@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SSL证书申请</title>
+    <!-- 使用以应用根为前缀的绝对路径，避免在 /easy/:tid 下解析异常 -->
+    <link rel="stylesheet" href="/easy/css/style.css?v=1.0.1" />
+  </head>
+
+  <body>
+    <div id="app">
+      <div class="container">
+        <!-- 步骤-1: 输入订单号 -->
+        <div id="step-tid" class="step-content">
+          <div class="card">
+            <div class="card-header">
+              <h2>SSL证书申请</h2>
+            </div>
+            <div class="card-body">
+              <form id="tid-form">
+                <div class="form-group">
+                  <input
+                    type="text"
+                    id="tid"
+                    name="tid"
+                    placeholder="请输入您的订单号"
+                    required
+                  />
+                  <span class="error-message" id="tid-error"></span>
+                </div>
+                <button type="submit" class="btn btn-primary btn-block">
+                  <span class="btn-text">查询订单</span>
+                  <span class="loading-spinner" style="display: none"></span>
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+
+        <!-- 步骤条 -->
+        <div id="steps-container" style="display: none">
+          <div class="steps">
+            <div class="step" data-step="0">
+              <div class="step-number">1</div>
+              <div class="step-title">提交域名</div>
+            </div>
+            <div class="step-line"></div>
+            <div class="step" data-step="1">
+              <div class="step-number">2</div>
+              <div class="step-title">验证域名</div>
+            </div>
+            <div class="step-line"></div>
+            <div class="step" data-step="2">
+              <div class="step-number">3</div>
+              <div class="step-title">签发证书</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 步骤0: 提交域名 -->
+        <div id="step-0" class="step-content" style="display: none">
+          <div class="card">
+            <div class="card-body">
+              <form id="apply-form">
+                <div class="form-group">
+                  <label>订单号</label>
+                  <input type="text" id="apply-tid" disabled />
+                </div>
+                <div class="form-group">
+                  <label>产品</label>
+                  <input type="text" id="product-name" disabled />
+                </div>
+                <div class="form-group">
+                  <label for="email"
+                    ><span class="required">*</span> 邮箱</label
+                  >
+                  <input
+                    type="email"
+                    id="email"
+                    name="email"
+                    placeholder="请输入您的电子邮箱"
+                    required
+                  />
+                  <span class="error-message" id="email-error"></span>
+                </div>
+                <div id="domain-input-group">
+                  <div class="form-group">
+                    <label for="domain"
+                      ><span class="required">*</span> 域名</label
+                    >
+                    <input
+                      type="text"
+                      id="domain"
+                      name="domain"
+                      placeholder="请输入您的域名"
+                      required
+                    />
+                    <span class="error-message" id="domain-error"></span>
+                  </div>
+                  <div class="form-group">
+                    <label for="validation_method"
+                      ><span class="required">*</span> 验证方式</label
+                    >
+                    <select
+                      id="validation_method"
+                      name="validation_method"
+                      required
+                    >
+                      <option value="">请选择域名验证方式</option>
+                    </select>
+                    <span class="error-message" id="validation-error"></span>
+                  </div>
+                  <div class="form-group">
+                    <label></label>
+                    <button
+                      type="submit"
+                      class="btn btn-primary"
+                      id="apply-btn"
+                    >
+                      <span class="btn-text">申请证书</span>
+                      <span
+                        class="loading-spinner"
+                        style="display: none"
+                      ></span>
+                    </button>
+                  </div>
+                </div>
+                <div
+                  class="form-group"
+                  id="query-btn-group"
+                  style="display: none"
+                >
+                  <label></label>
+                  <button type="button" class="btn btn-primary" id="query-btn">
+                    <span class="btn-text">查询</span>
+                    <span class="loading-spinner" style="display: none"></span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+
+        <!-- 步骤1: 验证域名 -->
+        <div id="step-1" class="step-content" style="display: none">
+          <div class="card">
+            <div class="card-body">
+              <form class="validation-form">
+                <div class="form-group">
+                  <label>域名</label>
+                  <input type="text" id="validation-domain" disabled />
+                </div>
+
+                <div class="form-group" id="method-group">
+                  <label>验证方式</label>
+                  <div class="input-group">
+                    <select id="validation-method-select">
+                      <option value="">请选择域名验证方式</option>
+                    </select>
+                    <button
+                      type="button"
+                      class="copy-btn"
+                      id="update-method-btn"
+                    >
+                      修改
+                    </button>
+                  </div>
+                </div>
+
+                <!-- DNS验证 -->
+                <div
+                  id="dns-validation"
+                  class="validation-content"
+                  style="display: none"
+                >
+                  <div class="form-group">
+                    <label>主机记录</label>
+                    <div class="input-with-copy">
+                      <input type="text" id="dns-host" readonly />
+                      <button
+                        type="button"
+                        class="copy-btn"
+                        data-copy="dns-host"
+                      >
+                        复制
+                      </button>
+                    </div>
+                  </div>
+                  <div class="form-group">
+                    <label>解析类型</label>
+                    <input
+                      type="text"
+                      id="dns-type"
+                      value="TXT"
+                      disabled
+                      style="width: 100px"
+                    />
+                  </div>
+                  <div class="form-group">
+                    <label>记录值</label>
+                    <div class="input-with-copy">
+                      <input type="text" id="dns-value" readonly />
+                      <button
+                        type="button"
+                        class="copy-btn"
+                        data-copy="dns-value"
+                      >
+                        复制
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 文件验证 -->
+                <div
+                  id="file-validation"
+                  class="validation-content"
+                  style="display: none"
+                >
+                  <div class="form-group">
+                    <label>验证链接</label>
+                    <div class="input-with-copy">
+                      <input type="text" id="file-link" readonly />
+                      <button
+                        type="button"
+                        class="copy-btn"
+                        data-copy="file-link"
+                      >
+                        复制
+                      </button>
+                    </div>
+                  </div>
+                  <div class="form-group">
+                    <label>文件内容</label>
+                    <div class="input-with-copy">
+                      <textarea id="file-content" rows="3" readonly></textarea>
+                      <button
+                        type="button"
+                        class="copy-btn"
+                        data-copy="file-content"
+                      >
+                        复制
+                      </button>
+                    </div>
+                  </div>
+                  <div class="form-group">
+                    <label>文件路径</label>
+                    <div class="input-with-copy">
+                      <button
+                        type="button"
+                        class="btn btn-secondary"
+                        id="download-file-btn"
+                      >
+                        下载
+                      </button>
+                      <input type="text" id="file-path" readonly />
+                      <button
+                        type="button"
+                        class="copy-btn"
+                        data-copy="file-path"
+                      >
+                        复制
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </form>
+
+              <div class="form-group" id="action-buttons-row">
+                <label></label>
+                <div class="button-group" id="action-buttons-group">
+                  <button class="btn btn-primary" id="check-validation-btn">
+                    <span class="btn-text">验证</span>
+                    <span class="loading-spinner" style="display: none"></span>
+                  </button>
+                  <button class="btn btn-secondary" id="test-validation-btn">
+                    <span class="btn-text">检测</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- 审核中（approving）提示区 -->
+              <div
+                class="form-group"
+                id="approving-section"
+                style="display: none"
+              >
+                <label></label>
+                <div>
+                  <div class="text-muted" style="margin-bottom: 10px">
+                    已完成验证，请等待签发证书
+                  </div>
+                  <button class="btn btn-primary" id="sync-status-btn">
+                    <span class="btn-text">查询</span>
+                    <span class="loading-spinner" style="display: none"></span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- 帮助信息 -->
+              <div class="help-section" id="help-section">
+                <span
+                  class="help-extra"
+                  id="dns-help-extra"
+                  style="display: none"
+                >
+                  <div class="help-content">
+                    <p>您需要做的：</p>
+                    <p>
+                      <b
+                        >1.
+                        在管理域名的网站给域名添加上面的解析(主机记录/解析类型/记录值)</b
+                      >
+                    </p>
+                    <p><b>2. 点击验证按钮进行验证</b></p>
+                    <br />
+                    <p>
+                      您也可以：
+                      <button
+                        type="button"
+                        class="btn btn-primary btn-small"
+                        id="copy-all-dns"
+                      >
+                        <span class="btn-text">复制解析记录</span>
+                      </button>
+                      发送给域名管理员操作！
+                    </p>
+                  </div>
+                </span>
+                <div class="help-content">
+                  <a
+                    href="#"
+                    target="_blank"
+                    class="help-link"
+                    id="validation-help-link"
+                  >
+                    <span id="help-text">如何做验证？</span>
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 步骤2: 证书已签发 -->
+        <div id="step-2" class="step-content" style="display: none">
+          <div class="card">
+            <div class="card-body">
+              <div class="form-group">
+                <label>域名</label>
+                <input type="text" id="issued-domain" disabled />
+              </div>
+
+              <!-- 宝塔面板密钥 -->
+              <div class="form-group">
+                <label for="cert-key"
+                  >密钥/KEY
+                  <button class="copy-btn inline" data-copy="cert-key">
+                    点击复制
+                  </button>
+                </label>
+                <textarea
+                  id="cert-key"
+                  rows="10"
+                  readonly
+                  style="
+                    font-family: Consolas, Monaco, monospace;
+                    font-size: 12px;
+                  "
+                ></textarea>
+              </div>
+
+              <!-- 宝塔面板证书 -->
+              <div class="form-group">
+                <label for="cert-pem"
+                  >证书/CRT/PEM
+                  <button class="copy-btn inline" data-copy="cert-pem">
+                    点击复制
+                  </button>
+                </label>
+                <textarea
+                  id="cert-pem"
+                  rows="10"
+                  readonly
+                  style="
+                    font-family: Consolas, Monaco, monospace;
+                    font-size: 12px;
+                  "
+                ></textarea>
+              </div>
+
+              <!-- 下载选项 -->
+              <div class="form-group">
+                <label>下载</label>
+                <div class="download-links">
+                  <a href="#" class="download-link" data-type="nginx">Nginx</a>
+                  <a href="#" class="download-link" data-type="apache"
+                    >Apache</a
+                  >
+                  <a href="#" class="download-link" data-type="iis">IIS</a>
+                  <a href="#" class="download-link" data-type="tomcat"
+                    >Tomcat</a
+                  >
+                  <a href="#" class="download-link" data-type="pem">Pem</a>
+                  <a href="#" class="download-link" data-type="all">全部</a>
+                </div>
+              </div>
+              <div class="divider"></div>
+              <div class="form-group">
+                <label>安装帮助</label>
+                <a id="help-url-link" href="#" target="_blank"></a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 验证检测弹窗 -->
+    <div id="check-dialog" class="dialog" style="display: none">
+      <div class="dialog-overlay"></div>
+      <div class="dialog-content">
+        <div class="dialog-header">
+          <h3>验证检测结果</h3>
+          <button class="dialog-close">&times;</button>
+        </div>
+        <div class="dialog-body">
+          <table class="check-table">
+            <tr>
+              <th>域名</th>
+              <td><span id="check-domain"></span></td>
+            </tr>
+            <tr>
+              <th>验证方式</th>
+              <td><span id="check-method"></span></td>
+            </tr>
+            <tr class="dns-result" style="display: none">
+              <th>验证记录</th>
+              <td><span id="check-query"></span></td>
+            </tr>
+            <tr class="dns-result" style="display: none">
+              <th>需要的值</th>
+              <td><span id="check-expected"></span></td>
+            </tr>
+            <tr class="dns-result" style="display: none">
+              <th>检测到的值</th>
+              <td><span id="check-detected"></span></td>
+            </tr>
+            <tr class="file-result" style="display: none">
+              <th>验证链接</th>
+              <td><span id="check-link"></span></td>
+            </tr>
+            <tr class="file-result" style="display: none">
+              <th>需要的内容</th>
+              <td><span id="check-file-expected"></span></td>
+            </tr>
+            <tr class="file-result" style="display: none">
+              <th>检测到的内容</th>
+              <td><span id="check-file-detected"></span></td>
+            </tr>
+            <tr>
+              <th>检测状态</th>
+              <td><span id="check-status" class="status-badge"></span></td>
+            </tr>
+            <tr id="check-error-row" style="display: none">
+              <th>错误信息</th>
+              <td><span id="check-error" class="error-text"></span></td>
+            </tr>
+          </table>
+        </div>
+        <div class="dialog-footer">
+          <button class="btn btn-secondary dialog-close-btn">关闭</button>
+          <button class="btn btn-primary" id="recheck-btn">
+            <span class="btn-text">重新检测</span
+            ><span class="loading-spinner" style="display: none"></span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 确认弹窗（用于 *.www. 提示） -->
+    <div id="confirm-dialog" class="dialog" style="display: none">
+      <div class="dialog-overlay"></div>
+      <div class="dialog-content">
+        <div class="dialog-header">
+          <h3>域名确认</h3>
+          <button class="dialog-close">&times;</button>
+        </div>
+        <div class="dialog-body">
+          <p id="confirm-message">确定要继续吗？</p>
+        </div>
+        <div class="dialog-footer">
+          <button class="btn btn-secondary" id="confirm-cancel">
+            <span class="btn-text">取消</span>
+            <span class="loading-spinner" style="display: none"></span>
+          </button>
+          <button class="btn btn-primary" id="confirm-ok">
+            <span class="btn-text">继续</span>
+            <span class="loading-spinner" style="display: none"></span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast 提示 -->
+    <div id="toast-container"></div>
+
+    <!-- 加载配置文件 -->
+    <script src="/easy/js/config.js?v=1.0.1"></script>
+    <script src="/easy/js/api.js?v=1.0.1"></script>
+    <script src="/easy/js/validator.js?v=1.0.1"></script>
+    <script src="/easy/js/main.js?v=1.0.1"></script>
+  </body>
+</html>

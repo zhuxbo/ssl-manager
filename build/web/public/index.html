@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>跳转中...</title>
+</head>
+<body>
+  <noscript>请启用 JavaScript 以继续访问。</noscript>
+  <script>
+    /**
+     * 入口跳转脚本
+     *
+     * 电商订单跳转说明：
+     * - /pdd/*  拼多多订单跳转
+     * - /tb/*   淘宝订单跳转
+     * - /tid/*  订单号充值跳转
+     * 如使用电商订单自动发货功能，需设置此跳转
+     *
+     * 其他路径默认跳转到 /user
+     */
+    (function() {
+      var path = window.location.pathname;
+      var search = window.location.search;
+      var target = '/user';
+
+      // 电商订单路径：pdd（拼多多）、tb（淘宝）、tid（订单号充值）
+      if (/^\/(pdd|tb)(\/.*)?$/i.test(path) || /^\/tid\/[^/]+/i.test(path)) {
+        target = '/user' + path + search;
+      }
+
+      window.location.replace(target);
+    })();
+  </script>
+</body>
+</html>

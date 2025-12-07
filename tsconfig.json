@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "skipLibCheck": true,
+    "moduleResolution": "bundler"
+  },
+  "files": [],
+  "references": [
+    { "path": "./frontend/shared" },
+    { "path": "./frontend/admin" },
+    { "path": "./frontend/user" }
+  ],
+  "exclude": [
+    "frontend/base",
+    "frontend/easy",
+    "**/node_modules"
+  ]
+}

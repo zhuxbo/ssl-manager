@@ -1,0 +1,7 @@
+{
+  "extends": ["development"],
+  "hints": {
+    "typescript-config/strict": "off",
+    "no-inline-styles": "off"
+  }
+}

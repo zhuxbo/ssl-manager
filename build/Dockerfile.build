@@ -1,0 +1,25 @@
+# Monorepo 构建系统 - 构建镜像
+# 继承基础镜像并添加构建脚本
+
+ARG BASE_IMAGE=cnssl-build-base:ubuntu-24.04
+FROM ${BASE_IMAGE}
+
+LABEL maintainer="zhuxbo@qq.com"
+LABEL description="Monorepo Build Image"
+
+# 复制构建脚本
+COPY scripts/ /build/scripts/
+RUN chmod +x /build/scripts/*.sh
+
+# 复制配置文件
+COPY config.json /build/config.json
+
+# 复制 nginx 配置和 web 文件
+COPY nginx/ /build/nginx/
+COPY web/ /build/web/
+
+# 设置工作目录
+WORKDIR /workspace
+
+# 入口点
+ENTRYPOINT ["/build/scripts/container-build.sh"]

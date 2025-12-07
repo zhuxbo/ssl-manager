@@ -1,0 +1,11 @@
+includes:
+    - vendor/larastan/larastan/extension.neon    # 引入 Larastan 扩展以支持 Laravel 特性
+    - vendor/pestphp/pest/extension.neon         # 引入 Pest 扩展以支持 Pest 测试框架
+
+parameters:
+    phpVersion: 80300
+    level: 4                                     # 设置 PHPStan 的分析级别（0-8，max 为最高）
+    paths:
+        - app                                    # 分析 app 目录中的代码
+    ignoreErrors:
+        - identifier: classConstant.phpDocType   # 忽略常量类型相关的错误

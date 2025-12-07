@@ -1,0 +1,28 @@
+# 缩小 Docker 构建上下文，避免敏感文件与无关大文件进入上下文
+
+# 临时与构建产物
+temp/
+reports/
+
+# SSH 与密钥
+**/.ssh/
+*.key
+*.pub
+id_*
+
+# Git 与编辑器
+.git
+.gitignore
+.gitattributes
+.idea/
+.vscode/
+.cursor/
+
+# 系统与缓存
+.DS_Store
+*.log
+node_modules/
+
+# 其他不需要的文件
+**/dist/
+**/vendor/

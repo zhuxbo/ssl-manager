@@ -1,0 +1,8 @@
+{
+  "baseURL": "/api/easy",
+  "helpURL": "/help",
+  "dnsTools": [
+    "https://dns-tools-us.cnssl.com",
+    "https://dns-tools-cn.cnssl.com"
+  ]
+}

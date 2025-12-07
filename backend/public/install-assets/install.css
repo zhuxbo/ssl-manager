@@ -1,0 +1,309 @@
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    line-height: 1.6;
+    margin: 0;
+    padding: 20px;
+    color: #333;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
+}
+.container {
+    max-width: 900px;
+    margin: 0 auto;
+    background: #fff;
+    padding: 30px;
+    border-radius: 12px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+    backdrop-filter: blur(10px);
+}
+h1 {
+    color: #333;
+    border-bottom: 2px solid #eee;
+    padding-bottom: 15px;
+    margin-bottom: 25px;
+    font-size: 2.2em;
+    font-weight: 300;
+    text-align: center;
+}
+h2 {
+    margin-top: 30px;
+    margin-bottom: 20px;
+    color: #444;
+    font-size: 1.4em;
+    font-weight: 500;
+    position: relative;
+}
+h2:before {
+    content: '';
+    position: absolute;
+    left: 0;
+    bottom: -5px;
+    width: 30px;
+    height: 3px;
+    background: #667eea;
+    border-radius: 2px;
+}
+.requirement {
+    margin-bottom: 12px;
+    padding: 15px;
+    border-radius: 8px;
+    border: 1px solid rgba(0,0,0,0.05);
+    transition: all 0.2s ease;
+}
+.requirement:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+.success {
+    background: linear-gradient(135deg, #e8f5e8 0%, #f0fdf0 100%);
+    border-left: 4px solid #10b981;
+    color: #065f46;
+}
+.warning {
+    background: linear-gradient(135deg, #fef3cd 0%, #fef8e8 100%);
+    border-left: 4px solid #f59e0b;
+    color: #92400e;
+}
+.error {
+    background: linear-gradient(135deg, #fee2e2 0%, #fef2f2 100%);
+    border-left: 4px solid #ef4444;
+    color: #991b1b;
+}
+.btn {
+    display: inline-block;
+    padding: 12px 24px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    text-decoration: none;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: 500;
+    margin-top: 20px;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+}
+.btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+}
+.btn.disabled {
+    background: #9ca3af;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+.log {
+    background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);
+    color: #e2e8f0;
+    padding: 20px;
+    border-radius: 10px;
+    font-family: 'SF Mono', Monaco, Inconsolata, 'Roboto Mono', Consolas, 'Courier New', monospace;
+    max-height: 400px;
+    overflow-y: auto;
+    margin-top: 25px;
+    border: 1px solid rgba(255,255,255,0.1);
+    backdrop-filter: blur(10px);
+}
+.log .success {
+    color: #68d391 !important;
+    background: rgba(104, 211, 145, 0.1) !important;
+    border-left: 4px solid #68d391 !important;
+    padding: 8px 12px !important;
+    margin: 8px 0 !important;
+    display: block !important;
+    font-weight: 600 !important;
+    border-radius: 4px !important;
+}
+.log .error {
+    color: #fc8181 !important;
+    background: rgba(252, 129, 129, 0.1) !important;
+    border-left: 4px solid #fc8181 !important;
+    padding: 8px 12px !important;
+    margin: 8px 0 !important;
+    display: block !important;
+    font-weight: 600 !important;
+    border-radius: 4px !important;
+}
+.log .warning {
+    color: #f6e05e !important;
+    background: rgba(246, 224, 94, 0.1) !important;
+    border-left: 4px solid #f6e05e !important;
+    padding: 8px 12px !important;
+    margin: 8px 0 !important;
+    display: block !important;
+    font-weight: 600 !important;
+    border-radius: 4px !important;
+}
+.log pre {
+    background: #222;
+    color: #f8f8f8;
+    border: 1px solid #444;
+    border-radius: 4px;
+    padding: 10px;
+    overflow-x: auto;
+    font-size: 12px;
+    line-height: 1.4;
+}
+.dark-output {
+    background: #222 !important;
+    color: #f8f8f8 !important;
+    border: 1px solid #444 !important;
+}
+.toggle-btn {
+    display: inline-block;
+    cursor: pointer;
+    color: #4285f4;
+    background-color: #e8f0fe;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    margin-left: 10px;
+}
+.toggle-btn:hover {
+    background-color: #d2e3fc;
+}
+form {
+    margin-top: 25px;
+}
+.form-group {
+    margin-bottom: 20px;
+}
+label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 600;
+    color: #374151;
+    font-size: 14px;
+}
+input[type="text"], input[type="password"] {
+    width: 100%;
+    padding: 12px 16px;
+    border: 2px solid #e5e7eb;
+    border-radius: 8px;
+    box-sizing: border-box;
+    font-size: 16px;
+    transition: all 0.2s ease;
+    background: #fafafa;
+}
+input[type="text"]:focus, input[type="password"]:focus {
+    outline: none;
+    border-color: #667eea;
+    background: #fff;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+.form-section {
+    margin-bottom: 30px;
+    padding: 25px;
+    background: #f9fafb;
+    border-radius: 10px;
+    border: 1px solid #e5e7eb;
+}
+.form-section h3 {
+    margin-top: 0;
+    margin-bottom: 20px;
+    color: #374151;
+    font-size: 1.2em;
+    font-weight: 600;
+}
+.form-section small {
+    color: #6b7280;
+    font-size: 12px;
+    margin-top: 4px;
+    display: block;
+}
+pre {
+    background: #f8f8f8;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 10px;
+    overflow-x: auto;
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+/* 加载动画 */
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+
+@keyframes progress {
+    0% { stroke-dashoffset: 100; }
+    100% { stroke-dashoffset: 0; }
+}
+
+.loading-spinner {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-radius: 50%;
+    border-top-color: #fff;
+    animation: spin 1s ease-in-out infinite;
+    margin-right: 8px;
+}
+
+.progress-ring {
+    display: inline-block;
+    width: 40px;
+    height: 40px;
+    border: 3px solid rgba(255,255,255,0.1);
+    border-radius: 50%;
+    border-top-color: #667eea;
+    animation: spin 1s linear infinite;
+}
+
+.fade-in {
+    animation: fadeIn 0.5s ease-in;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* 状态指示器 */
+.status-indicator {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 8px;
+}
+
+.status-success { background: #10b981; }
+.status-warning { background: #f59e0b; }
+.status-error { background: #ef4444; }
+
+/* 错误区域高亮动画 */
+@keyframes highlight {
+    0%, 100% { 
+        transform: scale(1); 
+    }
+    50% { 
+        transform: scale(1.02);
+    }
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+    .container {
+        margin: 10px;
+        padding: 20px;
+    }
+    
+    h1 {
+        font-size: 1.8em;
+    }
+    
+    .form-section {
+        padding: 20px;
+    }
+}

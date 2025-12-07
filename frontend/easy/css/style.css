@@ -1,0 +1,847 @@
+/* 全局样式 */
+:root {
+  --primary-color: #409eff;
+  --success-color: #67c23a;
+  --warning-color: #e6a23c;
+  --danger-color: #f56c6c;
+  --info-color: #909399;
+  --text-primary: #303133;
+  --text-regular: #606266;
+  --text-secondary: #909399;
+  --text-placeholder: #c0c4cc;
+  --border-base: #dcdfe6;
+  --border-light: #e4e7ed;
+  --border-lighter: #ebeef5;
+  --border-extra-light: #f2f6fc;
+  --background-color: #f5f7fa;
+  --card-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  font-size: 14px;
+  color: var(--text-primary);
+  background-color: var(--background-color);
+  line-height: 1.5;
+}
+
+.container {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+/* 卡片样式 */
+.card {
+  background: white;
+  border-radius: 4px;
+  box-shadow: var(--card-shadow);
+  margin-bottom: 20px;
+  overflow: hidden;
+}
+
+.card-header {
+  padding: 20px;
+  border-bottom: 1px solid var(--border-lighter);
+  text-align: center;
+}
+
+.card-header h2 {
+  font-size: 20px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.card-body {
+  padding: 20px;
+}
+
+/* 步骤条样式 */
+.steps {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 30px 0;
+  padding: 0 20px;
+}
+
+.step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+}
+
+.step-number {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: white;
+  border: 2px solid var(--border-base);
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 500;
+  margin-bottom: 8px;
+  transition: all 0.3s;
+}
+
+.step-title {
+  font-size: 14px;
+  color: var(--text-secondary);
+  transition: all 0.3s;
+}
+
+.step-line {
+  width: 100px;
+  height: 2px;
+  background: var(--border-base);
+  margin: 0 20px;
+  margin-bottom: 28px;
+  transition: all 0.3s;
+}
+
+.step.active .step-number {
+  background: var(--primary-color);
+  border-color: var(--primary-color);
+  color: white;
+}
+
+.step.active .step-title {
+  color: var(--text-primary);
+}
+
+.step.completed .step-number {
+  background: var(--success-color);
+  border-color: var(--success-color);
+  color: white;
+}
+
+.step.completed .step-title {
+  color: var(--text-primary);
+}
+
+.step.completed ~ .step-line {
+  background: var(--success-color);
+}
+
+/* 表单样式 */
+.form-group {
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+}
+
+.form-group label {
+  display: inline-block;
+  min-width: 100px;
+  margin-right: 15px;
+  color: var(--text-regular);
+  font-weight: 500;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+/* textarea 的 label 保持垂直居中对齐 */
+.form-group:has(textarea) {
+  align-items: center; /* 垂直居中对齐 */
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+  flex: 1;
+  padding: 10px 15px;
+  border: 1px solid var(--border-base);
+  border-radius: 4px;
+  font-size: 14px;
+  transition: border-color 0.3s;
+  background: white;
+  min-width: 0;
+  height: 40px;
+  line-height: 20px;
+  box-sizing: border-box;
+}
+
+.form-group textarea {
+  height: auto;
+  min-height: 80px;
+}
+
+/* 固定宽度的选择框 */
+#validation-method-select {
+  width: 200px;
+  flex: none;
+}
+
+#dns-type {
+  width: 100px;
+  flex: none;
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+  outline: none;
+  border-color: var(--primary-color);
+}
+
+.form-group input:disabled,
+.form-group select:disabled {
+  background-color: var(--border-extra-light);
+  color: var(--text-placeholder);
+  cursor: not-allowed;
+}
+
+.form-group textarea {
+  resize: vertical;
+  font-family: inherit;
+}
+
+.required {
+  color: var(--danger-color);
+}
+
+.error-message {
+  display: none;
+  color: var(--danger-color);
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.error-message.show {
+  display: block;
+}
+
+.form-group.error input,
+.form-group.error select {
+  border-color: var(--danger-color);
+}
+
+/* 按钮样式 */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 20px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s;
+  text-decoration: none;
+  background: white;
+  position: relative;
+  height: 40px; /* 统一高度与输入框一致 */
+}
+
+.btn-primary {
+  background: var(--primary-color);
+  color: white;
+  border-color: var(--primary-color);
+}
+
+.btn-primary:hover {
+  background: #66b1ff;
+  border-color: #66b1ff;
+}
+
+.btn-secondary {
+  background: white;
+  color: var(--text-regular);
+  border-color: var(--border-base);
+}
+
+.btn-secondary:hover {
+  color: var(--primary-color);
+  border-color: var(--primary-color);
+}
+
+/* 成功状态按钮（用于检测通过时高亮“检测”按钮） */
+.btn-success {
+  background: var(--success-color);
+  color: #fff;
+  border-color: var(--success-color);
+}
+
+.btn-success:hover {
+  filter: brightness(1.05);
+}
+
+.btn-block {
+  width: 100%;
+}
+
+/* 小尺寸按钮 */
+.btn-small,
+.btn-sm {
+  padding: 5px 10px;
+  height: 28px;
+  font-size: 12px;
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.loading-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  display: none; /* 默认不占位 */
+  margin-left: 8px; /* 与文字保持间距，仅在显示时生效 */
+}
+
+/* 加载时显示图标，按钮自增宽度（仅在按钮自身区域变化） */
+.btn.is-loading .loading-spinner {
+  display: inline-block;
+}
+
+.btn-secondary .loading-spinner {
+  border-color: rgba(0, 0, 0, 0.1);
+  border-top-color: var(--primary-color);
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 输入框带复制按钮 */
+.input-with-copy {
+  display: flex;
+  gap: 8px;
+  flex: 1;
+  align-items: stretch;
+}
+
+.input-with-copy input,
+.input-with-copy textarea {
+  flex: 1;
+  min-width: 0;
+}
+
+.copy-btn {
+  padding: 10px 15px;
+  background: white;
+  border: 1px solid var(--border-base);
+  border-radius: 4px;
+  color: var(--text-regular);
+  cursor: pointer;
+  transition: all 0.3s;
+  font-size: 14px;
+  height: 40px;
+  line-height: 20px;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.copy-btn:hover {
+  color: var(--primary-color);
+  border-color: var(--primary-color);
+}
+
+/* 分隔线 */
+.divider {
+  height: 1px;
+  background: var(--border-lighter);
+  margin: 20px 0;
+}
+
+/* 文本样式 */
+.text-muted {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.help-link {
+  color: var(--primary-color);
+  text-decoration: none;
+  font-size: 14px;
+  display: inline-block;
+}
+
+.help-link:hover {
+  text-decoration: underline;
+}
+
+/* 按钮组 */
+.button-group {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-start; /* 按钮左对齐 */
+}
+
+/* form-group 内的按钮组不需要额外的上边距 */
+.form-group .button-group {
+  margin-top: 0;
+}
+
+/* 成功页面 */
+.success-icon {
+  width: 80px;
+  height: 80px;
+  margin: 20px auto;
+  background: var(--success-color);
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 40px;
+}
+
+.success-message {
+  text-align: center;
+  font-size: 16px;
+  color: var(--text-primary);
+  margin-bottom: 30px;
+}
+
+/* 弹窗样式 */
+.dialog {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dialog-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.dialog-content {
+  position: relative;
+  background: white;
+  border-radius: 4px;
+  box-shadow: 0 2px 20px rgba(0, 0, 0, 0.2);
+  max-width: 600px;
+  width: 90%;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.dialog-header {
+  margin: 0 10px;
+  padding: 20px;
+  border-bottom: 1px solid var(--border-lighter);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.dialog-header h3 {
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.dialog-close {
+  background: none;
+  border: none;
+  font-size: 24px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 0;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dialog-close:hover {
+  color: var(--text-primary);
+}
+
+.dialog-body {
+  padding: 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.dialog-footer {
+  margin: 0 10px;
+  padding: 20px;
+  border-top: 1px solid var(--border-lighter);
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+/* 检测结果（表格样式见 .check-table） */
+
+/* 检测结果表格：带边框 & label 右对齐 */
+.check-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed; /* 固定表格布局，防止列宽变化 */
+}
+.check-table th,
+.check-table td {
+  border: 1px solid var(--border-lighter);
+  padding: 8px 10px;
+  vertical-align: top;
+}
+.check-table th {
+  width: 120px;
+  text-align: right;
+  color: var(--text-regular);
+  background: var(--border-extra-light);
+  white-space: nowrap;
+}
+.check-table td {
+  color: var(--text-primary);
+  word-wrap: break-word; /* 长文本自动换行 */
+  word-break: break-all; /* 强制断行，防止溢出 */
+}
+
+/* 旧版滚动容器样式已移除 */
+
+.status-badge {
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.status-badge.success {
+  background: #f0f9ff;
+  color: var(--success-color);
+}
+
+.status-badge.error {
+  background: #fef0f0;
+  color: var(--danger-color);
+}
+
+.error-text {
+  color: var(--danger-color);
+}
+
+/* Toast 提示（仅文本消息）右上角显示 */
+#toast-container {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 2000;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: flex-start;
+  gap: 10px;
+  pointer-events: none; /* 允许点击穿透容器 */
+}
+
+.toast {
+  background: white;
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  padding: 15px 20px;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  min-width: 300px;
+  animation: fadeIn 0.3s ease;
+  pointer-events: auto; /* 恢复 toast 本身的点击事件 */
+}
+
+@keyframes fadeIn {
+  from {
+    transform: scale(0.9);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.toast.success {
+  border-left: 4px solid var(--success-color);
+}
+
+.toast.error {
+  border-left: 4px solid var(--danger-color);
+}
+
+.toast.info {
+  border-left: 4px solid var(--info-color);
+}
+
+.toast-message {
+  flex: 1;
+  margin-right: 10px;
+}
+
+.toast-close {
+  cursor: pointer;
+  color: var(--text-secondary);
+}
+
+/* 内联复制按钮 - 小尺寸样式 */
+.copy-btn.inline {
+  padding: 4px 10px;
+  height: 24px;
+  line-height: 16px;
+  font-size: 12px;
+  margin-left: 10px;
+  margin-bottom: 10px; /* 与标签文字的间距 */
+  background: white;
+  color: var(--primary-color);
+  border: 1px solid var(--primary-color);
+}
+
+.copy-btn.inline:hover {
+  background: var(--primary-color);
+  color: white;
+  text-decoration: none;
+}
+
+/* 输入组 */
+.input-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+}
+
+.input-group select {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 验证表单 - 继承通用表单样式 */
+.validation-form .form-group {
+  display: flex;
+  align-items: center;
+}
+
+/* 查询按钮现在通过 form-group 自动对齐，不需要额外样式 */
+
+/* 域名后缀 */
+/* 旧版域名后缀展示已移除 */
+
+/* 帮助区域 */
+.help-section {
+  margin: 0;
+}
+
+.help-content {
+  margin: 20px 0;
+  padding: 20px;
+  background: var(--border-extra-light);
+  border-radius: 4px;
+  line-height: 1.6;
+}
+
+.help-extra {
+  margin-left: 10px;
+}
+
+.copy-all-link {
+  color: var(--primary-color);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.copy-all-link:hover {
+  text-decoration: underline;
+}
+
+/* 下载链接 */
+.download-links {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.download-link {
+  display: inline-block;
+  padding: 5px 12px;
+  height: 28px;
+  line-height: 18px;
+  font-size: 12px;
+  color: var(--primary-color);
+  background: white;
+  border: 1px solid var(--primary-color);
+  border-radius: 4px;
+  text-decoration: none;
+  transition: all 0.3s;
+}
+
+.download-link:hover {
+  color: white;
+  background: var(--primary-color);
+  text-decoration: none;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .container {
+    padding: 10px;
+  }
+
+  /* 表单在手机模式下竖向排列 */
+  .form-group {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .form-group label {
+    text-align: left;
+    margin-bottom: 8px;
+    margin-right: 0;
+    min-width: auto;
+  }
+
+  /* 带内联按钮的label保持一行 */
+  .form-group:has(textarea) label {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+
+  /* 内联按钮在移动端右对齐 */
+  .copy-btn.inline {
+    margin-left: auto;
+    margin-bottom: 0;
+  }
+
+  .form-group input,
+  .form-group select,
+  .form-group textarea {
+    width: 100%;
+  }
+
+  /* 输入组在手机端保持一行 */
+  .input-group {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  #validation-method-select {
+    width: auto;
+    flex: 1;
+    min-width: 120px;
+  }
+
+  .copy-btn {
+    height: 40px;
+  }
+
+  .validation-form .form-group {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .steps {
+    padding: 0 10px;
+  }
+
+  .step-line {
+    width: 60px;
+    margin: 0 10px;
+  }
+
+  .step-title {
+    font-size: 12px;
+  }
+
+  .dialog-content {
+    width: 95%;
+    max-height: 90vh;
+  }
+
+  /* 旧版 label 宽度控制已移除 */
+
+  .button-group {
+    flex-direction: column;
+  }
+
+  .button-group button {
+    width: 100%;
+  }
+
+  /* 移动端表格优化 */
+  .check-table th {
+    width: 100px; /* 移动端缩小标签列宽度 */
+    font-size: 13px;
+  }
+
+  .check-table td {
+    font-size: 13px;
+    padding: 6px 8px; /* 减少内边距 */
+  }
+
+  /* 弹窗在移动端的额外优化 */
+  .dialog-body {
+    padding: 15px;
+  }
+
+  .dialog-header,
+  .dialog-footer {
+    padding: 15px;
+  }
+}
+
+/* Step-2（证书签发）标签与复制按钮布局优化 */
+#step-2 .form-group > label {
+  /* 大屏：标签右对齐，文字与按钮垂直分布，间距 12px；固定标签宽度避免被内容撑宽 */
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end; /* 右对齐 */
+  row-gap: 12px;
+  text-align: right;
+  width: 100px; /* 与全局 label 宽度保持一致 */
+  min-width: 100px;
+}
+
+/* 大屏：垂直布局时，去除内联按钮的左外边距，避免多余间距叠加 */
+#step-2 .form-group > label .copy-btn.inline {
+  margin-left: 0;
+  margin-bottom: 0;
+}
+
+@media (max-width: 768px) {
+  /* 移动端竖排：label 占满行，文字左、按钮右 */
+  #step-2 .form-group > label {
+    width: 100%;
+    justify-content: space-between;
+    text-align: left;
+    flex-direction: row; /* 移动端恢复同一行左右分布 */
+    align-items: center;
+  }
+  /* 按钮右对齐 */
+  #step-2 .form-group > label .copy-btn.inline {
+    margin-left: auto;
+  }
+}

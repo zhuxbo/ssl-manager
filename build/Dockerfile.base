@@ -1,0 +1,109 @@
+# 证书管理系统 - 基础构建镜像
+# 包含所有构建工具，适合长期缓存
+
+FROM ubuntu:24.04
+
+LABEL maintainer="zhuxbo@qq.com"
+LABEL description="CNSSL Build Base Image with PHP 8.3, Node.js 22, Composer, pnpm"
+LABEL version="1.0"
+
+# 设置环境变量
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=Asia/Shanghai
+ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8
+
+# 配置工作目录
+WORKDIR /build
+
+# 1. 更新系统并安装基础工具
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        ca-certificates \
+        curl \
+        wget \
+        git \
+        openssh-client \
+        jq \
+        rsync \
+        bc \
+        unzip \
+        gnupg \
+        lsb-release \
+        software-properties-common \
+        tzdata && \
+    ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && \
+    echo $TZ > /etc/timezone
+
+# 2. 添加 PHP 8.3 仓库并安装
+RUN add-apt-repository -y ppa:ondrej/php && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+        php8.3-cli \
+        php8.3-bcmath \
+        php8.3-curl \
+        php8.3-gd \
+        php8.3-intl \
+        php8.3-mbstring \
+        php8.3-redis \
+        php8.3-xml \
+        php8.3-zip && \
+    php -v
+
+# 3. 安装 Composer
+RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer && \
+    chmod +x /usr/local/bin/composer && \
+    composer --version
+
+# 4. 配置 Composer 国内镜像（阿里云）
+RUN mkdir -p /etc/composer && \
+    echo '{"repositories": {"packagist": {"type": "composer", "url": "https://mirrors.aliyun.com/composer/"}}}' > /etc/composer/config.json
+
+# 5. 安装 Node.js 22 LTS
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
+    apt-get install -y --no-install-recommends nodejs && \
+    node -v && \
+    npm -v
+
+# 6. 配置 npm 国内镜像
+RUN npm config set registry https://registry.npmmirror.com
+
+# 7. 安装 pnpm
+RUN npm install -g pnpm && \
+    pnpm --version && \
+    pnpm config set registry https://registry.npmmirror.com
+
+# 8. 清理 apt 缓存减小镜像体积
+RUN apt-get clean && \
+    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+# 9. 配置 Git（容器内使用 root）
+RUN git config --global user.name "Build System" && \
+    git config --global user.email "build@cnssl.local" && \
+    git config --global init.defaultBranch main
+
+# 10. 创建 SSH 配置目录（安全：启用 accept-new）
+RUN mkdir -p /root/.ssh && \
+    chmod 700 /root/.ssh && \
+    touch /root/.ssh/config && \
+    printf "%s\n" \
+      "Host *" \
+      "  StrictHostKeyChecking accept-new" \
+      "  HashKnownHosts yes" \
+      > /root/.ssh/config && \
+    chmod 600 /root/.ssh/config
+
+# 验证工具版本
+RUN echo "=== Build Tools Versions ===" && \
+    echo "Git: $(git --version)" && \
+    echo "PHP: $(php -v | head -n1)" && \
+    echo "Composer: $(composer --version --no-ansi)" && \
+    echo "Node.js: $(node -v)" && \
+    echo "npm: $(npm -v)" && \
+    echo "pnpm: $(pnpm -v)" && \
+    echo "==========================="
+
+# 设置工作目录
+WORKDIR /workspace
+
+CMD ["/bin/bash"]

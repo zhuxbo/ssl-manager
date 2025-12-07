@@ -1,0 +1,120 @@
+import { http } from "@/utils/http";
+
+export interface IndexParams {
+  currentPage?: number;
+  pageSize?: number;
+  quickSearch?: string;
+  user_id?: number;
+  zone?: string;
+  prefix?: "_certum" | "_pki-validation" | "_dnsauth" | "_acme-challenge";
+  valid?: boolean;
+}
+
+export interface DelegationItem {
+  id: number;
+  user_id: number;
+  zone: string;
+  prefix: string;
+  label: string;
+  proxy_zone: string;
+  target_fqdn: string;
+  valid: boolean;
+  last_checked_at: string | null;
+  fail_count: number;
+  last_error: string;
+  created_at: string;
+  updated_at: string;
+  cname_to: {
+    host: string;
+    value: string;
+  };
+  user?: {
+    id: number;
+    email: string;
+    username: string;
+  };
+}
+
+/** 获取委托列表 */
+export function index(params: IndexParams): Promise<BaseResponse> {
+  return http.get<BaseResponse<null>, IndexParams>("/delegation", {
+    params
+  });
+}
+
+// 定义 FormParams 的默认值对象
+export const FORM_PARAMS_DEFAULT = {
+  user_id: 0,
+  zone: "",
+  prefix: ""
+};
+
+// 从默认值对象中提取键
+export const FORM_PARAMS_KEYS = Object.keys(
+  FORM_PARAMS_DEFAULT
+) as (keyof typeof FORM_PARAMS_DEFAULT)[];
+
+// 从默认值对象中提取类型
+export type FormParams = {
+  [K in keyof typeof FORM_PARAMS_DEFAULT]?: (typeof FORM_PARAMS_DEFAULT)[K];
+};
+
+export type StoreParams = FormParams;
+
+/** 创建委托 */
+export function store(
+  data: StoreParams
+): Promise<BaseResponse<DelegationItem>> {
+  return http.post<BaseResponse<DelegationItem>, StoreParams>("/delegation", {
+    data
+  });
+}
+
+/** 获取委托详情 */
+export function show(id: number): Promise<BaseResponse> {
+  return http.get<BaseResponse<null>, { id: number }>(`/delegation/${id}`);
+}
+
+/** 批量获取委托 */
+export function batchShow(ids: number[]): Promise<BaseResponse> {
+  return http.get<BaseResponse<null>, { ids: number[] }>(`/delegation/batch`, {
+    params: { ids }
+  });
+}
+
+export interface UpdateParams {
+  regen_label?: boolean;
+}
+
+/** 更新委托 */
+export function update(
+  id: number,
+  data: UpdateParams
+): Promise<BaseResponse<DelegationItem>> {
+  return http.put<BaseResponse<DelegationItem>, UpdateParams>(
+    `/delegation/${id}`,
+    { data }
+  );
+}
+
+/** 手动触发健康检查 */
+export function check(id: number): Promise<BaseResponse<DelegationItem>> {
+  return http.post<BaseResponse<DelegationItem>, null>(
+    `/delegation/check/${id}`
+  );
+}
+
+/** 删除委托 */
+export function destroy(id: number): Promise<BaseResponse> {
+  return http.delete<BaseResponse<null>, { id: number }>(`/delegation/${id}`);
+}
+
+/** 批量删除委托 */
+export function batchDestroy(ids: number[]): Promise<BaseResponse> {
+  return http.delete<BaseResponse<null>, { ids: number[] }>(
+    `/delegation/batch`,
+    {
+      data: { ids }
+    }
+  );
+}

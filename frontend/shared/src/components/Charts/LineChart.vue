@@ -1,0 +1,213 @@
+<script setup lang="ts">
+import { ref, onMounted, onBeforeUnmount, watch } from "vue";
+import * as echarts from "echarts/core";
+import { LineChart } from "echarts/charts";
+import {
+  GridComponent,
+  TooltipComponent,
+  LegendComponent,
+  DataZoomComponent,
+  TitleComponent
+} from "echarts/components";
+import { CanvasRenderer } from "echarts/renderers";
+import type { EChartsCoreOption } from "echarts/core";
+
+// 注册ECharts组件
+echarts.use([
+  LineChart,
+  GridComponent,
+  TooltipComponent,
+  LegendComponent,
+  DataZoomComponent,
+  TitleComponent,
+  CanvasRenderer
+]);
+
+interface SeriesData {
+  name: string;
+  data: number[];
+  color?: string;
+  yAxisIndex?: number;
+}
+
+interface Props {
+  title?: string;
+  xAxisData: string[];
+  series: SeriesData[];
+  height?: string;
+  smooth?: boolean;
+  showDataZoom?: boolean;
+  yAxisConfig?: Array<{
+    name: string;
+    position: "left" | "right";
+    type?: "value" | "category";
+  }>;
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  title: "",
+  height: "320px",
+  smooth: true,
+  showDataZoom: false,
+  yAxisConfig: () => [{ name: "", position: "left" }]
+});
+
+const chartRef = ref<HTMLDivElement>();
+let chartInstance: echarts.ECharts | null = null;
+
+const defaultColors = [
+  "#3B82F6",
+  "#10B981",
+  "#F59E0B",
+  "#EF4444",
+  "#8B5CF6",
+  "#EC4899"
+];
+
+const initChart = () => {
+  if (!chartRef.value) return;
+
+  chartInstance = echarts.init(chartRef.value);
+
+  const option: EChartsCoreOption = {
+    title: {
+      text: props.title,
+      left: "center",
+      textStyle: {
+        fontSize: 16,
+        fontWeight: "normal",
+        color: "#374151"
+      }
+    },
+    tooltip: {
+      trigger: "axis",
+      axisPointer: {
+        type: "cross",
+        label: {
+          backgroundColor: "#6a7985"
+        }
+      }
+    },
+    legend: {
+      data: props.series.map(s => s.name),
+      bottom: 10,
+      textStyle: {
+        color: "#6B7280"
+      }
+    },
+    grid: {
+      left: "3%",
+      right: "4%",
+      bottom: props.showDataZoom ? "28%" : "15%",
+      top: props.title ? "15%" : "10%",
+      containLabel: true
+    },
+    xAxis: {
+      type: "category",
+      boundaryGap: false,
+      data: props.xAxisData,
+      axisLabel: {
+        color: "#6B7280"
+      },
+      axisLine: {
+        lineStyle: {
+          color: "#E5E7EB"
+        }
+      }
+    },
+    yAxis: props.yAxisConfig.map((config, index) => ({
+      type: config.type || "value",
+      position: config.position,
+      name: config.name,
+      nameTextStyle: {
+        color: "#6B7280"
+      },
+      axisLabel: {
+        color: "#6B7280"
+      },
+      axisLine: {
+        lineStyle: {
+          color: "#E5E7EB"
+        }
+      },
+      splitLine: {
+        lineStyle: {
+          color: "#F3F4F6"
+        }
+      }
+    })),
+    dataZoom: props.showDataZoom
+      ? [
+          {
+            type: "inside",
+            start: 70,
+            end: 100
+          },
+          {
+            start: 70,
+            end: 100,
+            height: 30,
+            bottom: 50
+          }
+        ]
+      : undefined,
+    series: props.series.map((seriesItem, index) => ({
+      name: seriesItem.name,
+      type: "line",
+      smooth: props.smooth,
+      data: seriesItem.data,
+      yAxisIndex: seriesItem.yAxisIndex || 0,
+      lineStyle: {
+        color: seriesItem.color || defaultColors[index % defaultColors.length],
+        width: 2
+      },
+      itemStyle: {
+        color: seriesItem.color || defaultColors[index % defaultColors.length]
+      },
+      areaStyle: {
+        opacity: 0.1,
+        color: seriesItem.color || defaultColors[index % defaultColors.length]
+      }
+    }))
+  };
+
+  chartInstance.setOption(option);
+};
+
+const resizeChart = () => {
+  if (chartInstance) {
+    chartInstance.resize();
+  }
+};
+
+onMounted(() => {
+  initChart();
+  window.addEventListener("resize", resizeChart);
+});
+
+onBeforeUnmount(() => {
+  if (chartInstance) {
+    chartInstance.dispose();
+  }
+  window.removeEventListener("resize", resizeChart);
+});
+
+// 监听数据变化
+watch(
+  () => [props.xAxisData, props.series],
+  () => {
+    if (chartInstance) {
+      initChart();
+    }
+  },
+  { deep: true }
+);
+</script>
+
+<template>
+  <div ref="chartRef" :style="{ height: height, width: '100%' }" />
+</template>
+
+<style scoped>
+/* 图表容器样式 */
+</style>

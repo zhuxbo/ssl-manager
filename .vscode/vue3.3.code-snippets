@@ -1,0 +1,20 @@
+{
+  "Vue3.3+defineOptions": {
+    "scope": "vue",
+    "prefix": "Vue3.3+",
+    "body": [
+      "<script setup lang='ts'>",
+      "defineOptions({",
+      "\tname: ''",
+      "})",
+      "</script>\n",
+      "<template>",
+      "\t<div>$1</div>",
+      "</template>\n",
+      "<style lang='scss' scoped>\n",
+      "</style>",
+      "$0"
+    ],
+    "description": "Vue3.3+ template with defineOptions"
+  }
+}

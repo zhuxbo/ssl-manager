@@ -1,0 +1,5516 @@
+{
+    "version": "1.0",
+    "mysql_version": "8.0.43",
+    "generated_at": "2025-11-24 12:45:21",
+    "database": {
+        "name": "tempdb",
+        "charset": "utf8mb4",
+        "collation": "utf8mb4_0900_ai_ci"
+    },
+    "tables": {
+        "admin_logs": {
+            "engine": "InnoDB",
+            "collation": "utf8mb4_0900_ai_ci",
+            "comment": "",
+            "auto_increment": 1,
+            "columns": {
+                "id": {
+                    "position": 1,
+                    "type": "bigint unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "auto_increment",
+                    "comment": ""
+                },
+                "admin_id": {
+                    "position": 2,
+                    "type": "int",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "管理员ID"
+                },
+                "module": {
+                    "position": 3,
+                    "type": "varchar(100)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "模块"
+                },
+                "action": {
+                    "position": 4,
+                    "type": "varchar(100)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "操作"
+                },
+                "method": {
+                    "position": 5,
+                    "type": "varchar(10)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "请求方法"
+                },
+                "url": {
+                    "position": 6,
+                    "type": "varchar(2000)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "请求URL"
+                },
+                "params": {
+                    "position": 7,
+                    "type": "mediumtext",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "请求参数"
+                },
+                "response": {
+                    "position": 8,
+                    "type": "mediumtext",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "响应内容"
+                },
+                "status_code": {
+                    "position": 9,
+                    "type": "int",
+                    "nullable": false,
+                    "default": "200",
+                    "extra": "",
+                    "comment": "状态码"
+                },
+                "status": {
+                    "position": 10,
+                    "type": "tinyint",
+                    "nullable": false,
+                    "default": "0",
+                    "extra": "",
+                    "comment": "状态: 0=失败, 1=成功"
+                },
+                "duration": {
+                    "position": 11,
+                    "type": "decimal(8,2)",
+                    "nullable": false,
+                    "default": "0.00",
+                    "extra": "",
+                    "comment": "耗时(秒)"
+                },
+                "ip": {
+                    "position": 12,
+                    "type": "varchar(100)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "IP地址"
+                },
+                "user_agent": {
+                    "position": 13,
+                    "type": "varchar(500)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "User Agent"
+                },
+                "created_at": {
+                    "position": 14,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "创建时间"
+                }
+            },
+            "indexes": {
+                "admin_logs_action_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "action"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "admin_logs_admin_id_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "admin_id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "admin_logs_method_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "method"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "admin_logs_module_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "module"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "admin_logs_status_code_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "status_code"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "admin_logs_status_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "status"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "PRIMARY": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                }
+            },
+            "foreign_keys": []
+        },
+        "admin_refresh_tokens": {
+            "engine": "InnoDB",
+            "collation": "utf8mb4_0900_ai_ci",
+            "comment": "",
+            "auto_increment": 1,
+            "columns": {
+                "id": {
+                    "position": 1,
+                    "type": "bigint unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "auto_increment",
+                    "comment": ""
+                },
+                "admin_id": {
+                    "position": 2,
+                    "type": "int unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "管理员ID"
+                },
+                "refresh_token": {
+                    "position": 3,
+                    "type": "varchar(128)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "刷新令牌"
+                },
+                "expires_at": {
+                    "position": 4,
+                    "type": "timestamp",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "过期时间"
+                },
+                "created_at": {
+                    "position": 5,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "创建时间"
+                }
+            },
+            "indexes": {
+                "admin_refresh_tokens_admin_id_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "admin_id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "admin_refresh_tokens_refresh_token_unique": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "refresh_token"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "PRIMARY": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                }
+            },
+            "foreign_keys": {
+                "admin_refresh_tokens_admin_id_foreign": {
+                    "columns": [
+                        "admin_id"
+                    ],
+                    "references": {
+                        "table": "admins",
+                        "columns": [
+                            "id"
+                        ]
+                    },
+                    "on_delete": "CASCADE",
+                    "on_update": "NO ACTION"
+                }
+            }
+        },
+        "admins": {
+            "engine": "InnoDB",
+            "collation": "utf8mb4_0900_ai_ci",
+            "comment": "",
+            "auto_increment": 1,
+            "columns": {
+                "id": {
+                    "position": 1,
+                    "type": "int unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "auto_increment",
+                    "comment": "ID"
+                },
+                "username": {
+                    "position": 2,
+                    "type": "varchar(20)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "用户名"
+                },
+                "email": {
+                    "position": 3,
+                    "type": "varchar(50)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "邮箱"
+                },
+                "mobile": {
+                    "position": 4,
+                    "type": "varchar(20)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "手机"
+                },
+                "last_login_at": {
+                    "position": 5,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "上次登录时间"
+                },
+                "last_login_ip": {
+                    "position": 6,
+                    "type": "varchar(50)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "上次登录IP"
+                },
+                "password": {
+                    "position": 7,
+                    "type": "varchar(128)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "密码"
+                },
+                "token_version": {
+                    "position": 8,
+                    "type": "int unsigned",
+                    "nullable": false,
+                    "default": "0",
+                    "extra": "",
+                    "comment": "令牌版本"
+                },
+                "logout_at": {
+                    "position": 9,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "登出时间"
+                },
+                "status": {
+                    "position": 10,
+                    "type": "tinyint",
+                    "nullable": false,
+                    "default": "1",
+                    "extra": "",
+                    "comment": "状态: 0=禁用, 1=启用"
+                },
+                "created_at": {
+                    "position": 11,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                },
+                "updated_at": {
+                    "position": 12,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                }
+            },
+            "indexes": {
+                "admins_email_unique": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "email"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "admins_mobile_unique": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "mobile"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "admins_status_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "status"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "admins_username_unique": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "username"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "PRIMARY": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                }
+            },
+            "foreign_keys": []
+        },
+        "agisos": {
+            "engine": "InnoDB",
+            "collation": "utf8mb4_0900_ai_ci",
+            "comment": "",
+            "auto_increment": 1,
+            "columns": {
+                "id": {
+                    "position": 1,
+                    "type": "bigint unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "auto_increment",
+                    "comment": "ID"
+                },
+                "user_id": {
+                    "position": 2,
+                    "type": "bigint unsigned",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "用户ID"
+                },
+                "order_id": {
+                    "position": 3,
+                    "type": "bigint unsigned",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "订单ID"
+                },
+                "platform": {
+                    "position": 4,
+                    "type": "varchar(20)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "平台"
+                },
+                "type": {
+                    "position": 5,
+                    "type": "int unsigned",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "推送类型"
+                },
+                "sign": {
+                    "position": 6,
+                    "type": "varchar(200)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "签名"
+                },
+                "timestamp": {
+                    "position": 7,
+                    "type": "bigint unsigned",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "时间戳"
+                },
+                "data": {
+                    "position": 8,
+                    "type": "mediumtext",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "推送数据"
+                },
+                "tid": {
+                    "position": 9,
+                    "type": "varchar(200)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "订单ID"
+                },
+                "refund_id": {
+                    "position": 10,
+                    "type": "varchar(200)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "退款ID"
+                },
+                "status": {
+                    "position": 11,
+                    "type": "varchar(50)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "订单状态"
+                },
+                "product_code": {
+                    "position": 12,
+                    "type": "varchar(100)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "产品代码"
+                },
+                "period": {
+                    "position": 13,
+                    "type": "smallint unsigned",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "周期(月)"
+                },
+                "price": {
+                    "position": 14,
+                    "type": "decimal(10,2)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "价格"
+                },
+                "count": {
+                    "position": 15,
+                    "type": "smallint unsigned",
+                    "nullable": false,
+                    "default": "1",
+                    "extra": "",
+                    "comment": "件数"
+                },
+                "amount": {
+                    "position": 16,
+                    "type": "decimal(10,2)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "支付金额"
+                },
+                "recharged": {
+                    "position": 17,
+                    "type": "tinyint(1)",
+                    "nullable": false,
+                    "default": "0",
+                    "extra": "",
+                    "comment": "充值状态:0=未充值,1=已充值"
+                },
+                "created_at": {
+                    "position": 18,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                },
+                "updated_at": {
+                    "position": 19,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                }
+            },
+            "indexes": {
+                "agisos_order_id_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "order_id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "agisos_platform_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "platform"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "agisos_product_code_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "product_code"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "agisos_recharged_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "recharged"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "agisos_refund_id_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "refund_id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "agisos_status_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "status"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "agisos_tid_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "tid"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "agisos_user_id_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "user_id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "PRIMARY": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                }
+            },
+            "foreign_keys": {
+                "agisos_order_id_foreign": {
+                    "columns": [
+                        "order_id"
+                    ],
+                    "references": {
+                        "table": "orders",
+                        "columns": [
+                            "id"
+                        ]
+                    },
+                    "on_delete": "SET NULL",
+                    "on_update": "NO ACTION"
+                },
+                "agisos_user_id_foreign": {
+                    "columns": [
+                        "user_id"
+                    ],
+                    "references": {
+                        "table": "users",
+                        "columns": [
+                            "id"
+                        ]
+                    },
+                    "on_delete": "SET NULL",
+                    "on_update": "NO ACTION"
+                }
+            }
+        },
+        "api_logs": {
+            "engine": "InnoDB",
+            "collation": "utf8mb4_0900_ai_ci",
+            "comment": "",
+            "auto_increment": 1,
+            "columns": {
+                "id": {
+                    "position": 1,
+                    "type": "bigint unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "auto_increment",
+                    "comment": ""
+                },
+                "user_id": {
+                    "position": 2,
+                    "type": "bigint unsigned",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "用户ID"
+                },
+                "version": {
+                    "position": 3,
+                    "type": "varchar(10)",
+                    "nullable": false,
+                    "default": "v2",
+                    "extra": "",
+                    "comment": "API版本"
+                },
+                "method": {
+                    "position": 4,
+                    "type": "varchar(10)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "请求方法"
+                },
+                "url": {
+                    "position": 5,
+                    "type": "varchar(2000)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "请求URL"
+                },
+                "params": {
+                    "position": 6,
+                    "type": "mediumtext",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "请求参数"
+                },
+                "response": {
+                    "position": 7,
+                    "type": "mediumtext",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "响应内容"
+                },
+                "status_code": {
+                    "position": 8,
+                    "type": "int",
+                    "nullable": false,
+                    "default": "200",
+                    "extra": "",
+                    "comment": "状态码"
+                },
+                "status": {
+                    "position": 9,
+                    "type": "tinyint",
+                    "nullable": false,
+                    "default": "0",
+                    "extra": "",
+                    "comment": "状态: 0=失败, 1=成功"
+                },
+                "duration": {
+                    "position": 10,
+                    "type": "decimal(8,2)",
+                    "nullable": false,
+                    "default": "0.00",
+                    "extra": "",
+                    "comment": "耗时(秒)"
+                },
+                "ip": {
+                    "position": 11,
+                    "type": "varchar(100)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "IP地址"
+                },
+                "user_agent": {
+                    "position": 12,
+                    "type": "varchar(500)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "User Agent"
+                },
+                "created_at": {
+                    "position": 13,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "创建时间"
+                }
+            },
+            "indexes": {
+                "api_logs_method_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "method"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "api_logs_status_code_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "status_code"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "api_logs_status_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "status"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "api_logs_user_id_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "user_id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "api_logs_version_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "version"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "PRIMARY": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                }
+            },
+            "foreign_keys": []
+        },
+        "api_tokens": {
+            "engine": "InnoDB",
+            "collation": "utf8mb4_0900_ai_ci",
+            "comment": "",
+            "auto_increment": 1,
+            "columns": {
+                "id": {
+                    "position": 1,
+                    "type": "int unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "auto_increment",
+                    "comment": "ID"
+                },
+                "user_id": {
+                    "position": 2,
+                    "type": "bigint unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "用户ID"
+                },
+                "token": {
+                    "position": 3,
+                    "type": "varchar(128)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "令牌"
+                },
+                "allowed_ips": {
+                    "position": 4,
+                    "type": "varchar(200)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "允许的IP"
+                },
+                "rate_limit": {
+                    "position": 5,
+                    "type": "int",
+                    "nullable": false,
+                    "default": "60",
+                    "extra": "",
+                    "comment": "速率限制"
+                },
+                "last_used_at": {
+                    "position": 6,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "最后使用时间"
+                },
+                "last_used_ip": {
+                    "position": 7,
+                    "type": "varchar(100)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "最后使用IP"
+                },
+                "status": {
+                    "position": 8,
+                    "type": "tinyint unsigned",
+                    "nullable": false,
+                    "default": "1",
+                    "extra": "",
+                    "comment": "状态: 0=禁用, 1=启用"
+                },
+                "created_at": {
+                    "position": 9,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                },
+                "updated_at": {
+                    "position": 10,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                }
+            },
+            "indexes": {
+                "api_tokens_allowed_ips_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "allowed_ips"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "api_tokens_status_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "status"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "api_tokens_token_unique": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "token"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "api_tokens_user_id_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "user_id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "PRIMARY": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                }
+            },
+            "foreign_keys": {
+                "api_tokens_user_id_foreign": {
+                    "columns": [
+                        "user_id"
+                    ],
+                    "references": {
+                        "table": "users",
+                        "columns": [
+                            "id"
+                        ]
+                    },
+                    "on_delete": "CASCADE",
+                    "on_update": "NO ACTION"
+                }
+            }
+        },
+        "ca_logs": {
+            "engine": "InnoDB",
+            "collation": "utf8mb4_0900_ai_ci",
+            "comment": "",
+            "auto_increment": 1,
+            "columns": {
+                "id": {
+                    "position": 1,
+                    "type": "bigint unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "auto_increment",
+                    "comment": ""
+                },
+                "url": {
+                    "position": 2,
+                    "type": "varchar(2000)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "请求URL"
+                },
+                "api": {
+                    "position": 3,
+                    "type": "varchar(100)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "API"
+                },
+                "params": {
+                    "position": 4,
+                    "type": "mediumtext",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "请求参数"
+                },
+                "response": {
+                    "position": 5,
+                    "type": "mediumtext",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "响应内容"
+                },
+                "status_code": {
+                    "position": 6,
+                    "type": "int",
+                    "nullable": false,
+                    "default": "200",
+                    "extra": "",
+                    "comment": "状态码"
+                },
+                "status": {
+                    "position": 7,
+                    "type": "tinyint",
+                    "nullable": false,
+                    "default": "0",
+                    "extra": "",
+                    "comment": "状态: 0=失败, 1=成功"
+                },
+                "duration": {
+                    "position": 8,
+                    "type": "decimal(8,2)",
+                    "nullable": false,
+                    "default": "0.00",
+                    "extra": "",
+                    "comment": "耗时(秒)"
+                },
+                "created_at": {
+                    "position": 9,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "创建时间"
+                }
+            },
+            "indexes": {
+                "ca_logs_status_code_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "status_code"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "ca_logs_status_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "status"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "PRIMARY": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                }
+            },
+            "foreign_keys": []
+        },
+        "callback_logs": {
+            "engine": "InnoDB",
+            "collation": "utf8mb4_0900_ai_ci",
+            "comment": "",
+            "auto_increment": 1,
+            "columns": {
+                "id": {
+                    "position": 1,
+                    "type": "bigint unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "auto_increment",
+                    "comment": ""
+                },
+                "method": {
+                    "position": 2,
+                    "type": "varchar(10)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "请求方法"
+                },
+                "url": {
+                    "position": 3,
+                    "type": "varchar(2000)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "请求URL"
+                },
+                "params": {
+                    "position": 4,
+                    "type": "mediumtext",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "回调参数"
+                },
+                "response": {
+                    "position": 5,
+                    "type": "mediumtext",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "响应内容"
+                },
+                "ip": {
+                    "position": 6,
+                    "type": "varchar(100)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "IP地址"
+                },
+                "status": {
+                    "position": 7,
+                    "type": "tinyint",
+                    "nullable": false,
+                    "default": "0",
+                    "extra": "",
+                    "comment": "状态: 0=失败, 1=成功"
+                },
+                "created_at": {
+                    "position": 8,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "创建时间"
+                }
+            },
+            "indexes": {
+                "callback_logs_method_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "method"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "callback_logs_status_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "status"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "PRIMARY": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                }
+            },
+            "foreign_keys": []
+        },
+        "callbacks": {
+            "engine": "InnoDB",
+            "collation": "utf8mb4_0900_ai_ci",
+            "comment": "",
+            "auto_increment": 1,
+            "columns": {
+                "id": {
+                    "position": 1,
+                    "type": "int unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "auto_increment",
+                    "comment": "ID"
+                },
+                "user_id": {
+                    "position": 2,
+                    "type": "bigint unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "用户ID"
+                },
+                "url": {
+                    "position": 3,
+                    "type": "varchar(500)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "回调地址"
+                },
+                "token": {
+                    "position": 4,
+                    "type": "varchar(500)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "Token"
+                },
+                "status": {
+                    "position": 5,
+                    "type": "tinyint",
+                    "nullable": false,
+                    "default": "1",
+                    "extra": "",
+                    "comment": "状态: 0=禁用, 1=启用"
+                },
+                "created_at": {
+                    "position": 6,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                },
+                "updated_at": {
+                    "position": 7,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                }
+            },
+            "indexes": {
+                "callbacks_status_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "status"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "callbacks_user_id_unique": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "user_id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "PRIMARY": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                }
+            },
+            "foreign_keys": {
+                "callbacks_user_id_foreign": {
+                    "columns": [
+                        "user_id"
+                    ],
+                    "references": {
+                        "table": "users",
+                        "columns": [
+                            "id"
+                        ]
+                    },
+                    "on_delete": "CASCADE",
+                    "on_update": "NO ACTION"
+                }
+            }
+        },
+        "certs": {
+            "engine": "InnoDB",
+            "collation": "utf8mb4_0900_ai_ci",
+            "comment": "",
+            "auto_increment": null,
+            "columns": {
+                "id": {
+                    "position": 1,
+                    "type": "bigint unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "ID"
+                },
+                "order_id": {
+                    "position": 2,
+                    "type": "bigint unsigned",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "订单ID"
+                },
+                "last_cert_id": {
+                    "position": 3,
+                    "type": "bigint unsigned",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "上一个证书ID"
+                },
+                "api_id": {
+                    "position": 4,
+                    "type": "varchar(200)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "接口ID"
+                },
+                "vendor_id": {
+                    "position": 5,
+                    "type": "varchar(200)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "CA订单ID"
+                },
+                "vendor_cert_id": {
+                    "position": 6,
+                    "type": "varchar(200)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "CA证书ID"
+                },
+                "refer_id": {
+                    "position": 7,
+                    "type": "varchar(200)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "参考ID"
+                },
+                "unique_value": {
+                    "position": 8,
+                    "type": "varchar(32)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "唯一值"
+                },
+                "issuer": {
+                    "position": 9,
+                    "type": "varchar(200)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "颁发者"
+                },
+                "action": {
+                    "position": 10,
+                    "type": "enum('new','renew','reissue')",
+                    "nullable": false,
+                    "default": "new",
+                    "extra": "",
+                    "comment": "操作"
+                },
+                "channel": {
+                    "position": 11,
+                    "type": "enum('admin','web','api','acme')",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "渠道"
+                },
+                "params": {
+                    "position": 12,
+                    "type": "mediumtext",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "参数"
+                },
+                "amount": {
+                    "position": 13,
+                    "type": "decimal(10,2)",
+                    "nullable": false,
+                    "default": "0.00",
+                    "extra": "",
+                    "comment": "金额"
+                },
+                "common_name": {
+                    "position": 14,
+                    "type": "varchar(256)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "通用名称"
+                },
+                "alternative_names": {
+                    "position": 15,
+                    "type": "mediumtext",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "备用名称"
+                },
+                "standard_count": {
+                    "position": 16,
+                    "type": "int",
+                    "nullable": false,
+                    "default": "0",
+                    "extra": "",
+                    "comment": "标准域名数"
+                },
+                "wildcard_count": {
+                    "position": 17,
+                    "type": "int",
+                    "nullable": false,
+                    "default": "0",
+                    "extra": "",
+                    "comment": "通配符数"
+                },
+                "dcv": {
+                    "position": 18,
+                    "type": "mediumtext",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "验证信息"
+                },
+                "validation": {
+                    "position": 19,
+                    "type": "mediumtext",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "验证"
+                },
+                "issued_at": {
+                    "position": 20,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "颁发时间"
+                },
+                "expires_at": {
+                    "position": 21,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "过期时间"
+                },
+                "csr_md5": {
+                    "position": 22,
+                    "type": "char(32)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "CSR的MD5"
+                },
+                "csr": {
+                    "position": 23,
+                    "type": "mediumtext",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "CSR"
+                },
+                "private_key": {
+                    "position": 24,
+                    "type": "mediumtext",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "私钥"
+                },
+                "cert": {
+                    "position": 25,
+                    "type": "mediumtext",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "证书"
+                },
+                "serial_number": {
+                    "position": 26,
+                    "type": "varchar(128)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "序列号"
+                },
+                "fingerprint": {
+                    "position": 27,
+                    "type": "varchar(128)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "指纹"
+                },
+                "encryption_alg": {
+                    "position": 28,
+                    "type": "varchar(20)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "加密算法"
+                },
+                "encryption_bits": {
+                    "position": 29,
+                    "type": "smallint unsigned",
+                    "nullable": false,
+                    "default": "0",
+                    "extra": "",
+                    "comment": "加密位数"
+                },
+                "signature_digest_alg": {
+                    "position": 30,
+                    "type": "varchar(20)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "签名摘要算法"
+                },
+                "cert_apply_status": {
+                    "position": 31,
+                    "type": "tinyint",
+                    "nullable": false,
+                    "default": "0",
+                    "extra": "",
+                    "comment": "证书申请状态: 0=未提交CA, 2=已提交CA"
+                },
+                "domain_verify_status": {
+                    "position": 32,
+                    "type": "tinyint",
+                    "nullable": false,
+                    "default": "0",
+                    "extra": "",
+                    "comment": "域名验证状态: 0=未开始, 1=进行中, 2=已完成"
+                },
+                "org_verify_status": {
+                    "position": 33,
+                    "type": "tinyint",
+                    "nullable": false,
+                    "default": "0",
+                    "extra": "",
+                    "comment": "组织验证状态: 0=未开始, 1=进行中, 2=已完成"
+                },
+                "status": {
+                    "position": 34,
+                    "type": "enum('unpaid','pending','processing','approving','active','failed','cancelling','cancelled','revoked','renewed','reissued','expired')",
+                    "nullable": false,
+                    "default": "unpaid",
+                    "extra": "",
+                    "comment": "状态"
+                },
+                "created_at": {
+                    "position": 35,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                },
+                "updated_at": {
+                    "position": 36,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                }
+            },
+            "indexes": {
+                "certs_alternative_names_fulltext": {
+                    "unique": false,
+                    "type": "FULLTEXT",
+                    "columns": [
+                        "alternative_names"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "certs_api_id_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "api_id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "certs_common_name_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "common_name"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "certs_csr_md5_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "csr_md5"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "certs_issuer_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "issuer"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "certs_last_cert_id_unique": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "last_cert_id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "certs_order_id_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "order_id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "certs_refer_id_unique": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "refer_id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "certs_status_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "status"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "PRIMARY": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                }
+            },
+            "foreign_keys": []
+        },
+        "chains": {
+            "engine": "InnoDB",
+            "collation": "utf8mb4_0900_ai_ci",
+            "comment": "",
+            "auto_increment": 1,
+            "columns": {
+                "id": {
+                    "position": 1,
+                    "type": "int unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "auto_increment",
+                    "comment": "ID"
+                },
+                "common_name": {
+                    "position": 2,
+                    "type": "varchar(200)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "通用名称"
+                },
+                "intermediate_cert": {
+                    "position": 3,
+                    "type": "text",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "中级证书"
+                },
+                "created_at": {
+                    "position": 4,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                },
+                "updated_at": {
+                    "position": 5,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                }
+            },
+            "indexes": {
+                "chains_common_name_unique": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "common_name"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "PRIMARY": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                }
+            },
+            "foreign_keys": []
+        },
+        "cname_delegations": {
+            "engine": "InnoDB",
+            "collation": "utf8mb4_0900_ai_ci",
+            "comment": "",
+            "auto_increment": 1,
+            "columns": {
+                "id": {
+                    "position": 1,
+                    "type": "bigint unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "auto_increment",
+                    "comment": ""
+                },
+                "user_id": {
+                    "position": 2,
+                    "type": "bigint unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "所有者用户ID"
+                },
+                "zone": {
+                    "position": 3,
+                    "type": "varchar(255)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "委托域(ACME: 必须具体FQDN; 其他前缀: 支持根域或子域)"
+                },
+                "prefix": {
+                    "position": 4,
+                    "type": "varchar(50)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "委托前缀"
+                },
+                "label": {
+                    "position": 5,
+                    "type": "varchar(64)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "SHA256哈希标签(64位hex)"
+                },
+                "valid": {
+                    "position": 6,
+                    "type": "tinyint(1)",
+                    "nullable": false,
+                    "default": "0",
+                    "extra": "",
+                    "comment": "委托是否有效(健康检查结果)"
+                },
+                "last_checked_at": {
+                    "position": 7,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "上次健康检查时间"
+                },
+                "fail_count": {
+                    "position": 8,
+                    "type": "tinyint unsigned",
+                    "nullable": false,
+                    "default": "0",
+                    "extra": "",
+                    "comment": "连续失败次数(用于熔断\/预警)"
+                },
+                "last_error": {
+                    "position": 9,
+                    "type": "varchar(255)",
+                    "nullable": false,
+                    "default": "",
+                    "extra": "",
+                    "comment": "最近一次检查失败原因"
+                },
+                "created_at": {
+                    "position": 10,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                },
+                "updated_at": {
+                    "position": 11,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                }
+            },
+            "indexes": {
+                "cname_delegations_prefix_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "prefix"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "cname_delegations_user_id_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "user_id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "cname_delegations_valid_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "valid"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "cname_delegations_zone_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "zone"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "PRIMARY": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "uniq_user_zone_prefix": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "user_id",
+                        "zone",
+                        "prefix"
+                    ],
+                    "sub_parts": [
+                        null,
+                        null,
+                        null
+                    ]
+                }
+            },
+            "foreign_keys": []
+        },
+        "contacts": {
+            "engine": "InnoDB",
+            "collation": "utf8mb4_0900_ai_ci",
+            "comment": "",
+            "auto_increment": null,
+            "columns": {
+                "id": {
+                    "position": 1,
+                    "type": "bigint unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "ID"
+                },
+                "user_id": {
+                    "position": 2,
+                    "type": "bigint unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "用户ID"
+                },
+                "last_name": {
+                    "position": 3,
+                    "type": "varchar(50)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "姓"
+                },
+                "first_name": {
+                    "position": 4,
+                    "type": "varchar(50)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "名"
+                },
+                "identification_number": {
+                    "position": 5,
+                    "type": "varchar(100)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "证件编码"
+                },
+                "title": {
+                    "position": 6,
+                    "type": "varchar(50)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "职位"
+                },
+                "email": {
+                    "position": 7,
+                    "type": "varchar(100)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "邮箱"
+                },
+                "phone": {
+                    "position": 8,
+                    "type": "varchar(20)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "电话"
+                },
+                "created_at": {
+                    "position": 9,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                },
+                "updated_at": {
+                    "position": 10,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                }
+            },
+            "indexes": {
+                "contacts_email_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "email"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "contacts_first_name_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "first_name"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "contacts_last_name_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "last_name"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "contacts_phone_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "phone"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "contacts_user_id_foreign": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "user_id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "PRIMARY": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                }
+            },
+            "foreign_keys": {
+                "contacts_user_id_foreign": {
+                    "columns": [
+                        "user_id"
+                    ],
+                    "references": {
+                        "table": "users",
+                        "columns": [
+                            "id"
+                        ]
+                    },
+                    "on_delete": "CASCADE",
+                    "on_update": "NO ACTION"
+                }
+            }
+        },
+        "domain_validation_records": {
+            "engine": "InnoDB",
+            "collation": "utf8mb4_0900_ai_ci",
+            "comment": "",
+            "auto_increment": 1,
+            "columns": {
+                "id": {
+                    "position": 1,
+                    "type": "bigint unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "auto_increment",
+                    "comment": ""
+                },
+                "order_id": {
+                    "position": 2,
+                    "type": "bigint unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "订单ID"
+                },
+                "last_check_at": {
+                    "position": 3,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "上次验证时间"
+                },
+                "next_check_at": {
+                    "position": 4,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "下次验证时间"
+                },
+                "created_at": {
+                    "position": 5,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "创建时间"
+                }
+            },
+            "indexes": {
+                "domain_validation_records_order_id_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "order_id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "PRIMARY": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                }
+            },
+            "foreign_keys": []
+        },
+        "easy_logs": {
+            "engine": "InnoDB",
+            "collation": "utf8mb4_0900_ai_ci",
+            "comment": "",
+            "auto_increment": 1,
+            "columns": {
+                "id": {
+                    "position": 1,
+                    "type": "bigint unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "auto_increment",
+                    "comment": ""
+                },
+                "method": {
+                    "position": 2,
+                    "type": "varchar(10)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "请求方法"
+                },
+                "url": {
+                    "position": 3,
+                    "type": "varchar(2000)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "请求URL"
+                },
+                "params": {
+                    "position": 4,
+                    "type": "mediumtext",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "请求参数"
+                },
+                "response": {
+                    "position": 5,
+                    "type": "mediumtext",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "响应内容"
+                },
+                "ip": {
+                    "position": 6,
+                    "type": "varchar(100)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "IP地址"
+                },
+                "status": {
+                    "position": 7,
+                    "type": "tinyint",
+                    "nullable": false,
+                    "default": "0",
+                    "extra": "",
+                    "comment": "状态: 0=失败, 1=成功"
+                },
+                "created_at": {
+                    "position": 8,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "创建时间"
+                }
+            },
+            "indexes": {
+                "easy_logs_method_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "method"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "easy_logs_status_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "status"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "PRIMARY": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                }
+            },
+            "foreign_keys": []
+        },
+        "error_logs": {
+            "engine": "InnoDB",
+            "collation": "utf8mb4_0900_ai_ci",
+            "comment": "",
+            "auto_increment": 1,
+            "columns": {
+                "id": {
+                    "position": 1,
+                    "type": "bigint unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "auto_increment",
+                    "comment": ""
+                },
+                "method": {
+                    "position": 2,
+                    "type": "varchar(10)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "请求方法"
+                },
+                "url": {
+                    "position": 3,
+                    "type": "varchar(2000)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "请求URL"
+                },
+                "exception": {
+                    "position": 4,
+                    "type": "varchar(255)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "异常类型"
+                },
+                "message": {
+                    "position": 5,
+                    "type": "varchar(1000)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "错误信息"
+                },
+                "trace": {
+                    "position": 6,
+                    "type": "mediumtext",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "错误堆栈跟踪"
+                },
+                "status_code": {
+                    "position": 7,
+                    "type": "int",
+                    "nullable": false,
+                    "default": "500",
+                    "extra": "",
+                    "comment": "状态码"
+                },
+                "ip": {
+                    "position": 8,
+                    "type": "varchar(100)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "IP地址"
+                },
+                "created_at": {
+                    "position": 9,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "创建时间"
+                }
+            },
+            "indexes": {
+                "error_logs_method_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "method"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "error_logs_status_code_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "status_code"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "PRIMARY": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                }
+            },
+            "foreign_keys": []
+        },
+        "funds": {
+            "engine": "InnoDB",
+            "collation": "utf8mb4_0900_ai_ci",
+            "comment": "",
+            "auto_increment": null,
+            "columns": {
+                "id": {
+                    "position": 1,
+                    "type": "bigint unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "ID"
+                },
+                "user_id": {
+                    "position": 2,
+                    "type": "bigint unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "用户ID"
+                },
+                "amount": {
+                    "position": 3,
+                    "type": "decimal(10,2)",
+                    "nullable": false,
+                    "default": "0.00",
+                    "extra": "",
+                    "comment": "金额"
+                },
+                "type": {
+                    "position": 4,
+                    "type": "enum('addfunds','refunds','deduct','reverse')",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "类型:addfunds=充值,refunds=退款,deduct=扣款,reverse=退回"
+                },
+                "pay_method": {
+                    "position": 5,
+                    "type": "enum('wechat','alipay','credit','taobao','pinduoduo','jingdong','douyin','gift','other')",
+                    "nullable": false,
+                    "default": "other",
+                    "extra": "",
+                    "comment": "支付方法"
+                },
+                "pay_sn": {
+                    "position": 6,
+                    "type": "varchar(256)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "支付编号"
+                },
+                "ip": {
+                    "position": 7,
+                    "type": "varchar(200)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "IP"
+                },
+                "remark": {
+                    "position": 8,
+                    "type": "varchar(500)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "备注"
+                },
+                "status": {
+                    "position": 9,
+                    "type": "tinyint",
+                    "nullable": false,
+                    "default": "0",
+                    "extra": "",
+                    "comment": "状态: 0=处理中, 1=成功, 2=已退"
+                },
+                "created_at": {
+                    "position": 10,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                },
+                "updated_at": {
+                    "position": 11,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                }
+            },
+            "indexes": {
+                "funds_status_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "status"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "funds_type_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "type"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "funds_type_pay_method_pay_sn_unique": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "type",
+                        "pay_method",
+                        "pay_sn"
+                    ],
+                    "sub_parts": [
+                        null,
+                        null,
+                        null
+                    ]
+                },
+                "funds_user_id_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "user_id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "PRIMARY": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                }
+            },
+            "foreign_keys": []
+        },
+        "invoice_limits": {
+            "engine": "InnoDB",
+            "collation": "utf8mb4_0900_ai_ci",
+            "comment": "",
+            "auto_increment": 1,
+            "columns": {
+                "id": {
+                    "position": 1,
+                    "type": "bigint unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "auto_increment",
+                    "comment": ""
+                },
+                "user_id": {
+                    "position": 2,
+                    "type": "bigint unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "用户ID"
+                },
+                "type": {
+                    "position": 3,
+                    "type": "enum('issue','void','addfunds','refunds')",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "类型:issue=开票,void=作废,addfunds=充值,refunds=退款"
+                },
+                "limit_id": {
+                    "position": 4,
+                    "type": "bigint unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "关联ID（invoice_id 或 fund_id）"
+                },
+                "amount": {
+                    "position": 5,
+                    "type": "decimal(10,2)",
+                    "nullable": false,
+                    "default": "0.00",
+                    "extra": "",
+                    "comment": "金额"
+                },
+                "limit_before": {
+                    "position": 6,
+                    "type": "decimal(10,2)",
+                    "nullable": false,
+                    "default": "0.00",
+                    "extra": "",
+                    "comment": "操作前额度"
+                },
+                "limit_after": {
+                    "position": 7,
+                    "type": "decimal(10,2)",
+                    "nullable": false,
+                    "default": "0.00",
+                    "extra": "",
+                    "comment": "操作后额度"
+                },
+                "created_at": {
+                    "position": 8,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "创建时间"
+                }
+            },
+            "indexes": {
+                "invoice_limits_limit_id_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "limit_id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "invoice_limits_type_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "type"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "invoice_limits_type_limit_id_unique": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "type",
+                        "limit_id"
+                    ],
+                    "sub_parts": [
+                        null,
+                        null
+                    ]
+                },
+                "invoice_limits_user_id_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "user_id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "PRIMARY": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                }
+            },
+            "foreign_keys": []
+        },
+        "invoices": {
+            "engine": "InnoDB",
+            "collation": "utf8mb4_0900_ai_ci",
+            "comment": "",
+            "auto_increment": null,
+            "columns": {
+                "id": {
+                    "position": 1,
+                    "type": "bigint unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "ID"
+                },
+                "user_id": {
+                    "position": 2,
+                    "type": "bigint unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "用户ID"
+                },
+                "amount": {
+                    "position": 3,
+                    "type": "decimal(10,2)",
+                    "nullable": false,
+                    "default": "0.00",
+                    "extra": "",
+                    "comment": "金额"
+                },
+                "organization": {
+                    "position": 4,
+                    "type": "varchar(200)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "组织"
+                },
+                "taxation": {
+                    "position": 5,
+                    "type": "varchar(100)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "税号"
+                },
+                "remark": {
+                    "position": 6,
+                    "type": "varchar(500)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "备注"
+                },
+                "email": {
+                    "position": 7,
+                    "type": "varchar(100)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "邮箱"
+                },
+                "status": {
+                    "position": 8,
+                    "type": "tinyint",
+                    "nullable": false,
+                    "default": "0",
+                    "extra": "",
+                    "comment": "状态: 0=处理中, 1=已开票, 2=已作废"
+                },
+                "created_at": {
+                    "position": 9,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                },
+                "updated_at": {
+                    "position": 10,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                }
+            },
+            "indexes": {
+                "invoices_organization_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "organization"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "invoices_status_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "status"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "invoices_taxation_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "taxation"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "invoices_user_id_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "user_id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "PRIMARY": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                }
+            },
+            "foreign_keys": []
+        },
+        "job_batches": {
+            "engine": "InnoDB",
+            "collation": "utf8mb4_0900_ai_ci",
+            "comment": "",
+            "auto_increment": null,
+            "columns": {
+                "id": {
+                    "position": 1,
+                    "type": "varchar(255)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                },
+                "name": {
+                    "position": 2,
+                    "type": "varchar(255)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                },
+                "total_jobs": {
+                    "position": 3,
+                    "type": "int",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                },
+                "pending_jobs": {
+                    "position": 4,
+                    "type": "int",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                },
+                "failed_jobs": {
+                    "position": 5,
+                    "type": "int",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                },
+                "failed_job_ids": {
+                    "position": 6,
+                    "type": "longtext",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                },
+                "options": {
+                    "position": 7,
+                    "type": "mediumtext",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                },
+                "cancelled_at": {
+                    "position": 8,
+                    "type": "int",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                },
+                "created_at": {
+                    "position": 9,
+                    "type": "int",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                },
+                "finished_at": {
+                    "position": 10,
+                    "type": "int",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                }
+            },
+            "indexes": {
+                "PRIMARY": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                }
+            },
+            "foreign_keys": []
+        },
+        "jobs": {
+            "engine": "InnoDB",
+            "collation": "utf8mb4_0900_ai_ci",
+            "comment": "",
+            "auto_increment": 1,
+            "columns": {
+                "id": {
+                    "position": 1,
+                    "type": "bigint unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "auto_increment",
+                    "comment": ""
+                },
+                "queue": {
+                    "position": 2,
+                    "type": "varchar(255)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                },
+                "payload": {
+                    "position": 3,
+                    "type": "longtext",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                },
+                "attempts": {
+                    "position": 4,
+                    "type": "tinyint unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                },
+                "reserved_at": {
+                    "position": 5,
+                    "type": "int unsigned",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                },
+                "available_at": {
+                    "position": 6,
+                    "type": "int unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                },
+                "created_at": {
+                    "position": 7,
+                    "type": "int unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                }
+            },
+            "indexes": {
+                "jobs_queue_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "queue"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "PRIMARY": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                }
+            },
+            "foreign_keys": []
+        },
+        "notification_templates": {
+            "engine": "InnoDB",
+            "collation": "utf8mb4_0900_ai_ci",
+            "comment": "",
+            "auto_increment": 1,
+            "columns": {
+                "id": {
+                    "position": 1,
+                    "type": "int unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "auto_increment",
+                    "comment": "ID"
+                },
+                "name": {
+                    "position": 2,
+                    "type": "varchar(100)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "模板名称"
+                },
+                "code": {
+                    "position": 3,
+                    "type": "varchar(50)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "模板标识"
+                },
+                "channels": {
+                    "position": 4,
+                    "type": "text",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "可用通道"
+                },
+                "content": {
+                    "position": 5,
+                    "type": "text",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "模板内容"
+                },
+                "variables": {
+                    "position": 6,
+                    "type": "text",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "变量说明"
+                },
+                "example": {
+                    "position": 7,
+                    "type": "text",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "示例"
+                },
+                "status": {
+                    "position": 8,
+                    "type": "tinyint",
+                    "nullable": false,
+                    "default": "1",
+                    "extra": "",
+                    "comment": "状态:1=启用,0=禁用"
+                },
+                "created_at": {
+                    "position": 9,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                },
+                "updated_at": {
+                    "position": 10,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                }
+            },
+            "indexes": {
+                "notification_templates_code_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "code"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "notification_templates_name_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "name"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "notification_templates_status_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "status"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "PRIMARY": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                }
+            },
+            "foreign_keys": []
+        },
+        "notifications": {
+            "engine": "InnoDB",
+            "collation": "utf8mb4_0900_ai_ci",
+            "comment": "",
+            "auto_increment": 1,
+            "columns": {
+                "id": {
+                    "position": 1,
+                    "type": "bigint unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "auto_increment",
+                    "comment": ""
+                },
+                "notifiable_type": {
+                    "position": 2,
+                    "type": "varchar(255)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                },
+                "notifiable_id": {
+                    "position": 3,
+                    "type": "bigint unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                },
+                "template_id": {
+                    "position": 4,
+                    "type": "int unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "模板ID"
+                },
+                "data": {
+                    "position": 5,
+                    "type": "text",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "通知数据"
+                },
+                "read_at": {
+                    "position": 6,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "阅读时间"
+                },
+                "sent_at": {
+                    "position": 7,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "发送时间"
+                },
+                "status": {
+                    "position": 8,
+                    "type": "enum('pending','sending','sent','failed')",
+                    "nullable": false,
+                    "default": "pending",
+                    "extra": "",
+                    "comment": "状态: pending=待发送,sending=发送中,sent=已发送,failed=发送失败"
+                },
+                "created_at": {
+                    "position": 9,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                },
+                "updated_at": {
+                    "position": 10,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                }
+            },
+            "indexes": {
+                "notifications_notifiable_type_notifiable_id_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "notifiable_type",
+                        "notifiable_id"
+                    ],
+                    "sub_parts": [
+                        null,
+                        null
+                    ]
+                },
+                "notifications_status_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "status"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "notifications_template_id_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "template_id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "PRIMARY": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                }
+            },
+            "foreign_keys": []
+        },
+        "orders": {
+            "engine": "InnoDB",
+            "collation": "utf8mb4_0900_ai_ci",
+            "comment": "",
+            "auto_increment": null,
+            "columns": {
+                "id": {
+                    "position": 1,
+                    "type": "bigint unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "ID"
+                },
+                "user_id": {
+                    "position": 2,
+                    "type": "bigint unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "用户ID"
+                },
+                "product_id": {
+                    "position": 3,
+                    "type": "int unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "产品ID"
+                },
+                "latest_cert_id": {
+                    "position": 4,
+                    "type": "bigint unsigned",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "最新证书ID"
+                },
+                "brand": {
+                    "position": 5,
+                    "type": "varchar(50)",
+                    "nullable": false,
+                    "default": "",
+                    "extra": "",
+                    "comment": "品牌"
+                },
+                "period": {
+                    "position": 6,
+                    "type": "int",
+                    "nullable": false,
+                    "default": "0",
+                    "extra": "",
+                    "comment": "购买时长"
+                },
+                "plus": {
+                    "position": 7,
+                    "type": "tinyint unsigned",
+                    "nullable": false,
+                    "default": "0",
+                    "extra": "",
+                    "comment": "赠送时间"
+                },
+                "amount": {
+                    "position": 8,
+                    "type": "decimal(10,2)",
+                    "nullable": false,
+                    "default": "0.00",
+                    "extra": "",
+                    "comment": "金额"
+                },
+                "period_from": {
+                    "position": 9,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "有效期从"
+                },
+                "period_till": {
+                    "position": 10,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "有效期到"
+                },
+                "purchased_standard_count": {
+                    "position": 11,
+                    "type": "int",
+                    "nullable": false,
+                    "default": "0",
+                    "extra": "",
+                    "comment": "已购标准域名数"
+                },
+                "purchased_wildcard_count": {
+                    "position": 12,
+                    "type": "int",
+                    "nullable": false,
+                    "default": "0",
+                    "extra": "",
+                    "comment": "已购通配符数"
+                },
+                "organization": {
+                    "position": 13,
+                    "type": "text",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "组织"
+                },
+                "contact": {
+                    "position": 14,
+                    "type": "text",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "联系人"
+                },
+                "cancelled_at": {
+                    "position": 15,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "取消时间"
+                },
+                "admin_remark": {
+                    "position": 16,
+                    "type": "varchar(255)",
+                    "nullable": false,
+                    "default": "",
+                    "extra": "",
+                    "comment": "管理员备注"
+                },
+                "remark": {
+                    "position": 17,
+                    "type": "varchar(255)",
+                    "nullable": false,
+                    "default": "",
+                    "extra": "",
+                    "comment": "会员备注"
+                },
+                "created_at": {
+                    "position": 18,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                },
+                "updated_at": {
+                    "position": 19,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                }
+            },
+            "indexes": {
+                "orders_brand_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "brand"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "orders_latest_cert_id_unique": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "latest_cert_id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "orders_product_id_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "product_id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "orders_user_id_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "user_id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "PRIMARY": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                }
+            },
+            "foreign_keys": []
+        },
+        "organizations": {
+            "engine": "InnoDB",
+            "collation": "utf8mb4_0900_ai_ci",
+            "comment": "",
+            "auto_increment": null,
+            "columns": {
+                "id": {
+                    "position": 1,
+                    "type": "bigint unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "ID"
+                },
+                "user_id": {
+                    "position": 2,
+                    "type": "bigint unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "用户ID"
+                },
+                "name": {
+                    "position": 3,
+                    "type": "varchar(200)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "组织名称"
+                },
+                "registration_number": {
+                    "position": 4,
+                    "type": "varchar(100)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "注册号"
+                },
+                "country": {
+                    "position": 5,
+                    "type": "varchar(100)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "国家"
+                },
+                "state": {
+                    "position": 6,
+                    "type": "varchar(100)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "省份"
+                },
+                "city": {
+                    "position": 7,
+                    "type": "varchar(100)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "城市"
+                },
+                "address": {
+                    "position": 8,
+                    "type": "varchar(200)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "地址"
+                },
+                "postcode": {
+                    "position": 9,
+                    "type": "varchar(20)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "邮编"
+                },
+                "phone": {
+                    "position": 10,
+                    "type": "varchar(20)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "电话"
+                },
+                "created_at": {
+                    "position": 11,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                },
+                "updated_at": {
+                    "position": 12,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                }
+            },
+            "indexes": {
+                "organizations_name_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "name"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "organizations_registration_number_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "registration_number"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "organizations_user_id_foreign": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "user_id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "PRIMARY": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                }
+            },
+            "foreign_keys": {
+                "organizations_user_id_foreign": {
+                    "columns": [
+                        "user_id"
+                    ],
+                    "references": {
+                        "table": "users",
+                        "columns": [
+                            "id"
+                        ]
+                    },
+                    "on_delete": "CASCADE",
+                    "on_update": "NO ACTION"
+                }
+            }
+        },
+        "product_prices": {
+            "engine": "InnoDB",
+            "collation": "utf8mb4_0900_ai_ci",
+            "comment": "",
+            "auto_increment": 1,
+            "columns": {
+                "id": {
+                    "position": 1,
+                    "type": "int unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "auto_increment",
+                    "comment": "ID"
+                },
+                "product_id": {
+                    "position": 2,
+                    "type": "int unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "产品 ID"
+                },
+                "level_code": {
+                    "position": 3,
+                    "type": "varchar(50)",
+                    "nullable": false,
+                    "default": "standard",
+                    "extra": "",
+                    "comment": "级别代码"
+                },
+                "period": {
+                    "position": 4,
+                    "type": "int",
+                    "nullable": false,
+                    "default": "12",
+                    "extra": "",
+                    "comment": "购买时长"
+                },
+                "price": {
+                    "position": 5,
+                    "type": "decimal(10,2)",
+                    "nullable": false,
+                    "default": "0.00",
+                    "extra": "",
+                    "comment": "价格"
+                },
+                "alternative_standard_price": {
+                    "position": 6,
+                    "type": "decimal(10,2)",
+                    "nullable": false,
+                    "default": "0.00",
+                    "extra": "",
+                    "comment": "附加标准域名价格"
+                },
+                "alternative_wildcard_price": {
+                    "position": 7,
+                    "type": "decimal(10,2)",
+                    "nullable": false,
+                    "default": "0.00",
+                    "extra": "",
+                    "comment": "附加通配符价格"
+                },
+                "created_at": {
+                    "position": 8,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                },
+                "updated_at": {
+                    "position": 9,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                }
+            },
+            "indexes": {
+                "PRIMARY": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "product_prices_level_code_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "level_code"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "product_prices_period_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "period"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "product_prices_product_id_level_code_period_unique": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "product_id",
+                        "level_code",
+                        "period"
+                    ],
+                    "sub_parts": [
+                        null,
+                        null,
+                        null
+                    ]
+                }
+            },
+            "foreign_keys": {
+                "product_prices_product_id_foreign": {
+                    "columns": [
+                        "product_id"
+                    ],
+                    "references": {
+                        "table": "products",
+                        "columns": [
+                            "id"
+                        ]
+                    },
+                    "on_delete": "CASCADE",
+                    "on_update": "NO ACTION"
+                }
+            }
+        },
+        "products": {
+            "engine": "InnoDB",
+            "collation": "utf8mb4_0900_ai_ci",
+            "comment": "",
+            "auto_increment": 1,
+            "columns": {
+                "id": {
+                    "position": 1,
+                    "type": "int unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "auto_increment",
+                    "comment": "ID"
+                },
+                "name": {
+                    "position": 2,
+                    "type": "varchar(100)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "产品名称"
+                },
+                "code": {
+                    "position": 3,
+                    "type": "varchar(100)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "产品标识"
+                },
+                "api_id": {
+                    "position": 4,
+                    "type": "varchar(128)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "接口ID"
+                },
+                "source": {
+                    "position": 5,
+                    "type": "varchar(500)",
+                    "nullable": false,
+                    "default": "default",
+                    "extra": "",
+                    "comment": "来源"
+                },
+                "brand": {
+                    "position": 6,
+                    "type": "varchar(50)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "品牌"
+                },
+                "ca": {
+                    "position": 7,
+                    "type": "varchar(200)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "签发机构"
+                },
+                "warranty_currency": {
+                    "position": 8,
+                    "type": "varchar(20)",
+                    "nullable": false,
+                    "default": "$",
+                    "extra": "",
+                    "comment": "保障金货币"
+                },
+                "warranty": {
+                    "position": 9,
+                    "type": "int unsigned",
+                    "nullable": false,
+                    "default": "0",
+                    "extra": "",
+                    "comment": "保障金额"
+                },
+                "server": {
+                    "position": 10,
+                    "type": "int unsigned",
+                    "nullable": false,
+                    "default": "0",
+                    "extra": "",
+                    "comment": "服务器授权"
+                },
+                "encryption_standard": {
+                    "position": 11,
+                    "type": "enum('international','chinese')",
+                    "nullable": false,
+                    "default": "international",
+                    "extra": "",
+                    "comment": "加密标准"
+                },
+                "encryption_alg": {
+                    "position": 12,
+                    "type": "varchar(50)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "加密算法"
+                },
+                "signature_digest_alg": {
+                    "position": 13,
+                    "type": "varchar(50)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "签名摘要算法"
+                },
+                "validation_type": {
+                    "position": 14,
+                    "type": "enum('dv','ov','ev')",
+                    "nullable": false,
+                    "default": "dv",
+                    "extra": "",
+                    "comment": "验证类型"
+                },
+                "common_name_types": {
+                    "position": 15,
+                    "type": "varchar(50)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "通用名称类型"
+                },
+                "alternative_name_types": {
+                    "position": 16,
+                    "type": "varchar(50)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "备用名称类型"
+                },
+                "validation_methods": {
+                    "position": 17,
+                    "type": "varchar(200)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "验证方法"
+                },
+                "periods": {
+                    "position": 18,
+                    "type": "varchar(100)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "购买时长"
+                },
+                "standard_min": {
+                    "position": 19,
+                    "type": "int unsigned",
+                    "nullable": false,
+                    "default": "0",
+                    "extra": "",
+                    "comment": "标准域名起始个数"
+                },
+                "standard_max": {
+                    "position": 20,
+                    "type": "int unsigned",
+                    "nullable": false,
+                    "default": "0",
+                    "extra": "",
+                    "comment": "标准域名最大个数"
+                },
+                "wildcard_min": {
+                    "position": 21,
+                    "type": "int unsigned",
+                    "nullable": false,
+                    "default": "0",
+                    "extra": "",
+                    "comment": "通配符起始个数"
+                },
+                "wildcard_max": {
+                    "position": 22,
+                    "type": "int unsigned",
+                    "nullable": false,
+                    "default": "0",
+                    "extra": "",
+                    "comment": "通配符最大个数"
+                },
+                "total_min": {
+                    "position": 23,
+                    "type": "int unsigned",
+                    "nullable": false,
+                    "default": "0",
+                    "extra": "",
+                    "comment": "总最少个数"
+                },
+                "total_max": {
+                    "position": 24,
+                    "type": "int unsigned",
+                    "nullable": false,
+                    "default": "0",
+                    "extra": "",
+                    "comment": "总最大个数"
+                },
+                "add_san": {
+                    "position": 25,
+                    "type": "tinyint unsigned",
+                    "nullable": false,
+                    "default": "0",
+                    "extra": "",
+                    "comment": "增加SAN: 0=否, 1=是"
+                },
+                "replace_san": {
+                    "position": 26,
+                    "type": "tinyint unsigned",
+                    "nullable": false,
+                    "default": "0",
+                    "extra": "",
+                    "comment": "替换SAN: 0=否, 1=是"
+                },
+                "reissue": {
+                    "position": 27,
+                    "type": "tinyint unsigned",
+                    "nullable": false,
+                    "default": "0",
+                    "extra": "",
+                    "comment": "重签证书: 0=否, 1=是"
+                },
+                "renew": {
+                    "position": 28,
+                    "type": "tinyint unsigned",
+                    "nullable": false,
+                    "default": "0",
+                    "extra": "",
+                    "comment": "续费证书: 0=否, 1=是"
+                },
+                "reuse_csr": {
+                    "position": 29,
+                    "type": "tinyint unsigned",
+                    "nullable": false,
+                    "default": "0",
+                    "extra": "",
+                    "comment": "重用CSR: 0=否, 1=是"
+                },
+                "gift_root_domain": {
+                    "position": 30,
+                    "type": "tinyint unsigned",
+                    "nullable": false,
+                    "default": "0",
+                    "extra": "",
+                    "comment": "赠送根域名: 0=否, 1=是"
+                },
+                "refund_period": {
+                    "position": 31,
+                    "type": "tinyint unsigned",
+                    "nullable": false,
+                    "default": "30",
+                    "extra": "",
+                    "comment": "退款期限"
+                },
+                "remark": {
+                    "position": 32,
+                    "type": "varchar(500)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "备注"
+                },
+                "weight": {
+                    "position": 33,
+                    "type": "int",
+                    "nullable": false,
+                    "default": "0",
+                    "extra": "",
+                    "comment": "权重"
+                },
+                "cost": {
+                    "position": 34,
+                    "type": "varchar(2000)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "成本"
+                },
+                "status": {
+                    "position": 35,
+                    "type": "tinyint unsigned",
+                    "nullable": false,
+                    "default": "1",
+                    "extra": "",
+                    "comment": "状态: 0=禁用, 1=启用"
+                },
+                "created_at": {
+                    "position": 36,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                },
+                "updated_at": {
+                    "position": 37,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                }
+            },
+            "indexes": {
+                "PRIMARY": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "products_alternative_name_types_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "alternative_name_types"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "products_brand_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "brand"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "products_ca_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "ca"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "products_code_unique": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "code"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "products_common_name_types_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "common_name_types"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "products_encryption_alg_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "encryption_alg"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "products_encryption_standard_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "encryption_standard"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "products_name_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "name"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "products_source_api_id_unique": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "source",
+                        "api_id"
+                    ],
+                    "sub_parts": [
+                        null,
+                        null
+                    ]
+                },
+                "products_status_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "status"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "products_validation_type_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "validation_type"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "products_weight_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "weight"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                }
+            },
+            "foreign_keys": []
+        },
+        "setting_groups": {
+            "engine": "InnoDB",
+            "collation": "utf8mb4_0900_ai_ci",
+            "comment": "",
+            "auto_increment": 1,
+            "columns": {
+                "id": {
+                    "position": 1,
+                    "type": "int unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "auto_increment",
+                    "comment": "ID"
+                },
+                "name": {
+                    "position": 2,
+                    "type": "varchar(50)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "组名称"
+                },
+                "title": {
+                    "position": 3,
+                    "type": "varchar(100)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "组标题"
+                },
+                "description": {
+                    "position": 4,
+                    "type": "varchar(500)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "组描述"
+                },
+                "weight": {
+                    "position": 5,
+                    "type": "int",
+                    "nullable": false,
+                    "default": "0",
+                    "extra": "",
+                    "comment": "权重"
+                },
+                "created_at": {
+                    "position": 6,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                },
+                "updated_at": {
+                    "position": 7,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                }
+            },
+            "indexes": {
+                "PRIMARY": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "setting_groups_name_unique": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "name"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "setting_groups_weight_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "weight"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                }
+            },
+            "foreign_keys": []
+        },
+        "settings": {
+            "engine": "InnoDB",
+            "collation": "utf8mb4_0900_ai_ci",
+            "comment": "",
+            "auto_increment": 1,
+            "columns": {
+                "id": {
+                    "position": 1,
+                    "type": "int unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "auto_increment",
+                    "comment": "ID"
+                },
+                "group_id": {
+                    "position": 2,
+                    "type": "int unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "组ID"
+                },
+                "key": {
+                    "position": 3,
+                    "type": "varchar(100)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "键名"
+                },
+                "type": {
+                    "position": 4,
+                    "type": "enum('string','integer','float','boolean','select','array','base64')",
+                    "nullable": false,
+                    "default": "string",
+                    "extra": "",
+                    "comment": "类型: string=字符串,integer=整数,float=浮点数,boolean=布尔值,select=选择框,array=数组,base64=Base64编码"
+                },
+                "options": {
+                    "position": 5,
+                    "type": "varchar(2000)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "选项"
+                },
+                "is_multiple": {
+                    "position": 6,
+                    "type": "tinyint(1)",
+                    "nullable": false,
+                    "default": "0",
+                    "extra": "",
+                    "comment": "是否多选"
+                },
+                "value": {
+                    "position": 7,
+                    "type": "varchar(10000)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "键值"
+                },
+                "description": {
+                    "position": 8,
+                    "type": "varchar(500)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "描述"
+                },
+                "weight": {
+                    "position": 9,
+                    "type": "int",
+                    "nullable": false,
+                    "default": "0",
+                    "extra": "",
+                    "comment": "权重"
+                },
+                "created_at": {
+                    "position": 10,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                },
+                "updated_at": {
+                    "position": 11,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                }
+            },
+            "indexes": {
+                "PRIMARY": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "settings_group_id_key_unique": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "group_id",
+                        "key"
+                    ],
+                    "sub_parts": [
+                        null,
+                        null
+                    ]
+                },
+                "settings_weight_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "weight"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                }
+            },
+            "foreign_keys": {
+                "settings_group_id_foreign": {
+                    "columns": [
+                        "group_id"
+                    ],
+                    "references": {
+                        "table": "setting_groups",
+                        "columns": [
+                            "id"
+                        ]
+                    },
+                    "on_delete": "CASCADE",
+                    "on_update": "NO ACTION"
+                }
+            }
+        },
+        "tasks": {
+            "engine": "InnoDB",
+            "collation": "utf8mb4_0900_ai_ci",
+            "comment": "",
+            "auto_increment": 1,
+            "columns": {
+                "id": {
+                    "position": 1,
+                    "type": "bigint unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "auto_increment",
+                    "comment": ""
+                },
+                "order_id": {
+                    "position": 2,
+                    "type": "bigint unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "订单ID"
+                },
+                "action": {
+                    "position": 3,
+                    "type": "varchar(50)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "任务动作"
+                },
+                "result": {
+                    "position": 4,
+                    "type": "text",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "执行结果"
+                },
+                "attempts": {
+                    "position": 5,
+                    "type": "int",
+                    "nullable": false,
+                    "default": "0",
+                    "extra": "",
+                    "comment": "执行次数"
+                },
+                "started_at": {
+                    "position": 6,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "开始执行时间"
+                },
+                "last_execute_at": {
+                    "position": 7,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "最后执行时间"
+                },
+                "source": {
+                    "position": 8,
+                    "type": "varchar(50)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "来源"
+                },
+                "weight": {
+                    "position": 9,
+                    "type": "int",
+                    "nullable": false,
+                    "default": "0",
+                    "extra": "",
+                    "comment": "权重"
+                },
+                "status": {
+                    "position": 10,
+                    "type": "enum('executing','successful','failed','stopped')",
+                    "nullable": false,
+                    "default": "executing",
+                    "extra": "",
+                    "comment": "状态:executing=待执行,successful=已成功,failed=已失败,stopped=已停止"
+                },
+                "created_at": {
+                    "position": 11,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                },
+                "updated_at": {
+                    "position": 12,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                }
+            },
+            "indexes": {
+                "PRIMARY": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "tasks_action_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "action"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "tasks_order_id_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "order_id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "tasks_status_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "status"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                }
+            },
+            "foreign_keys": []
+        },
+        "transactions": {
+            "engine": "InnoDB",
+            "collation": "utf8mb4_0900_ai_ci",
+            "comment": "",
+            "auto_increment": 1,
+            "columns": {
+                "id": {
+                    "position": 1,
+                    "type": "bigint unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "auto_increment",
+                    "comment": ""
+                },
+                "user_id": {
+                    "position": 2,
+                    "type": "bigint unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "用户ID"
+                },
+                "type": {
+                    "position": 3,
+                    "type": "enum('order','cancel','addfunds','refunds','deduct','reverse')",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "类型:order=订单,cancel=取消,addfunds=充值,refunds=退款,deduct=扣款,reverse=退回"
+                },
+                "transaction_id": {
+                    "position": 4,
+                    "type": "bigint unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "关联ID（order_id 或 fund_id）"
+                },
+                "amount": {
+                    "position": 5,
+                    "type": "decimal(10,2)",
+                    "nullable": false,
+                    "default": "0.00",
+                    "extra": "",
+                    "comment": "交易金额"
+                },
+                "standard_count": {
+                    "position": 6,
+                    "type": "smallint",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "标准域名数量"
+                },
+                "wildcard_count": {
+                    "position": 7,
+                    "type": "smallint",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "通配符数量"
+                },
+                "balance_before": {
+                    "position": 8,
+                    "type": "decimal(10,2)",
+                    "nullable": false,
+                    "default": "0.00",
+                    "extra": "",
+                    "comment": "交易前余额"
+                },
+                "balance_after": {
+                    "position": 9,
+                    "type": "decimal(10,2)",
+                    "nullable": false,
+                    "default": "0.00",
+                    "extra": "",
+                    "comment": "交易后余额"
+                },
+                "remark": {
+                    "position": 10,
+                    "type": "varchar(500)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "备注"
+                },
+                "created_at": {
+                    "position": 11,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "创建时间"
+                }
+            },
+            "indexes": {
+                "PRIMARY": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "transactions_transaction_id_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "transaction_id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "transactions_type_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "type"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "transactions_user_id_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "user_id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                }
+            },
+            "foreign_keys": []
+        },
+        "user_levels": {
+            "engine": "InnoDB",
+            "collation": "utf8mb4_0900_ai_ci",
+            "comment": "",
+            "auto_increment": 1,
+            "columns": {
+                "id": {
+                    "position": 1,
+                    "type": "int unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "auto_increment",
+                    "comment": "ID"
+                },
+                "name": {
+                    "position": 2,
+                    "type": "varchar(100)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "级别名称"
+                },
+                "code": {
+                    "position": 3,
+                    "type": "varchar(50)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "级别标识"
+                },
+                "custom": {
+                    "position": 4,
+                    "type": "tinyint unsigned",
+                    "nullable": false,
+                    "default": "0",
+                    "extra": "",
+                    "comment": "定制: 0=否, 1=是"
+                },
+                "cost_rate": {
+                    "position": 5,
+                    "type": "decimal(6,4)",
+                    "nullable": false,
+                    "default": "1.0000",
+                    "extra": "",
+                    "comment": "成本价倍率"
+                },
+                "weight": {
+                    "position": 6,
+                    "type": "int",
+                    "nullable": false,
+                    "default": "0",
+                    "extra": "",
+                    "comment": "权重"
+                },
+                "created_at": {
+                    "position": 7,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                },
+                "updated_at": {
+                    "position": 8,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                }
+            },
+            "indexes": {
+                "PRIMARY": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "user_levels_code_unique": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "code"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "user_levels_custom_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "custom"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "user_levels_name_unique": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "name"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "user_levels_weight_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "weight"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                }
+            },
+            "foreign_keys": []
+        },
+        "user_logs": {
+            "engine": "InnoDB",
+            "collation": "utf8mb4_0900_ai_ci",
+            "comment": "",
+            "auto_increment": 1,
+            "columns": {
+                "id": {
+                    "position": 1,
+                    "type": "bigint unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "auto_increment",
+                    "comment": ""
+                },
+                "user_id": {
+                    "position": 2,
+                    "type": "bigint unsigned",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "用户ID"
+                },
+                "module": {
+                    "position": 3,
+                    "type": "varchar(100)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "模块"
+                },
+                "action": {
+                    "position": 4,
+                    "type": "varchar(100)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "操作"
+                },
+                "method": {
+                    "position": 5,
+                    "type": "varchar(10)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "请求方法"
+                },
+                "url": {
+                    "position": 6,
+                    "type": "varchar(2000)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "请求URL"
+                },
+                "params": {
+                    "position": 7,
+                    "type": "mediumtext",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "请求参数"
+                },
+                "response": {
+                    "position": 8,
+                    "type": "mediumtext",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "响应内容"
+                },
+                "status_code": {
+                    "position": 9,
+                    "type": "int",
+                    "nullable": false,
+                    "default": "200",
+                    "extra": "",
+                    "comment": "状态码"
+                },
+                "status": {
+                    "position": 10,
+                    "type": "tinyint",
+                    "nullable": false,
+                    "default": "0",
+                    "extra": "",
+                    "comment": "状态: 0=失败, 1=成功"
+                },
+                "duration": {
+                    "position": 11,
+                    "type": "decimal(8,2)",
+                    "nullable": false,
+                    "default": "0.00",
+                    "extra": "",
+                    "comment": "耗时(秒)"
+                },
+                "ip": {
+                    "position": 12,
+                    "type": "varchar(100)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "IP地址"
+                },
+                "user_agent": {
+                    "position": 13,
+                    "type": "varchar(500)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "User Agent"
+                },
+                "created_at": {
+                    "position": 14,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "创建时间"
+                }
+            },
+            "indexes": {
+                "PRIMARY": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "user_logs_action_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "action"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "user_logs_method_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "method"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "user_logs_module_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "module"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "user_logs_status_code_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "status_code"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "user_logs_status_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "status"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "user_logs_user_id_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "user_id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                }
+            },
+            "foreign_keys": []
+        },
+        "user_refresh_tokens": {
+            "engine": "InnoDB",
+            "collation": "utf8mb4_0900_ai_ci",
+            "comment": "",
+            "auto_increment": 1,
+            "columns": {
+                "id": {
+                    "position": 1,
+                    "type": "bigint unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "auto_increment",
+                    "comment": ""
+                },
+                "user_id": {
+                    "position": 2,
+                    "type": "bigint unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "用户ID"
+                },
+                "refresh_token": {
+                    "position": 3,
+                    "type": "varchar(128)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "刷新令牌"
+                },
+                "expires_at": {
+                    "position": 4,
+                    "type": "timestamp",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "过期时间"
+                },
+                "created_at": {
+                    "position": 5,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "创建时间"
+                }
+            },
+            "indexes": {
+                "PRIMARY": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "user_refresh_tokens_refresh_token_unique": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "refresh_token"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "user_refresh_tokens_user_id_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "user_id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                }
+            },
+            "foreign_keys": {
+                "user_refresh_tokens_user_id_foreign": {
+                    "columns": [
+                        "user_id"
+                    ],
+                    "references": {
+                        "table": "users",
+                        "columns": [
+                            "id"
+                        ]
+                    },
+                    "on_delete": "CASCADE",
+                    "on_update": "NO ACTION"
+                }
+            }
+        },
+        "users": {
+            "engine": "InnoDB",
+            "collation": "utf8mb4_0900_ai_ci",
+            "comment": "",
+            "auto_increment": null,
+            "columns": {
+                "id": {
+                    "position": 1,
+                    "type": "bigint unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "ID"
+                },
+                "username": {
+                    "position": 2,
+                    "type": "varchar(20)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "用户名"
+                },
+                "email": {
+                    "position": 3,
+                    "type": "varchar(50)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "邮箱"
+                },
+                "mobile": {
+                    "position": 4,
+                    "type": "varchar(20)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "手机"
+                },
+                "balance": {
+                    "position": 5,
+                    "type": "decimal(10,2)",
+                    "nullable": false,
+                    "default": "0.00",
+                    "extra": "",
+                    "comment": "余额"
+                },
+                "level_code": {
+                    "position": 6,
+                    "type": "varchar(50)",
+                    "nullable": false,
+                    "default": "standard",
+                    "extra": "",
+                    "comment": "级别号"
+                },
+                "custom_level_code": {
+                    "position": 7,
+                    "type": "varchar(100)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "定制级别号"
+                },
+                "credit_limit": {
+                    "position": 8,
+                    "type": "decimal(10,2)",
+                    "nullable": false,
+                    "default": "0.00",
+                    "extra": "",
+                    "comment": "信用额度"
+                },
+                "invoice_limit": {
+                    "position": 9,
+                    "type": "decimal(10,2)",
+                    "nullable": false,
+                    "default": "0.00",
+                    "extra": "",
+                    "comment": "发票额度"
+                },
+                "last_login_at": {
+                    "position": 10,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "上次登录时间"
+                },
+                "last_login_ip": {
+                    "position": 11,
+                    "type": "varchar(50)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "上次登录IP"
+                },
+                "join_ip": {
+                    "position": 12,
+                    "type": "varchar(50)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "加入IP"
+                },
+                "join_at": {
+                    "position": 13,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "加入时间"
+                },
+                "source": {
+                    "position": 14,
+                    "type": "varchar(200)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "来源"
+                },
+                "password": {
+                    "position": 15,
+                    "type": "varchar(128)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "密码"
+                },
+                "token_version": {
+                    "position": 16,
+                    "type": "int unsigned",
+                    "nullable": false,
+                    "default": "0",
+                    "extra": "",
+                    "comment": "令牌版本"
+                },
+                "logout_at": {
+                    "position": 17,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "登出时间"
+                },
+                "email_verified_at": {
+                    "position": 18,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "邮箱验证时间"
+                },
+                "mobile_verified_at": {
+                    "position": 19,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "手机验证时间"
+                },
+                "notification_settings": {
+                    "position": 20,
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "通知设置"
+                },
+                "status": {
+                    "position": 21,
+                    "type": "tinyint",
+                    "nullable": false,
+                    "default": "1",
+                    "extra": "",
+                    "comment": "状态: 0=禁用, 1=启用"
+                },
+                "created_at": {
+                    "position": 22,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                },
+                "updated_at": {
+                    "position": 23,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                }
+            },
+            "indexes": {
+                "PRIMARY": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "users_custom_level_code_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "custom_level_code"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "users_email_unique": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "email"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "users_level_code_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "level_code"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "users_mobile_unique": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "mobile"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "users_status_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "status"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "users_username_unique": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "username"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                }
+            },
+            "foreign_keys": []
+        }
+    }
+}

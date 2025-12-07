@@ -1,0 +1,43 @@
+{
+  "Version": "6.0.0",
+  "Title": "SSL",
+  "StorageNameSpace": "",
+  "FixedHeader": true,
+  "HiddenSideBar": false,
+  "MultiTagsCache": true,
+  "KeepAlive": true,
+  "Layout": "double",
+  "Theme": "light",
+  "DarkMode": false,
+  "OverallStyle": "light",
+  "Grey": false,
+  "Weak": false,
+  "HideTabs": false,
+  "HideFooter": false,
+  "Stretch": false,
+  "SidebarStatus": true,
+  "EpThemeColor": "#409EFF",
+  "ShowLogo": true,
+  "ShowModel": "smart",
+  "MenuArrowIconNoTransition": false,
+  "CachingAsyncRoutes": false,
+  "TooltipEffect": "light",
+  "ResponsiveStorageNameSpace": "responsive-",
+  "MenuSearchHistory": 6,
+  "BaseUrlApi": "/api",
+  "Brands": [
+    "certum",
+    "gogetssl",
+    "positive",
+    "ssltrus",
+    "rapid",
+    "geotrust",
+    "digicert",
+    "trustasia"
+  ],
+  "DnsTools": [
+    "https://dns-tools-cn.cnssl.com",
+    "https://dns-tools-us.cnssl.com"
+  ],
+  "Beian": "豫ICP备123456789号"
+}

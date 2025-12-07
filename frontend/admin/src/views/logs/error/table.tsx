@@ -1,0 +1,74 @@
+import dayjs from "dayjs";
+import Info from "~icons/ri/question-line";
+
+export const tableColumns: TableColumnList = [
+  {
+    label: "ID",
+    prop: "id",
+    minWidth: 90
+  },
+  {
+    headerRenderer: () => (
+      <div class="flex flex-row items-center">
+        <span>请求URL</span>
+        <iconifyIconOffline
+          icon={Info}
+          class="ml-1 cursor-help"
+          v-tippy={{
+            content: "双击下面请求URL进行拷贝"
+          }}
+        />
+      </div>
+    ),
+    prop: "url",
+    minWidth: 140
+  },
+  {
+    label: "请求方法",
+    prop: "method",
+    minWidth: 100
+  },
+  {
+    label: "异常类型",
+    prop: "exception",
+    minWidth: 180
+  },
+  {
+    label: "错误信息",
+    prop: "message",
+    minWidth: 200,
+    showOverflowTooltip: true
+  },
+  {
+    label: "IP 地址",
+    prop: "ip",
+    minWidth: 120
+  },
+  {
+    label: "状态码",
+    prop: "status_code",
+    minWidth: 100,
+    cellRenderer: ({ row, props }) => (
+      <el-tag
+        size={props.size}
+        type={row.status_code < 400 ? "success" : "danger"}
+        effect="plain"
+      >
+        {row.status_code}
+      </el-tag>
+    )
+  },
+  {
+    label: "请求时间",
+    prop: "created_at",
+    minWidth: 180,
+    formatter: ({ created_at }) =>
+      created_at ? dayjs(created_at).format("YYYY-MM-DD HH:mm:ss") : "-"
+  },
+  {
+    label: "操作",
+    fixed: "right",
+    slot: "operation",
+    width: 80
+  }
+];

@@ -1,0 +1,58 @@
+{
+  "build": {
+    "npm_registry": "https://registry.npmmirror.com",
+    "composer_mirror": "https://mirrors.aliyun.com/composer/",
+    "min_php_version": "8.3",
+    "min_node_version": "22",
+    "production_repo": {
+      "url": "git@gitee.com:zhuxbo/production-code.git",
+      "branch": "main",
+      "commit_message": "Build: {version} - {date}"
+    },
+    "git_user": {
+      "name": "zhuxbo",
+      "email": "zhuxbo@qq.com"
+    }
+  },
+  "exclude_patterns": {
+    "backend": [
+      ".git/",
+      ".github/",
+      ".gitignore",
+      ".gitattributes",
+      ".dockerignore",
+      ".editorconfig",
+      ".pint.json",
+      ".cursor/",
+      ".idea/",
+      ".vscode/",
+      ".DS_Store",
+      ".env",
+      ".env.backup",
+      ".env.local",
+      ".env.production",
+      ".env.prod",
+      ".phpunit.cache/",
+      ".phpunit.result.cache",
+      ".phpstorm.meta.php",
+      "_ide_helper.php",
+      "_ide_helper_models.php",
+      "storage/debugbar/",
+      "node_modules/",
+      "tests/",
+      "phpunit.xml",
+      "phpstan.neon",
+      "*.log",
+      "README.md",
+      "LICENSE",
+      "INSTALL.md",
+      "DATABASE_SYNC.md",
+      "DOCKER_INSTALL.MD",
+      "JDK_INSTALL.md",
+      "Dockerfile",
+      "Dockerfile.nginx",
+      "docker-compose.yml",
+      "docker/"
+    ]
+  }
+}

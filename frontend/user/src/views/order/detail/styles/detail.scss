@@ -1,0 +1,64 @@
+.box {
+  float: left;
+  width: 100%;
+  min-width: 920px;
+  padding: 20px;
+  margin-top: 10px;
+  border: 1px solid var(--ba-border-color);
+}
+
+.title {
+  margin-bottom: 20px;
+  color: var(--el-text-color-regular);
+
+  span,
+  button {
+    vertical-align: middle;
+  }
+}
+
+.descriptions {
+  width: 100%;
+  margin-bottom: 10px;
+  font-size: 14px;
+  line-height: 28px;
+  border-left: 4px solid var(--el-border-color);
+}
+
+.label {
+  display: inline-block;
+  width: 140px;
+  margin-right: 16px;
+  vertical-align: top;
+  color: var(--el-text-color-regular);
+  text-align: right;
+}
+
+.content {
+  display: inline-block;
+  width: calc(100% - 156px);
+  vertical-align: top;
+  color: var(--el-text-color-regular);
+  word-wrap: break-word;
+
+  li {
+    list-style: none;
+  }
+
+  button {
+    padding: 0;
+    font-size: 14px;
+    line-height: 28px;
+    vertical-align: top;
+    border: 0;
+  }
+}
+
+.horizontal-scrollbar {
+  width: 100%; /* 适应父容器宽度 */
+  overflow-x: auto; /* 允许横向滚动 */
+}
+
+.scroll-wrapper {
+  white-space: nowrap; /* 防止内容换行 */
+}

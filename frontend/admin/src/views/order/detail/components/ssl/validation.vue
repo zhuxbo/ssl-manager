@@ -1,0 +1,777 @@
+<template>
+  <div
+    v-if="['cname', 'txt'].includes(cert.dcv?.method) && cert.dcv?.dns?.value"
+    class="descriptions"
+  >
+    <div style="margin-top: 18px">
+      <el-form-item label="主机记录：" label-width="82px">
+        <table v-if="hostIncludeSubDomain" style="width: 100%">
+          <tbody>
+            <tr v-for="(item, index) in cert.validation" :key="index">
+              <td
+                v-if="['cname', 'txt'].includes(item.method?.toLowerCase())"
+                style="padding: 0"
+              >
+                <el-input
+                  :model-value="item.host"
+                  spellcheck="false"
+                  :style="{ width: '100%' }"
+                >
+                  <template #suffix>
+                    <Copy :copied="item.host" />
+                  </template>
+                  <template v-if="cert.validation?.length > 1" #append
+                    >.{{
+                      getRootDomain(item.domain.replace("*.", ""))
+                    }}</template
+                  >
+                </el-input>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <el-input v-else :model-value="cert.dcv?.dns?.host" spellcheck="false">
+          <template #suffix>
+            <Copy :copied="cert.dcv?.dns?.host" />
+          </template>
+        </el-input>
+      </el-form-item>
+      <el-form-item label="解析类型：" label-width="82px">
+        <el-input
+          :model-value="cert.dcv?.dns?.type.toUpperCase()"
+          :disabled="true"
+          style="width: 73px"
+        />
+      </el-form-item>
+      <el-form-item label="记录值：" label-width="82px">
+        <el-input :model-value="cert.dcv?.dns?.value" spellcheck="false">
+          <template #suffix>
+            <Copy :copied="cert.dcv?.dns?.value" />
+          </template>
+        </el-input>
+      </el-form-item>
+    </div>
+  </div>
+  <div
+    v-if="
+      ['file', 'http', 'https'].includes(cert.dcv?.method) &&
+      cert.dcv?.file?.content
+    "
+    class="descriptions"
+  >
+    <div style="margin-top: 18px">
+      <el-form-item label="文件名：" label-width="82px">
+        <el-input :model-value="cert.dcv?.file?.name" spellcheck="false">
+          <template #suffix>
+            <Copy :copied="cert.dcv?.file?.name" />
+          </template>
+        </el-input>
+      </el-form-item>
+      <el-form-item label="文件内容：" label-width="82px">
+        <el-input
+          :rows="3"
+          type="textarea"
+          class="file-content"
+          :model-value="cert.dcv?.file?.content"
+          spellcheck="false"
+        />
+        <Copy
+          :copied="cert.dcv?.file?.content"
+          style="position: absolute; right: 12px; bottom: 7px"
+        />
+      </el-form-item>
+      <el-form-item label="路径：" label-width="82px">
+        <el-input :model-value="cert.dcv?.file?.path" spellcheck="false">
+          <template #suffix>
+            <Copy :copied="cert.dcv?.file?.path" />
+          </template>
+          <template #prepend>
+            <el-button
+              type="primary"
+              @click="OrderApi.downloadValidateFile(order.id)"
+              >下 载</el-button
+            >
+          </template>
+        </el-input>
+      </el-form-item>
+    </div>
+  </div>
+  <div class="descriptions">
+    <div style="margin: 10px 0">
+      <ValidationMethods
+        v-model="validationMethod"
+        :methods="order.product.validation_methods"
+      />
+      <el-button
+        :disable="
+          !['unpaid', 'pending', 'processing'].includes(cert.status) ||
+          allVerified
+        "
+        style="
+          border-left: 0;
+          border-top-left-radius: 0;
+          border-bottom-left-radius: 0;
+        "
+        @click="updateValidationMethod(validationMethod)"
+        >修改</el-button
+      >
+      <el-button
+        v-if="
+          ['processing'].includes(cert.status) &&
+          ![
+            'admin',
+            'administrator',
+            'postmaster',
+            'hostmaster',
+            'webmaster'
+          ].includes(cert.dcv['method'])
+        "
+        :disable="allVerified"
+        type="primary"
+        style="margin-left: 16px"
+        @click="revalidate()"
+        >验证</el-button
+      >
+      <el-button
+        v-if="
+          ['cname', 'txt'].includes(cert.dcv?.method) &&
+          cert.dcv?.dns?.value &&
+          ['unpaid', 'pending', 'processing'].includes(cert.status) &&
+          !allVerified
+        "
+        type="primary"
+        style="margin-left: 16px"
+        @click="copyDnsRecords()"
+        >复制解析</el-button
+      >
+      <el-button
+        v-if="
+          cert.validation?.length > 1 &&
+          ['cname', 'txt', 'file', 'http', 'https'].includes(
+            cert.dcv?.method
+          ) &&
+          !allVerified &&
+          (cert.dcv?.dns?.value || cert.dcv?.file?.content) &&
+          ['unpaid', 'pending', 'processing'].includes(cert.status)
+        "
+        :disabled="isChecking"
+        type="primary"
+        :loading="isChecking"
+        @click="startBatchVerify"
+      >
+        检测所有
+      </el-button>
+      <el-button
+        v-if="['unpaid'].includes(cert.status)"
+        type="warning"
+        @click="pay"
+      >
+        支付
+      </el-button>
+      <el-button
+        v-if="['pending'].includes(cert.status)"
+        type="warning"
+        @click="commit"
+      >
+        提交
+      </el-button>
+    </div>
+  </div>
+  <div class="descriptions">
+    <table style="width: 100%">
+      <tbody>
+        <tr>
+          <td v-if="cert.validation?.length > 1" class="index">序号</td>
+          <td class="domain">域名</td>
+          <td :style="{ 'text-align': 'right' }">状态</td>
+        </tr>
+        <tr v-for="(item, index) in cert.validation" :key="index">
+          <td v-if="cert.validation?.length > 1">{{ index + 1 }}</td>
+          <td>
+            {{ item.domain }}
+            <el-button
+              v-if="
+                ![
+                  'admin',
+                  'administrator',
+                  'postmaster',
+                  'hostmaster',
+                  'webmaster'
+                ].includes(item.method) &&
+                ['unpaid', 'pending', 'processing'].includes(cert.status) &&
+                (cert.dcv?.dns?.value || cert.dcv?.file?.content)
+              "
+              link
+              @click="checkSingleValidation(item)"
+            >
+              <el-icon
+                v-if="item.checked"
+                color="var(--el-color-success)"
+                :size="18"
+                style="vertical-align: middle"
+                ><Check
+              /></el-icon>
+              <el-button v-else type="primary" link>检测</el-button>
+            </el-button>
+          </td>
+          <td :style="{ 'text-align': 'right' }">
+            <template
+              v-if="
+                item.verified == 1 ||
+                ['active', 'approving'].includes(cert.status)
+              "
+            >
+              <el-icon
+                color="var(--el-color-success)"
+                :size="18"
+                style="vertical-align: middle"
+                ><SuccessFilled
+              /></el-icon>
+            </template>
+            <template
+              v-else-if="
+                ['unpaid', 'pending', 'processing'].includes(cert.status)
+              "
+            >
+              <el-icon
+                v-if="item.verified == 2"
+                color="var(--el-color-warning)"
+                :size="18"
+                style="vertical-align: middle"
+              >
+                <WarningFilled />
+              </el-icon>
+              <el-icon
+                v-if="item.verified != 2"
+                class="is-loading"
+                :size="18"
+                style="vertical-align: middle"
+                ><Loading
+              /></el-icon>
+            </template>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <el-dialog
+    v-model="checkDialogVisible"
+    title="验证检测结果"
+    class="validation-check-dialog"
+  >
+    <div v-if="currentCheckItem" class="check-result-dialog">
+      <el-descriptions :column="1" border>
+        <el-descriptions-item label="域名" label-align="right">
+          {{ currentCheckItem.domain }}
+        </el-descriptions-item>
+        <el-descriptions-item label="验证方式" label-align="right">
+          {{ currentCheckItem.method }}
+        </el-descriptions-item>
+        <template
+          v-if="
+            ['cname', 'txt'].includes(currentCheckItem.method?.toLowerCase())
+          "
+        >
+          <el-descriptions-item label="验证记录" label-align="right">
+            {{
+              currentCheckItem.query ||
+              (currentCheckItem.host || cert.dcv?.dns?.host) +
+                "." +
+                getRootDomain(currentCheckItem.domain.replace("*.", ""))
+            }}
+          </el-descriptions-item>
+          <el-descriptions-item label="需要的值" label-align="right">
+            {{ currentCheckItem.value || cert.dcv?.dns?.value }}
+          </el-descriptions-item>
+          <el-descriptions-item
+            v-if="currentCheckItem.detected_value"
+            label="检测到的值"
+            label-align="right"
+          >
+            {{ currentCheckItem.detected_value }}
+          </el-descriptions-item>
+          <el-descriptions-item
+            v-if="currentCheckItem.query_sub"
+            label="子域查询"
+            label-align="right"
+          >
+            {{ currentCheckItem.query_sub }}
+            <span v-if="currentCheckItem.value_sub">
+              → {{ currentCheckItem.value_sub }}</span
+            >
+          </el-descriptions-item>
+        </template>
+        <template
+          v-if="
+            ['file', 'http', 'https'].includes(
+              currentCheckItem.method?.toLowerCase()
+            )
+          "
+        >
+          <el-descriptions-item label="验证链接" label-align="right">
+            {{
+              currentCheckItem.link ||
+              `${currentCheckItem.method === "file" ? "https:" : currentCheckItem.method + ":"}//${currentCheckItem.domain}/.well-known/pki-validation/${cert.dcv?.file?.name}`
+            }}
+          </el-descriptions-item>
+          <el-descriptions-item label="需要的内容" label-align="right">
+            {{ currentCheckItem.content || cert.dcv?.file?.content }}
+          </el-descriptions-item>
+          <el-descriptions-item
+            v-if="currentCheckItem.detected_value"
+            label="检测到的内容"
+            label-align="right"
+          >
+            <div
+              style="max-height: 200px; overflow-y: auto; word-break: break-all"
+            >
+              {{ currentCheckItem.detected_value }}
+            </div>
+          </el-descriptions-item>
+        </template>
+        <el-descriptions-item label="检测状态" label-align="right">
+          <el-tag :type="currentCheckItem.checked ? 'success' : 'danger'">
+            {{ currentCheckItem.checked ? "验证通过" : "验证失败" }}
+          </el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item
+          v-if="currentCheckItem.error"
+          label="错误信息"
+          label-align="right"
+        >
+          <div style="color: var(--el-color-danger)">
+            {{ currentCheckItem.error }}
+          </div>
+        </el-descriptions-item>
+      </el-descriptions>
+    </div>
+    <template #footer>
+      <el-button @click="checkDialogVisible = false">关闭</el-button>
+      <el-button
+        type="primary"
+        :loading="isChecking"
+        @click="debouncedVerifyItem"
+        >重新检测</el-button
+      >
+    </template>
+  </el-dialog>
+</template>
+<script setup lang="ts">
+import { ref, inject, computed, onMounted, watch } from "vue";
+import Copy from "./copy.vue";
+import {
+  SuccessFilled,
+  WarningFilled,
+  Loading,
+  Check
+} from "@element-plus/icons-vue";
+import { get as getRootDomain } from "psl";
+import * as OrderApi from "@/api/order";
+import ValidationMethods from "./validationMethods.vue";
+import axios, { AxiosResponse } from "axios";
+import { debounce } from "lodash-es";
+import { useRoute } from "vue-router";
+import { message } from "@shared/utils";
+import { getConfig } from "@/config";
+
+const get = inject("get") as Function;
+const order = inject("order") as any;
+const cert = inject("cert") as any;
+
+const hostIncludeSubDomain = computed(() => {
+  let includeSubDomain = false;
+  cert.value?.validation &&
+    cert.value.validation.forEach((item: { host: string }) => {
+      if (item.host && item.host !== cert.value.dcv?.dns?.host)
+        includeSubDomain = true;
+    });
+  return includeSubDomain;
+});
+
+const allVerified = computed(() => {
+  let verified = true;
+  cert.value.validation &&
+    cert.value.validation.forEach((item: { verified: number }) => {
+      if (item.verified != 1) verified = false;
+    });
+  return verified;
+});
+
+const validationMethod = ref(cert.value.dcv?.method);
+
+// 添加监听器监听cert.value的变化
+watch(
+  () => cert.value,
+  newVal => {
+    if (newVal) {
+      validationMethod.value = newVal.dcv?.method;
+    }
+  }
+);
+
+const loading = ref(false);
+
+const route = useRoute();
+const issue_verify = Boolean(
+  Number(
+    route.query.issue_verify ??
+      route.query.verify ??
+      (route.query.pay !== undefined ? 0 : 1)
+  )
+);
+
+const pay = () => {
+  OrderApi.pay(order.id, { commit: true, issue_verify: issue_verify }).then(
+    res => {
+      message(res.msg ? res.msg : "支付成功", { type: "success" });
+      get();
+    }
+  );
+};
+
+const commit = () => {
+  OrderApi.commit(order.id).then(res => {
+    message(res.msg ? res.msg : "提交成功", { type: "success" });
+    get();
+  });
+};
+
+const revalidate = () => {
+  if (loading.value) return;
+  loading.value = true;
+  OrderApi.revalidate(order.id)
+    .then(res => {
+      message(res.msg ? res.msg : "开始验证，请等待几分钟后刷新页面查看结果", {
+        type: "success"
+      });
+    })
+    .finally(() => {
+      loading.value = false;
+    });
+};
+
+const updateValidationMethod = (method: string) => {
+  if (loading.value) return;
+  loading.value = true;
+  OrderApi.updateDCV(order.id, method)
+    .then(res => {
+      message(res.msg ? res.msg : "修改成功", { type: "success" });
+      get();
+    })
+    .finally(() => {
+      loading.value = false;
+    });
+};
+
+const copyDnsRecords = () => {
+  const records = [];
+  if (hostIncludeSubDomain.value) {
+    cert.value.validation.forEach(
+      (item: { method: string; host: string; domain: string }) => {
+        if (item.method === "cname" || item.method === "txt") {
+          records.push(
+            `域名：${item.domain}\n主机记录：${item.host}\n解析类型：${cert.value.dcv.dns.type}\n记录值：${cert.value.dcv.dns.value}`
+          );
+        }
+      }
+    );
+  } else {
+    records.push(
+      `域名：${cert.value.validation[0].domain}\n主机记录：${cert.value.dcv.dns.host}\n解析类型：${cert.value.dcv.dns.type}\n记录值：${cert.value.dcv.dns.value}`
+    );
+  }
+
+  const text = records.join("\n\n");
+  navigator.clipboard.writeText(text).then(() => {
+    message("解析记录已复制到剪贴板", { type: "success" });
+  });
+};
+
+// 批量检测函数
+async function batchVerifyValidation(validation: any[], ca?: string) {
+  if (!validation?.length) return validation;
+
+  // 准备请求数据，适配新接口格式
+  const requestData = validation.map((item: any) => {
+    const baseData: any = {
+      domain: item.domain,
+      method: item.method?.toLowerCase()
+    };
+
+    // 根据验证方法添加相应字段
+    if (["txt", "cname"].includes(baseData.method)) {
+      baseData.host = item.host || cert.value.dcv?.dns?.host || "@";
+      baseData.value = item.value || cert.value.dcv?.dns?.value;
+    } else if (["file", "http", "https"].includes(baseData.method)) {
+      const protocol = baseData.method === "file" ? "" : baseData.method + ":";
+      baseData.link =
+        item.link ||
+        `${protocol}//${item.domain}/.well-known/pki-validation/${cert.value.dcv?.file?.name}`;
+      baseData.name = item.name || cert.value.dcv?.file?.name;
+      baseData.content = item.content || cert.value.dcv?.file?.content;
+    }
+
+    return baseData;
+  });
+
+  // 从配置文件获取 DNS Tools 基础地址，并拼接 API 路径
+  const dnsToolsHosts = getConfig()?.DnsTools || [
+    "https://dns-tools-cn.cnssl.com",
+    "https://dns-tools-us.cnssl.com"
+  ];
+  const endpoints = dnsToolsHosts.map(host => `${host}/api/dcv/verify`);
+
+  let response: AxiosResponse<any, any>;
+  let lastError: any;
+
+  for (const endpoint of endpoints) {
+    try {
+      response = await axios.post(endpoint, requestData, {
+        timeout: 10000
+      });
+
+      // 只要有响应（无论 code 是 0 还是 1），就使用该响应
+      if (response.data !== undefined) {
+        break;
+      }
+    } catch (error) {
+      lastError = error;
+      console.debug(`Failed to connect to ${endpoint}, trying next...`);
+      continue;
+    }
+  }
+
+  // 处理返回数据
+  if (response?.data) {
+    // code=1 时数据在 data.results 中，code=0 时可能在 errors 中
+    const results = response.data.data?.results || {};
+    const errors = response.data.errors || [];
+
+    // 如果有 errors 数组，将其转换为 results 格式
+    if (errors.length > 0) {
+      errors.forEach((err: any) => {
+        if (err.domain) {
+          results[err.domain] = err;
+        }
+      });
+    }
+
+    return validation.map((item: any) => {
+      const resultKey = item.domain;
+      const checkResult = results[resultKey];
+
+      if (checkResult) {
+        const updateData: any = {
+          ...item,
+          checked: checkResult.matched === "true",
+          error: checkResult.matched === "false" ? `验证失败` : ""
+        };
+
+        // 根据验证方法设置检测值和额外信息
+        if (["txt", "cname"].includes(item.method?.toLowerCase())) {
+          updateData.detected_value = checkResult.value || "";
+          // 保存查询信息用于显示
+          updateData.query = checkResult.query || "";
+          updateData.query_sub = checkResult.query_sub || "";
+          updateData.value_sub = checkResult.value_sub || "";
+        } else if (
+          ["file", "http", "https"].includes(item.method?.toLowerCase())
+        ) {
+          // 对于文件验证，content 可能已被截断
+          updateData.detected_value = checkResult.content || "";
+          // 保存链接信息
+          updateData.link =
+            checkResult.link ||
+            checkResult.link_https ||
+            checkResult.link_http ||
+            item.link;
+        }
+
+        return updateData;
+      }
+      return item;
+    });
+  }
+
+  // 如果所有节点都失败，返回原数据
+  if (lastError) {
+    console.error("All DCV verify endpoints failed:", lastError);
+  }
+  return validation;
+}
+
+// 添加状态变量
+const checkDialogVisible = ref(false);
+const currentCheckItem = ref<any>(null);
+const isChecking = ref(false);
+
+// 添加检测单条记录的函数
+async function checkSingleValidation(item: any) {
+  currentCheckItem.value = item;
+  checkDialogVisible.value = true;
+
+  // 如果检测失败，自动重新检测一次
+  if (!item.checked) {
+    await debouncedVerifyItem();
+  }
+}
+
+// 单条验证检测函数
+async function verifyItem() {
+  if (!currentCheckItem.value) return;
+
+  isChecking.value = true;
+  try {
+    const result = await batchVerifyValidation(
+      [currentCheckItem.value],
+      order.product.ca
+    );
+
+    if (result?.[0]) {
+      const newItem = result[0];
+
+      // 如果检测成功，清除错误相关字段
+      if (newItem.checked) {
+        newItem.error = "";
+        newItem.detected_value = newItem.detected_value || "";
+        newItem.errors = undefined;
+      }
+
+      // 更新数据
+      const index = cert.value.validation.findIndex(
+        (item: any) =>
+          item.domain === currentCheckItem.value.domain &&
+          item.method === currentCheckItem.value.method
+      );
+      if (index !== -1) {
+        cert.value.validation[index] = newItem;
+        currentCheckItem.value = newItem;
+      }
+    }
+  } finally {
+    isChecking.value = false;
+  }
+}
+
+// 监听弹窗状态，关闭时清理当前项
+watch(checkDialogVisible, newValue => {
+  if (!newValue) {
+    currentCheckItem.value = null;
+    isChecking.value = false;
+  }
+});
+
+const debouncedVerifyItem = debounce(verifyItem, 500);
+
+// 启动批量检测
+async function startBatchVerify() {
+  if (
+    !cert.value?.validation?.length ||
+    !["cname", "txt", "file", "http", "https"].includes(
+      cert.value.dcv?.method
+    ) ||
+    allVerified.value ||
+    (!cert.value.dcv?.dns?.value && !cert.value.dcv?.file?.content) ||
+    !["unpaid", "pending", "processing"].includes(cert.value.status)
+  ) {
+    return;
+  }
+
+  try {
+    isChecking.value = true;
+    cert.value.validation = await batchVerifyValidation(
+      cert.value.validation,
+      order.product.ca
+    );
+  } catch {
+  } finally {
+    isChecking.value = false;
+  }
+}
+
+onMounted(async () => {
+  await startBatchVerify();
+});
+</script>
+<style lang="scss">
+.validation-check-dialog {
+  .el-dialog {
+    width: fit-content !important;
+    min-width: 400px !important;
+    max-width: 80vw !important;
+  }
+
+  .el-dialog__body {
+    min-width: 400px;
+    padding: 20px;
+  }
+
+  /* 优化长文本显示 */
+  .el-descriptions__cell {
+    word-break: break-all;
+    white-space: pre-wrap;
+  }
+}
+</style>
+<style scoped lang="scss">
+.box {
+  float: left;
+  padding: 20px;
+  margin: 10px;
+  border: 1px solid var(--ba-border-color);
+}
+
+.title {
+  margin-bottom: 20px;
+  color: var(--el-text-color-regular);
+
+  span,
+  button {
+    vertical-align: middle;
+  }
+}
+
+.descriptions {
+  width: 100%;
+  padding: 5px 0 5px 20px;
+  margin-bottom: 10px;
+  font-size: 14px;
+  line-height: 28px;
+  white-space: nowrap;
+  border-left: 4px solid var(--el-border-color);
+
+  td {
+    height: 40px;
+    padding: 0 5px;
+  }
+}
+
+.index {
+  width: 50px;
+}
+
+.type {
+  width: 240px;
+}
+
+::v-deep(.el-input-group__prepend) .el-button--primary {
+  color: #fff !important;
+  background-color: var(--el-color-primary) !important;
+  border-color: var(--el-color-primary) !important;
+  border-radius: 4px 0 0 4px !important;
+}
+
+:deep(.el-textarea__inner) {
+  resize: none;
+  scrollbar-width: none;
+}
+
+:deep(.el-textarea__inner::-webkit-scrollbar) {
+  display: none;
+}
+
+.check-result-dialog {
+  max-height: 60vh;
+  overflow-y: auto;
+}
+</style>
