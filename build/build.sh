@@ -52,16 +52,13 @@ mkdir -p "$TEMP_DIR"/{reports,production-code,caches/pnpm-store,caches/composer-
 
 # 默认参数
 BUILD_MODULE="all"
-BUILD_MODE="test"
+BUILD_MODE="local"          # 默认本地构建
+RELEASE_CHANNEL=""          # release 通道: main 或 dev
 FORCE_BUILD="false"
 REBUILD_IMAGE="false"
 COMPARE="false"
 CLEAR_CACHE="false"
-
-# 无参数时默认使用测试模式（不再交互式询问）
-if [ $# -eq 0 ]; then
-    BUILD_MODE="test"
-fi
+CREATE_PACKAGE="false"      # 是否创建安装包
 
 # 显示帮助信息
 show_help() {
@@ -80,34 +77,50 @@ Monorepo 构建脚本 - 容器化构建
   web         仅更新 web 静态文件
 
 选项:
-  --test              测试模式（默认），不推送到远程仓库
-  --prod              生产模式，完整流程包含推送
-  --force-build       强制构建（即使已是最新）
-  --clear-cache       构建前清空依赖缓存
-  --rebuild-image     强制重建 Docker 镜像
-  --compare           构建成功后输出与远程产物差异摘要
-  -h, --help          显示此帮助信息
+  --release [main|dev]  发布模式，推送到远程仓库
+                        main: 正式版（main 分支）
+                        dev:  开发版（dev 分支）
+                        不指定通道则默认为 main
+  --package             构建完成后创建安装包（完整包+升级包）
+  --force-build         强制构建（即使已是最新）
+  --clear-cache         构建前清空依赖缓存
+  --rebuild-image       强制重建 Docker 镜像
+  --compare             构建成功后输出与远程产物差异摘要
+  -h, --help            显示此帮助信息
 
 示例:
-  $0 --test                      # 测试构建所有模块
-  $0 --prod                      # 生产构建并推送
-  $0 --test api                  # 测试构建后端
-  $0 --prod admin --force-build  # 强制构建管理端并推送
+  $0                             # 本地构建所有模块
+  $0 api                         # 本地构建后端
+  $0 --package                   # 本地构建并创建安装包
+  $0 --release                   # 发布正式版（main）
+  $0 --release dev               # 发布开发版
+  $0 --release main --package    # 发布正式版并创建安装包
 EOF
     exit 0
 }
 
 # 解析命令行参数
-for arg in "$@"; do
+ARGS=("$@")
+i=0
+while [ $i -lt ${#ARGS[@]} ]; do
+    arg="${ARGS[$i]}"
     case "$arg" in
         -h|--help)
             show_help
             ;;
-        --test)
-            BUILD_MODE="test"
-            ;;
-        --prod)
-            BUILD_MODE="prod"
+        --release)
+            BUILD_MODE="release"
+            # 检查下一个参数是否是 release 通道
+            next_idx=$((i + 1))
+            if [ $next_idx -lt ${#ARGS[@]} ]; then
+                next_arg="${ARGS[$next_idx]}"
+                if [[ "$next_arg" =~ ^(main|dev)$ ]]; then
+                    RELEASE_CHANNEL="$next_arg"
+                    i=$next_idx
+                fi
+            fi
+            # 默认通道为 main
+            [ -z "$RELEASE_CHANNEL" ] && RELEASE_CHANNEL="main"
             ;;
         --force-build)
             FORCE_BUILD="true"
@@ -120,6 +133,9 @@ for arg in "$@"; do
             ;;
         --compare)
             COMPARE="true"
+            ;;
+        --package)
+            CREATE_PACKAGE="true"
             ;;
         --*)
             log_error "未知选项: $arg"
@@ -137,6 +153,7 @@ for arg in "$@"; do
             fi
             ;;
     esac
+    i=$((i + 1))
 done
 
 # 显示构建配置
@@ -145,7 +162,11 @@ log_info "============================================"
 log_info "Monorepo 构建系统"
 log_info "============================================"
 log_info "构建模块: $BUILD_MODULE"
-log_info "构建模式: $BUILD_MODE"
+if [ "$BUILD_MODE" = "release" ]; then
+    log_info "构建模式: release ($RELEASE_CHANNEL)"
+else
+    log_info "构建模式: $BUILD_MODE"
+fi
 log_info "强制构建: $FORCE_BUILD"
 log_info "重建镜像: $REBUILD_IMAGE"
 log_info "Monorepo: $MONOREPO_ROOT"
@@ -203,10 +224,10 @@ if [ "$CLEAR_CACHE" = "true" ]; then
     echo ""
 fi
 
-# SSH 认证：仅生产模式推送时需要
+# SSH 认证：仅发布模式推送时需要
 NEED_SSH=false
 USE_AGENT=false
-if [ "$BUILD_MODE" = "prod" ]; then
+if [ "$BUILD_MODE" = "release" ]; then
     NEED_SSH=true
     # 检测 ssh-agent
     if [ -z "${SSH_AUTH_SOCK:-}" ] || [ ! -S "${SSH_AUTH_SOCK}" ]; then
@@ -251,7 +272,7 @@ if [ "$BUILD_MODE" = "prod" ]; then
         exit 1
     fi
 else
-    log_info "测试模式，不需要 SSH 认证"
+    log_info "本地构建模式，不需要 SSH 认证"
 fi
 
 # 读取配置
@@ -390,6 +411,7 @@ fi
 # 传递构建环境变量
 DOCKER_OPTS+=( -e BUILD_MODULE="$BUILD_MODULE" )
 DOCKER_OPTS+=( -e BUILD_MODE="$BUILD_MODE" )
+DOCKER_OPTS+=( -e RELEASE_CHANNEL="$RELEASE_CHANNEL" )
 DOCKER_OPTS+=( -e FORCE_BUILD="$FORCE_BUILD" )
 
 # 依赖缓存复用
@@ -457,12 +479,28 @@ if [ "$RUN_STATUS" -eq 0 ]; then
         echo ""
     fi
 
-    # 测试模式提示
-    if [ "$BUILD_MODE" = "test" ]; then
+    # 可选：创建安装包
+    if [ "$CREATE_PACKAGE" = "true" ]; then
+        echo ""
+        log_step "创建安装包"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        PACKAGE_CHANNEL="${RELEASE_CHANNEL:-main}"
+        if bash "$SCRIPT_DIR/scripts/package.sh" --channel "$PACKAGE_CHANNEL"; then
+            log_success "安装包创建完成"
+            log_info "安装包位于: $TEMP_DIR/packages"
+        else
+            log_warning "安装包创建失败"
+        fi
+        echo ""
+    fi
+
+    # 本地构建模式提示
+    if [ "$BUILD_MODE" = "local" ]; then
         echo ""
         log_info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        log_info "测试构建完成，产物位于: $TEMP_DIR/production-code"
-        log_info "如需推送到远程仓库，请运行: ./build.sh --prod"
+        log_info "本地构建完成，产物位于: $TEMP_DIR/production-code"
+        log_info "如需发布正式版: ./build.sh --release main"
+        log_info "如需发布开发版: ./build.sh --release dev"
         log_info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     fi
 

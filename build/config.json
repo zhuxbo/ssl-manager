@@ -4,10 +4,11 @@
     "composer_mirror": "https://mirrors.aliyun.com/composer/",
     "min_php_version": "8.3",
     "min_node_version": "22",
-    "production_repo": {
-      "url": "git@gitee.com:zhuxbo/production-code.git",
-      "branch": "main",
-      "commit_message": "Build: {version} - {date}"
+    "release": {
+      "gitee": {
+        "owner": "zhuxbo",
+        "repo": "manager-release-test"
+      }
     },
     "git_user": {
       "name": "zhuxbo",

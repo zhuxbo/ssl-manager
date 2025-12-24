@@ -245,12 +245,24 @@ if [ -d "$SOURCE_DIR/.git" ]; then
     MONOREPO_COMMIT=$(cd "$SOURCE_DIR" && git rev-parse HEAD 2>/dev/null || echo "")
 fi
 
+# 从 version.json 读取版本号
+VERSION_FILE="$SOURCE_DIR/version.json"
+if [ -f "$VERSION_FILE" ]; then
+    VERSION=$(jq -r '.version // "1.0.0"' "$VERSION_FILE")
+    RELEASE_CHANNEL=$(jq -r '.channel // "main"' "$VERSION_FILE")
+else
+    VERSION="1.0.0"
+    RELEASE_CHANNEL="main"
+    log_warning "version.json 不存在，使用默认版本 $VERSION"
+fi
+
 # 生成构建信息
-VERSION=$(date +%Y%m%d%H%M%S)
+BUILD_TIME=$(date -Iseconds)
 cat > "$PRODUCTION_DIR/config.json" <<EOF
 {
   "version": "$VERSION",
-  "build_time": "$(date -Iseconds)",
+  "channel": "$RELEASE_CHANNEL",
+  "build_time": "$BUILD_TIME",
   "build_module": "${BUILD_MODULE:-all}",
   "php_version": "$(php -v | head -n1)",
   "node_version": "$(node -v)",
@@ -259,6 +271,22 @@ cat > "$PRODUCTION_DIR/config.json" <<EOF
 }
 EOF
 
+# 更新后端 version.php 配置（写入构建时信息）
+VERSION_PHP="$PRODUCTION_DIR/backend/config/version.php"
+if [ -f "$VERSION_PHP" ]; then
+    log_info "更新 version.php 配置..."
+    # 在容器中创建临时 .env 写入构建信息
+    BACKEND_ENV="$PRODUCTION_DIR/backend/.env.build"
+    cat > "$BACKEND_ENV" <<EOF
+APP_VERSION=$VERSION
+APP_BUILD_TIME=$BUILD_TIME
+APP_BUILD_COMMIT=$MONOREPO_COMMIT
+APP_RELEASE_CHANNEL=$RELEASE_CHANNEL
+EOF
+    log_info "已生成 .env.build 文件"
+fi
+
 log_success "config.json 已生成"
 log_info "版本: $VERSION"
+log_info "通道: $RELEASE_CHANNEL"
 log_info "Monorepo commit: ${MONOREPO_COMMIT:-N/A}"

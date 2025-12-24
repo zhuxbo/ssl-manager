@@ -312,3 +312,42 @@ git diff HEAD~1 -- frontend/base/
 2. **共享代码优先** - 新增通用功能应放入 `frontend/shared/`
 3. **工厂函数模式** - auth、http 等依赖 store 的模块使用工厂函数注入依赖
 4. **Tailwind 扫描** - 各应用的 `tailwind.css` 需添加 `@source` 指令扫描 shared 包
+
+## 部署
+
+### 一键安装
+
+```bash
+# 自动检测环境（推荐）
+curl -fsSL https://gitee.com/zhuxbo/cert-manager/raw/main/deploy/install.sh | bash
+
+# 指定 Docker 部署
+curl -fsSL https://gitee.com/zhuxbo/cert-manager/raw/main/deploy/install.sh | bash -s docker
+
+# 指定宝塔部署
+curl -fsSL https://gitee.com/zhuxbo/cert-manager/raw/main/deploy/install.sh | bash -s bt
+```
+
+### 部署方式
+
+| 方式 | 适用环境 | 说明 |
+|------|----------|------|
+| Docker | 任意 Linux | 推荐，7 步交互式配置，自动安装 Docker |
+| 宝塔面板 | 已安装宝塔 | 使用宝塔管理 PHP/MySQL/Nginx |
+
+### 脚本结构
+
+```
+deploy/
+├── install.sh              # 远程一键安装入口
+├── scripts/
+│   ├── common.sh           # 公共函数库（下载、镜像源配置等）
+│   ├── bt-install.sh       # 宝塔面板安装
+│   ├── bt-deps.sh          # 宝塔依赖检测
+│   ├── docker-install.sh   # Docker 交互式安装
+│   └── upgrade.sh          # 升级辅助脚本
+├── docker/                 # Docker 配置模板
+└── nginx/                  # Nginx 配置模板
+```
+
+详细文档请参阅 [CLAUDE.md](./CLAUDE.md#部署脚本)

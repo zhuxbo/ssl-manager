@@ -30,7 +30,8 @@ PRODUCTION_DIR="/workspace/production-code"
 
 # 解析环境变量
 BUILD_MODULE="${BUILD_MODULE:-all}"
-BUILD_MODE="${BUILD_MODE:-test}"
+BUILD_MODE="${BUILD_MODE:-local}"
+RELEASE_CHANNEL="${RELEASE_CHANNEL:-}"
 FORCE_BUILD="${FORCE_BUILD:-false}"
 
 # 构建标志
@@ -64,15 +65,19 @@ log_info "============================================"
 log_info "Monorepo 构建系统 - 容器内构建"
 log_info "============================================"
 log_info "构建模块: $BUILD_MODULE"
-log_info "构建模式: $BUILD_MODE"
+if [ "$BUILD_MODE" = "release" ]; then
+    log_info "构建模式: release ($RELEASE_CHANNEL)"
+else
+    log_info "构建模式: $BUILD_MODE"
+fi
 log_info "强制构建: $FORCE_BUILD"
 log_info "源目录:   $SOURCE_DIR"
 log_info "工作目录: $WORKSPACE_DIR"
 log_info "============================================"
 echo ""
 
-# SSH 认证：仅生产模式推送时需要
-if [ "$BUILD_MODE" = "prod" ]; then
+# SSH 认证：仅发布模式推送时需要
+if [ "$BUILD_MODE" = "release" ]; then
     if [ -n "${SSH_AUTH_SOCK:-}" ] && [ -S "${SSH_AUTH_SOCK}" ]; then
         log_success "检测到 ssh-agent 转发，将使用 agent 进行认证"
     elif [ -f "/root/.ssh/id_gitee" ]; then
@@ -82,7 +87,7 @@ if [ "$BUILD_MODE" = "prod" ]; then
         chmod 600 /root/.ssh/id_gitee_loaded
         export GIT_SSH_COMMAND="ssh -i /root/.ssh/id_gitee_loaded -o StrictHostKeyChecking=accept-new"
     else
-        log_warning "生产模式需要 SSH 认证进行推送，但未检测到凭据"
+        log_warning "发布模式需要 SSH 认证进行推送，但未检测到凭据"
     fi
 fi
 
@@ -111,7 +116,7 @@ mkdir -p "$WORKSPACE_DIR" "$PRODUCTION_DIR"
 
 # 导出构建标志供子脚本使用
 export BUILD_BACKEND BUILD_ADMIN BUILD_USER BUILD_EASY BUILD_NGINX BUILD_WEB
-export BUILD_MODULE BUILD_MODE FORCE_BUILD
+export BUILD_MODULE BUILD_MODE RELEASE_CHANNEL FORCE_BUILD
 export SOURCE_DIR WORKSPACE_DIR PRODUCTION_DIR CONFIG_FILE
 
 # 阶段 1: 准备工作目录
@@ -234,9 +239,11 @@ else
 fi
 echo ""
 
-# 阶段 5: 推送（仅生产模式）
-if [ "$BUILD_MODE" = "prod" ]; then
-    log_step "阶段 5: 推送到远程仓库（单提交覆盖）"
+# 阶段 5: 推送（仅发布模式）
+if [ "$BUILD_MODE" = "release" ]; then
+    # 根据 RELEASE_CHANNEL 确定目标分支
+    TARGET_BRANCH="${RELEASE_CHANNEL:-main}"
+    log_step "阶段 5: 推送到远程仓库 ($TARGET_BRANCH 分支)"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     cd "$PRODUCTION_DIR"
 
@@ -249,22 +256,24 @@ if [ "$BUILD_MODE" = "prod" ]; then
     # 准备提交信息
     VERSION=$(jq -r '.version' "$PRODUCTION_DIR/config.json" 2>/dev/null || echo "unknown")
     DATE=$(date +"%Y-%m-%d %H:%M:%S")
-    COMMIT_MSG="Build: $VERSION - $DATE"
+    CHANNEL_LABEL=""
+    [ "$TARGET_BRANCH" = "dev" ] && CHANNEL_LABEL=" (dev)"
+    COMMIT_MSG="Build: $VERSION$CHANNEL_LABEL - $DATE"
 
     # 单提交覆盖策略
-    git checkout --orphan main_tmp >/dev/null 2>&1 || git checkout --orphan main_tmp
+    git checkout --orphan "${TARGET_BRANCH}_tmp" >/dev/null 2>&1 || git checkout --orphan "${TARGET_BRANCH}_tmp"
     git add -A
     if git diff --cached --quiet; then
         git commit --allow-empty -m "$COMMIT_MSG" --quiet
     else
         git commit -m "$COMMIT_MSG" --quiet
     fi
-    git branch -M main >/dev/null 2>&1 || git branch -M main
-    git push -q origin main --force
-    log_success "生产仓库已以单提交方式强制推送"
+    git branch -M "$TARGET_BRANCH" >/dev/null 2>&1 || git branch -M "$TARGET_BRANCH"
+    git push -q origin "$TARGET_BRANCH" --force
+    log_success "已推送到 $TARGET_BRANCH 分支"
     echo ""
 else
-    log_info "测试模式：跳过推送到远程仓库"
+    log_info "本地构建模式：跳过推送到远程仓库"
     echo ""
 fi
 

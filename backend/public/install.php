@@ -364,6 +364,9 @@ $requiredExtensions = [
 $extensionRequirements = [];
 $extensionSuccess = true;
 
+// 检查exec函数是否可用（需要在宝塔环境检测之前定义）
+$execEnabled = function_exists('exec') && ! in_array('exec', array_map('trim', explode(',', ini_get('disable_functions'))));
+
 // 检测宝塔环境并设置正确的PHP路径
 $phpBinary = 'php';
 $isBaotaEnv = false;
@@ -392,9 +395,6 @@ elseif ($execEnabled) {
         }
     }
 }
-
-// 检查exec函数是否可用（多处会用到）
-$execEnabled = function_exists('exec') && ! in_array('exec', array_map('trim', explode(',', ini_get('disable_functions'))));
 
 foreach ($requiredExtensions as $extension) {
     // 使用多种方法检测扩展，与安装脚本保持一致
