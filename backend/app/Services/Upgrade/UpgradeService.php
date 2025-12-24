@@ -1,0 +1,389 @@
+<?php
+
+namespace App\Services\Upgrade;
+
+use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\Log;
+use RuntimeException;
+
+class UpgradeService
+{
+    public function __construct(
+        protected VersionManager $versionManager,
+        protected ReleaseClient $releaseClient,
+        protected BackupManager $backupManager,
+        protected PackageExtractor $packageExtractor,
+    ) {}
+
+    /**
+     * 检查更新
+     */
+    public function checkForUpdate(): array
+    {
+        $currentVersion = $this->versionManager->getCurrentVersion();
+        $channel = $currentVersion['channel'];
+
+        $latestRelease = $this->releaseClient->getLatestRelease($channel);
+
+        if (! $latestRelease) {
+            return [
+                'has_update' => false,
+                'current_version' => $currentVersion['version'],
+                'latest_version' => null,
+                'message' => '无法获取最新版本信息',
+            ];
+        }
+
+        $comparison = $this->versionManager->compareVersions(
+            $latestRelease['version'],
+            $currentVersion['version']
+        );
+
+        $hasUpdate = $comparison > 0;
+
+        return [
+            'has_update' => $hasUpdate,
+            'current_version' => $currentVersion['version'],
+            'latest_version' => $latestRelease['version'],
+            'changelog' => $latestRelease['body'] ?? '',
+            'download_url' => $this->releaseClient->findUpgradePackageUrl($latestRelease),
+            'package_size' => $this->formatPackageSize($latestRelease),
+            'release_date' => $latestRelease['published_at'] ?? '',
+            'channel' => $channel,
+        ];
+    }
+
+    /**
+     * 执行升级
+     */
+    public function performUpgrade(string $version = 'latest'): array
+    {
+        $steps = [];
+
+        try {
+            // 步骤 1: 获取目标版本信息
+            $steps[] = ['step' => 'fetch_release', 'status' => 'running'];
+
+            if ($version === 'latest') {
+                $release = $this->releaseClient->getLatestRelease();
+            } else {
+                $tag = str_starts_with($version, 'v') ? $version : "v$version";
+                $release = $this->releaseClient->getReleaseByTag($tag);
+            }
+
+            if (! $release) {
+                throw new RuntimeException("无法获取版本 $version 的信息");
+            }
+
+            $steps[count($steps) - 1]['status'] = 'completed';
+            $targetVersion = $release['version'];
+
+            // 检查是否允许升级
+            if (! $this->versionManager->isUpgradeAllowed($targetVersion)) {
+                throw new RuntimeException("不允许升级到版本 $targetVersion（版本相同或低于当前版本）");
+            }
+
+            // 检查 PHP 版本
+            if (! $this->versionManager->checkPhpVersion()) {
+                $minVersion = $this->versionManager->getMinPhpVersion();
+                throw new RuntimeException("PHP 版本不满足要求，需要 PHP >= $minVersion");
+            }
+
+            // 步骤 2: 创建备份
+            $forceBackup = Config::get('upgrade.behavior.force_backup', true);
+            $backupId = null;
+
+            if ($forceBackup) {
+                $steps[] = ['step' => 'backup', 'status' => 'running'];
+                $backupId = $this->backupManager->createBackup();
+                $steps[count($steps) - 1]['status'] = 'completed';
+                $steps[count($steps) - 1]['backup_id'] = $backupId;
+            }
+
+            // 步骤 3: 进入维护模式
+            $maintenanceMode = Config::get('upgrade.behavior.maintenance_mode', true);
+            if ($maintenanceMode) {
+                $steps[] = ['step' => 'maintenance_on', 'status' => 'running'];
+                Artisan::call('down', ['--retry' => 60]);
+                $steps[count($steps) - 1]['status'] = 'completed';
+            }
+
+            // 步骤 4: 下载升级包（优先 Gitee，回退 GitHub）
+            $steps[] = ['step' => 'download', 'status' => 'running'];
+            $packagePath = $this->packageExtractor->getDownloadPath() . "/upgrade-$targetVersion.zip";
+
+            if (! $this->releaseClient->downloadUpgradePackage($release, $packagePath)) {
+                throw new RuntimeException('下载升级包失败（所有下载源都不可用）');
+            }
+            $steps[count($steps) - 1]['status'] = 'completed';
+
+            // 步骤 5: 解压并验证
+            $steps[] = ['step' => 'extract', 'status' => 'running'];
+            $extractedPath = $this->packageExtractor->extract($packagePath);
+            $this->packageExtractor->validatePackage($extractedPath);
+            $steps[count($steps) - 1]['status'] = 'completed';
+
+            // 步骤 6: 应用升级
+            $steps[] = ['step' => 'apply', 'status' => 'running'];
+            $this->packageExtractor->applyUpgrade($extractedPath);
+            $steps[count($steps) - 1]['status'] = 'completed';
+
+            // 清理 opcache 以便加载新代码
+            if (function_exists('opcache_reset')) {
+                opcache_reset();
+                Log::info('[Upgrade] opcache_reset called after applying upgrade');
+            }
+
+            // 步骤 7: 运行迁移
+            $autoMigrate = Config::get('upgrade.behavior.auto_migrate', true);
+            if ($autoMigrate) {
+                $steps[] = ['step' => 'migrate', 'status' => 'running'];
+                Artisan::call('migrate', ['--force' => true]);
+                $steps[count($steps) - 1]['status'] = 'completed';
+            }
+
+            // 步骤 8: 运行种子
+            $autoSeed = Config::get('upgrade.behavior.auto_seed', true);
+            if ($autoSeed) {
+                $steps[] = ['step' => 'seed', 'status' => 'running'];
+                $seedClass = Config::get('upgrade.behavior.seed_class');
+                $seedOptions = ['--force' => true];
+                if ($seedClass) {
+                    $seedOptions['--class'] = $seedClass;
+                }
+                Artisan::call('db:seed', $seedOptions);
+                $steps[count($steps) - 1]['status'] = 'completed';
+            }
+
+            // 步骤 9: 更新版本号
+            $steps[] = ['step' => 'update_version', 'status' => 'running'];
+            $this->updateEnvVersion($targetVersion);
+            $steps[count($steps) - 1]['status'] = 'completed';
+
+            // 步骤 10: 清理缓存
+            $clearCache = Config::get('upgrade.behavior.clear_cache', true);
+            if ($clearCache) {
+                $steps[] = ['step' => 'clear_cache', 'status' => 'running'];
+                Log::info('[Upgrade] Step: clear_cache - starting optimize:clear');
+                Artisan::call('optimize:clear');
+                Log::info('[Upgrade] optimize:clear done, output: ' . Artisan::output());
+
+                // 重建缓存
+                Log::info('[Upgrade] Starting config:cache');
+                Artisan::call('config:cache');
+                Log::info('[Upgrade] config:cache done, output: ' . Artisan::output());
+
+                Log::info('[Upgrade] Starting route:cache');
+                Artisan::call('route:cache');
+                Log::info('[Upgrade] route:cache done, output: ' . Artisan::output());
+
+                // 验证路由缓存文件
+                $routeCacheFile = base_path('bootstrap/cache/routes-v7.php');
+                Log::info('[Upgrade] Route cache file exists: ' . (file_exists($routeCacheFile) ? 'YES' : 'NO'));
+
+                $steps[count($steps) - 1]['status'] = 'completed';
+            }
+
+            // 步骤 11: 清理临时文件
+            $steps[] = ['step' => 'cleanup', 'status' => 'running'];
+            $this->packageExtractor->cleanup($extractedPath);
+            $this->packageExtractor->cleanupOldPackages();
+            $steps[count($steps) - 1]['status'] = 'completed';
+
+            // 步骤 12: 退出维护模式
+            if ($maintenanceMode) {
+                $steps[] = ['step' => 'maintenance_off', 'status' => 'running'];
+                Artisan::call('up');
+                $steps[count($steps) - 1]['status'] = 'completed';
+            }
+
+            // 最终清理 opcache
+            if (function_exists('opcache_reset')) {
+                opcache_reset();
+                Log::info('[Upgrade] Final opcache_reset called');
+            }
+
+            Log::info("升级完成: {$this->versionManager->getVersionString()} -> $targetVersion");
+
+            return [
+                'success' => true,
+                'from_version' => $this->versionManager->getVersionString(),
+                'to_version' => $targetVersion,
+                'backup_id' => $backupId,
+                'steps' => $steps,
+            ];
+
+        } catch (\Exception $e) {
+            // 标记当前步骤失败
+            if (! empty($steps)) {
+                $steps[count($steps) - 1]['status'] = 'failed';
+                $steps[count($steps) - 1]['error'] = $e->getMessage();
+            }
+
+            // 尝试恢复
+            try {
+                // 退出维护模式
+                Artisan::call('up');
+            } catch (\Exception $upError) {
+                Log::error("退出维护模式失败: {$upError->getMessage()}");
+            }
+
+            Log::error("升级失败: {$e->getMessage()}");
+
+            return [
+                'success' => false,
+                'error' => $e->getMessage(),
+                'steps' => $steps,
+            ];
+        }
+    }
+
+    /**
+     * 回滚到指定备份
+     */
+    public function rollback(string $backupId): array
+    {
+        try {
+            // 检查备份是否存在
+            $backup = $this->backupManager->getBackup($backupId);
+            if (! $backup) {
+                throw new RuntimeException("备份不存在: $backupId");
+            }
+
+            // 进入维护模式
+            Artisan::call('down', ['--retry' => 60]);
+
+            // 恢复备份
+            $this->backupManager->restoreBackup($backupId);
+
+            // 清理 opcache 以加载恢复的代码
+            if (function_exists('opcache_reset')) {
+                opcache_reset();
+                Log::info('[Rollback] opcache_reset called after restore');
+            }
+
+            // 清理并重建缓存
+            Artisan::call('optimize:clear');
+            Artisan::call('config:cache');
+            Artisan::call('route:cache');
+
+            // 最终清理 opcache
+            if (function_exists('opcache_reset')) {
+                opcache_reset();
+            }
+
+            // 退出维护模式
+            Artisan::call('up');
+
+            Log::info("回滚完成: $backupId");
+
+            return [
+                'success' => true,
+                'backup_id' => $backupId,
+                'restored_version' => $backup['version'] ?? 'unknown',
+            ];
+
+        } catch (\Exception $e) {
+            // 尝试退出维护模式
+            try {
+                Artisan::call('up');
+            } catch (\Exception $upError) {
+                // 忽略
+            }
+
+            Log::error("回滚失败: {$e->getMessage()}");
+
+            return [
+                'success' => false,
+                'error' => $e->getMessage(),
+            ];
+        }
+    }
+
+    /**
+     * 获取版本历史
+     */
+    public function getReleaseHistory(int $limit = 10): array
+    {
+        $channel = $this->versionManager->getChannel();
+
+        return $this->releaseClient->getReleaseHistory($limit, $channel);
+    }
+
+    /**
+     * 获取备份列表
+     */
+    public function getBackups(): array
+    {
+        return $this->backupManager->listBackups();
+    }
+
+    /**
+     * 删除备份
+     */
+    public function deleteBackup(string $backupId): bool
+    {
+        return $this->backupManager->deleteBackup($backupId);
+    }
+
+    /**
+     * 格式化包大小
+     */
+    protected function formatPackageSize(array $release): string
+    {
+        $assets = $release['assets'] ?? [];
+
+        foreach ($assets as $asset) {
+            $name = $asset['name'] ?? '';
+            if (str_contains($name, 'upgrade')) {
+                $size = $asset['size'] ?? 0;
+
+                return $this->formatBytes($size);
+            }
+        }
+
+        return 'unknown';
+    }
+
+    /**
+     * 更新 .env 文件中的版本号
+     */
+    protected function updateEnvVersion(string $version): void
+    {
+        $envPath = base_path('.env');
+
+        if (! file_exists($envPath)) {
+            return;
+        }
+
+        $content = file_get_contents($envPath);
+
+        // 更新或添加 APP_VERSION
+        if (preg_match('/^APP_VERSION=.*/m', $content)) {
+            $content = preg_replace('/^APP_VERSION=.*/m', "APP_VERSION=$version", $content);
+        } else {
+            $content .= "\nAPP_VERSION=$version";
+        }
+
+        file_put_contents($envPath, $content);
+
+        Log::info("已更新 .env 版本号: $version");
+    }
+
+    /**
+     * 格式化字节数
+     */
+    protected function formatBytes(int $bytes): string
+    {
+        $units = ['B', 'KB', 'MB', 'GB'];
+        $index = 0;
+
+        while ($bytes >= 1024 && $index < count($units) - 1) {
+            $bytes /= 1024;
+            $index++;
+        }
+
+        return round($bytes, 2) . ' ' . $units[$index];
+    }
+}

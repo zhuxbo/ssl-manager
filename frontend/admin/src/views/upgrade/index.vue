@@ -1,0 +1,470 @@
+<script setup lang="ts">
+import { onMounted, ref, computed } from "vue";
+import {
+  getVersion,
+  checkUpdate,
+  getReleases,
+  executeUpgrade,
+  getBackups,
+  executeRollback,
+  deleteBackup,
+  type VersionInfo,
+  type UpdateCheckResult,
+  type ReleaseInfo,
+  type BackupInfo,
+  type UpgradeStep
+} from "@/api/upgrade";
+import { message } from "@shared/utils";
+import {
+  ElButton,
+  ElCard,
+  ElTag,
+  ElPopconfirm,
+  ElProgress,
+  ElEmpty,
+  ElTooltip,
+  ElDivider
+} from "element-plus";
+
+defineOptions({
+  name: "Upgrade"
+});
+
+// 当前版本信息
+const currentVersion = ref<VersionInfo | null>(null);
+// 更新检查结果
+const updateInfo = ref<UpdateCheckResult | null>(null);
+// 历史版本列表
+const releases = ref<ReleaseInfo[]>([]);
+// 备份列表
+const backups = ref<BackupInfo[]>([]);
+
+// 加载状态
+const loadingVersion = ref(false);
+const loadingCheck = ref(false);
+const loadingReleases = ref(false);
+const loadingBackups = ref(false);
+const upgrading = ref(false);
+const rollingBack = ref(false);
+
+// 升级步骤
+const upgradeSteps = ref<UpgradeStep[]>([]);
+const showUpgradeProgress = ref(false);
+
+// 步骤名称映射
+const stepNames: Record<string, string> = {
+  fetch_release: "获取版本信息",
+  backup: "创建备份",
+  maintenance_on: "进入维护模式",
+  download: "下载升级包",
+  extract: "解压升级包",
+  apply: "应用升级",
+  migrate: "运行数据库迁移",
+  clear_cache: "清理缓存",
+  cleanup: "清理临时文件",
+  maintenance_off: "退出维护模式"
+};
+
+// 计算当前升级进度
+const upgradeProgress = computed(() => {
+  if (!upgradeSteps.value.length) return 0;
+  const completed = upgradeSteps.value.filter(
+    s => s.status === "completed"
+  ).length;
+  return Math.round((completed / upgradeSteps.value.length) * 100);
+});
+
+// 格式化文件大小
+const formatBytes = (bytes: number): string => {
+  const units = ["B", "KB", "MB", "GB"];
+  let index = 0;
+  let size = bytes;
+  while (size >= 1024 && index < units.length - 1) {
+    size /= 1024;
+    index++;
+  }
+  return `${size.toFixed(2)} ${units[index]}`;
+};
+
+// 格式化日期
+const formatDate = (dateStr: string): string => {
+  if (!dateStr) return "";
+  const date = new Date(dateStr);
+  return date.toLocaleString("zh-CN");
+};
+
+// 加载当前版本信息
+const loadVersion = async () => {
+  loadingVersion.value = true;
+  try {
+    const { data } = await getVersion();
+    currentVersion.value = data;
+  } finally {
+    loadingVersion.value = false;
+  }
+};
+
+// 检查更新
+const handleCheckUpdate = async () => {
+  loadingCheck.value = true;
+  try {
+    const { data } = await checkUpdate();
+    updateInfo.value = data;
+    if (data.has_update) {
+      message("发现新版本: " + data.latest_version, { type: "success" });
+    } else {
+      message("当前已是最新版本", { type: "info" });
+    }
+  } finally {
+    loadingCheck.value = false;
+  }
+};
+
+// 加载历史版本
+const loadReleases = async () => {
+  loadingReleases.value = true;
+  try {
+    const { data } = await getReleases(10);
+    releases.value = data.releases || [];
+  } finally {
+    loadingReleases.value = false;
+  }
+};
+
+// 加载备份列表
+const loadBackups = async () => {
+  loadingBackups.value = true;
+  try {
+    const { data } = await getBackups();
+    backups.value = data.backups || [];
+  } finally {
+    loadingBackups.value = false;
+  }
+};
+
+// 执行升级
+const handleUpgrade = async (version: string = "latest") => {
+  upgrading.value = true;
+  showUpgradeProgress.value = true;
+  upgradeSteps.value = [];
+
+  try {
+    const { data } = await executeUpgrade(version);
+    upgradeSteps.value = data.steps || [];
+
+    if (data.success) {
+      message(`升级成功！${data.from_version} -> ${data.to_version}`, {
+        type: "success"
+      });
+      // 刷新版本信息
+      await loadVersion();
+      await loadBackups();
+    } else {
+      message("升级失败: " + (data.error || "未知错误"), { type: "error" });
+    }
+  } catch {
+    message("升级请求失败", { type: "error" });
+  } finally {
+    upgrading.value = false;
+  }
+};
+
+// 执行回滚
+const handleRollback = async (backupId: string) => {
+  rollingBack.value = true;
+  try {
+    const { data } = await executeRollback(backupId);
+    if (data.success) {
+      message(`回滚成功！已恢复到版本 ${data.restored_version}`, {
+        type: "success"
+      });
+      await loadVersion();
+    }
+  } catch {
+    message("回滚失败", { type: "error" });
+  } finally {
+    rollingBack.value = false;
+  }
+};
+
+// 删除备份
+const handleDeleteBackup = async (backupId: string) => {
+  try {
+    await deleteBackup(backupId);
+    message("备份已删除", { type: "success" });
+    await loadBackups();
+  } catch {
+    message("删除失败", { type: "error" });
+  }
+};
+
+// 关闭升级进度
+const closeUpgradeProgress = () => {
+  showUpgradeProgress.value = false;
+  upgradeSteps.value = [];
+};
+
+onMounted(() => {
+  loadVersion();
+  loadBackups();
+});
+</script>
+
+<template>
+  <div class="main p-4">
+    <!-- 当前版本信息 -->
+    <el-card class="mb-4">
+      <template #header>
+        <div class="flex justify-between items-center">
+          <span class="text-lg font-bold">当前版本</span>
+          <el-button
+            type="primary"
+            :loading="loadingCheck"
+            @click="handleCheckUpdate"
+          >
+            检查更新
+          </el-button>
+        </div>
+      </template>
+      <div v-if="currentVersion" class="version-info">
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div>
+            <div class="text-gray-500 text-sm">版本号</div>
+            <div class="text-lg font-bold">
+              {{ currentVersion.version }}
+              <el-tag v-if="currentVersion.channel === 'dev'" type="warning" size="small" class="ml-2">
+                开发版
+              </el-tag>
+            </div>
+          </div>
+          <div>
+            <div class="text-gray-500 text-sm">应用名称</div>
+            <div class="text-lg">{{ currentVersion.name }}</div>
+          </div>
+          <div v-if="currentVersion.build_time">
+            <div class="text-gray-500 text-sm">构建时间</div>
+            <div class="text-lg">{{ formatDate(currentVersion.build_time) }}</div>
+          </div>
+          <div>
+            <div class="text-gray-500 text-sm">发布通道</div>
+            <div class="text-lg">{{ currentVersion.channel }}</div>
+          </div>
+        </div>
+      </div>
+      <div v-else class="text-gray-400">
+        加载中...
+      </div>
+    </el-card>
+
+    <!-- 更新信息 -->
+    <el-card v-if="updateInfo?.has_update" class="mb-4">
+      <template #header>
+        <div class="flex justify-between items-center">
+          <span class="text-lg font-bold text-green-600">发现新版本</span>
+          <el-button
+            type="success"
+            :loading="upgrading"
+            @click="handleUpgrade('latest')"
+          >
+            立即升级
+          </el-button>
+        </div>
+      </template>
+      <div class="update-info">
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+          <div>
+            <div class="text-gray-500 text-sm">最新版本</div>
+            <div class="text-lg font-bold text-green-600">{{ updateInfo.latest_version }}</div>
+          </div>
+          <div v-if="updateInfo.release_date">
+            <div class="text-gray-500 text-sm">发布时间</div>
+            <div class="text-lg">{{ formatDate(updateInfo.release_date) }}</div>
+          </div>
+          <div v-if="updateInfo.package_size">
+            <div class="text-gray-500 text-sm">升级包大小</div>
+            <div class="text-lg">{{ updateInfo.package_size }}</div>
+          </div>
+        </div>
+        <div v-if="updateInfo.changelog">
+          <div class="text-gray-500 text-sm mb-2">更新日志</div>
+          <div class="changelog bg-gray-50 p-4 rounded whitespace-pre-wrap text-sm">
+            {{ updateInfo.changelog }}
+          </div>
+        </div>
+      </div>
+    </el-card>
+
+    <!-- 升级进度 -->
+    <el-card v-if="showUpgradeProgress" class="mb-4">
+      <template #header>
+        <div class="flex justify-between items-center">
+          <span class="text-lg font-bold">升级进度</span>
+          <el-button
+            v-if="!upgrading"
+            type="text"
+            @click="closeUpgradeProgress"
+          >
+            关闭
+          </el-button>
+        </div>
+      </template>
+      <div class="upgrade-progress">
+        <el-progress
+          :percentage="upgradeProgress"
+          :status="upgrading ? '' : upgradeProgress === 100 ? 'success' : 'exception'"
+          class="mb-4"
+        />
+        <div class="steps">
+          <div
+            v-for="step in upgradeSteps"
+            :key="step.step"
+            class="step flex items-center gap-2 py-2"
+          >
+            <span v-if="step.status === 'completed'" class="text-green-500">✓</span>
+            <span v-else-if="step.status === 'failed'" class="text-red-500">✗</span>
+            <span v-else-if="step.status === 'running'" class="text-blue-500">○</span>
+            <span v-else class="text-gray-400">○</span>
+            <span :class="{ 'text-red-500': step.status === 'failed' }">
+              {{ stepNames[step.step] || step.step }}
+            </span>
+            <span v-if="step.error" class="text-red-500 text-sm">
+              ({{ step.error }})
+            </span>
+          </div>
+        </div>
+      </div>
+    </el-card>
+
+    <!-- 历史版本 -->
+    <el-card class="mb-4">
+      <template #header>
+        <div class="flex justify-between items-center">
+          <span class="text-lg font-bold">历史版本</span>
+          <el-button :loading="loadingReleases" @click="loadReleases">
+            加载历史版本
+          </el-button>
+        </div>
+      </template>
+      <div v-if="releases.length" class="releases">
+        <div
+          v-for="release in releases"
+          :key="release.tag_name"
+          class="release py-3 border-b last:border-b-0"
+        >
+          <div class="flex justify-between items-start">
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="font-bold">{{ release.tag_name }}</span>
+                <el-tag v-if="release.prerelease" type="warning" size="small">
+                  预发布
+                </el-tag>
+                <el-tag
+                  v-if="currentVersion?.version === release.version"
+                  type="success"
+                  size="small"
+                >
+                  当前版本
+                </el-tag>
+              </div>
+              <div class="text-gray-500 text-sm mt-1">
+                {{ formatDate(release.published_at) }}
+              </div>
+            </div>
+            <el-tooltip
+              v-if="currentVersion?.version !== release.version"
+              content="升级到此版本"
+              placement="top"
+            >
+              <el-button
+                type="primary"
+                size="small"
+                :loading="upgrading"
+                @click="handleUpgrade(release.version)"
+              >
+                升级
+              </el-button>
+            </el-tooltip>
+          </div>
+          <div v-if="release.body" class="text-sm text-gray-600 mt-2 whitespace-pre-wrap">
+            {{ release.body }}
+          </div>
+        </div>
+      </div>
+      <el-empty v-else description="点击按钮加载历史版本" />
+    </el-card>
+
+    <!-- 备份管理 -->
+    <el-card>
+      <template #header>
+        <div class="flex justify-between items-center">
+          <span class="text-lg font-bold">备份管理</span>
+          <el-button :loading="loadingBackups" @click="loadBackups">
+            刷新
+          </el-button>
+        </div>
+      </template>
+      <div v-if="backups.length" class="backups">
+        <div
+          v-for="backup in backups"
+          :key="backup.id"
+          class="backup py-3 border-b last:border-b-0"
+        >
+          <div class="flex justify-between items-start">
+            <div>
+              <div class="font-bold">{{ backup.id }}</div>
+              <div class="text-gray-500 text-sm mt-1">
+                版本: {{ backup.version }} |
+                创建时间: {{ formatDate(backup.created_at) }} |
+                大小: {{ formatBytes(backup.size) }}
+              </div>
+              <div class="text-gray-400 text-xs mt-1">
+                包含:
+                <span v-if="backup.includes?.backend">后端代码</span>
+                <span v-if="backup.includes?.database">, 数据库</span>
+                <span v-if="backup.includes?.frontend">, 前端</span>
+              </div>
+            </div>
+            <div class="flex gap-2">
+              <el-popconfirm
+                title="确定要恢复到此备份吗？当前数据将被覆盖"
+                confirm-button-text="确定"
+                cancel-button-text="取消"
+                @confirm="handleRollback(backup.id)"
+              >
+                <template #reference>
+                  <el-button
+                    type="warning"
+                    size="small"
+                    :loading="rollingBack"
+                  >
+                    回滚
+                  </el-button>
+                </template>
+              </el-popconfirm>
+              <el-popconfirm
+                title="确定要删除此备份吗？"
+                confirm-button-text="确定"
+                cancel-button-text="取消"
+                @confirm="handleDeleteBackup(backup.id)"
+              >
+                <template #reference>
+                  <el-button type="danger" size="small">
+                    删除
+                  </el-button>
+                </template>
+              </el-popconfirm>
+            </div>
+          </div>
+        </div>
+      </div>
+      <el-empty v-else description="暂无备份" />
+    </el-card>
+  </div>
+</template>
+
+<style scoped>
+.changelog {
+  max-height: 200px;
+  overflow-y: auto;
+}
+</style>

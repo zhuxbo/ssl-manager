@@ -24,6 +24,7 @@ use App\Http\Controllers\Admin\SettingController;
 use App\Http\Controllers\Admin\SettingGroupController;
 use App\Http\Controllers\Admin\TaskController;
 use App\Http\Controllers\Admin\TransactionController;
+use App\Http\Controllers\Admin\UpgradeController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\UserLevelController;
 use App\Utils\RouteHelper;
@@ -197,5 +198,16 @@ Route::prefix('admin')->middleware('api.admin')->group(function () {
         Route::get('{id}', [NotificationController::class, 'show'])->where('id', '[0-9]+');
         Route::post('test-send', [NotificationController::class, 'sendTest']);
         Route::post('{id}/resend', [NotificationController::class, 'resend'])->where('id', '[0-9]+');
+    });
+
+    // 系统升级管理
+    Route::prefix('upgrade')->group(function () {
+        Route::get('version', [UpgradeController::class, 'version']);
+        Route::get('check', [UpgradeController::class, 'check']);
+        Route::get('releases', [UpgradeController::class, 'releases']);
+        Route::post('execute', [UpgradeController::class, 'execute']);
+        Route::get('backups', [UpgradeController::class, 'backups']);
+        Route::post('rollback', [UpgradeController::class, 'rollback']);
+        Route::delete('backup', [UpgradeController::class, 'deleteBackup']);
     });
 });

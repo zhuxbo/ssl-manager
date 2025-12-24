@@ -47,6 +47,16 @@ export default {
         title: "系统设置",
         keepAlive: true
       }
+    },
+    {
+      path: "/upgrade",
+      name: "Upgrade",
+      component: () => import("@/views/upgrade/index.vue"),
+      meta: {
+        icon: "ri:download-cloud-2-line",
+        title: "系统升级",
+        keepAlive: true
+      }
     }
   ]
 } satisfies RouteConfigsTable;
