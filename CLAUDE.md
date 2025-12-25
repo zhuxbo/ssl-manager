@@ -388,3 +388,55 @@ $client->downloadPackageWithFallback($filename, $tag, $savePath);
 下载源硬编码在脚本和后端中：
 - **Gitee**: `https://gitee.com/zhuxbo/cert-manager`
 - **GitHub**: `https://github.com/zhuxbo/cert-manager`
+
+## Web 安装向导
+
+### 目录结构
+
+```
+backend/public/
+├── install.php                    # 入口文件（~30行）
+└── install-assets/                # 安装资源目录（安装后可删除）
+    ├── autoload.php               # PSR-4 自动加载器
+    ├── InstallController.php      # 请求控制器
+    ├── DTO/
+    │   ├── CheckResult.php        # 检查结果对象
+    │   └── InstallConfig.php      # 安装配置对象
+    ├── Checker/
+    │   ├── RequirementChecker.php # 系统环境检查协调器
+    │   ├── PhpChecker.php         # PHP 版本和扩展检查
+    │   ├── FunctionChecker.php    # PHP 函数检查
+    │   ├── PermissionChecker.php  # 目录权限检查
+    │   └── ToolChecker.php        # Composer/Java 检查
+    ├── Connector/
+    │   ├── DatabaseConnector.php  # 数据库连接测试
+    │   └── RedisConnector.php     # Redis 连接测试
+    ├── Installer/
+    │   ├── InstallExecutor.php    # 安装执行协调器
+    │   ├── EnvConfigurator.php    # .env 文件配置
+    │   ├── ComposerRunner.php     # Composer 安装
+    │   ├── KeyGenerator.php       # 密钥生成
+    │   ├── DatabaseMigrator.php   # 数据库迁移
+    │   └── Cleaner.php            # 安装文件清理
+    ├── View/
+    │   ├── Renderer.php           # 页面渲染器
+    │   └── ProgressReporter.php   # 安装进度输出
+    └── *.html / *.css / *.js      # 静态资源
+```
+
+### 模块说明
+
+- **入口文件** (`install.php`): 仅加载自动加载器并调用控制器
+- **DTO**: 数据传输对象，用于类型安全的配置传递
+- **Checker**: 系统环境检查器，验证 PHP、扩展、函数、权限等
+- **Connector**: 数据库和 Redis 连接测试
+- **Installer**: 安装执行器，按步骤执行 Composer 安装、密钥生成、数据库迁移等
+- **View**: 页面渲染和进度报告
+
+### 安装流程
+
+1. 系统环境检查（PHP 8.3+、扩展、函数、目录权限、Composer）
+2. 配置表单（数据库、Redis 连接信息）
+3. 连接测试（数据库连接、空库验证、Redis 认证）
+4. 执行安装（.env 配置、Composer、密钥生成、迁移、优化）
+5. 自动清理安装文件
