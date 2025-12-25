@@ -49,5 +49,4 @@ pnpm-debug.log*
 coverage/
 
 # 开发/测试目录
-deploy/_reference/
 deploy/release-server/
