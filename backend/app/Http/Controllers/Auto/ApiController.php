@@ -30,7 +30,8 @@ class ApiController extends Controller
 
         $params = $request->validate([
             'csr' => ['nullable', 'string'],
-            'validation_method' => ['nullable', 'in:txt,file,admin,administrator,postmaster,webmaster,hostmaster'],
+            'domains' => ['nullable', 'string'], // 多域名支持，逗号分割
+            'validation_method' => ['nullable', 'in:txt,file,http,https,cname,admin,administrator,postmaster,webmaster,hostmaster'],
         ]);
 
         $order = $this->findOrder($referId);
@@ -75,7 +76,12 @@ class ApiController extends Controller
             }
 
             $updateParams['channel'] = 'api';
-            $updateParams['domains'] = $cert->alternative_names;
+            // 优先使用客户端传入的 domains，否则使用当前证书的域名
+            // 注意：domains 必须保持字符串格式（逗号分割），ActionTrait::getCert 会调用
+            // DomainUtil::convertToUnicodeDomains(string) 处理，传数组会导致类型错误
+            $updateParams['domains'] = ! empty($params['domains'])
+                ? trim($params['domains'])
+                : $cert->alternative_names;
             $updateParams['validation_method'] = $params['validation_method'] ?? 'txt';
 
             // 如果订单到期时间小于 15 天则续费，否则重签
@@ -164,8 +170,8 @@ class ApiController extends Controller
             }
         }
 
-        // 续费会生成新订单：当 refer_id 指向已标记为 renewed 的证书时，跟随链路找到最新订单
-        if ($order->latestCert->status === 'renewed') {
+        // 续费/重签会生成新证书：当 refer_id 指向已标记为 renewed/reissued 的证书时，跟随链路找到最新订单
+        if (in_array($order->latestCert->status, ['renewed', 'reissued'])) {
             $order = $this->findNewOrder($order->latestCert);
         }
 
@@ -276,10 +282,12 @@ class ApiController extends Controller
             'expires_at' => $cert->expires_at?->toDateTimeString(),
         ];
 
-        if (in_array($cert->dcv['method'], ['file', 'http', 'https']) && $cert->status === 'processing') {
+        // 空值守卫：dcv 可能为 null（如 CodeSign/DocSign 产品）
+        $dcvMethod = $cert->dcv['method'] ?? null;
+        if (in_array($dcvMethod, ['file', 'http', 'https']) && $cert->status === 'processing') {
             $data['file'] = [
-                'path' => $cert->dcv['file']['path'],
-                'content' => $cert->dcv['file']['content'],
+                'path' => $cert->dcv['file']['path'] ?? '',
+                'content' => $cert->dcv['file']['content'] ?? '',
             ];
         }
 
