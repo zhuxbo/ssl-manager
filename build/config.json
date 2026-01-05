@@ -7,7 +7,7 @@
     "release": {
       "gitee": {
         "owner": "zhuxbo",
-        "repo": "manager-release-test"
+        "repo": "cert-manager"
       }
     },
     "git_user": {

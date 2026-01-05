@@ -254,11 +254,21 @@ perform_upgrade() {
     fi
 
     # 更新前端
-    for app in admin user easy; do
-        if [ -d "$src_dir/$app" ]; then
-            cp -rf "$src_dir/$app"/* "$INSTALL_DIR/$app/" 2>/dev/null || true
-        fi
-    done
+    if [ -d "$src_dir/frontend" ]; then
+        # 新结构：前端在 frontend/ 子目录中
+        for app in admin user easy; do
+            if [ -d "$src_dir/frontend/$app" ]; then
+                cp -rf "$src_dir/frontend/$app"/* "$INSTALL_DIR/$app/" 2>/dev/null || true
+            fi
+        done
+    else
+        # 兼容旧格式（前端直接在根目录）
+        for app in admin user easy; do
+            if [ -d "$src_dir/$app" ]; then
+                cp -rf "$src_dir/$app"/* "$INSTALL_DIR/$app/" 2>/dev/null || true
+            fi
+        done
+    fi
 
     # 安装 Composer 依赖
     log_info "安装 Composer 依赖..."

@@ -125,13 +125,12 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 FULL_DIR="$WORK_DIR/full"
 mkdir -p "$FULL_DIR"
 
-# 复制文件，排除 vendor 目录（由 install.php 安装）
-rsync -a --exclude='vendor/' --exclude='frontend/' "$PRODUCTION_DIR/" "$FULL_DIR/"
+# 复制文件，排除 vendor 目录（由 install.php 安装）和 deploy 目录（独立脚本包）
+rsync -a --exclude='vendor/' --exclude='deploy/' "$PRODUCTION_DIR/" "$FULL_DIR/"
 
-# 复制前端文件（从 frontend/ 移到根目录）
-for app in admin user easy; do
-    if [ -d "$PRODUCTION_DIR/frontend/$app" ]; then
-        cp -r "$PRODUCTION_DIR/frontend/$app" "$FULL_DIR/"
+# 确保前端目录完整
+for app in admin user easy web; do
+    if [ -d "$FULL_DIR/frontend/$app" ]; then
         log_info "已包含前端: $app"
     fi
 done
@@ -142,13 +141,7 @@ mkdir -p "$FULL_DIR/backend/bootstrap/cache"
 mkdir -p "$FULL_DIR/backend/vendor"
 touch "$FULL_DIR/backend/vendor/.gitkeep"
 
-# 添加部署脚本
-DEPLOY_SRC="$BUILD_DIR/../deploy"
-if [ -d "$DEPLOY_SRC" ]; then
-    # 排除开发/测试目录
-    rsync -a --exclude='_reference' --exclude='release-server' "$DEPLOY_SRC/" "$FULL_DIR/deploy/"
-    log_info "已包含部署脚本"
-fi
+# 部署脚本已独立打包，完整包不再包含 deploy 目录
 
 # 创建 .gitkeep 文件
 find "$FULL_DIR/backend/storage" -type d -empty -exec touch {}/.gitkeep \;
@@ -194,12 +187,16 @@ rsync -a --exclude='.env' \
 mkdir -p "$UPGRADE_DIR/backend/vendor"
 touch "$UPGRADE_DIR/backend/vendor/.gitkeep"
 
-# 前端：完整复制（都是静态文件，从 frontend/ 目录）
-for app in admin user easy; do
-    if [ -d "$PRODUCTION_DIR/frontend/$app" ]; then
-        cp -r "$PRODUCTION_DIR/frontend/$app" "$UPGRADE_DIR/"
-    fi
-done
+# 前端：保持 frontend/ 目录结构
+if [ -d "$PRODUCTION_DIR/frontend" ]; then
+    mkdir -p "$UPGRADE_DIR/frontend"
+    for app in admin user easy; do
+        if [ -d "$PRODUCTION_DIR/frontend/$app" ]; then
+            cp -r "$PRODUCTION_DIR/frontend/$app" "$UPGRADE_DIR/frontend/"
+            log_info "升级包已包含前端: $app"
+        fi
+    done
+fi
 
 # 复制配置文件（但不覆盖现有）
 cp "$PRODUCTION_DIR/config.json" "$UPGRADE_DIR/"
@@ -212,6 +209,31 @@ cat > "$UPGRADE_DIR/manifest.json" <<EOF
   "build_time": "$(date -u "+%Y-%m-%dT%H:%M:%SZ")"
 }
 EOF
+
+# 生成 deleted-files.txt（基于 git diff 自动检测删除的文件）
+if [ -d "$PRODUCTION_DIR/.git" ]; then
+    cd "$PRODUCTION_DIR"
+    # 获取上一个版本的 tag
+    PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+
+    if [ -n "$PREV_TAG" ]; then
+        log_info "检测删除的文件（对比 $PREV_TAG）..."
+
+        # 获取删除的文件列表（D = deleted）
+        git diff --name-status "$PREV_TAG" HEAD | grep "^D" | cut -f2 > "$UPGRADE_DIR/deleted-files.txt"
+
+        DELETED_COUNT=$(wc -l < "$UPGRADE_DIR/deleted-files.txt" | tr -d ' ')
+        if [ "$DELETED_COUNT" -gt 0 ]; then
+            log_info "发现 $DELETED_COUNT 个删除的文件"
+        else
+            rm -f "$UPGRADE_DIR/deleted-files.txt"
+            log_info "没有删除的文件"
+        fi
+    else
+        log_warning "无法获取上一个版本 tag，跳过删除文件检测"
+    fi
+    cd - > /dev/null
+fi
 
 # 复制 nginx 配置
 if [ -d "$PRODUCTION_DIR/nginx" ]; then
@@ -254,13 +276,108 @@ UPGRADE_SHA256=$(sha256sum "$OUTPUT_DIR/$UPGRADE_PACKAGE" | cut -d' ' -f1)
 log_success "升级包: $UPGRADE_PACKAGE ($UPGRADE_SIZE)"
 echo ""
 
-# 阶段 3: 生成 manifest.json
-log_step "阶段 3: 生成 manifest.json"
+# 阶段 3: 创建脚本部署包
+log_step "阶段 3: 创建脚本部署包"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+SCRIPT_PACKAGE="ssl-manager-script-$VERSION.zip"
+# 从项目根目录获取 deploy（BUILD_DIR 的父目录）
+PROJECT_ROOT="$(cd "$BUILD_DIR/.." && pwd)"
+SCRIPT_DIR_SRC="$PROJECT_ROOT/deploy"
+
+if [ -d "$SCRIPT_DIR_SRC" ]; then
+    SCRIPT_PKG_DIR="$WORK_DIR/script-deploy"
+    mkdir -p "$SCRIPT_PKG_DIR/scripts"
+
+    # 复制脚本文件
+    cp "$SCRIPT_DIR_SRC/scripts/"*.sh "$SCRIPT_PKG_DIR/scripts/" 2>/dev/null || true
+    cp "$SCRIPT_DIR_SRC/deploy.sh" "$SCRIPT_PKG_DIR/" 2>/dev/null || true
+
+    # 复制 nginx 配置模板
+    if [ -d "$SCRIPT_DIR_SRC/nginx" ]; then
+        cp "$SCRIPT_DIR_SRC/nginx/"*.conf "$SCRIPT_PKG_DIR/" 2>/dev/null || true
+    fi
+
+    # 创建使用说明
+    cat > "$SCRIPT_PKG_DIR/README.md" <<EOF
+# SSL证书管理系统 - 部署脚本
+
+版本: $VERSION
+打包时间: $(date "+%Y-%m-%d %H:%M:%S")
+
+## 使用方法
+
+### 宝塔面板部署
+\`\`\`bash
+bash scripts/bt-install.sh
+\`\`\`
+
+### Docker 部署
+\`\`\`bash
+bash scripts/docker-install.sh
+\`\`\`
+
+## 文件说明
+
+- \`scripts/bt-install.sh\` - 宝塔面板安装脚本
+- \`scripts/docker-install.sh\` - Docker 交互式安装脚本
+- \`scripts/common.sh\` - 公共函数库
+- \`scripts/bt-deps.sh\` - 宝塔依赖检测
+- \`scripts/upgrade.sh\` - 升级辅助脚本
+- \`deploy.sh\` - 旧版入口（保留兼容）
+- \`manager.conf\` - Nginx 配置模板
+EOF
+
+    # 打包
+    cd "$WORK_DIR"
+    zip -rq "$OUTPUT_DIR/$SCRIPT_PACKAGE" script-deploy
+    SCRIPT_SIZE=$(du -h "$OUTPUT_DIR/$SCRIPT_PACKAGE" | cut -d'	' -f1)
+    SCRIPT_SHA256=$(sha256sum "$OUTPUT_DIR/$SCRIPT_PACKAGE" | cut -d' ' -f1)
+
+    log_success "脚本包: $SCRIPT_PACKAGE ($SCRIPT_SIZE)"
+else
+    log_warning "未找到 deploy 目录，跳过脚本包"
+    SCRIPT_SIZE=""
+    SCRIPT_SHA256=""
+fi
+echo ""
+
+# 阶段 4: 生成 manifest.json
+log_step "阶段 4: 生成 manifest.json"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 BUILD_TIME=$(date -u "+%Y-%m-%dT%H:%M:%SZ")
 
-cat > "$OUTPUT_DIR/$MANIFEST_FILE" <<EOF
+if [ -n "$SCRIPT_SHA256" ]; then
+    cat > "$OUTPUT_DIR/$MANIFEST_FILE" <<EOF
+{
+  "version": "$VERSION",
+  "channel": "$CHANNEL",
+  "build_time": "$BUILD_TIME",
+  "packages": {
+    "full": {
+      "filename": "$FULL_PACKAGE",
+      "sha256": "$FULL_SHA256",
+      "size": "$FULL_SIZE"
+    },
+    "upgrade": {
+      "filename": "$UPGRADE_PACKAGE",
+      "sha256": "$UPGRADE_SHA256",
+      "size": "$UPGRADE_SIZE"
+    },
+    "script": {
+      "filename": "$SCRIPT_PACKAGE",
+      "sha256": "$SCRIPT_SHA256",
+      "size": "$SCRIPT_SIZE"
+    }
+  },
+  "changelog": "",
+  "min_version": "",
+  "notes": ""
+}
+EOF
+else
+    cat > "$OUTPUT_DIR/$MANIFEST_FILE" <<EOF
 {
   "version": "$VERSION",
   "channel": "$CHANNEL",
@@ -282,6 +399,7 @@ cat > "$OUTPUT_DIR/$MANIFEST_FILE" <<EOF
   "notes": ""
 }
 EOF
+fi
 
 log_success "manifest.json 已生成"
 echo ""
@@ -295,5 +413,8 @@ log_info ""
 log_info "生成的文件:"
 log_info "  - $FULL_PACKAGE ($FULL_SIZE)"
 log_info "  - $UPGRADE_PACKAGE ($UPGRADE_SIZE)"
+if [ -n "$SCRIPT_SHA256" ]; then
+    log_info "  - $SCRIPT_PACKAGE ($SCRIPT_SIZE)"
+fi
 log_info "  - $MANIFEST_FILE"
 log_info "============================================"
