@@ -476,6 +476,9 @@ class UpgradeService
             return false;
         }
 
+        // 自动检测并切换镜像
+        $mirrorConfigured = $this->configureComposerMirror($basePath, $composerCmd);
+
         $command = sprintf(
             'cd %s && %s install --no-dev --optimize-autoloader --no-interaction 2>&1',
             escapeshellarg($basePath),
@@ -489,6 +492,11 @@ class UpgradeService
         $outputStr = implode("\n", $output);
         Log::info("[Upgrade] Composer output: $outputStr");
 
+        // 如果配置了镜像，安装完成后恢复默认配置
+        if ($mirrorConfigured) {
+            $this->resetComposerMirror($basePath, $composerCmd);
+        }
+
         if ($returnCode !== 0) {
             Log::error("[Upgrade] Composer install failed with code: $returnCode");
 
@@ -498,6 +506,101 @@ class UpgradeService
         Log::info('[Upgrade] Composer install completed successfully');
 
         return true;
+    }
+
+    /**
+     * 检测网络并配置 Composer 镜像
+     */
+    protected function configureComposerMirror(string $basePath, string $composerCmd): bool
+    {
+        // 检查环境变量强制指定（使用 getenv 而非 env，因为这是运行时检查）
+        $forceMirror = getenv('FORCE_CHINA_MIRROR');
+        if ($forceMirror !== false) {
+            if ($forceMirror === '0') {
+                Log::info('[Upgrade] FORCE_CHINA_MIRROR=0, using default source');
+
+                return false;
+            }
+            if ($forceMirror === '1') {
+                Log::info('[Upgrade] FORCE_CHINA_MIRROR=1, forcing Aliyun mirror');
+
+                return $this->setAliyunMirror($basePath, $composerCmd);
+            }
+        }
+
+        // 检测是否能快速访问 GitHub API（composer.lock 中的 dist URL）
+        $canAccessGithub = $this->checkNetworkAccess('https://api.github.com', 3);
+
+        if ($canAccessGithub) {
+            Log::info('[Upgrade] GitHub API accessible, using default source');
+
+            return false;
+        }
+
+        return $this->setAliyunMirror($basePath, $composerCmd);
+    }
+
+    /**
+     * 设置阿里云镜像
+     */
+    protected function setAliyunMirror(string $basePath, string $composerCmd): bool
+    {
+        $configCmd = sprintf(
+            'cd %s && %s config repo.packagist composer https://mirrors.aliyun.com/composer/ 2>&1',
+            escapeshellarg($basePath),
+            $composerCmd
+        );
+
+        exec($configCmd, $output, $returnCode);
+
+        if ($returnCode === 0) {
+            Log::info('[Upgrade] Configured Aliyun composer mirror');
+
+            return true;
+        }
+
+        Log::warning('[Upgrade] Failed to configure mirror, will use default');
+
+        return false;
+    }
+
+    /**
+     * 重置 Composer 镜像配置
+     */
+    protected function resetComposerMirror(string $basePath, string $composerCmd): void
+    {
+        $resetCmd = sprintf(
+            'cd %s && %s config --unset repo.packagist 2>&1',
+            escapeshellarg($basePath),
+            $composerCmd
+        );
+
+        exec($resetCmd, $output, $returnCode);
+
+        if ($returnCode === 0) {
+            Log::info('[Upgrade] Reset composer mirror configuration');
+        }
+    }
+
+    /**
+     * 检测网络访问
+     */
+    protected function checkNetworkAccess(string $url, int $timeout = 3): bool
+    {
+        $ch = curl_init();
+        curl_setopt_array($ch, [
+            CURLOPT_URL => $url,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_CONNECTTIMEOUT => $timeout,
+            CURLOPT_TIMEOUT => $timeout,
+            CURLOPT_NOBODY => true,
+        ]);
+
+        curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        return $httpCode >= 200 && $httpCode < 400;
     }
 
     /**

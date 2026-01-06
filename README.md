@@ -335,6 +335,55 @@ curl -fsSL https://gitee.com/zhuxbo/cert-manager/raw/main/deploy/install.sh | ba
 | Docker | 任意 Linux | 推荐，7 步交互式配置，自动安装 Docker |
 | 宝塔面板 | 已安装宝塔 | 使用宝塔管理 PHP/MySQL/Nginx |
 
+### 升级
+
+Docker 和宝塔使用同一个升级脚本，通过参数区分模式：
+
+```bash
+# 宝塔环境升级
+cd /www/wwwroot/ssl-manager/deploy/scripts
+bash upgrade.sh
+
+# Docker 环境升级
+bash upgrade.sh docker
+
+# 检查更新
+bash upgrade.sh check
+
+# 升级到指定版本
+bash upgrade.sh --version 1.0.1
+
+# 回滚
+bash upgrade.sh rollback
+
+# 强制使用国内镜像
+FORCE_CHINA_MIRROR=1 bash upgrade.sh
+```
+
+### Composer 镜像
+
+安装和升级时会自动检测网络环境，决定是否使用国内镜像：
+
+1. 检测云服务商元数据（阿里云/腾讯云/华为云）
+2. 检测 GitHub API 是否 3 秒内可达
+3. 如不可达，自动切换阿里云 Composer 镜像
+
+**手动指定镜像：**
+
+```bash
+# 脚本安装/升级 - 强制使用国内镜像
+FORCE_CHINA_MIRROR=1 bash install.sh
+
+# 脚本安装/升级 - 强制不使用国内镜像
+FORCE_CHINA_MIRROR=0 bash install.sh
+```
+
+在线升级和安装也支持此环境变量，可在 `.env` 中配置：
+
+```env
+FORCE_CHINA_MIRROR=1
+```
+
 ### 脚本结构
 
 ```

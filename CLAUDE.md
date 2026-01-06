@@ -63,7 +63,12 @@ curl -fsSL https://gitee.com/zhuxbo/cert-manager/raw/main/deploy/install.sh | ba
 
 # 指定 Docker/宝塔
 bash -s docker  # 或 bash -s bt
+
+# 强制使用国内 Composer 镜像
+FORCE_CHINA_MIRROR=1 bash install.sh
 ```
+
+脚本自动检测网络环境（云服务商元数据 + GitHub 可达性），决定是否使用阿里云镜像。
 
 ## Auto API
 

@@ -1047,6 +1047,11 @@ init_application() {
 
     # 安装 Composer 依赖
     log_info "安装 Composer 依赖..."
+    # 检测并配置镜像
+    if is_china_server; then
+        log_info "配置 Composer 中国镜像..."
+        $compose_cmd exec -T -u root php composer config repo.packagist composer https://mirrors.aliyun.com/composer/ --working-dir=/var/www/html 2>&1 || true
+    fi
     $compose_cmd exec -T -u root php composer install --no-dev --optimize-autoloader --working-dir=/var/www/html 2>&1 || true
 
     # 运行数据库迁移

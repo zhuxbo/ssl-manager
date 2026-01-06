@@ -33,6 +33,10 @@ SSL证书管理系统 - 升级脚本
   --file FILE       使用本地升级包
   -h, help          显示帮助
 
+环境变量:
+  FORCE_CHINA_MIRROR=1    强制使用国内 Composer 镜像
+  FORCE_CHINA_MIRROR=0    强制使用国际源
+
 示例:
   $0 check                    # 检查更新
   $0                          # 执行升级
@@ -40,6 +44,7 @@ SSL证书管理系统 - 升级脚本
   $0 --file /path/to/pkg.zip  # 使用本地包升级
   $0 rollback                 # 回滚
   $0 docker                   # Docker 环境升级
+  FORCE_CHINA_MIRROR=1 $0     # 强制使用国内镜像升级
 
 EOF
     exit 0
@@ -273,9 +278,19 @@ perform_upgrade() {
     # 安装 Composer 依赖
     log_info "安装 Composer 依赖..."
     if [ "$DEPLOY_MODE" = "docker" ]; then
+        # Docker 环境：检测并配置镜像
+        if is_china_server; then
+            log_info "配置 Composer 中国镜像..."
+            $compose_cmd exec -T php composer config repo.packagist composer https://mirrors.aliyun.com/composer/
+        fi
         $compose_cmd exec -T php composer install --no-dev --optimize-autoloader
     else
         cd "$INSTALL_DIR/backend"
+        # 宝塔环境：检测并配置镜像
+        if is_china_server; then
+            log_info "配置 Composer 中国镜像..."
+            composer config repo.packagist composer https://mirrors.aliyun.com/composer/
+        fi
         COMPOSER_ALLOW_SUPERUSER=1 composer install --no-dev --optimize-autoloader
     fi
 
