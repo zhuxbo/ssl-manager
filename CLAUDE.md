@@ -1,5 +1,71 @@
 # Manager Monorepo
 
+## ACME 模块
+
+Manager 实现了 ACME RFC 8555 协议服务端，供 certbot 等 ACME 客户端使用。
+
+### 架构
+
+```
+certbot → Manager (ACME 服务) → Gateway/上级 Manager (REST API) → Certum
+```
+
+### ACME 端点 (`/acme/*`)
+
+- `GET /acme/directory` - 目录
+- `HEAD/GET /acme/new-nonce` - 获取 Nonce
+- `POST /acme/new-acct` - 注册账户（需要 EAB）
+- `POST /acme/new-order` - 创建订单
+- `POST /acme/authz/{token}` - 获取授权
+- `POST /acme/chall/{token}` - 响应验证
+- `POST /acme/order/{token}/finalize` - 完成订单
+- `POST /acme/cert/{token}` - 下载证书
+
+### REST API 端点 (`/api/acme/*`)
+
+供下级 Manager 调用，与 Gateway 接口一致：
+
+- `POST /api/acme/accounts` - 创建账户
+- `POST /api/acme/orders` - 创建订单
+- `GET /api/acme/orders/{id}` - 获取订单
+- `POST /api/acme/orders/{id}/finalize` - 完成订单
+- `GET /api/acme/orders/{id}/certificate` - 下载证书
+
+### 关键服务
+
+- `App\Services\Acme\JwsService` - JWS 解析和验证
+- `App\Services\Acme\NonceService` - Nonce 管理
+- `App\Services\Acme\AccountService` - 账户管理
+- `App\Services\Acme\OrderService` - 订单管理
+- `App\Services\Acme\BillingService` - 计费逻辑
+- `App\Services\Acme\UpstreamClient` - 上级 API 调用
+
+### 配置
+
+```bash
+# .env
+ACME_GATEWAY_URL=https://gateway.example.com/api  # 必须配置，否则无法签发证书
+ACME_GATEWAY_KEY=xxx
+ACME_DEFAULT_PRODUCT_ID=xxx
+```
+
+### 安全机制
+
+- **JWS 签名验证** - 所有 POST 请求需 JWS 签名，支持 RS256/384/512 和 ES256/384/512
+- **算法混淆防护** - 严格验证 alg 与密钥类型匹配，EC 还验证曲线（P-256/384/521）
+- **Nonce 防重放** - 使用 Redis `Cache::pull()` 原子操作，每个 Nonce 仅能使用一次
+- **请求 URL 验证** - 防止 URL 混淆攻击
+- **EAB 强制要求** - 必须提供有效的外部账户绑定凭证
+- **时序攻击防护** - EAB HMAC 验证使用 `hash_equals()`
+
+### 安全测试
+
+```bash
+php artisan test tests/Unit/AcmeSecurityTest.php
+```
+
+---
+
 ## 工作流程
 
 - **base 目录只读**：通过 git subtree 同步上游代码，不要修改

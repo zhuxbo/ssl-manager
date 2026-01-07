@@ -6,6 +6,11 @@ vendor/
 dist/
 *.local
 
+# Docker develop environment
+develop/docker/.env
+develop/docker/data/
+
+
 # IDE
 .idea/
 *.swp
