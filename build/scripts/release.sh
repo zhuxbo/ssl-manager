@@ -122,16 +122,16 @@ fi
 CONFIG_FILE="$BUILD_DIR/config.json"
 if [ -f "$CONFIG_FILE" ]; then
     if [ -z "$GITEE_OWNER" ]; then
-        GITEE_OWNER=$(jq -r '.build.release.gitee.owner // "cnssl"' "$CONFIG_FILE")
+        GITEE_OWNER=$(jq -r '.build.release.gitee.owner // "zhuxbo"' "$CONFIG_FILE")
     fi
     if [ -z "$GITEE_REPO" ]; then
-        GITEE_REPO=$(jq -r '.build.release.gitee.repo // "ssl-manager"' "$CONFIG_FILE")
+        GITEE_REPO=$(jq -r '.build.release.gitee.repo // "cert-manager"' "$CONFIG_FILE")
     fi
 fi
 
 # 默认值
-GITEE_OWNER="${GITEE_OWNER:-cnssl}"
-GITEE_REPO="${GITEE_REPO:-ssl-manager}"
+GITEE_OWNER="${GITEE_OWNER:-zhuxbo}"
+GITEE_REPO="${GITEE_REPO:-cert-manager}"
 
 # 检查包目录
 if [ ! -d "$PACKAGE_DIR" ]; then
@@ -142,6 +142,7 @@ fi
 # 检查必需的包文件
 FULL_PACKAGE="$PACKAGE_DIR/ssl-manager-full-$VERSION.zip"
 UPGRADE_PACKAGE="$PACKAGE_DIR/ssl-manager-upgrade-$VERSION.zip"
+SCRIPT_PACKAGE="$PACKAGE_DIR/ssl-manager-script-$VERSION.zip"
 MANIFEST_FILE="$PACKAGE_DIR/manifest.json"
 
 if [ ! -f "$FULL_PACKAGE" ]; then
@@ -152,6 +153,11 @@ fi
 if [ ! -f "$UPGRADE_PACKAGE" ]; then
     log_error "升级包不存在: $UPGRADE_PACKAGE"
     exit 1
+fi
+
+if [ ! -f "$SCRIPT_PACKAGE" ]; then
+    log_warning "脚本包不存在: $SCRIPT_PACKAGE"
+    SCRIPT_PACKAGE=""
 fi
 
 if [ ! -f "$MANIFEST_FILE" ]; then
@@ -280,13 +286,18 @@ main() {
     echo ""
 
     # 步骤 2: 上传附件
-    log_info "步骤 2: 上传附件"
+    log_info "步骤 2: 上传版本化附件"
 
     upload_asset "$release_id" "$FULL_PACKAGE"
     upload_asset "$release_id" "$UPGRADE_PACKAGE"
+    if [ -n "$SCRIPT_PACKAGE" ]; then
+        upload_asset "$release_id" "$SCRIPT_PACKAGE"
+    fi
     upload_asset "$release_id" "$MANIFEST_FILE"
 
     echo ""
+
+    # 注意: latest Release 由 GitHub CI 自动创建，此脚本仅用于 Gitee 手动发布
 
     # 完成
     log_info "============================================"

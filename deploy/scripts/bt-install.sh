@@ -163,9 +163,9 @@ download_application() {
     fi
 
     # 复制 Nginx 配置
-    if [ -d "$extract_dir/deploy/nginx" ]; then
+    if [ -d "$extract_dir/nginx" ]; then
         ensure_dir "$INSTALL_DIR/nginx"
-        cp "$extract_dir/deploy/nginx"/*.conf "$INSTALL_DIR/nginx/" 2>/dev/null || true
+        cp "$extract_dir/nginx"/*.conf "$INSTALL_DIR/nginx/" 2>/dev/null || true
     fi
 
     # 清理临时文件

@@ -157,18 +157,31 @@ is_china_server() {
         [ "$FORCE_CHINA_MIRROR" = "1" ] && return 0 || return 1
     fi
 
-    # 检查云服务商元数据
+    # 检查云服务商元数据 - 阿里云
     local aliyun_region=$(timeout 1 curl -s "http://100.100.100.200/latest/meta-data/region-id" 2>/dev/null || echo "")
     if [ -n "$aliyun_region" ] && [[ "$aliyun_region" =~ ^cn- ]]; then
         return 0
     fi
 
+    # 检查云服务商元数据 - 腾讯云
     local tencent_region=$(timeout 1 curl -s "http://metadata.tencentyun.com/latest/meta-data/region" 2>/dev/null || echo "")
     if [ -n "$tencent_region" ]; then
         if [[ "$tencent_region" =~ ^(ap-beijing|ap-shanghai|ap-guangzhou|ap-chengdu|ap-chongqing|ap-nanjing) ]]; then
             return 0
         fi
         return 1
+    fi
+
+    # 检查云服务商元数据 - 华为云
+    local huawei_az=$(timeout 1 curl -s "http://169.254.169.254/openstack/latest/meta_data.json" 2>/dev/null | grep -o '"availability_zone":"[^"]*"' | head -1 || echo "")
+    if [ -n "$huawei_az" ] && [[ "$huawei_az" =~ cn- ]]; then
+        return 0
+    fi
+
+    # Fallback: 检测 GitHub API 是否可达（3秒超时）
+    # 如果不可达，说明可能在国内网络环境
+    if ! timeout 3 curl -s --head "https://api.github.com" >/dev/null 2>&1; then
+        return 0
     fi
 
     # 默认不使用中国镜像

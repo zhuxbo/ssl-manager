@@ -116,6 +116,92 @@ class VersionManager
     }
 
     /**
+     * 检查是否为连续版本升级（逐版本升级约束）
+     *
+     * @param  array  $availableVersions  可用版本列表（已按版本号排序）
+     */
+    public function isSequentialUpgrade(string $targetVersion, array $availableVersions): bool
+    {
+        $currentVersion = $this->getVersionString();
+        $channel = $this->getChannel();
+
+        // 过滤同通道的版本并排序
+        $versions = $this->filterAndSortVersions($availableVersions, $channel, $currentVersion);
+
+        if (empty($versions)) {
+            return false;
+        }
+
+        // 获取下一个可升级版本
+        $nextVersion = $versions[0] ?? null;
+
+        if (! $nextVersion) {
+            return false;
+        }
+
+        // 目标版本必须等于下一个版本
+        $targetNormalized = ltrim($targetVersion, 'vV');
+        $nextNormalized = ltrim($nextVersion, 'vV');
+
+        return $this->compareVersions($targetNormalized, $nextNormalized) === 0;
+    }
+
+    /**
+     * 获取下一个可升级版本
+     *
+     * @param  array  $availableVersions  可用版本列表
+     */
+    public function getNextUpgradeVersion(array $availableVersions): ?string
+    {
+        $currentVersion = $this->getVersionString();
+        $channel = $this->getChannel();
+
+        $versions = $this->filterAndSortVersions($availableVersions, $channel, $currentVersion);
+
+        return $versions[0] ?? null;
+    }
+
+    /**
+     * 过滤并排序版本列表
+     * 返回比当前版本高的同通道版本，按版本号升序排列
+     */
+    protected function filterAndSortVersions(array $versions, string $channel, string $currentVersion): array
+    {
+        $filtered = [];
+
+        foreach ($versions as $version) {
+            $v = ltrim($version, 'vV');
+
+            // 检查是否为同通道版本
+            if (! $this->isSameChannel($v, $channel)) {
+                continue;
+            }
+
+            // 只保留比当前版本高的版本
+            if ($this->compareVersions($v, $currentVersion) > 0) {
+                $filtered[] = $v;
+            }
+        }
+
+        // 按版本号升序排序（从小到大）
+        usort($filtered, fn ($a, $b) => $this->compareVersions($a, $b));
+
+        return $filtered;
+    }
+
+    /**
+     * 检查版本是否属于指定通道
+     */
+    protected function isSameChannel(string $version, string $channel): bool
+    {
+        $parts = $this->parseVersion($version);
+        $isPreRelease = ! empty($parts['prerelease']);
+
+        // dev 通道接受预发布版本，main 通道只接受正式版本
+        return ($channel === 'dev') === $isPreRelease;
+    }
+
+    /**
      * 检查 PHP 版本是否满足最低要求
      */
     public function checkPhpVersion(): bool

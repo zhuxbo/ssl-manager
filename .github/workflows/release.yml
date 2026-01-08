@@ -102,13 +102,13 @@ jobs:
           mkdir -p release/ssl-manager/frontend
           cp -r frontend/admin/dist release/ssl-manager/frontend/admin
           cp -r frontend/user/dist release/ssl-manager/frontend/user
+          cp -r frontend/easy release/ssl-manager/frontend/easy
 
-          # 复制部署脚本
-          cp -r deploy release/ssl-manager/
-          rm -rf release/ssl-manager/deploy/_reference
-          rm -rf release/ssl-manager/deploy/release-server
+          # 复制 web.conf 到 frontend/web（manager.conf 引用此路径）
+          mkdir -p release/ssl-manager/frontend/web
+          cp build/web/web.conf release/ssl-manager/frontend/web/
 
-          # 复制配置文件
+          # 复制配置文件（不含 deploy，deploy 单独打包）
           cp -r build/nginx release/ssl-manager/ 2>/dev/null || true
           cp version.json release/ssl-manager/
 
@@ -156,10 +156,11 @@ jobs:
       - name: Create script deploy package
         run: |
           cd release
-          mkdir -p script-deploy
-          cp -r ssl-manager/deploy/scripts script-deploy/
-          cp ssl-manager/deploy/deploy.sh script-deploy/
-          cp ssl-manager/deploy/nginx/*.conf script-deploy/ 2>/dev/null || true
+          mkdir -p script-deploy/scripts
+          # 直接从源代码复制（完整包不含 deploy）
+          cp -r ../deploy/scripts/*.sh script-deploy/scripts/
+          cp ../deploy/deploy.sh script-deploy/
+          cp ../deploy/nginx/*.conf script-deploy/ 2>/dev/null || true
           cat > script-deploy/README.md <<EOF
           # SSL Manager 脚本部署包
 
@@ -178,7 +179,8 @@ jobs:
         run: |
           cd release
           mkdir -p docker-deploy
-          cp -r ssl-manager/deploy/docker docker-deploy/
+          # 直接从源代码复制（完整包不含 deploy）
+          cp -r ../deploy/docker docker-deploy/
           cat > docker-deploy/README.md <<EOF
           # SSL Manager Docker 部署包
 

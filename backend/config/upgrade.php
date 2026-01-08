@@ -13,16 +13,18 @@ return [
         // Gitee 仓库
         'gitee' => [
             'owner' => env('UPGRADE_GITEE_OWNER', 'zhuxbo'),
-            'repo' => env('UPGRADE_GITEE_REPO', 'manager-release-test'),
+            'repo' => env('UPGRADE_GITEE_REPO', 'cert-manager'),
             'api_base' => 'https://gitee.com/api/v5',
+            'download_base' => 'https://gitee.com',
             'access_token' => env('UPGRADE_GITEE_TOKEN', ''),
         ],
 
         // GitHub 仓库（备用）
         'github' => [
-            'owner' => env('UPGRADE_GITHUB_OWNER', 'cnssl'),
-            'repo' => env('UPGRADE_GITHUB_REPO', 'ssl-manager'),
+            'owner' => env('UPGRADE_GITHUB_OWNER', 'zhuxbo'),
+            'repo' => env('UPGRADE_GITHUB_REPO', 'cert-manager'),
             'api_base' => 'https://api.github.com',
+            'download_base' => 'https://github.com',
         ],
 
         // 本地服务器（开发测试用）
@@ -75,6 +77,9 @@ return [
 
         // 自动清理旧的升级包
         'auto_cleanup' => true,
+
+        // 升级包保留天数
+        'retention_days' => 30,
     ],
 
     // 升级行为配置
@@ -105,5 +110,8 @@ return [
 
         // 不允许降级
         'allow_downgrade' => false,
+
+        // 要求逐版本升级（不能跳过中间版本）
+        'require_sequential' => true,
     ],
 ];

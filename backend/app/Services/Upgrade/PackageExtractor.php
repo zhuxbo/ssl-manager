@@ -119,6 +119,18 @@ class PackageExtractor
                 $this->applyFrontendUpgrade($frontendUserDir, 'user');
             }
 
+            // 应用前端更新（简易申请端）
+            $frontendEasyDir = $this->findFrontendDir($extractedPath, 'easy');
+            if ($frontendEasyDir) {
+                $this->applyFrontendUpgrade($frontendEasyDir, 'easy');
+            }
+
+            // 处理删除的文件
+            $this->processDeletedFiles($extractedPath);
+
+            // 清理缓存和临时文件
+            $this->cleanupCacheFiles();
+
             Log::info('升级应用成功');
 
             return true;
@@ -333,6 +345,140 @@ class PackageExtractor
     }
 
     /**
+     * 处理删除的文件
+     */
+    protected function processDeletedFiles(string $extractedPath): void
+    {
+        // 查找 deleted-files.txt
+        $deletedFilesPath = $this->findDeletedFilesList($extractedPath);
+        if (! $deletedFilesPath) {
+            Log::info('升级包中没有 deleted-files.txt，跳过文件删除');
+
+            return;
+        }
+
+        $content = File::get($deletedFilesPath);
+        $files = array_filter(array_map('trim', explode("\n", $content)));
+
+        if (empty($files)) {
+            Log::info('deleted-files.txt 为空，跳过文件删除');
+
+            return;
+        }
+
+        $baseDir = base_path();
+        $deletedCount = 0;
+
+        foreach ($files as $relativePath) {
+            // 移除 backend/ 前缀（git diff 输出的路径包含 backend/）
+            if (str_starts_with($relativePath, 'backend/')) {
+                $relativePath = substr($relativePath, 8);
+            }
+
+            // 安全检查：不允许删除配置文件和用户数据
+            if ($this->isSafeToDelete($relativePath)) {
+                $fullPath = "$baseDir/$relativePath";
+                if (File::exists($fullPath)) {
+                    File::delete($fullPath);
+                    $deletedCount++;
+                    Log::info("删除文件: $relativePath");
+                }
+            } else {
+                Log::warning("跳过受保护的文件: $relativePath");
+            }
+        }
+
+        Log::info("共删除 $deletedCount 个文件");
+    }
+
+    /**
+     * 查找 deleted-files.txt
+     */
+    protected function findDeletedFilesList(string $extractedPath): ?string
+    {
+        $possiblePaths = [
+            "$extractedPath/deleted-files.txt",
+        ];
+
+        // 在子目录中查找
+        $dirs = File::directories($extractedPath);
+        foreach ($dirs as $dir) {
+            $possiblePaths[] = "$dir/deleted-files.txt";
+        }
+
+        foreach ($possiblePaths as $path) {
+            if (File::exists($path)) {
+                return $path;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * 检查文件是否可以安全删除
+     */
+    protected function isSafeToDelete(string $relativePath): bool
+    {
+        // 检查路径穿越攻击
+        if (str_contains($relativePath, '../') || str_contains($relativePath, '..\\')) {
+            Log::warning("检测到路径穿越尝试: $relativePath");
+
+            return false;
+        }
+
+        // 不允许删除的文件和目录
+        $protected = [
+            '.env',
+            'storage/',
+            'bootstrap/cache/',
+            'vendor/',
+            '.git/',
+        ];
+
+        foreach ($protected as $pattern) {
+            if (str_starts_with($relativePath, $pattern) || $relativePath === rtrim($pattern, '/')) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * 清理缓存和临时文件
+     */
+    protected function cleanupCacheFiles(): void
+    {
+        $baseDir = base_path();
+        $cacheDirs = [
+            "$baseDir/bootstrap/cache",
+            "$baseDir/storage/framework/cache/data",
+            "$baseDir/storage/framework/views",
+        ];
+
+        foreach ($cacheDirs as $dir) {
+            if (File::isDirectory($dir)) {
+                // 删除目录内的文件，保留 .gitkeep
+                $files = File::files($dir);
+                foreach ($files as $file) {
+                    if ($file->getFilename() !== '.gitkeep') {
+                        File::delete($file->getRealPath());
+                    }
+                }
+
+                // 递归删除子目录
+                $subDirs = File::directories($dir);
+                foreach ($subDirs as $subDir) {
+                    File::deleteDirectory($subDir);
+                }
+
+                Log::info("已清理缓存目录: $dir");
+            }
+        }
+    }
+
+    /**
      * 清理解压的临时文件
      */
     public function cleanup(string $extractedPath): void
@@ -361,14 +507,16 @@ class PackageExtractor
             return 0;
         }
 
+        $retentionDays = Config::get('upgrade.package.retention_days', 30);
         $deleted = 0;
         $files = File::files($this->downloadPath);
 
         foreach ($files as $file) {
-            // 删除超过 7 天的文件
-            if ($file->getMTime() < time() - 7 * 24 * 3600) {
+            // 删除超过保留期限的文件
+            if ($file->getMTime() < time() - $retentionDays * 24 * 3600) {
                 File::delete($file->getRealPath());
                 $deleted++;
+                Log::info("清理过期升级包: {$file->getFilename()}");
             }
         }
 

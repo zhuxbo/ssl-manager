@@ -84,6 +84,32 @@ class UpgradeService
                 throw new RuntimeException("不允许升级到版本 $targetVersion（版本相同或低于当前版本）");
             }
 
+            // 检查逐版本升级约束
+            $requireSequential = Config::get('upgrade.constraints.require_sequential', true);
+            if ($requireSequential) {
+                $steps[] = ['step' => 'check_sequential', 'status' => 'running'];
+
+                // 获取可用版本列表
+                $releases = $this->releaseClient->getReleaseHistory(50);
+                $availableVersions = array_column($releases, 'version');
+
+                if (! $this->versionManager->isSequentialUpgrade($targetVersion, $availableVersions)) {
+                    $nextVersion = $this->versionManager->getNextUpgradeVersion($availableVersions);
+                    $currentVersion = $this->versionManager->getVersionString();
+
+                    if ($nextVersion) {
+                        throw new RuntimeException(
+                            "必须按版本顺序升级。当前版本: $currentVersion，下一个可升级版本: $nextVersion，" .
+                            "目标版本: $targetVersion。请先升级到 $nextVersion"
+                        );
+                    } else {
+                        throw new RuntimeException("没有可用的升级版本");
+                    }
+                }
+
+                $steps[count($steps) - 1]['status'] = 'completed';
+            }
+
             // 检查 PHP 版本
             if (! $this->versionManager->checkPhpVersion()) {
                 $minVersion = $this->versionManager->getMinPhpVersion();
@@ -128,6 +154,25 @@ class UpgradeService
             $steps[] = ['step' => 'apply', 'status' => 'running'];
             $this->packageExtractor->applyUpgrade($extractedPath);
             $steps[count($steps) - 1]['status'] = 'completed';
+
+            // 步骤 6.5: 检测并安装 Composer 依赖
+            $backendDir = $this->findBackendDirInPackage($extractedPath);
+            $needComposerInstall = $backendDir && (
+                file_exists("$backendDir/composer.json") ||
+                file_exists("$backendDir/composer.lock")
+            );
+
+            if ($needComposerInstall) {
+                $steps[] = ['step' => 'composer_install', 'status' => 'running'];
+                Log::info('[Upgrade] Detected composer changes, running composer install');
+
+                $composerInstallSuccess = $this->runComposerInstall();
+                if (! $composerInstallSuccess) {
+                    throw new RuntimeException('Composer 依赖安装失败');
+                }
+
+                $steps[count($steps) - 1]['status'] = 'completed';
+            }
 
             // 清理 opcache 以便加载新代码
             if (function_exists('opcache_reset')) {
@@ -385,5 +430,200 @@ class UpgradeService
         }
 
         return round($bytes, 2) . ' ' . $units[$index];
+    }
+
+    /**
+     * 在升级包中查找后端目录
+     */
+    protected function findBackendDirInPackage(string $extractedPath): ?string
+    {
+        // 直接在解压目录下
+        if (is_dir("$extractedPath/backend")) {
+            return "$extractedPath/backend";
+        }
+
+        // 解压目录本身就是后端
+        if (file_exists("$extractedPath/composer.json")) {
+            return $extractedPath;
+        }
+
+        // 在子目录中查找（压缩包可能包含根目录）
+        $dirs = glob("$extractedPath/*", GLOB_ONLYDIR);
+        foreach ($dirs as $dir) {
+            if (is_dir("$dir/backend")) {
+                return "$dir/backend";
+            }
+            if (file_exists("$dir/composer.json")) {
+                return $dir;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * 执行 Composer Install
+     */
+    protected function runComposerInstall(): bool
+    {
+        $basePath = base_path();
+
+        // 尝试查找 composer 命令
+        $composerCmd = $this->findComposerCommand();
+        if (! $composerCmd) {
+            Log::error('[Upgrade] Composer not found');
+
+            return false;
+        }
+
+        // 自动检测并切换镜像
+        $mirrorConfigured = $this->configureComposerMirror($basePath, $composerCmd);
+
+        $command = sprintf(
+            'cd %s && %s install --no-dev --optimize-autoloader --no-interaction 2>&1',
+            escapeshellarg($basePath),
+            $composerCmd
+        );
+
+        Log::info("[Upgrade] Running: $command");
+
+        exec($command, $output, $returnCode);
+
+        $outputStr = implode("\n", $output);
+        Log::info("[Upgrade] Composer output: $outputStr");
+
+        // 如果配置了镜像，安装完成后恢复默认配置
+        if ($mirrorConfigured) {
+            $this->resetComposerMirror($basePath, $composerCmd);
+        }
+
+        if ($returnCode !== 0) {
+            Log::error("[Upgrade] Composer install failed with code: $returnCode");
+
+            return false;
+        }
+
+        Log::info('[Upgrade] Composer install completed successfully');
+
+        return true;
+    }
+
+    /**
+     * 检测网络并配置 Composer 镜像
+     */
+    protected function configureComposerMirror(string $basePath, string $composerCmd): bool
+    {
+        // 检查环境变量强制指定（使用 getenv 而非 env，因为这是运行时检查）
+        $forceMirror = getenv('FORCE_CHINA_MIRROR');
+        if ($forceMirror !== false) {
+            if ($forceMirror === '0') {
+                Log::info('[Upgrade] FORCE_CHINA_MIRROR=0, using default source');
+
+                return false;
+            }
+            if ($forceMirror === '1') {
+                Log::info('[Upgrade] FORCE_CHINA_MIRROR=1, forcing Aliyun mirror');
+
+                return $this->setAliyunMirror($basePath, $composerCmd);
+            }
+        }
+
+        // 检测是否能快速访问 GitHub API（composer.lock 中的 dist URL）
+        $canAccessGithub = $this->checkNetworkAccess('https://api.github.com', 3);
+
+        if ($canAccessGithub) {
+            Log::info('[Upgrade] GitHub API accessible, using default source');
+
+            return false;
+        }
+
+        return $this->setAliyunMirror($basePath, $composerCmd);
+    }
+
+    /**
+     * 设置阿里云镜像
+     */
+    protected function setAliyunMirror(string $basePath, string $composerCmd): bool
+    {
+        $configCmd = sprintf(
+            'cd %s && %s config repo.packagist composer https://mirrors.aliyun.com/composer/ 2>&1',
+            escapeshellarg($basePath),
+            $composerCmd
+        );
+
+        exec($configCmd, $output, $returnCode);
+
+        if ($returnCode === 0) {
+            Log::info('[Upgrade] Configured Aliyun composer mirror');
+
+            return true;
+        }
+
+        Log::warning('[Upgrade] Failed to configure mirror, will use default');
+
+        return false;
+    }
+
+    /**
+     * 重置 Composer 镜像配置
+     */
+    protected function resetComposerMirror(string $basePath, string $composerCmd): void
+    {
+        $resetCmd = sprintf(
+            'cd %s && %s config --unset repo.packagist 2>&1',
+            escapeshellarg($basePath),
+            $composerCmd
+        );
+
+        exec($resetCmd, $output, $returnCode);
+
+        if ($returnCode === 0) {
+            Log::info('[Upgrade] Reset composer mirror configuration');
+        }
+    }
+
+    /**
+     * 检测网络访问
+     */
+    protected function checkNetworkAccess(string $url, int $timeout = 3): bool
+    {
+        $ch = curl_init();
+        curl_setopt_array($ch, [
+            CURLOPT_URL => $url,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_CONNECTTIMEOUT => $timeout,
+            CURLOPT_TIMEOUT => $timeout,
+            CURLOPT_NOBODY => true,
+        ]);
+
+        curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        return $httpCode >= 200 && $httpCode < 400;
+    }
+
+    /**
+     * 查找 Composer 命令
+     */
+    protected function findComposerCommand(): ?string
+    {
+        // 检查常见的 composer 命令
+        $commands = ['composer', 'composer.phar', '/usr/local/bin/composer', '/usr/bin/composer'];
+
+        foreach ($commands as $cmd) {
+            exec("which $cmd 2>/dev/null", $output, $returnCode);
+            if ($returnCode === 0 && ! empty($output)) {
+                return $cmd;
+            }
+        }
+
+        // 检查当前目录是否有 composer.phar
+        $pharPath = base_path('composer.phar');
+        if (file_exists($pharPath)) {
+            return "php $pharPath";
+        }
+
+        return null;
     }
 }

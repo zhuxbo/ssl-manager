@@ -35,6 +35,11 @@ class Order extends BaseModel
         'cancelled_at',
         'admin_remark',
         'remark',
+        // ACME 相关字段
+        'eab_kid',
+        'eab_hmac',
+        'eab_used_at',
+        'auto_renew',
     ];
 
     protected $casts = [
@@ -46,6 +51,14 @@ class Order extends BaseModel
         'period_from' => 'datetime',
         'period_till' => 'datetime',
         'cancelled_at' => 'datetime',
+        // ACME 相关字段
+        'eab_hmac' => 'encrypted',
+        'eab_used_at' => 'datetime',
+        'auto_renew' => 'boolean',
+    ];
+
+    protected $hidden = [
+        'eab_hmac', // 敏感数据不序列化
     ];
 
     /**

@@ -54,6 +54,11 @@ trap cleanup EXIT
 
 # 检测是否在中国
 is_china_server() {
+    # 如果环境变量已设置，直接使用
+    if [ -n "$FORCE_CHINA_MIRROR" ]; then
+        [ "$FORCE_CHINA_MIRROR" = "1" ] && return 0 || return 1
+    fi
+
     # 检查阿里云
     local aliyun_region=$(timeout 1 curl -s "http://100.100.100.200/latest/meta-data/region-id" 2>/dev/null || echo "")
     if [ -n "$aliyun_region" ] && [[ "$aliyun_region" =~ ^cn- ]]; then
@@ -67,6 +72,17 @@ is_china_server() {
             return 0
         fi
         return 1
+    fi
+
+    # 检查华为云
+    local huawei_az=$(timeout 1 curl -s "http://169.254.169.254/openstack/latest/meta_data.json" 2>/dev/null | grep -o '"availability_zone":"[^"]*"' | head -1 || echo "")
+    if [ -n "$huawei_az" ] && [[ "$huawei_az" =~ cn- ]]; then
+        return 0
+    fi
+
+    # Fallback: 检测 GitHub API 是否可达
+    if ! timeout 3 curl -s --head "https://api.github.com" >/dev/null 2>&1; then
+        return 0
     fi
 
     return 1
@@ -158,10 +174,16 @@ main() {
         fi
     done
 
-    # 检测网络环境
+    # 检测网络环境（如果用户未手动指定）
     log_step "检测网络环境..."
-    if is_china_server; then
-        log_info "检测到中国大陆服务器，将使用国内镜像源"
+    if [ -n "$FORCE_CHINA_MIRROR" ]; then
+        if [ "$FORCE_CHINA_MIRROR" = "1" ]; then
+            log_info "FORCE_CHINA_MIRROR=1，强制使用国内镜像源"
+        else
+            log_info "FORCE_CHINA_MIRROR=0，强制使用国际源"
+        fi
+    elif is_china_server; then
+        log_info "检测到中国大陆网络环境，将使用国内镜像源"
         export FORCE_CHINA_MIRROR=1
     else
         log_info "使用国际源"

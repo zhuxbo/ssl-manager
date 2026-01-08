@@ -13,26 +13,32 @@ class ReleaseClient
 
     protected array $config;
 
-    /**
-     * 下载源配置 (硬编码)
-     */
-    protected array $sources = [
-        'gitee' => [
-            'owner' => 'zhuxbo',
-            'repo' => 'cert-manager',
-            'download_base' => 'https://gitee.com/zhuxbo/cert-manager/releases/download',
-        ],
-        'github' => [
-            'owner' => 'zhuxbo',
-            'repo' => 'cert-manager',
-            'download_base' => 'https://github.com/zhuxbo/cert-manager/releases/download',
-        ],
-    ];
-
     public function __construct()
     {
         $this->provider = Config::get('upgrade.source.provider', 'gitee');
         $this->config = Config::get("upgrade.source.$this->provider", []);
+    }
+
+    /**
+     * 获取下载基础 URL
+     */
+    protected function getDownloadBaseUrl(string $provider): string
+    {
+        // local provider 直接使用 base_url
+        if ($provider === 'local') {
+            return Config::get('upgrade.source.local.base_url', '');
+        }
+
+        $config = Config::get("upgrade.source.$provider", []);
+        $downloadBase = $config['download_base'] ?? '';
+        $owner = $config['owner'] ?? '';
+        $repo = $config['repo'] ?? '';
+
+        if ($downloadBase && $owner && $repo) {
+            return "$downloadBase/$owner/$repo/releases/download";
+        }
+
+        return '';
     }
 
     /**
@@ -142,16 +148,22 @@ class ReleaseClient
      */
     public function downloadPackageWithFallback(string $filename, string $tag, string $savePath): bool
     {
-        // 下载顺序：Gitee -> GitHub
-        $providers = ['gitee', 'github'];
+        // 如果是 local provider，只尝试 local（用于发布前测试）
+        if ($this->provider === 'local') {
+            $providers = ['local'];
+        } else {
+            // 下载顺序：Gitee -> GitHub（使用配置）
+            $providers = ['gitee', 'github'];
+        }
 
         foreach ($providers as $provider) {
-            $source = $this->sources[$provider] ?? null;
-            if (! $source) {
+            $downloadBase = $this->getDownloadBaseUrl($provider);
+            if (empty($downloadBase)) {
                 continue;
             }
 
-            $url = "{$source['download_base']}/$tag/$filename";
+            // local provider URL 格式不同：base_url/tag/filename
+            $url = "$downloadBase/$tag/$filename";
             Log::info("尝试从 $provider 下载: $url");
 
             if ($this->downloadPackage($url, $savePath)) {
@@ -320,9 +332,9 @@ class ReleaseClient
             $tagName = $release['tag_name'] ?? '';
             if ($this->matchChannel($tagName, $channel)) {
                 $version = ltrim($tagName, 'vV');
-                // 移除 -dev 后缀进行比较
-                $compareVersion = preg_replace('/-dev$/', '', $version);
-                $compareLatest = preg_replace('/-dev$/', '', $latestVersion);
+                // 移除预发布后缀进行比较
+                $compareVersion = $this->stripPreReleaseSuffix($version);
+                $compareLatest = $this->stripPreReleaseSuffix($latestVersion);
 
                 if (version_compare($compareVersion, $compareLatest, '>')) {
                     $latestVersion = $version;
@@ -404,26 +416,27 @@ class ReleaseClient
      */
     protected function getLatestGithubRelease(string $channel): ?array
     {
-        // GitHub 的 latest 只返回非预发布版本
-        if ($channel === 'main') {
-            $url = "{$this->config['api_base']}/repos/{$this->config['owner']}/{$this->config['repo']}/releases/latest";
-            $response = Http::withHeaders(['Accept' => 'application/vnd.github.v3+json'])->get($url);
-
-            if ($response->successful()) {
-                return $this->normalizeRelease($response->json());
-            }
-        }
-
-        // dev 通道需要遍历查找
+        // 遍历所有 releases，找到匹配通道的最高版本（与 Gitee 逻辑一致）
+        // 不使用 /releases/latest API，避免获取到 latest tag
         $releases = $this->fetchGithubReleases();
+        $latestRelease = null;
+        $latestVersion = '0.0.0';
+
         foreach ($releases as $release) {
             $tagName = $release['tag_name'] ?? '';
             if ($this->matchChannel($tagName, $channel)) {
-                return $this->normalizeRelease($release);
+                $version = ltrim($tagName, 'vV');
+                $compareVersion = $this->stripPreReleaseSuffix($version);
+                $compareLatest = $this->stripPreReleaseSuffix($latestVersion);
+
+                if (version_compare($compareVersion, $compareLatest, '>')) {
+                    $latestVersion = $version;
+                    $latestRelease = $release;
+                }
             }
         }
 
-        return null;
+        return $latestRelease ? $this->normalizeRelease($latestRelease) : null;
     }
 
     /**
@@ -485,11 +498,33 @@ class ReleaseClient
      */
     protected function matchChannel(string $tagName, string $channel): bool
     {
-        // main 通道: v1.0.0（不带 -dev）
-        // dev 通道: v1.0.0-dev
-        $isDev = str_contains($tagName, '-dev');
+        // 过滤 latest tag（latest 只用于安装，不用于在线升级）
+        if (strtolower($tagName) === 'latest') {
+            return false;
+        }
 
-        return ($channel === 'dev') === $isDev;
+        // main 通道: v1.0.0（纯版本号，无预发布后缀）
+        // dev 通道: v1.0.0-dev, v1.0.0-alpha, v1.0.0-beta, v1.0.0-rc.1 等
+        $preReleaseSuffixes = ['-dev', '-alpha', '-beta', '-rc'];
+        $isPreRelease = false;
+
+        foreach ($preReleaseSuffixes as $suffix) {
+            if (str_contains($tagName, $suffix)) {
+                $isPreRelease = true;
+                break;
+            }
+        }
+
+        return ($channel === 'dev') === $isPreRelease;
+    }
+
+    /**
+     * 移除预发布后缀用于版本比较
+     */
+    protected function stripPreReleaseSuffix(string $version): string
+    {
+        // 移除 -dev, -alpha, -alpha.1, -beta, -beta.2, -rc, -rc.1 等后缀
+        return preg_replace('/-(dev|alpha|beta|rc)(\.\d+)?$/', '', $version);
     }
 
     /**
@@ -559,8 +594,8 @@ class ReleaseClient
             $tagName = $release['tag_name'] ?? '';
             if ($this->matchChannel($tagName, $channel)) {
                 $version = ltrim($tagName, 'vV');
-                $compareVersion = preg_replace('/-dev$/', '', $version);
-                $compareLatest = preg_replace('/-dev$/', '', $latestVersion);
+                $compareVersion = $this->stripPreReleaseSuffix($version);
+                $compareLatest = $this->stripPreReleaseSuffix($latestVersion);
 
                 if (version_compare($compareVersion, $compareLatest, '>')) {
                     $latestVersion = $version;

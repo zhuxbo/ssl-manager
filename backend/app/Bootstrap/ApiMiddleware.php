@@ -17,6 +17,7 @@ use App\Http\Middleware\TrimStrings;
 use App\Http\Middleware\TrustProxies;
 use App\Http\Middleware\UserAuthenticate;
 use App\Http\Middleware\UserRefreshTokenAuthenticate;
+use App\Http\Middleware\AcmeJwsMiddleware;
 use Illuminate\Foundation\Configuration\Middleware as Config;
 use Illuminate\Foundation\Http\Middleware\ConvertEmptyStringsToNull;
 use Illuminate\Foundation\Http\Middleware\ValidatePostSize;
@@ -66,9 +67,10 @@ class ApiMiddleware
             RateLimiter::class.':auto',
         ]);
 
-        // API Auto 中间件组
+        // ACME 中间件组
         $middleware->group('api.acme', [
             RateLimiter::class.':acme',
+            AcmeJwsMiddleware::class,
         ]);
 
         // 管理员中间件组
