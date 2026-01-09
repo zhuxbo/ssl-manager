@@ -144,16 +144,6 @@ check_docker() {
 # 下载函数
 # ========================================
 
-# 解析版本标识
-resolve_version_tag() {
-    local version="$1"
-    case "$version" in
-        latest) echo "latest" ;;
-        dev) echo "dev-latest" ;;
-        *) echo "$version" ;;
-    esac
-}
-
 # 下载脚本包（支持版本参数）
 download_script_package() {
     local save_path="$1"
@@ -161,20 +151,15 @@ download_script_package() {
 
     # 构建 URL 列表
     local urls=()
-    local tag=$(resolve_version_tag "$version")
 
-    if [[ "$tag" == "dev-latest" ]]; then
-        # 开发版：使用 dev-latest tag 下的 latest 包
-        urls+=("$GITEE_BASE_URL/releases/download/dev-latest/ssl-manager-script-latest.zip")
-        urls+=("$GITHUB_BASE_URL/releases/download/dev-latest/ssl-manager-script-latest.zip")
-    elif [[ "$tag" == "latest" ]]; then
-        # 稳定版：使用 latest tag 下的 latest 包
+    if [[ "$version" == "latest" ]]; then
+        # 最新稳定版：使用 latest tag
         urls+=("$GITEE_BASE_URL/releases/download/latest/ssl-manager-script-latest.zip")
         urls+=("$GITHUB_BASE_URL/releases/download/latest/ssl-manager-script-latest.zip")
     else
         # 指定版本：使用版本号命名的包（如 ssl-manager-script-0.0.4-beta.zip）
-        urls+=("$GITEE_BASE_URL/releases/download/v$tag/ssl-manager-script-$tag.zip")
-        urls+=("$GITHUB_BASE_URL/releases/download/v$tag/ssl-manager-script-$tag.zip")
+        urls+=("$GITEE_BASE_URL/releases/download/v$version/ssl-manager-script-$version.zip")
+        urls+=("$GITHUB_BASE_URL/releases/download/v$version/ssl-manager-script-$version.zip")
     fi
 
     log_info "下载脚本包 (版本: $version)..."
@@ -218,16 +203,13 @@ show_help() {
 选项:
   --version, -v VERSION  指定安装版本
                          latest   最新稳定版（默认）
-                         dev      最新开发版
-                         x.x.x    指定版本号（自动查找）
+                         x.x.x    指定版本号
   -h, --help             显示此帮助信息
 
 示例:
-  $0                     # 安装最新稳定版
-  $0 --version dev       # 安装最新开发版
-  $0 --version 1.2.0     # 安装指定版本
-  $0 docker -v dev       # Docker 安装开发版
-  $0 bt --version latest # 宝塔安装稳定版
+  $0                        # 安装最新稳定版
+  $0 --version 0.0.4-beta   # 安装指定版本
+  $0 docker -v 0.0.4-beta   # Docker 安装指定版本
 
 环境变量:
   FORCE_CHINA_MIRROR=1   强制使用国内镜像

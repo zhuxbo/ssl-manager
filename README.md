@@ -16,9 +16,8 @@ curl ... | bash -s docker   # Docker 部署
 curl ... | bash -s bt       # 宝塔面板部署
 
 # 指定版本安装
-curl ... | bash -s -- --version dev      # 安装最新开发版
-curl ... | bash -s -- --version 1.0.0    # 安装指定版本
-curl ... | bash -s docker -v dev         # Docker + 开发版
+curl ... | bash -s -- --version 0.0.4-beta   # 安装指定版本
+curl ... | bash -s docker -v 0.0.4-beta      # Docker + 指定版本
 ```
 
 | 参数 | 说明 |
@@ -26,8 +25,7 @@ curl ... | bash -s docker -v dev         # Docker + 开发版
 | `docker` | Docker 部署（推荐，7 步交互式配置） |
 | `bt` | 宝塔面板部署 |
 | `--version latest` | 最新稳定版（默认） |
-| `--version dev` | 最新开发版 |
-| `--version x.x.x` | 指定版本号（自动查找稳定版/开发版） |
+| `--version x.x.x` | 指定版本号 |
 
 ## 升级
 
