@@ -281,7 +281,7 @@ perform_upgrade() {
         # Docker 环境：检测并配置镜像
         if is_china_server; then
             log_info "配置 Composer 中国镜像..."
-            $compose_cmd exec -T php composer config repo.packagist composer https://mirrors.aliyun.com/composer/
+            $compose_cmd exec -T php composer config repo.packagist composer https://mirrors.tencent.com/composer/
         fi
         $compose_cmd exec -T php composer install --no-dev --optimize-autoloader
     else
@@ -289,7 +289,7 @@ perform_upgrade() {
         # 宝塔环境：检测并配置镜像
         if is_china_server; then
             log_info "配置 Composer 中国镜像..."
-            composer config repo.packagist composer https://mirrors.aliyun.com/composer/
+            composer config repo.packagist composer https://mirrors.tencent.com/composer/
         fi
         COMPOSER_ALLOW_SUPERUSER=1 composer install --no-dev --optimize-autoloader
     fi

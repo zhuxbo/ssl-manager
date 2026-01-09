@@ -213,7 +213,11 @@ install_composer_deps() {
     # 配置中国镜像
     if is_china_server; then
         log_info "配置 Composer 中国镜像..."
-        composer config -g repo.packagist composer https://mirrors.aliyun.com/composer/
+        # 使用腾讯云镜像（对 GitHub 包有更好的代理）
+        composer config -g repo.packagist composer https://mirrors.tencent.com/composer/
+        # 配置 GitHub 使用 OAuth 或增加超时（避免 GitHub 下载超时）
+        composer config -g process-timeout 600
+        composer config -g github-protocols https
     fi
 
     # 安装依赖

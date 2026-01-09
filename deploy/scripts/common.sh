@@ -589,7 +589,7 @@ get_composer_mirror_cmd() {
     fi
 
     if [ "$region" = "china" ]; then
-        echo "composer config -g repo.packagist composer https://mirrors.aliyun.com/composer/"
+        echo "composer config -g repo.packagist composer https://mirrors.tencent.com/composer/ && composer config -g process-timeout 600"
     else
         echo "# Using default Composer mirrors"
     fi
