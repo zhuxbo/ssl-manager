@@ -280,18 +280,12 @@ show_nginx_tips() {
     echo
     echo "1. 创建网站（如果尚未创建）"
     echo "   - 域名: 您的域名"
-    echo "   - 根目录: $INSTALL_DIR/backend/public"
+    echo "   - 网站目录: $INSTALL_DIR/backend"
+    echo "   - 运行目录: /public"
     echo "   - PHP版本: 8.${PHP_VERSION: -1}"
     echo
     echo "2. 在网站配置中添加以下内容（配置文件 → 自定义配置）:"
     echo "   include $INSTALL_DIR/nginx/manager.conf;"
-    echo
-    if [ -f "$INSTALL_DIR/nginx/manager.conf" ]; then
-        echo "3. 或者复制以下配置到网站配置中:"
-        echo "   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        cat "$INSTALL_DIR/nginx/manager.conf"
-        echo "   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    fi
     echo
 }
 
@@ -312,7 +306,7 @@ show_complete_info() {
     echo
     echo "队列配置（宝塔 → 计划任务 → 添加守护进程）:"
     echo "  名称: ssl-manager-queue"
-    echo "  命令: $PHP_CMD $INSTALL_DIR/backend/artisan queue:work --sleep=3 --tries=3"
+    echo "  命令: $PHP_CMD $INSTALL_DIR/backend/artisan queue:work --queue tasks,notifications --sleep=3 --tries=3 --max-time 3600"
     echo
     echo "定时任务（宝塔 → 计划任务 → 添加任务）:"
     echo "  执行周期: 每分钟"
