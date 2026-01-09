@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "435c8224bc174caa82ae25b38f38f237",
+    "content-hash": "5e2077c643df15574a8a3ed0f40fcbb6",
     "packages": [
         {
             "name": "brick/math",
@@ -8788,8 +8788,8 @@
             "version": "2.1.x-dev",
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/phpstan/phpstan/zipball/a4325dd67ed91f7398e56642790ed0f645d96eec",
-                "reference": "a4325dd67ed91f7398e56642790ed0f645d96eec",
+                "url": "https://api.github.com/repos/phpstan/phpstan/zipball/b32d7823493f93a4184306bd7f21915bfeecdabc",
+                "reference": "b32d7823493f93a4184306bd7f21915bfeecdabc",
                 "shasum": ""
             },
             "require": {
@@ -8835,7 +8835,7 @@
                     "type": "github"
                 }
             ],
-            "time": "2026-01-05T18:33:46+00:00"
+            "time": "2026-01-08T20:28:44+00:00"
         },
         {
             "name": "phpunit/php-code-coverage",
