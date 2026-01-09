@@ -227,28 +227,6 @@ install_composer_deps() {
     log_success "Composer 依赖安装完成"
 }
 
-# 配置环境
-configure_environment() {
-    log_step "配置环境"
-
-    cd "$INSTALL_DIR/backend"
-
-    # 复制环境配置
-    if [ ! -f ".env" ]; then
-        if [ -f ".env.example" ]; then
-            cp .env.example .env
-        else
-            log_error "未找到 .env.example 文件"
-            exit 1
-        fi
-    fi
-
-    # 生成应用密钥
-    $PHP_CMD artisan key:generate --force
-
-    log_success "环境配置完成"
-}
-
 # 设置权限
 set_permissions() {
     log_step "设置文件权限"
@@ -335,9 +313,6 @@ main() {
 
     # 安装 Composer 依赖
     install_composer_deps
-
-    # 配置环境
-    configure_environment
 
     # 设置权限
     set_permissions

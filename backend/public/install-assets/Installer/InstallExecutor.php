@@ -58,14 +58,20 @@ class InstallExecutor
             $this->reporter->completeStep('环境变量配置完成');
             $this->steps[] = '配置环境变量';
 
-            // 步骤 2: Composer 安装
-            $this->reporter->startStep(2, '安装 Composer 依赖 (可能需要较长时间)');
-            if (! $this->composerRunner->install()) {
-                throw new \Exception('Composer 依赖安装失败 (返回码 ' . $this->composerRunner->getReturnCode() . ')');
+            // 步骤 2: Composer 安装（如果已安装则跳过）
+            $this->reporter->startStep(2, '安装 Composer 依赖');
+            if ($this->isComposerInstalled()) {
+                $this->reporter->completeStep('Composer 依赖已存在，跳过安装');
+                $this->steps[] = 'Composer 依赖已存在';
+            } else {
+                $this->reporter->showOutput('正在安装依赖，可能需要较长时间...');
+                if (! $this->composerRunner->install()) {
+                    throw new \Exception('Composer 依赖安装失败 (返回码 ' . $this->composerRunner->getReturnCode() . ')');
+                }
+                $this->reporter->showOutput($this->composerRunner->getOutputString());
+                $this->reporter->completeStep('Composer 依赖安装完成');
+                $this->steps[] = '安装 Composer 依赖';
             }
-            $this->reporter->showOutput($this->composerRunner->getOutputString());
-            $this->reporter->completeStep('Composer 依赖安装完成');
-            $this->steps[] = '安装 Composer 依赖';
 
             // 步骤 3: 生成应用密钥
             $this->reporter->startStep(3, '生成应用密钥');
@@ -132,6 +138,16 @@ class InstallExecutor
                 'steps' => $this->steps,
             ];
         }
+    }
+
+    /**
+     * 检测 Composer 依赖是否已安装
+     */
+    private function isComposerInstalled(): bool
+    {
+        $autoloadPath = $this->projectRoot . '/vendor/autoload.php';
+
+        return file_exists($autoloadPath);
     }
 
     /**
