@@ -8,6 +8,7 @@ import {
   getBackups,
   executeRollback,
   deleteBackup,
+  setChannel,
   type VersionInfo,
   type UpdateCheckResult,
   type ReleaseInfo,
@@ -23,7 +24,9 @@ import {
   ElProgress,
   ElEmpty,
   ElTooltip,
-  ElDivider
+  ElDivider,
+  ElSelect,
+  ElOption
 } from "element-plus";
 
 defineOptions({
@@ -204,6 +207,31 @@ const closeUpgradeProgress = () => {
   upgradeSteps.value = [];
 };
 
+// 通道切换状态
+const changingChannel = ref(false);
+
+// 切换通道
+const handleChangeChannel = async (newChannel: "main" | "dev") => {
+  if (!currentVersion.value) return;
+
+  changingChannel.value = true;
+  try {
+    await setChannel(newChannel);
+    message(`已切换到${newChannel === "main" ? "稳定版" : "开发版"}通道`, {
+      type: "success"
+    });
+    // 重新加载版本信息和检查更新
+    await loadVersion();
+    updateInfo.value = null; // 清除旧的更新信息
+  } catch {
+    message("切换通道失败", { type: "error" });
+    // 恢复原来的值
+    await loadVersion();
+  } finally {
+    changingChannel.value = false;
+  }
+};
+
 onMounted(() => {
   loadVersion();
   loadBackups();
@@ -246,8 +274,16 @@ onMounted(() => {
             <div class="text-lg">{{ formatDate(currentVersion.build_time) }}</div>
           </div>
           <div>
-            <div class="text-gray-500 text-sm">发布通道</div>
-            <div class="text-lg">{{ currentVersion.channel }}</div>
+            <div class="text-gray-500 text-sm mb-1">发布通道</div>
+            <el-select
+              :model-value="currentVersion.channel"
+              size="small"
+              :loading="changingChannel"
+              @change="handleChangeChannel"
+            >
+              <el-option label="稳定版 (main)" value="main" />
+              <el-option label="开发版 (dev)" value="dev" />
+            </el-select>
           </div>
         </div>
       </div>

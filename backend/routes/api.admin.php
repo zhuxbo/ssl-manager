@@ -209,5 +209,6 @@ Route::prefix('admin')->middleware('api.admin')->group(function () {
         Route::get('backups', [UpgradeController::class, 'backups']);
         Route::post('rollback', [UpgradeController::class, 'rollback']);
         Route::delete('backup', [UpgradeController::class, 'deleteBackup']);
+        Route::post('channel', [UpgradeController::class, 'setChannel']);
     });
 });

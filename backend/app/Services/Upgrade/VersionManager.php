@@ -37,6 +37,41 @@ class VersionManager
     }
 
     /**
+     * 设置发布通道
+     */
+    public function setChannel(string $channel): bool
+    {
+        if (! in_array($channel, ['main', 'dev'])) {
+            return false;
+        }
+
+        $configPath = base_path('config.json');
+
+        if (! file_exists($configPath)) {
+            return false;
+        }
+
+        $config = json_decode(file_get_contents($configPath), true);
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            return false;
+        }
+
+        $config['channel'] = $channel;
+
+        $result = file_put_contents(
+            $configPath,
+            json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)
+        );
+
+        if ($result !== false) {
+            // 清除配置缓存
+            Config::set('version.channel', $channel);
+        }
+
+        return $result !== false;
+    }
+
+    /**
      * 比较两个语义化版本
      *
      * @return int -1 if v1 < v2, 0 if v1 == v2, 1 if v1 > v2

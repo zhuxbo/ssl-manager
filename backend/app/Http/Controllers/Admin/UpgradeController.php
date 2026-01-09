@@ -116,4 +116,27 @@ class UpgradeController extends BaseController
             $this->error('删除备份失败');
         }
     }
+
+    /**
+     * 设置发布通道
+     */
+    public function setChannel(Request $request): void
+    {
+        $channel = $request->input('channel');
+
+        if (! in_array($channel, ['main', 'dev'])) {
+            $this->error("无效的通道: $channel");
+        }
+
+        $result = $this->versionManager->setChannel($channel);
+
+        if ($result) {
+            $this->success([
+                'channel' => $channel,
+                'message' => '通道已切换',
+            ]);
+        } else {
+            $this->error('切换通道失败');
+        }
+    }
 }

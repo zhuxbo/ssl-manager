@@ -293,10 +293,7 @@ if [ -d "$SCRIPT_DIR_SRC" ]; then
     cp "$SCRIPT_DIR_SRC/scripts/"*.sh "$SCRIPT_PKG_DIR/scripts/" 2>/dev/null || true
     cp "$SCRIPT_DIR_SRC/deploy.sh" "$SCRIPT_PKG_DIR/" 2>/dev/null || true
 
-    # 复制 nginx 配置模板
-    if [ -d "$SCRIPT_DIR_SRC/nginx" ]; then
-        cp "$SCRIPT_DIR_SRC/nginx/"*.conf "$SCRIPT_PKG_DIR/" 2>/dev/null || true
-    fi
+    # nginx 配置已统一打包在完整包中（build/nginx），脚本包不再单独包含
 
     # 创建使用说明
     cat > "$SCRIPT_PKG_DIR/README.md" <<EOF
@@ -325,7 +322,8 @@ bash scripts/docker-install.sh
 - \`scripts/bt-deps.sh\` - 宝塔依赖检测
 - \`scripts/upgrade.sh\` - 升级辅助脚本
 - \`deploy.sh\` - 旧版入口（保留兼容）
-- \`manager.conf\` - Nginx 配置模板
+
+注意：Nginx 配置已统一打包在完整包的 nginx 目录中。
 EOF
 
     # 打包

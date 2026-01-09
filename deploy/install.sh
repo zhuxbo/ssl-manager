@@ -5,6 +5,7 @@
 #   curl -fsSL https://gitee.com/zhuxbo/cert-manager/raw/main/deploy/install.sh | bash
 #   curl -fsSL https://gitee.com/zhuxbo/cert-manager/raw/main/deploy/install.sh | bash -s docker
 #   curl -fsSL https://gitee.com/zhuxbo/cert-manager/raw/main/deploy/install.sh | bash -s bt
+#   curl -fsSL https://gitee.com/zhuxbo/cert-manager/raw/main/deploy/install.sh | bash -s -- --version dev
 
 set -e
 
@@ -52,20 +53,21 @@ trap cleanup EXIT
 # 检测函数
 # ========================================
 
-# 检测是否在中国
+# 检测服务器是否在中国大陆
+# 多层检测，确保准确性
 is_china_server() {
     # 如果环境变量已设置，直接使用
     if [ -n "$FORCE_CHINA_MIRROR" ]; then
         [ "$FORCE_CHINA_MIRROR" = "1" ] && return 0 || return 1
     fi
 
-    # 检查阿里云
+    # 1. 检查云服务商元数据 - 阿里云
     local aliyun_region=$(timeout 1 curl -s "http://100.100.100.200/latest/meta-data/region-id" 2>/dev/null || echo "")
     if [ -n "$aliyun_region" ] && [[ "$aliyun_region" =~ ^cn- ]]; then
         return 0
     fi
 
-    # 检查腾讯云
+    # 检查云服务商元数据 - 腾讯云
     local tencent_region=$(timeout 1 curl -s "http://metadata.tencentyun.com/latest/meta-data/region" 2>/dev/null || echo "")
     if [ -n "$tencent_region" ]; then
         if [[ "$tencent_region" =~ ^(ap-beijing|ap-shanghai|ap-guangzhou|ap-chengdu|ap-chongqing|ap-nanjing) ]]; then
@@ -74,17 +76,46 @@ is_china_server() {
         return 1
     fi
 
-    # 检查华为云
+    # 检查云服务商元数据 - 华为云
     local huawei_az=$(timeout 1 curl -s "http://169.254.169.254/openstack/latest/meta_data.json" 2>/dev/null | grep -o '"availability_zone":"[^"]*"' | head -1 || echo "")
     if [ -n "$huawei_az" ] && [[ "$huawei_az" =~ cn- ]]; then
         return 0
     fi
 
-    # Fallback: 检测 GitHub API 是否可达
-    if ! timeout 3 curl -s --head "https://api.github.com" >/dev/null 2>&1; then
+    # 2. 检测 baidu.com 可达性 + Google 不可达
+    local baidu_ok=false
+    if timeout 2 curl -s --head "https://www.baidu.com" >/dev/null 2>&1; then
+        baidu_ok=true
+    fi
+
+    if [ "$baidu_ok" = true ]; then
+        # Google 在国内通常不可访问，如果不可达则认为是国内网络
+        if ! timeout 3 curl -s --head "https://www.google.com" >/dev/null 2>&1; then
+            return 0
+        fi
+    fi
+
+    # 3. IP 归属地检测（备选方案）
+    local country=""
+    # 尝试 ip.sb
+    country=$(timeout 3 curl -s "https://api.ip.sb/geoip" 2>/dev/null | grep -o '"country_code":"[^"]*"' | cut -d'"' -f4 || echo "")
+    if [ -z "$country" ]; then
+        # 尝试 ipinfo.io
+        country=$(timeout 3 curl -s "https://ipinfo.io/country" 2>/dev/null | tr -d '\n' || echo "")
+    fi
+
+    if [ "$country" = "CN" ]; then
         return 0
     fi
 
+    # 4. 最终判断：如果 baidu 可达但 Google 不可达，认为是国内
+    if [ "$baidu_ok" = true ]; then
+        if ! timeout 3 curl -s --head "https://www.google.com" >/dev/null 2>&1; then
+            return 0
+        fi
+    fi
+
+    # 默认不使用中国镜像
     return 1
 }
 
@@ -112,27 +143,49 @@ check_docker() {
 # ========================================
 # 下载函数
 # ========================================
+
+# 解析版本标识
+resolve_version_tag() {
+    local version="$1"
+    case "$version" in
+        latest) echo "latest" ;;
+        dev) echo "dev-latest" ;;
+        *) echo "$version" ;;
+    esac
+}
+
+# 下载脚本包（支持版本参数）
 download_script_package() {
     local save_path="$1"
+    local version="${2:-latest}"
 
-    local gitee_url="$GITEE_BASE_URL/releases/download/latest/$SCRIPT_PACKAGE"
-    local github_url="$GITHUB_BASE_URL/releases/download/latest/$SCRIPT_PACKAGE"
+    # 构建 URL 列表
+    local urls=()
+    local tag=$(resolve_version_tag "$version")
 
-    log_info "下载脚本包..."
-
-    # 优先尝试 Gitee
-    log_info "尝试从 Gitee 下载..."
-    if curl -fsSL --connect-timeout 10 --max-time 120 -o "$save_path" "$gitee_url" 2>/dev/null; then
-        log_success "Gitee 下载成功"
-        return 0
+    if [[ "$tag" == "dev-latest" ]]; then
+        urls+=("$GITEE_BASE_URL/releases/download/dev-latest/$SCRIPT_PACKAGE")
+        urls+=("$GITHUB_BASE_URL/releases/download/dev-latest/$SCRIPT_PACKAGE")
+    elif [[ "$tag" == "latest" ]]; then
+        urls+=("$GITEE_BASE_URL/releases/download/latest/$SCRIPT_PACKAGE")
+        urls+=("$GITHUB_BASE_URL/releases/download/latest/$SCRIPT_PACKAGE")
+    else
+        # 指定版本：先尝试 main 分支，再尝试 dev 分支
+        urls+=("$GITEE_BASE_URL/releases/download/v$tag/$SCRIPT_PACKAGE")
+        urls+=("$GITHUB_BASE_URL/releases/download/v$tag/$SCRIPT_PACKAGE")
+        urls+=("$GITEE_BASE_URL/releases/download/dev-v$tag/$SCRIPT_PACKAGE")
+        urls+=("$GITHUB_BASE_URL/releases/download/dev-v$tag/$SCRIPT_PACKAGE")
     fi
 
-    # 回退到 GitHub
-    log_warning "Gitee 下载失败，尝试 GitHub..."
-    if curl -fsSL --connect-timeout 10 --max-time 120 -o "$save_path" "$github_url" 2>/dev/null; then
-        log_success "GitHub 下载成功"
-        return 0
-    fi
+    log_info "下载脚本包 (版本: $version)..."
+
+    for url in "${urls[@]}"; do
+        log_info "尝试: $url"
+        if curl -fsSL --connect-timeout 10 --max-time 120 -o "$save_path" "$url" 2>/dev/null; then
+            log_success "下载成功"
+            return 0
+        fi
+    done
 
     log_error "下载失败"
     return 1
@@ -151,12 +204,72 @@ show_banner() {
 }
 
 # ========================================
+# 显示帮助
+# ========================================
+show_help() {
+    cat <<EOF
+用法: $0 [选项] [模式]
+
+模式:
+  auto    自动检测环境（默认）
+  docker  使用 Docker 安装
+  bt      使用宝塔面板安装
+
+选项:
+  --version, -v VERSION  指定安装版本
+                         latest   最新稳定版（默认）
+                         dev      最新开发版
+                         x.x.x    指定版本号（自动查找）
+  -h, --help             显示此帮助信息
+
+示例:
+  $0                     # 安装最新稳定版
+  $0 --version dev       # 安装最新开发版
+  $0 --version 1.2.0     # 安装指定版本
+  $0 docker -v dev       # Docker 安装开发版
+  $0 bt --version latest # 宝塔安装稳定版
+
+环境变量:
+  FORCE_CHINA_MIRROR=1   强制使用国内镜像
+  FORCE_CHINA_MIRROR=0   强制使用国际源
+EOF
+    exit 0
+}
+
+# ========================================
 # 主流程
 # ========================================
 main() {
-    local mode="${1:-auto}"
+    local mode="auto"
+    local version="latest"
+
+    # 解析参数
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --version|-v)
+                version="$2"
+                shift 2
+                ;;
+            -h|--help)
+                show_help
+                ;;
+            bt|docker|auto)
+                mode="$1"
+                shift
+                ;;
+            *)
+                log_error "未知参数: $1"
+                show_help
+                ;;
+        esac
+    done
 
     show_banner
+
+    # 显示版本信息
+    if [ "$version" != "latest" ]; then
+        log_info "安装版本: $version"
+    fi
 
     # 检查 root 权限
     if [ "$EUID" -ne 0 ]; then
@@ -193,10 +306,13 @@ main() {
     # 创建临时目录
     mkdir -p "$TEMP_DIR"
 
+    # 导出版本变量供子脚本使用
+    export INSTALL_VERSION="$version"
+
     # 下载脚本包
     log_step "下载安装脚本..."
     local package_file="$TEMP_DIR/$SCRIPT_PACKAGE"
-    if ! download_script_package "$package_file"; then
+    if ! download_script_package "$package_file" "$version"; then
         log_error "无法下载安装脚本包"
         exit 1
     fi
