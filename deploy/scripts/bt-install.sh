@@ -255,18 +255,18 @@ set_permissions() {
 
     cd "$INSTALL_DIR"
 
-    # 设置所有者
-    chown -R www:www "$INSTALL_DIR"
+    # 设置所有者（排除 .user.ini，宝塔会锁定此文件）
+    find "$INSTALL_DIR" -not -name ".user.ini" -exec chown www:www {} \; 2>/dev/null || true
 
     # 设置目录权限
-    find "$INSTALL_DIR" -type d -exec chmod 755 {} \;
+    find "$INSTALL_DIR" -type d -exec chmod 755 {} \; 2>/dev/null || true
 
-    # 设置文件权限
-    find "$INSTALL_DIR" -type f -exec chmod 644 {} \;
+    # 设置文件权限（排除 .user.ini）
+    find "$INSTALL_DIR" -type f -not -name ".user.ini" -exec chmod 644 {} \; 2>/dev/null || true
 
     # 设置 storage 和 cache 目录权限
-    chmod -R 775 "$INSTALL_DIR/backend/storage"
-    chmod -R 775 "$INSTALL_DIR/backend/bootstrap/cache"
+    chmod -R 775 "$INSTALL_DIR/backend/storage" 2>/dev/null || true
+    chmod -R 775 "$INSTALL_DIR/backend/bootstrap/cache" 2>/dev/null || true
 
     log_success "权限设置完成"
 }
