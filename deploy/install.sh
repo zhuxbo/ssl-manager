@@ -164,17 +164,17 @@ download_script_package() {
     local tag=$(resolve_version_tag "$version")
 
     if [[ "$tag" == "dev-latest" ]]; then
-        urls+=("$GITEE_BASE_URL/releases/download/dev-latest/$SCRIPT_PACKAGE")
-        urls+=("$GITHUB_BASE_URL/releases/download/dev-latest/$SCRIPT_PACKAGE")
+        # 开发版：使用 dev-latest tag 下的 latest 包
+        urls+=("$GITEE_BASE_URL/releases/download/dev-latest/ssl-manager-script-latest.zip")
+        urls+=("$GITHUB_BASE_URL/releases/download/dev-latest/ssl-manager-script-latest.zip")
     elif [[ "$tag" == "latest" ]]; then
-        urls+=("$GITEE_BASE_URL/releases/download/latest/$SCRIPT_PACKAGE")
-        urls+=("$GITHUB_BASE_URL/releases/download/latest/$SCRIPT_PACKAGE")
+        # 稳定版：使用 latest tag 下的 latest 包
+        urls+=("$GITEE_BASE_URL/releases/download/latest/ssl-manager-script-latest.zip")
+        urls+=("$GITHUB_BASE_URL/releases/download/latest/ssl-manager-script-latest.zip")
     else
-        # 指定版本：先尝试 main 分支，再尝试 dev 分支
-        urls+=("$GITEE_BASE_URL/releases/download/v$tag/$SCRIPT_PACKAGE")
-        urls+=("$GITHUB_BASE_URL/releases/download/v$tag/$SCRIPT_PACKAGE")
-        urls+=("$GITEE_BASE_URL/releases/download/dev-v$tag/$SCRIPT_PACKAGE")
-        urls+=("$GITHUB_BASE_URL/releases/download/dev-v$tag/$SCRIPT_PACKAGE")
+        # 指定版本：使用版本号命名的包（如 ssl-manager-script-0.0.4-beta.zip）
+        urls+=("$GITEE_BASE_URL/releases/download/v$tag/ssl-manager-script-$tag.zip")
+        urls+=("$GITHUB_BASE_URL/releases/download/v$tag/ssl-manager-script-$tag.zip")
     fi
 
     log_info "下载脚本包 (版本: $version)..."
