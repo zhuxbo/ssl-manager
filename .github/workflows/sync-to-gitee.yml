@@ -128,7 +128,7 @@ jobs:
             done
           fi
 
-      - name: Sync latest release
+      - name: Sync latest release (stable)
         if: steps.release_info.outputs.skip != 'true' && steps.release_info.outputs.prerelease == 'false'
         run: |
           echo "Syncing latest release to Gitee..."
@@ -179,6 +179,68 @@ jobs:
           # 上传 latest 包
           if [ "$RELEASE_ID" != "null" ] && [ -n "$RELEASE_ID" ]; then
             for file in latest-assets/*latest*; do
+              if [ -f "$file" ]; then
+                echo "Uploading: $file"
+                curl -s -X POST "https://gitee.com/api/v5/repos/zhuxbo/cert-manager/releases/$RELEASE_ID/attach_files" \
+                  -H "Content-Type: multipart/form-data" \
+                  -F "access_token=${{ secrets.GITEE_TOKEN }}" \
+                  -F "file=@$file"
+              fi
+            done
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Sync dev-latest release
+        if: steps.release_info.outputs.skip != 'true' && steps.release_info.outputs.prerelease == 'true'
+        run: |
+          echo "Syncing dev-latest release to Gitee..."
+
+          # 推送 dev-latest tag
+          git clone --depth 1 https://oauth2:${{ secrets.GITEE_TOKEN }}@gitee.com/zhuxbo/cert-manager.git /tmp/gitee-repo
+          cd /tmp/gitee-repo
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git tag -d dev-latest 2>/dev/null || true
+          git push origin :refs/tags/dev-latest 2>/dev/null || true
+          git tag dev-latest
+          git push origin dev-latest
+
+          # 下载 dev-latest 包
+          cd /tmp
+          mkdir -p dev-latest-assets
+          gh release download dev-latest --repo ${{ github.repository }} --dir dev-latest-assets || true
+          ls -la dev-latest-assets/
+
+          # 创建/更新 Gitee dev-latest release
+          VERSION="${{ steps.release_info.outputs.tag }}"
+
+          # 先尝试删除现有的 dev-latest release
+          EXISTING=$(curl -s "https://gitee.com/api/v5/repos/zhuxbo/cert-manager/releases/tags/dev-latest?access_token=${{ secrets.GITEE_TOKEN }}")
+          EXISTING_ID=$(echo "$EXISTING" | jq -r '.id')
+          if [ "$EXISTING_ID" != "null" ] && [ -n "$EXISTING_ID" ]; then
+            echo "Deleting existing dev-latest release: $EXISTING_ID"
+            curl -s -X DELETE "https://gitee.com/api/v5/repos/zhuxbo/cert-manager/releases/$EXISTING_ID?access_token=${{ secrets.GITEE_TOKEN }}"
+          fi
+
+          # 创建新的 dev-latest release
+          RESPONSE=$(curl -s -X POST "https://gitee.com/api/v5/repos/zhuxbo/cert-manager/releases" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"access_token\": \"${{ secrets.GITEE_TOKEN }}\",
+              \"tag_name\": \"dev-latest\",
+              \"name\": \"Latest Dev Release ($VERSION)\",
+              \"body\": \"当前最新开发版本: $VERSION\\n\\n从 GitHub 同步\",
+              \"prerelease\": true,
+              \"target_commitish\": \"dev\"
+            }")
+
+          RELEASE_ID=$(echo "$RESPONSE" | jq -r '.id')
+          echo "Created dev-latest release: $RELEASE_ID"
+
+          # 上传 dev-latest 包
+          if [ "$RELEASE_ID" != "null" ] && [ -n "$RELEASE_ID" ]; then
+            for file in dev-latest-assets/*latest*; do
               if [ -f "$file" ]; then
                 echo "Uploading: $file"
                 curl -s -X POST "https://gitee.com/api/v5/repos/zhuxbo/cert-manager/releases/$RELEASE_ID/attach_files" \
