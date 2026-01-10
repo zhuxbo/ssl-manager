@@ -379,13 +379,16 @@ class ReleaseClient
             $tagName = $release['tag_name'] ?? '';
             if ($this->matchChannel($tagName, $channel)) {
                 $filtered[] = $this->normalizeRelease($release);
-                if (count($filtered) >= $limit) {
-                    break;
-                }
             }
         }
 
-        return $filtered;
+        // 按版本号降序排序
+        usort($filtered, fn ($a, $b) => version_compare(
+            $this->stripPreReleaseSuffix(ltrim($b['version'] ?? '', 'vV')),
+            $this->stripPreReleaseSuffix(ltrim($a['version'] ?? '', 'vV'))
+        ));
+
+        return array_slice($filtered, 0, $limit);
     }
 
     /**
@@ -467,13 +470,16 @@ class ReleaseClient
             $tagName = $release['tag_name'] ?? '';
             if ($this->matchChannel($tagName, $channel)) {
                 $filtered[] = $this->normalizeRelease($release);
-                if (count($filtered) >= $limit) {
-                    break;
-                }
             }
         }
 
-        return $filtered;
+        // 按版本号降序排序
+        usort($filtered, fn ($a, $b) => version_compare(
+            $this->stripPreReleaseSuffix(ltrim($b['version'] ?? '', 'vV')),
+            $this->stripPreReleaseSuffix(ltrim($a['version'] ?? '', 'vV'))
+        ));
+
+        return array_slice($filtered, 0, $limit);
     }
 
     /**

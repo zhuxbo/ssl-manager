@@ -7,16 +7,36 @@ use Illuminate\Support\Facades\Config;
 class VersionManager
 {
     /**
+     * 从 config.json 读取版本配置（实时读取，避免缓存问题）
+     */
+    protected function getConfigJson(): array
+    {
+        $configPath = dirname(base_path()) . '/config.json';
+
+        if (file_exists($configPath)) {
+            $content = file_get_contents($configPath);
+            $config = json_decode($content, true);
+            if (json_last_error() === JSON_ERROR_NONE) {
+                return $config;
+            }
+        }
+
+        return [];
+    }
+
+    /**
      * 获取当前版本信息
      */
     public function getCurrentVersion(): array
     {
+        $configJson = $this->getConfigJson();
+
         return [
-            'version' => Config::get('version.version', '0.0.0'),
+            'version' => $configJson['version'] ?? Config::get('version.version', '0.0.0'),
             'name' => Config::get('version.name', 'SSL Manager'),
-            'build_time' => Config::get('version.build_time', ''),
+            'build_time' => $configJson['build_time'] ?? Config::get('version.build_time', ''),
             'build_commit' => Config::get('version.build_commit', ''),
-            'channel' => Config::get('version.channel', 'main'),
+            'channel' => $configJson['channel'] ?? Config::get('version.channel', 'main'),
         ];
     }
 
@@ -25,7 +45,9 @@ class VersionManager
      */
     public function getVersionString(): string
     {
-        return Config::get('version.version', '0.0.0');
+        $configJson = $this->getConfigJson();
+
+        return $configJson['version'] ?? Config::get('version.version', '0.0.0');
     }
 
     /**
@@ -33,7 +55,9 @@ class VersionManager
      */
     public function getChannel(): string
     {
-        return Config::get('version.channel', 'main');
+        $configJson = $this->getConfigJson();
+
+        return $configJson['channel'] ?? Config::get('version.channel', 'main');
     }
 
     /**

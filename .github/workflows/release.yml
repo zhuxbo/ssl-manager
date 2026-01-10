@@ -210,6 +210,16 @@ jobs:
             release/ssl-manager-*.zip
             release/checksums.txt
 
+      - name: Delete existing release
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Deleting existing release: $TAG"
+            gh release delete "$TAG" --yes
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
@@ -257,6 +267,16 @@ jobs:
           git push origin :refs/tags/latest 2>/dev/null || true
           git tag latest
           git push origin latest
+
+      - name: Delete existing latest release
+        if: steps.version.outputs.prerelease != 'true'
+        run: |
+          if gh release view "latest" >/dev/null 2>&1; then
+            echo "Deleting existing latest release"
+            gh release delete "latest" --yes
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Update latest release (stable)
         if: steps.version.outputs.prerelease != 'true'
