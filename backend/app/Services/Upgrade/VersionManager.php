@@ -45,18 +45,23 @@ class VersionManager
             return false;
         }
 
-        $configPath = base_path('config.json');
+        // config.json 在项目根目录（backend 的上级目录）
+        $configPath = dirname(base_path()) . '/config.json';
 
         if (! file_exists($configPath)) {
-            return false;
+            // 如果文件不存在，创建新的
+            $config = [
+                'version' => $this->getVersionString(),
+                'channel' => $channel,
+                'build_time' => Config::get('version.build_time', ''),
+            ];
+        } else {
+            $config = json_decode(file_get_contents($configPath), true);
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                return false;
+            }
+            $config['channel'] = $channel;
         }
-
-        $config = json_decode(file_get_contents($configPath), true);
-        if (json_last_error() !== JSON_ERROR_NONE) {
-            return false;
-        }
-
-        $config['channel'] = $channel;
 
         $result = file_put_contents(
             $configPath,

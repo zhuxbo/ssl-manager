@@ -92,7 +92,16 @@ jobs:
 
           echo "Creating Gitee release for $RELEASE_TAG..."
 
-          # 创建 release
+          # 先检查并删除现有 release（避免重复执行时附件重复）
+          EXISTING=$(curl -s "https://gitee.com/api/v5/repos/zhuxbo/cert-manager/releases/tags/$RELEASE_TAG?access_token=${{ secrets.GITEE_TOKEN }}")
+          EXISTING_ID=$(echo "$EXISTING" | jq -r '.id')
+          if [ "$EXISTING_ID" != "null" ] && [ -n "$EXISTING_ID" ]; then
+            echo "Deleting existing release: $EXISTING_ID"
+            curl -s -X DELETE "https://gitee.com/api/v5/repos/zhuxbo/cert-manager/releases/$EXISTING_ID?access_token=${{ secrets.GITEE_TOKEN }}"
+            sleep 2
+          fi
+
+          # 创建新 release
           RESPONSE=$(curl -s -X POST "https://gitee.com/api/v5/repos/zhuxbo/cert-manager/releases" \
             -H "Content-Type: application/json" \
             -d "{
@@ -108,25 +117,22 @@ jobs:
           RELEASE_ID=$(echo "$RESPONSE" | jq -r '.id')
 
           if [ "$RELEASE_ID" == "null" ] || [ -z "$RELEASE_ID" ]; then
-            echo "Failed to create release, trying to get existing one..."
-            RESPONSE=$(curl -s "https://gitee.com/api/v5/repos/zhuxbo/cert-manager/releases/tags/$RELEASE_TAG?access_token=${{ secrets.GITEE_TOKEN }}")
-            RELEASE_ID=$(echo "$RESPONSE" | jq -r '.id')
+            echo "Failed to create release"
+            exit 1
           fi
 
           echo "Release ID: $RELEASE_ID"
 
           # 上传附件
-          if [ "$RELEASE_ID" != "null" ] && [ -n "$RELEASE_ID" ]; then
-            for file in assets/*; do
-              if [ -f "$file" ]; then
-                echo "Uploading: $file"
-                curl -s -X POST "https://gitee.com/api/v5/repos/zhuxbo/cert-manager/releases/$RELEASE_ID/attach_files" \
-                  -H "Content-Type: multipart/form-data" \
-                  -F "access_token=${{ secrets.GITEE_TOKEN }}" \
-                  -F "file=@$file"
-              fi
-            done
-          fi
+          for file in assets/*; do
+            if [ -f "$file" ]; then
+              echo "Uploading: $file"
+              curl -s -X POST "https://gitee.com/api/v5/repos/zhuxbo/cert-manager/releases/$RELEASE_ID/attach_files" \
+                -H "Content-Type: multipart/form-data" \
+                -F "access_token=${{ secrets.GITEE_TOKEN }}" \
+                -F "file=@$file"
+            fi
+          done
 
       - name: Sync latest release (stable)
         if: steps.release_info.outputs.skip != 'true' && steps.release_info.outputs.prerelease == 'false'
