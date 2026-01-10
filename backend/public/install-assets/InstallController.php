@@ -456,9 +456,9 @@ class InstallController
 
         echo '<input type="hidden" name="action" value="install">';
         echo '<input type="hidden" name="install" value="1">';
-        echo '<button type="submit" id="install-button" class="btn" onclick="prepareAndSubmitInstall(this); return false;">立即安装</button>';
-        echo '</form>';
         echo '<div id="install-log-div" class="log" style="display:none; margin-top: 20px;"></div>';
+        echo '<button type="submit" id="install-button" class="btn" style="margin-top: 20px;" onclick="prepareAndSubmitInstall(this); return false;">立即安装</button>';
+        echo '</form>';
     }
 
     /**
