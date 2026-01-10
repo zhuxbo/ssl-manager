@@ -93,12 +93,15 @@ jobs:
           echo "Creating Gitee release for $RELEASE_TAG..."
 
           # 先检查并删除现有 release（避免重复执行时附件重复）
-          EXISTING=$(curl -s "https://gitee.com/api/v5/repos/zhuxbo/cert-manager/releases/tags/$RELEASE_TAG?access_token=${{ secrets.GITEE_TOKEN }}")
-          EXISTING_ID=$(echo "$EXISTING" | jq -r '.id')
-          if [ "$EXISTING_ID" != "null" ] && [ -n "$EXISTING_ID" ]; then
-            echo "Deleting existing release: $EXISTING_ID"
+          # 通过列表查找，因为 Gitee 的 /releases/tags/{tag} 接口可能不可靠
+          RELEASES=$(curl -s "https://gitee.com/api/v5/repos/zhuxbo/cert-manager/releases?access_token=${{ secrets.GITEE_TOKEN }}&per_page=100")
+          EXISTING_ID=$(echo "$RELEASES" | jq -r ".[] | select(.tag_name == \"$RELEASE_TAG\") | .id")
+          if [ -n "$EXISTING_ID" ] && [ "$EXISTING_ID" != "null" ]; then
+            echo "Deleting existing release: $EXISTING_ID (tag: $RELEASE_TAG)"
             curl -s -X DELETE "https://gitee.com/api/v5/repos/zhuxbo/cert-manager/releases/$EXISTING_ID?access_token=${{ secrets.GITEE_TOKEN }}"
             sleep 2
+          else
+            echo "No existing release found for tag: $RELEASE_TAG"
           fi
 
           # 创建新 release
@@ -159,12 +162,15 @@ jobs:
           RELEASE_TAG="latest"
           VERSION="${{ steps.release_info.outputs.tag }}"
 
-          # 先尝试删除现有的 latest release
-          EXISTING=$(curl -s "https://gitee.com/api/v5/repos/zhuxbo/cert-manager/releases/tags/latest?access_token=${{ secrets.GITEE_TOKEN }}")
-          EXISTING_ID=$(echo "$EXISTING" | jq -r '.id')
-          if [ "$EXISTING_ID" != "null" ] && [ -n "$EXISTING_ID" ]; then
+          # 先尝试删除现有的 latest release（通过列表查找）
+          RELEASES=$(curl -s "https://gitee.com/api/v5/repos/zhuxbo/cert-manager/releases?access_token=${{ secrets.GITEE_TOKEN }}&per_page=100")
+          EXISTING_ID=$(echo "$RELEASES" | jq -r '.[] | select(.tag_name == "latest") | .id')
+          if [ -n "$EXISTING_ID" ] && [ "$EXISTING_ID" != "null" ]; then
             echo "Deleting existing latest release: $EXISTING_ID"
             curl -s -X DELETE "https://gitee.com/api/v5/repos/zhuxbo/cert-manager/releases/$EXISTING_ID?access_token=${{ secrets.GITEE_TOKEN }}"
+            sleep 2
+          else
+            echo "No existing latest release found"
           fi
 
           # 创建新的 latest release
