@@ -8,6 +8,11 @@ on:
 permissions:
   contents: write
 
+# 并发控制：同一 tag 只允许一个 release 流程
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 env:
   NODE_OPTIONS: --max-old-space-size=4096
 
