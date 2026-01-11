@@ -280,7 +280,8 @@ download_upgrade_package() {
 
 # 创建备份
 create_backup() {
-    log_step "创建备份..."
+    # 日志输出到 stderr，避免被 $() 捕获
+    log_step "创建备份..." >&2
 
     local backup_dir="$INSTALL_DIR/storage/backups"
     local timestamp=$(get_timestamp)
@@ -289,7 +290,7 @@ create_backup() {
     mkdir -p "$backup_path/code"
 
     # 备份代码目录（排除 storage、vendor）
-    log_info "备份代码..."
+    log_info "备份代码..." >&2
     rsync -a --exclude='storage' --exclude='vendor' --exclude='node_modules' \
         "$INSTALL_DIR/backend/" "$backup_path/code/backend/" 2>/dev/null || \
         cp -r "$INSTALL_DIR/backend" "$backup_path/code/" 2>/dev/null || true
@@ -303,7 +304,8 @@ create_backup() {
     # 记录备份信息
     echo "{\"version\": \"$(get_current_version)\", \"timestamp\": \"$timestamp\"}" > "$backup_path/backup.json"
 
-    log_success "备份完成: $backup_path"
+    log_success "备份完成: $backup_path" >&2
+    # 只输出路径到 stdout，供调用者捕获
     echo "$backup_path"
 }
 
