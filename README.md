@@ -8,9 +8,13 @@ SSL 证书管理系统，支持多级代理、自动签发、在线升级。
 ## 安装
 
 ```bash
-# 自动检测环境（推荐）
 curl -fsSL https://gitee.com/zhuxbo/cert-manager/raw/main/deploy/install.sh | bash
+```
 
+<details>
+<summary>更多安装选项</summary>
+
+```bash
 # 指定部署方式
 curl ... | bash -s docker   # Docker 部署
 curl ... | bash -s bt       # 宝塔面板部署
@@ -27,13 +31,35 @@ curl ... | bash -s docker -v 0.0.4-beta      # Docker + 指定版本
 | `--version latest` | 最新稳定版（默认） |
 | `--version x.x.x` | 指定版本号 |
 
+</details>
+
 ## 升级
 
+### 在线升级（推荐）
+
+登录管理后台 → 系统设置 → 在线升级，可视化操作。
+
+### 脚本升级
+
 ```bash
-php artisan upgrade:check    # 检查更新
-php artisan upgrade:run      # 执行升级
-php artisan upgrade:rollback # 回滚
+curl -fsSL https://gitee.com/zhuxbo/cert-manager/raw/main/deploy/deploy.sh | bash -s upgrade
 ```
+
+<details>
+<summary>更多升级选项</summary>
+
+```bash
+# 脚本升级
+curl ... | bash -s upgrade              # 宝塔环境升级
+curl ... | bash -s upgrade docker       # Docker 环境升级
+
+# artisan 命令（需进入 backend 目录）
+php artisan upgrade:check       # 检查更新
+php artisan upgrade:run         # 执行升级
+php artisan upgrade:rollback    # 回滚
+```
+
+</details>
 
 ## 开发
 
