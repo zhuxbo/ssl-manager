@@ -111,7 +111,7 @@ return [
         // 不允许降级
         'allow_downgrade' => false,
 
-        // 要求逐版本升级（不能跳过中间版本）
-        'require_sequential' => true,
+        // 允许跨版本升级（全量替换方式）
+        'require_sequential' => false,
     ],
 ];

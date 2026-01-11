@@ -25,7 +25,7 @@ check_environment() {
         log_info "脚本部署仅支持宝塔面板环境"
         log_info "请选择以下方式之一："
         log_info "  1. 安装宝塔面板后重试: https://www.bt.cn/new/download.html"
-        log_info "  2. 使用 Docker 部署: ./deploy.sh docker"
+        log_info "  2. 使用 Docker 部署: ./install.sh docker"
         exit 1
     fi
 
@@ -124,11 +124,14 @@ select_install_dir() {
 download_application() {
     log_step "下载应用程序"
 
+    # 使用环境变量中的版本，默认为 latest
+    local version="${INSTALL_VERSION:-latest}"
+
     local temp_dir="/tmp/ssl-manager-download-$$"
     mkdir -p "$temp_dir"
 
     # 下载完整包
-    if ! download_and_extract_full "$temp_dir" "latest"; then
+    if ! download_and_extract_full "$temp_dir" "$version"; then
         log_error "下载失败"
         rm -rf "$temp_dir"
         exit 1
@@ -138,6 +141,11 @@ download_application() {
     local extract_dir="$temp_dir/ssl-manager"
     if [ ! -d "$extract_dir" ]; then
         extract_dir=$(find "$temp_dir" -maxdepth 1 -type d -name "ssl-manager*" | head -1)
+    fi
+
+    # 有时候完整包直接解压在根目录（full 目录）
+    if [ ! -d "$extract_dir" ]; then
+        extract_dir="$temp_dir/full"
     fi
 
     if [ ! -d "$extract_dir" ]; then
@@ -166,6 +174,29 @@ download_application() {
     if [ -d "$extract_dir/nginx" ]; then
         ensure_dir "$INSTALL_DIR/nginx"
         cp "$extract_dir/nginx"/*.conf "$INSTALL_DIR/nginx/" 2>/dev/null || true
+
+        # 替换 nginx 配置中的占位符
+        log_info "处理 nginx 配置..."
+        for conf_file in "$INSTALL_DIR/nginx"/*.conf; do
+            if [ -f "$conf_file" ]; then
+                sed -i "s|__PROJECT_ROOT__|$INSTALL_DIR|g" "$conf_file"
+            fi
+        done
+        log_success "nginx 配置已更新"
+    fi
+
+    # 替换 frontend/web 配置中的占位符
+    if [ -d "$INSTALL_DIR/frontend/web" ]; then
+        for conf_file in "$INSTALL_DIR/frontend/web"/*.conf; do
+            if [ -f "$conf_file" ]; then
+                sed -i "s|__PROJECT_ROOT__|$INSTALL_DIR|g" "$conf_file"
+            fi
+        done
+    fi
+
+    # 复制版本配置
+    if [ -f "$extract_dir/config.json" ]; then
+        cp "$extract_dir/config.json" "$INSTALL_DIR/"
     fi
 
     # 清理临时文件
@@ -191,7 +222,11 @@ install_composer_deps() {
     # 配置中国镜像
     if is_china_server; then
         log_info "配置 Composer 中国镜像..."
-        composer config -g repo.packagist composer https://mirrors.aliyun.com/composer/
+        # 使用腾讯云镜像（对 GitHub 包有更好的代理）
+        composer config -g repo.packagist composer https://mirrors.tencent.com/composer/
+        # 配置 GitHub 使用 OAuth 或增加超时（避免 GitHub 下载超时）
+        composer config -g process-timeout 600
+        composer config -g github-protocols https
     fi
 
     # 安装依赖
@@ -201,46 +236,24 @@ install_composer_deps() {
     log_success "Composer 依赖安装完成"
 }
 
-# 配置环境
-configure_environment() {
-    log_step "配置环境"
-
-    cd "$INSTALL_DIR/backend"
-
-    # 复制环境配置
-    if [ ! -f ".env" ]; then
-        if [ -f ".env.example" ]; then
-            cp .env.example .env
-        else
-            log_error "未找到 .env.example 文件"
-            exit 1
-        fi
-    fi
-
-    # 生成应用密钥
-    $PHP_CMD artisan key:generate --force
-
-    log_success "环境配置完成"
-}
-
 # 设置权限
 set_permissions() {
     log_step "设置文件权限"
 
     cd "$INSTALL_DIR"
 
-    # 设置所有者
-    chown -R www:www "$INSTALL_DIR"
+    # 设置所有者（排除 .user.ini，宝塔会锁定此文件）
+    find "$INSTALL_DIR" -not -name ".user.ini" -exec chown www:www {} \; 2>/dev/null || true
 
     # 设置目录权限
-    find "$INSTALL_DIR" -type d -exec chmod 755 {} \;
+    find "$INSTALL_DIR" -type d -exec chmod 755 {} \; 2>/dev/null || true
 
-    # 设置文件权限
-    find "$INSTALL_DIR" -type f -exec chmod 644 {} \;
+    # 设置文件权限（排除 .user.ini）
+    find "$INSTALL_DIR" -type f -not -name ".user.ini" -exec chmod 644 {} \; 2>/dev/null || true
 
     # 设置 storage 和 cache 目录权限
-    chmod -R 775 "$INSTALL_DIR/backend/storage"
-    chmod -R 775 "$INSTALL_DIR/backend/bootstrap/cache"
+    chmod -R 775 "$INSTALL_DIR/backend/storage" 2>/dev/null || true
+    chmod -R 775 "$INSTALL_DIR/backend/bootstrap/cache" 2>/dev/null || true
 
     log_success "权限设置完成"
 }
@@ -254,18 +267,12 @@ show_nginx_tips() {
     echo
     echo "1. 创建网站（如果尚未创建）"
     echo "   - 域名: 您的域名"
-    echo "   - 根目录: $INSTALL_DIR/backend/public"
+    echo "   - 网站目录: $INSTALL_DIR/backend"
+    echo "   - 运行目录: /public"
     echo "   - PHP版本: 8.${PHP_VERSION: -1}"
     echo
     echo "2. 在网站配置中添加以下内容（配置文件 → 自定义配置）:"
     echo "   include $INSTALL_DIR/nginx/manager.conf;"
-    echo
-    if [ -f "$INSTALL_DIR/nginx/manager.conf" ]; then
-        echo "3. 或者复制以下配置到网站配置中:"
-        echo "   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        cat "$INSTALL_DIR/nginx/manager.conf"
-        echo "   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    fi
     echo
 }
 
@@ -286,7 +293,7 @@ show_complete_info() {
     echo
     echo "队列配置（宝塔 → 计划任务 → 添加守护进程）:"
     echo "  名称: ssl-manager-queue"
-    echo "  命令: $PHP_CMD $INSTALL_DIR/backend/artisan queue:work --sleep=3 --tries=3"
+    echo "  命令: $PHP_CMD $INSTALL_DIR/backend/artisan queue:work --queue tasks,notifications --sleep=3 --tries=3 --max-time 3600"
     echo
     echo "定时任务（宝塔 → 计划任务 → 添加任务）:"
     echo "  执行周期: 每分钟"
@@ -315,9 +322,6 @@ main() {
 
     # 安装 Composer 依赖
     install_composer_deps
-
-    # 配置环境
-    configure_environment
 
     # 设置权限
     set_permissions

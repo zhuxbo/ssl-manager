@@ -8,6 +8,7 @@ import {
   getBackups,
   executeRollback,
   deleteBackup,
+  setChannel,
   type VersionInfo,
   type UpdateCheckResult,
   type ReleaseInfo,
@@ -23,7 +24,9 @@ import {
   ElProgress,
   ElEmpty,
   ElTooltip,
-  ElDivider
+  ElDivider,
+  ElSelect,
+  ElOption
 } from "element-plus";
 
 defineOptions({
@@ -73,6 +76,43 @@ const upgradeProgress = computed(() => {
   ).length;
   return Math.round((completed / upgradeSteps.value.length) * 100);
 });
+
+// 比较两个语义化版本
+// 返回: 1 if v1 > v2, 0 if v1 == v2, -1 if v1 < v2
+const compareVersions = (v1: string, v2: string): number => {
+  // 移除 v 前缀
+  const clean1 = v1.replace(/^v/i, "");
+  const clean2 = v2.replace(/^v/i, "");
+
+  // 分离版本号和预发布标识
+  const [version1, pre1] = clean1.split("-");
+  const [version2, pre2] = clean2.split("-");
+
+  // 比较主版本号
+  const parts1 = version1.split(".").map(Number);
+  const parts2 = version2.split(".").map(Number);
+
+  for (let i = 0; i < 3; i++) {
+    const p1 = parts1[i] || 0;
+    const p2 = parts2[i] || 0;
+    if (p1 > p2) return 1;
+    if (p1 < p2) return -1;
+  }
+
+  // 版本号相同时比较预发布标识
+  // 没有预发布标识的版本 > 有预发布标识的版本
+  if (!pre1 && pre2) return 1;
+  if (pre1 && !pre2) return -1;
+  if (pre1 && pre2) return pre1.localeCompare(pre2);
+
+  return 0;
+};
+
+// 检查目标版本是否比当前版本新
+const isNewerVersion = (target: string, current?: string): boolean => {
+  if (!current) return false;
+  return compareVersions(target, current) > 0;
+};
 
 // 格式化文件大小
 const formatBytes = (bytes: number): string => {
@@ -204,6 +244,31 @@ const closeUpgradeProgress = () => {
   upgradeSteps.value = [];
 };
 
+// 通道切换状态
+const changingChannel = ref(false);
+
+// 切换通道
+const handleChangeChannel = async (newChannel: "main" | "dev") => {
+  if (!currentVersion.value) return;
+
+  changingChannel.value = true;
+  try {
+    await setChannel(newChannel);
+    message(`已切换到${newChannel === "main" ? "稳定版" : "开发版"}通道`, {
+      type: "success"
+    });
+    // 重新加载版本信息和检查更新
+    await loadVersion();
+    updateInfo.value = null; // 清除旧的更新信息
+  } catch {
+    message("切换通道失败", { type: "error" });
+    // 恢复原来的值
+    await loadVersion();
+  } finally {
+    changingChannel.value = false;
+  }
+};
+
 onMounted(() => {
   loadVersion();
   loadBackups();
@@ -246,8 +311,16 @@ onMounted(() => {
             <div class="text-lg">{{ formatDate(currentVersion.build_time) }}</div>
           </div>
           <div>
-            <div class="text-gray-500 text-sm">发布通道</div>
-            <div class="text-lg">{{ currentVersion.channel }}</div>
+            <div class="text-gray-500 text-sm mb-1">发布通道</div>
+            <el-select
+              :model-value="currentVersion.channel"
+              size="small"
+              :loading="changingChannel"
+              @change="handleChangeChannel"
+            >
+              <el-option label="稳定版 (main)" value="main" />
+              <el-option label="开发版 (dev)" value="dev" />
+            </el-select>
           </div>
         </div>
       </div>
@@ -371,7 +444,7 @@ onMounted(() => {
               </div>
             </div>
             <el-tooltip
-              v-if="currentVersion?.version !== release.version"
+              v-if="isNewerVersion(release.version, currentVersion?.version)"
               content="升级到此版本"
               placement="top"
             >

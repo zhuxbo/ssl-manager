@@ -192,12 +192,14 @@ class ReleaseClient
         $version = $release['version'] ?? '';
         $tagName = $release['tag_name'] ?? "v$version";
 
-        // 尝试从 assets 中获取文件名
+        // 尝试从 assets 中获取文件名和 URL
         $filename = null;
+        $assetUrl = null;
         foreach ($release['assets'] ?? [] as $asset) {
             $name = $asset['name'] ?? '';
             if (str_contains($name, 'upgrade') && str_ends_with($name, '.zip')) {
                 $filename = $name;
+                $assetUrl = $asset['browser_download_url'] ?? null;
                 break;
             }
         }
@@ -205,6 +207,12 @@ class ReleaseClient
         // 如果没有找到 assets，构造标准文件名
         if (! $filename) {
             $filename = "ssl-manager-upgrade-$version.zip";
+        }
+
+        // local provider 直接使用 assets 中的 URL（已包含完整路径）
+        if ($this->provider === 'local' && $assetUrl) {
+            Log::info("Local provider 直接下载: $assetUrl");
+            return $this->downloadPackage($assetUrl, $savePath);
         }
 
         return $this->downloadPackageWithFallback($filename, $tagName, $savePath);
@@ -218,12 +226,14 @@ class ReleaseClient
         $version = $release['version'] ?? '';
         $tagName = $release['tag_name'] ?? "v$version";
 
-        // 尝试从 assets 中获取文件名
+        // 尝试从 assets 中获取文件名和 URL
         $filename = null;
+        $assetUrl = null;
         foreach ($release['assets'] ?? [] as $asset) {
             $name = $asset['name'] ?? '';
             if (str_contains($name, 'full') && str_ends_with($name, '.zip')) {
                 $filename = $name;
+                $assetUrl = $asset['browser_download_url'] ?? null;
                 break;
             }
         }
@@ -231,6 +241,12 @@ class ReleaseClient
         // 如果没有找到 assets，构造标准文件名
         if (! $filename) {
             $filename = "ssl-manager-full-$version.zip";
+        }
+
+        // local provider 直接使用 assets 中的 URL（已包含完整路径）
+        if ($this->provider === 'local' && $assetUrl) {
+            Log::info("Local provider 直接下载: $assetUrl");
+            return $this->downloadPackage($assetUrl, $savePath);
         }
 
         return $this->downloadPackageWithFallback($filename, $tagName, $savePath);
@@ -379,13 +395,16 @@ class ReleaseClient
             $tagName = $release['tag_name'] ?? '';
             if ($this->matchChannel($tagName, $channel)) {
                 $filtered[] = $this->normalizeRelease($release);
-                if (count($filtered) >= $limit) {
-                    break;
-                }
             }
         }
 
-        return $filtered;
+        // 按版本号降序排序
+        usort($filtered, fn ($a, $b) => version_compare(
+            $this->stripPreReleaseSuffix(ltrim($b['version'] ?? '', 'vV')),
+            $this->stripPreReleaseSuffix(ltrim($a['version'] ?? '', 'vV'))
+        ));
+
+        return array_slice($filtered, 0, $limit);
     }
 
     /**
@@ -467,13 +486,16 @@ class ReleaseClient
             $tagName = $release['tag_name'] ?? '';
             if ($this->matchChannel($tagName, $channel)) {
                 $filtered[] = $this->normalizeRelease($release);
-                if (count($filtered) >= $limit) {
-                    break;
-                }
             }
         }
 
-        return $filtered;
+        // 按版本号降序排序
+        usort($filtered, fn ($a, $b) => version_compare(
+            $this->stripPreReleaseSuffix(ltrim($b['version'] ?? '', 'vV')),
+            $this->stripPreReleaseSuffix(ltrim($a['version'] ?? '', 'vV'))
+        ));
+
+        return array_slice($filtered, 0, $limit);
     }
 
     /**

@@ -8,25 +8,75 @@ SSL 证书管理系统，支持多级代理、自动签发、在线升级。
 ## 安装
 
 ```bash
-# 自动检测环境（推荐）
 curl -fsSL https://gitee.com/zhuxbo/cert-manager/raw/main/deploy/install.sh | bash
+```
 
+<details>
+<summary>更多安装选项</summary>
+
+```bash
 # 指定部署方式
 curl ... | bash -s docker   # Docker 部署
 curl ... | bash -s bt       # 宝塔面板部署
+
+# 指定版本安装
+curl ... | bash -s -- --version 0.0.4-beta   # 安装指定版本
+curl ... | bash -s docker -v 0.0.4-beta      # Docker + 指定版本
 ```
 
-| 方式 | 说明 |
+| 参数 | 说明 |
 |------|------|
-| Docker | 推荐，7 步交互式配置，自动安装 Docker |
-| 宝塔 | 使用宝塔管理 PHP/MySQL/Nginx |
+| `docker` | Docker 部署（推荐，7 步交互式配置） |
+| `bt` | 宝塔面板部署 |
+| `--version latest` | 最新稳定版（默认） |
+| `--version x.x.x` | 指定版本号 |
+
+</details>
 
 ## 升级
 
+### 在线升级（推荐）
+
+登录管理后台 → 系统设置 → 在线升级，可视化操作。
+
+### 脚本升级
+
 ```bash
-php artisan upgrade:check    # 检查更新
-php artisan upgrade:run      # 执行升级
-php artisan upgrade:rollback # 回滚
+curl -fsSL https://gitee.com/zhuxbo/cert-manager/raw/main/deploy/upgrade.sh | bash
+```
+
+<details>
+<summary>更多升级选项</summary>
+
+```bash
+# 脚本升级
+curl ... | bash                         # 升级到最新版
+curl ... | bash -s -- --version 1.0.0   # 升级到指定版本
+curl ... | bash -s -- --dir /path/to/app  # 指定安装目录
+curl ... | bash -s -- rollback          # 回滚到上一版本
+
+# artisan 命令（需进入 backend 目录）
+php artisan upgrade:check       # 检查更新
+php artisan upgrade:run         # 执行升级
+php artisan upgrade:rollback    # 回滚
+```
+
+| 参数 | 说明 |
+|------|------|
+| `--version x.x.x` | 升级到指定版本 |
+| `--dir PATH` | 指定安装目录（自动检测失败时使用） |
+| `-y, --yes` | 自动确认，非交互模式 |
+| `rollback` | 回滚到上一版本 |
+
+</details>
+
+## 卸载
+
+Docker 部署卸载：
+
+```bash
+cd /opt/ssl-manager  # 进入安装目录
+docker-compose down -v  # 停止并删除容器和数据卷
 ```
 
 ## 开发

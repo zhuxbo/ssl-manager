@@ -50,6 +50,7 @@
       "DATABASE_SYNC.md",
       "DOCKER_INSTALL.MD",
       "JDK_INSTALL.md",
+      "JRE_INSTALL.md",
       "Dockerfile",
       "Dockerfile.nginx",
       "docker-compose.yml",

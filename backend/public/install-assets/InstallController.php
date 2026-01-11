@@ -8,7 +8,6 @@ use Install\Connector\RedisConnector;
 use Install\DTO\InstallConfig;
 use Install\Installer\Cleaner;
 use Install\Installer\InstallExecutor;
-use Install\View\ProgressReporter;
 use Install\View\Renderer;
 
 /**
@@ -456,9 +455,9 @@ class InstallController
 
         echo '<input type="hidden" name="action" value="install">';
         echo '<input type="hidden" name="install" value="1">';
-        echo '<button type="submit" id="install-button" class="btn" onclick="prepareAndSubmitInstall(this); return false;">立即安装</button>';
-        echo '</form>';
         echo '<div id="install-log-div" class="log" style="display:none; margin-top: 20px;"></div>';
+        echo '<button type="submit" id="install-button" class="btn" style="margin-top: 20px;" onclick="prepareAndSubmitInstall(this); return false;">立即安装</button>';
+        echo '</form>';
     }
 
     /**
@@ -468,8 +467,8 @@ class InstallController
     {
         echo '<div id="install-log-div" class="log">正在执行安装...</div>';
 
-        $reporter = new ProgressReporter(8);
-        $executor = new InstallExecutor($this->projectRoot, $reporter);
+        $executor = new InstallExecutor($this->projectRoot);
+        $reporter = $executor->getReporter();
 
         $reporter->init();
         $result = $executor->execute($this->config);

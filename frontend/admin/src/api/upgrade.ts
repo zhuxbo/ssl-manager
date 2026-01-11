@@ -131,3 +131,14 @@ export function deleteBackup(
     { data: { backup_id: backupId } }
   );
 }
+
+// 设置发布通道
+export function setChannel(
+  channel: "main" | "dev"
+): Promise<BaseResponse<{ channel: string; message: string }>> {
+  return http.request<BaseResponse<{ channel: string; message: string }>>(
+    "post",
+    "/upgrade/channel",
+    { data: { channel } }
+  );
+}

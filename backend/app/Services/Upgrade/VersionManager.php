@@ -7,16 +7,58 @@ use Illuminate\Support\Facades\Config;
 class VersionManager
 {
     /**
+     * 获取 config.json 的路径
+     * 优先使用项目根目录，如果不可用则使用 backend 目录
+     */
+    protected function getConfigPath(): string
+    {
+        // 优先使用项目根目录（backend 的上级目录）
+        $rootPath = dirname(base_path()) . '/config.json';
+        if (file_exists($rootPath) || is_writable(dirname(base_path()))) {
+            return $rootPath;
+        }
+
+        // 回退到 backend 目录（Docker 环境）
+        return base_path('config.json');
+    }
+
+    /**
+     * 从 config.json 读取版本配置（实时读取，避免缓存问题）
+     */
+    protected function getConfigJson(): array
+    {
+        // 尝试两个位置
+        $paths = [
+            dirname(base_path()) . '/config.json',
+            base_path('config.json'),
+        ];
+
+        foreach ($paths as $configPath) {
+            if (file_exists($configPath)) {
+                $content = file_get_contents($configPath);
+                $config = json_decode($content, true);
+                if (json_last_error() === JSON_ERROR_NONE) {
+                    return $config;
+                }
+            }
+        }
+
+        return [];
+    }
+
+    /**
      * 获取当前版本信息
      */
     public function getCurrentVersion(): array
     {
+        $configJson = $this->getConfigJson();
+
         return [
-            'version' => Config::get('version.version', '0.0.0'),
+            'version' => $configJson['version'] ?? Config::get('version.version', '0.0.0'),
             'name' => Config::get('version.name', 'SSL Manager'),
-            'build_time' => Config::get('version.build_time', ''),
+            'build_time' => $configJson['build_time'] ?? Config::get('version.build_time', ''),
             'build_commit' => Config::get('version.build_commit', ''),
-            'channel' => Config::get('version.channel', 'main'),
+            'channel' => $configJson['channel'] ?? Config::get('version.channel', 'main'),
         ];
     }
 
@@ -25,7 +67,9 @@ class VersionManager
      */
     public function getVersionString(): string
     {
-        return Config::get('version.version', '0.0.0');
+        $configJson = $this->getConfigJson();
+
+        return $configJson['version'] ?? Config::get('version.version', '0.0.0');
     }
 
     /**
@@ -33,7 +77,47 @@ class VersionManager
      */
     public function getChannel(): string
     {
-        return Config::get('version.channel', 'main');
+        $configJson = $this->getConfigJson();
+
+        return $configJson['channel'] ?? Config::get('version.channel', 'main');
+    }
+
+    /**
+     * 设置发布通道
+     */
+    public function setChannel(string $channel): bool
+    {
+        if (! in_array($channel, ['main', 'dev'])) {
+            return false;
+        }
+
+        // 使用智能路径检测
+        $configPath = $this->getConfigPath();
+        $existingConfig = $this->getConfigJson();
+
+        if (empty($existingConfig)) {
+            // 如果没有现有配置，创建新的
+            $config = [
+                'version' => $this->getVersionString(),
+                'channel' => $channel,
+                'build_time' => Config::get('version.build_time', ''),
+            ];
+        } else {
+            $config = $existingConfig;
+            $config['channel'] = $channel;
+        }
+
+        $result = file_put_contents(
+            $configPath,
+            json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)
+        );
+
+        if ($result !== false) {
+            // 清除配置缓存
+            Config::set('version.channel', $channel);
+        }
+
+        return $result !== false;
     }
 
     /**

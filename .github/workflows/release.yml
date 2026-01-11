@@ -8,6 +8,11 @@ on:
 permissions:
   contents: write
 
+# 并发控制：同一 tag 只允许一个 release 流程
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 env:
   NODE_OPTIONS: --max-old-space-size=4096
 
@@ -88,15 +93,43 @@ jobs:
         run: |
           mkdir -p release/ssl-manager
 
-          # 复制后端
-          cp -r backend release/ssl-manager/
-          rm -rf release/ssl-manager/backend/vendor
-          rm -rf release/ssl-manager/backend/storage/logs/*
-          rm -rf release/ssl-manager/backend/storage/framework/cache/*
-          rm -rf release/ssl-manager/backend/storage/framework/sessions/*
-          rm -rf release/ssl-manager/backend/storage/framework/views/*
-          rm -rf release/ssl-manager/backend/bootstrap/cache/*
-          rm -f release/ssl-manager/backend/.env
+          # 后端：使用 rsync 排除不需要的文件
+          rsync -a \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='.gitignore' \
+            --exclude='.gitattributes' \
+            --exclude='.editorconfig' \
+            --exclude='.pint.json' \
+            --exclude='.idea' \
+            --exclude='.vscode' \
+            --exclude='.cursor' \
+            --exclude='.env' \
+            --exclude='.env.*' \
+            --exclude='.phpunit.cache' \
+            --exclude='.phpunit.result.cache' \
+            --exclude='phpunit.xml' \
+            --exclude='phpstan.neon' \
+            --exclude='tests' \
+            --exclude='vendor' \
+            --exclude='storage/logs/*' \
+            --exclude='storage/framework/cache/*' \
+            --exclude='storage/framework/sessions/*' \
+            --exclude='storage/framework/views/*' \
+            --exclude='storage/debugbar' \
+            --exclude='bootstrap/cache/*' \
+            --exclude='*.md' \
+            --exclude='LICENSE' \
+            backend/ release/ssl-manager/backend/
+
+          # 创建 .ssl-manager 标记文件
+          echo "ssl-manager" > release/ssl-manager/backend/.ssl-manager
+
+          # 保留必要的空目录结构
+          mkdir -p release/ssl-manager/backend/storage/{app/public,framework/{cache,sessions,views},logs}
+          mkdir -p release/ssl-manager/backend/bootstrap/cache
+          touch release/ssl-manager/backend/storage/.gitkeep
+          touch release/ssl-manager/backend/bootstrap/cache/.gitkeep
 
           # 复制前端构建产物
           mkdir -p release/ssl-manager/frontend
@@ -104,9 +137,8 @@ jobs:
           cp -r frontend/user/dist release/ssl-manager/frontend/user
           cp -r frontend/easy release/ssl-manager/frontend/easy
 
-          # 复制 web.conf 到 frontend/web（manager.conf 引用此路径）
-          mkdir -p release/ssl-manager/frontend/web
-          cp build/web/web.conf release/ssl-manager/frontend/web/
+          # 复制 build/web 整个目录到 frontend/web（包含 web.conf、help、public）
+          cp -r build/web release/ssl-manager/frontend/
 
           # 复制配置文件（不含 deploy，deploy 单独打包）
           cp -r build/nginx release/ssl-manager/ 2>/dev/null || true
@@ -147,6 +179,8 @@ jobs:
           rm -rf upgrade/backend/.env*
           rm -rf upgrade/backend/storage
           rm -rf upgrade/backend/bootstrap/cache/*
+          # 升级包排除 web 目录（用户可能已定制）
+          rm -rf upgrade/frontend/web
           mkdir -p upgrade/backend/vendor
           touch upgrade/backend/vendor/.gitkeep
           mkdir -p upgrade/backend/storage/{app/public,framework/{cache,sessions,views},logs}
@@ -157,20 +191,27 @@ jobs:
         run: |
           cd release
           mkdir -p script-deploy/scripts
-          # 直接从源代码复制（完整包不含 deploy）
+          # 复制部署脚本
+          cp ../deploy/install.sh script-deploy/
+          cp ../deploy/upgrade.sh script-deploy/
           cp -r ../deploy/scripts/*.sh script-deploy/scripts/
-          cp ../deploy/deploy.sh script-deploy/
-          cp ../deploy/nginx/*.conf script-deploy/ 2>/dev/null || true
           cat > script-deploy/README.md <<EOF
           # SSL Manager 脚本部署包
 
           版本: ${{ steps.version.outputs.version }}
 
-          ## 使用方法
+          ## 安装
 
           \`\`\`bash
-          chmod +x deploy.sh
-          ./deploy.sh
+          chmod +x install.sh
+          ./install.sh
+          \`\`\`
+
+          ## 升级
+
+          \`\`\`bash
+          chmod +x upgrade.sh
+          ./upgrade.sh
           \`\`\`
           EOF
           zip -rq ssl-manager-script-${{ steps.version.outputs.version }}.zip script-deploy
@@ -210,6 +251,16 @@ jobs:
             release/ssl-manager-*.zip
             release/checksums.txt
 
+      - name: Delete existing release
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Deleting existing release: $TAG"
+            gh release delete "$TAG" --yes
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
@@ -241,14 +292,14 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Create latest packages
+      - name: Create latest packages (stable)
         if: steps.version.outputs.prerelease != 'true'
         run: |
           cd release
           cp ssl-manager-full-${{ steps.version.outputs.version }}.zip ssl-manager-full-latest.zip
           cp ssl-manager-script-${{ steps.version.outputs.version }}.zip ssl-manager-script-latest.zip
 
-      - name: Update latest tag
+      - name: Update latest tag (stable)
         if: steps.version.outputs.prerelease != 'true'
         run: |
           git config user.name "GitHub Actions"
@@ -258,7 +309,17 @@ jobs:
           git tag latest
           git push origin latest
 
-      - name: Update latest release
+      - name: Delete existing latest release
+        if: steps.version.outputs.prerelease != 'true'
+        run: |
+          if gh release view "latest" >/dev/null 2>&1; then
+            echo "Deleting existing latest release"
+            gh release delete "latest" --yes
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update latest release (stable)
         if: steps.version.outputs.prerelease != 'true'
         uses: softprops/action-gh-release@v1
         with:

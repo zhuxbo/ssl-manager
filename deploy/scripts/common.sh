@@ -151,13 +151,14 @@ test_redis_connection() {
 }
 
 # 检测服务器是否在中国大陆
+# 多层检测，确保准确性
 is_china_server() {
     # 如果环境变量已设置，直接使用
     if [ -n "$FORCE_CHINA_MIRROR" ]; then
         [ "$FORCE_CHINA_MIRROR" = "1" ] && return 0 || return 1
     fi
 
-    # 检查云服务商元数据 - 阿里云
+    # 1. 检查云服务商元数据 - 阿里云
     local aliyun_region=$(timeout 1 curl -s "http://100.100.100.200/latest/meta-data/region-id" 2>/dev/null || echo "")
     if [ -n "$aliyun_region" ] && [[ "$aliyun_region" =~ ^cn- ]]; then
         return 0
@@ -178,10 +179,37 @@ is_china_server() {
         return 0
     fi
 
-    # Fallback: 检测 GitHub API 是否可达（3秒超时）
-    # 如果不可达，说明可能在国内网络环境
-    if ! timeout 3 curl -s --head "https://api.github.com" >/dev/null 2>&1; then
+    # 2. 检测 baidu.com 可达性 + Google 不可达
+    local baidu_ok=false
+    if timeout 2 curl -s --head "https://www.baidu.com" >/dev/null 2>&1; then
+        baidu_ok=true
+    fi
+
+    if [ "$baidu_ok" = true ]; then
+        # Google 在国内通常不可访问，如果不可达则认为是国内网络
+        if ! timeout 3 curl -s --head "https://www.google.com" >/dev/null 2>&1; then
+            return 0
+        fi
+    fi
+
+    # 3. IP 归属地检测（备选方案）
+    local country=""
+    # 尝试 ip.sb
+    country=$(timeout 3 curl -s "https://api.ip.sb/geoip" 2>/dev/null | grep -o '"country_code":"[^"]*"' | cut -d'"' -f4 || echo "")
+    if [ -z "$country" ]; then
+        # 尝试 ipinfo.io
+        country=$(timeout 3 curl -s "https://ipinfo.io/country" 2>/dev/null | tr -d '\n' || echo "")
+    fi
+
+    if [ "$country" = "CN" ]; then
         return 0
+    fi
+
+    # 4. 最终判断：如果 baidu 可达但 Google 不可达，认为是国内
+    if [ "$baidu_ok" = true ]; then
+        if ! timeout 3 curl -s --head "https://www.google.com" >/dev/null 2>&1; then
+            return 0
+        fi
     fi
 
     # 默认不使用中国镜像
@@ -342,33 +370,67 @@ file_sha256() {
 # 下载函数（优先 Gitee，回退 GitHub）
 # ========================================
 
-# 下载 Release 包
-# 用法: download_release_file <filename> <save_path> [tag]
+# 解析版本标识
+# 用法: resolve_version_tag <version>
+# 输出: 解析后的 tag 名称
+resolve_version_tag() {
+    local version="$1"
+
+    case "$version" in
+        latest)
+            echo "latest"  # main 分支的 latest tag
+            ;;
+        dev)
+            echo "dev-latest"  # dev 分支的 latest tag
+            ;;
+        *)
+            # 指定版本号，返回原始值
+            echo "$version"
+            ;;
+    esac
+}
+
+# 下载 Release 包（支持版本回退）
+# 用法: download_release_file <filename> <save_path> [version]
+# version: latest（默认）、dev、或具体版本号如 1.0.0
 download_release_file() {
     local filename="$1"
     local save_path="$2"
-    local tag="${3:-latest}"
+    local version="${3:-latest}"
 
-    local gitee_url="$GITEE_BASE_URL/releases/download/$tag/$filename"
-    local github_url="$GITHUB_BASE_URL/releases/download/$tag/$filename"
+    # 处理特殊版本标识
+    local tag=$(resolve_version_tag "$version")
 
-    log_info "下载: $filename (版本: $tag)"
+    # 构建 URL 列表
+    local urls=()
 
-    # 优先尝试 Gitee
-    log_info "尝试从 Gitee 下载..."
-    if curl -fsSL --connect-timeout 10 --max-time 300 -o "$save_path" "$gitee_url" 2>/dev/null; then
-        log_success "Gitee 下载成功"
-        return 0
+    if [[ "$tag" == "dev-latest" ]]; then
+        # 开发版只尝试 dev 分支
+        urls+=("$GITEE_BASE_URL/releases/download/dev-latest/$filename")
+        urls+=("$GITHUB_BASE_URL/releases/download/dev-latest/$filename")
+    elif [[ "$tag" == "latest" ]]; then
+        # 稳定版只尝试 main 分支
+        urls+=("$GITEE_BASE_URL/releases/download/latest/$filename")
+        urls+=("$GITHUB_BASE_URL/releases/download/latest/$filename")
+    else
+        # 指定版本：先尝试 main 分支 tag (v1.0.0)，再尝试 dev 分支 tag (dev-v1.0.0)
+        urls+=("$GITEE_BASE_URL/releases/download/v$tag/$filename")
+        urls+=("$GITHUB_BASE_URL/releases/download/v$tag/$filename")
+        urls+=("$GITEE_BASE_URL/releases/download/dev-v$tag/$filename")
+        urls+=("$GITHUB_BASE_URL/releases/download/dev-v$tag/$filename")
     fi
 
-    # 回退到 GitHub
-    log_warning "Gitee 下载失败，尝试 GitHub..."
-    if curl -fsSL --connect-timeout 10 --max-time 300 -o "$save_path" "$github_url" 2>/dev/null; then
-        log_success "GitHub 下载成功"
-        return 0
-    fi
+    log_info "下载: $filename (版本: $version)"
 
-    log_error "下载失败: $filename"
+    for url in "${urls[@]}"; do
+        log_info "尝试: $url"
+        if curl -fsSL --connect-timeout 10 --max-time 300 -o "$save_path" "$url" 2>/dev/null; then
+            log_success "下载成功"
+            return 0
+        fi
+    done
+
+    log_error "下载失败: $filename (版本: $version)"
     return 1
 }
 
@@ -396,13 +458,22 @@ download_raw_file() {
 }
 
 # 下载脚本包并解压
-# 用法: download_and_extract_scripts <dest_dir> [tag]
+# 用法: download_and_extract_scripts <dest_dir> [version]
+# version: latest（默认）、dev、或具体版本号
 download_and_extract_scripts() {
     local dest_dir="$1"
-    local tag="${2:-latest}"
+    local version="${2:-latest}"
     local temp_file="/tmp/ssl-manager-script-$$.zip"
 
-    if download_release_file "ssl-manager-script-$tag.zip" "$temp_file" "$tag"; then
+    # 根据版本确定文件名
+    local filename
+    case "$version" in
+        latest) filename="ssl-manager-script-latest.zip" ;;
+        dev) filename="ssl-manager-script-latest.zip" ;;  # dev 分支也使用 latest 文件名
+        *) filename="ssl-manager-script-$version.zip" ;;
+    esac
+
+    if download_release_file "$filename" "$temp_file" "$version"; then
         ensure_dir "$dest_dir"
         unzip -qo "$temp_file" -d "$dest_dir"
         rm -f "$temp_file"
@@ -413,13 +484,22 @@ download_and_extract_scripts() {
 }
 
 # 下载完整程序包并解压
-# 用法: download_and_extract_full <dest_dir> [tag]
+# 用法: download_and_extract_full <dest_dir> [version]
+# version: latest（默认）、dev、或具体版本号
 download_and_extract_full() {
     local dest_dir="$1"
-    local tag="${2:-latest}"
+    local version="${2:-latest}"
     local temp_file="/tmp/ssl-manager-full-$$.zip"
 
-    if download_release_file "ssl-manager-full-$tag.zip" "$temp_file" "$tag"; then
+    # 根据版本确定文件名
+    local filename
+    case "$version" in
+        latest) filename="ssl-manager-full-latest.zip" ;;
+        dev) filename="ssl-manager-full-latest.zip" ;;  # dev 分支也使用 latest 文件名
+        *) filename="ssl-manager-full-$version.zip" ;;
+    esac
+
+    if download_release_file "$filename" "$temp_file" "$version"; then
         ensure_dir "$dest_dir"
         unzip -qo "$temp_file" -d "$dest_dir"
         rm -f "$temp_file"
@@ -509,7 +589,7 @@ get_composer_mirror_cmd() {
     fi
 
     if [ "$region" = "china" ]; then
-        echo "composer config -g repo.packagist composer https://mirrors.aliyun.com/composer/"
+        echo "composer config -g repo.packagist composer https://mirrors.tencent.com/composer/ && composer config -g process-timeout 600"
     else
         echo "# Using default Composer mirrors"
     fi

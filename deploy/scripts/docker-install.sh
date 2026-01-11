@@ -472,11 +472,14 @@ create_directories() {
 download_application() {
     log_info "下载应用程序..."
 
+    # 使用环境变量中的版本，默认为 latest
+    local version="${INSTALL_VERSION:-latest}"
+
     local temp_dir="/tmp/ssl-manager-download-$$"
     mkdir -p "$temp_dir"
 
     # 下载完整包
-    if ! download_and_extract_full "$temp_dir" "latest"; then
+    if ! download_and_extract_full "$temp_dir" "$version"; then
         log_error "下载失败"
         rm -rf "$temp_dir"
         exit 1
@@ -486,6 +489,11 @@ download_application() {
     local extract_dir="$temp_dir/ssl-manager"
     if [ ! -d "$extract_dir" ]; then
         extract_dir=$(find "$temp_dir" -maxdepth 1 -type d -name "ssl-manager*" | head -1)
+    fi
+
+    # 有时候完整包直接解压在根目录（full 目录）
+    if [ ! -d "$extract_dir" ]; then
+        extract_dir="$temp_dir/full"
     fi
 
     if [ ! -d "$extract_dir" ]; then
@@ -1050,7 +1058,7 @@ init_application() {
     # 检测并配置镜像
     if is_china_server; then
         log_info "配置 Composer 中国镜像..."
-        $compose_cmd exec -T -u root php composer config repo.packagist composer https://mirrors.aliyun.com/composer/ --working-dir=/var/www/html 2>&1 || true
+        $compose_cmd exec -T -u root php composer config repo.packagist composer https://mirrors.tencent.com/composer/ --working-dir=/var/www/html 2>&1 || true
     fi
     $compose_cmd exec -T -u root php composer install --no-dev --optimize-autoloader --working-dir=/var/www/html 2>&1 || true
 
