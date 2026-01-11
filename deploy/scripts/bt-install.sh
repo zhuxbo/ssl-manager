@@ -185,6 +185,15 @@ download_application() {
         log_success "nginx 配置已更新"
     fi
 
+    # 替换 frontend/web 配置中的占位符
+    if [ -d "$INSTALL_DIR/frontend/web" ]; then
+        for conf_file in "$INSTALL_DIR/frontend/web"/*.conf; do
+            if [ -f "$conf_file" ]; then
+                sed -i "s|__PROJECT_ROOT__|$INSTALL_DIR|g" "$conf_file"
+            fi
+        done
+    fi
+
     # 复制版本配置
     if [ -f "$extract_dir/config.json" ]; then
         cp "$extract_dir/config.json" "$INSTALL_DIR/"

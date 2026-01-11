@@ -104,9 +104,8 @@ jobs:
           cp -r frontend/user/dist release/ssl-manager/frontend/user
           cp -r frontend/easy release/ssl-manager/frontend/easy
 
-          # 复制 web.conf 到 frontend/web（manager.conf 引用此路径）
-          mkdir -p release/ssl-manager/frontend/web
-          cp build/web/web.conf release/ssl-manager/frontend/web/
+          # 复制 build/web 整个目录到 frontend/web（包含 web.conf、help、public）
+          cp -r build/web release/ssl-manager/frontend/
 
           # 复制配置文件（不含 deploy，deploy 单独打包）
           cp -r build/nginx release/ssl-manager/ 2>/dev/null || true
@@ -147,6 +146,8 @@ jobs:
           rm -rf upgrade/backend/.env*
           rm -rf upgrade/backend/storage
           rm -rf upgrade/backend/bootstrap/cache/*
+          # 升级包排除 web 目录（用户可能已定制）
+          rm -rf upgrade/frontend/web
           mkdir -p upgrade/backend/vendor
           touch upgrade/backend/vendor/.gitkeep
           mkdir -p upgrade/backend/storage/{app/public,framework/{cache,sessions,views},logs}
