@@ -158,20 +158,27 @@ jobs:
         run: |
           cd release
           mkdir -p script-deploy/scripts
-          # 直接从源代码复制（完整包不含 deploy）
+          # 复制部署脚本
+          cp ../deploy/install.sh script-deploy/
+          cp ../deploy/upgrade.sh script-deploy/
           cp -r ../deploy/scripts/*.sh script-deploy/scripts/
-          cp ../deploy/deploy.sh script-deploy/
-          cp ../deploy/nginx/*.conf script-deploy/ 2>/dev/null || true
           cat > script-deploy/README.md <<EOF
           # SSL Manager 脚本部署包
 
           版本: ${{ steps.version.outputs.version }}
 
-          ## 使用方法
+          ## 安装
 
           \`\`\`bash
-          chmod +x deploy.sh
-          ./deploy.sh
+          chmod +x install.sh
+          ./install.sh
+          \`\`\`
+
+          ## 升级
+
+          \`\`\`bash
+          chmod +x upgrade.sh
+          ./upgrade.sh
           \`\`\`
           EOF
           zip -rq ssl-manager-script-${{ steps.version.outputs.version }}.zip script-deploy

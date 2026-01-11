@@ -25,7 +25,7 @@ check_environment() {
         log_info "脚本部署仅支持宝塔面板环境"
         log_info "请选择以下方式之一："
         log_info "  1. 安装宝塔面板后重试: https://www.bt.cn/new/download.html"
-        log_info "  2. 使用 Docker 部署: ./deploy.sh docker"
+        log_info "  2. 使用 Docker 部署: ./install.sh docker"
         exit 1
     fi
 

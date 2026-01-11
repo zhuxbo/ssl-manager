@@ -291,7 +291,8 @@ if [ -d "$SCRIPT_DIR_SRC" ]; then
 
     # 复制脚本文件
     cp "$SCRIPT_DIR_SRC/scripts/"*.sh "$SCRIPT_PKG_DIR/scripts/" 2>/dev/null || true
-    cp "$SCRIPT_DIR_SRC/deploy.sh" "$SCRIPT_PKG_DIR/" 2>/dev/null || true
+    cp "$SCRIPT_DIR_SRC/install.sh" "$SCRIPT_PKG_DIR/" 2>/dev/null || true
+    cp "$SCRIPT_DIR_SRC/upgrade.sh" "$SCRIPT_PKG_DIR/" 2>/dev/null || true
 
     # nginx 配置已统一打包在完整包中（build/nginx），脚本包不再单独包含
 
@@ -302,26 +303,28 @@ if [ -d "$SCRIPT_DIR_SRC" ]; then
 版本: $VERSION
 打包时间: $(date "+%Y-%m-%d %H:%M:%S")
 
-## 使用方法
+## 安装
 
-### 宝塔面板部署
 \`\`\`bash
-bash scripts/bt-install.sh
+chmod +x install.sh
+./install.sh
 \`\`\`
 
-### Docker 部署
+## 升级
+
 \`\`\`bash
-bash scripts/docker-install.sh
+chmod +x upgrade.sh
+./upgrade.sh
 \`\`\`
 
 ## 文件说明
 
-- \`scripts/bt-install.sh\` - 宝塔面板安装脚本
-- \`scripts/docker-install.sh\` - Docker 交互式安装脚本
+- \`install.sh\` - 安装脚本（自动检测环境）
+- \`upgrade.sh\` - 升级脚本
+- \`scripts/bt-install.sh\` - 宝塔面板安装
+- \`scripts/docker-install.sh\` - Docker 交互式安装
 - \`scripts/common.sh\` - 公共函数库
 - \`scripts/bt-deps.sh\` - 宝塔依赖检测
-- \`scripts/upgrade.sh\` - 升级辅助脚本
-- \`deploy.sh\` - 旧版入口（保留兼容）
 
 注意：Nginx 配置已统一打包在完整包的 nginx 目录中。
 EOF
