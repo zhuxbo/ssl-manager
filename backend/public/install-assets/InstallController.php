@@ -8,7 +8,6 @@ use Install\Connector\RedisConnector;
 use Install\DTO\InstallConfig;
 use Install\Installer\Cleaner;
 use Install\Installer\InstallExecutor;
-use Install\View\ProgressReporter;
 use Install\View\Renderer;
 
 /**
@@ -468,8 +467,8 @@ class InstallController
     {
         echo '<div id="install-log-div" class="log">正在执行安装...</div>';
 
-        $reporter = new ProgressReporter(8);
-        $executor = new InstallExecutor($this->projectRoot, $reporter);
+        $executor = new InstallExecutor($this->projectRoot);
+        $reporter = $executor->getReporter();
 
         $reporter->init();
         $result = $executor->execute($this->config);
