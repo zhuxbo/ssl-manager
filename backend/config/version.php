@@ -7,12 +7,21 @@
  * config.json 在构建发布包时自动生成
  */
 
-// 尝试从 config.json 读取版本信息
+// 尝试从 config.json 读取版本信息（支持两个位置）
 $configJson = [];
-$configPath = dirname(__DIR__, 2) . '/config.json';
-if (file_exists($configPath)) {
-    $content = file_get_contents($configPath);
-    $configJson = json_decode($content, true) ?: [];
+$configPaths = [
+    dirname(__DIR__, 2) . '/config.json',  // 项目根目录
+    dirname(__DIR__) . '/config.json',      // backend 目录（Docker 环境）
+];
+
+foreach ($configPaths as $configPath) {
+    if (file_exists($configPath)) {
+        $content = file_get_contents($configPath);
+        $configJson = json_decode($content, true) ?: [];
+        if (! empty($configJson)) {
+            break;
+        }
+    }
 }
 
 return [

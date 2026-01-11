@@ -34,6 +34,7 @@ pnpm-debug.log*
 .cache/
 .parcel-cache/
 .turbo/
+.pnpm-store/
 
 # Laravel
 /backend/storage/*.key

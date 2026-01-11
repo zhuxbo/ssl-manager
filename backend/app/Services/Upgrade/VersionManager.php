@@ -7,17 +7,39 @@ use Illuminate\Support\Facades\Config;
 class VersionManager
 {
     /**
+     * 获取 config.json 的路径
+     * 优先使用项目根目录，如果不可用则使用 backend 目录
+     */
+    protected function getConfigPath(): string
+    {
+        // 优先使用项目根目录（backend 的上级目录）
+        $rootPath = dirname(base_path()) . '/config.json';
+        if (file_exists($rootPath) || is_writable(dirname(base_path()))) {
+            return $rootPath;
+        }
+
+        // 回退到 backend 目录（Docker 环境）
+        return base_path('config.json');
+    }
+
+    /**
      * 从 config.json 读取版本配置（实时读取，避免缓存问题）
      */
     protected function getConfigJson(): array
     {
-        $configPath = dirname(base_path()) . '/config.json';
+        // 尝试两个位置
+        $paths = [
+            dirname(base_path()) . '/config.json',
+            base_path('config.json'),
+        ];
 
-        if (file_exists($configPath)) {
-            $content = file_get_contents($configPath);
-            $config = json_decode($content, true);
-            if (json_last_error() === JSON_ERROR_NONE) {
-                return $config;
+        foreach ($paths as $configPath) {
+            if (file_exists($configPath)) {
+                $content = file_get_contents($configPath);
+                $config = json_decode($content, true);
+                if (json_last_error() === JSON_ERROR_NONE) {
+                    return $config;
+                }
             }
         }
 
@@ -69,21 +91,19 @@ class VersionManager
             return false;
         }
 
-        // config.json 在项目根目录（backend 的上级目录）
-        $configPath = dirname(base_path()) . '/config.json';
+        // 使用智能路径检测
+        $configPath = $this->getConfigPath();
+        $existingConfig = $this->getConfigJson();
 
-        if (! file_exists($configPath)) {
-            // 如果文件不存在，创建新的
+        if (empty($existingConfig)) {
+            // 如果没有现有配置，创建新的
             $config = [
                 'version' => $this->getVersionString(),
                 'channel' => $channel,
                 'build_time' => Config::get('version.build_time', ''),
             ];
         } else {
-            $config = json_decode(file_get_contents($configPath), true);
-            if (json_last_error() !== JSON_ERROR_NONE) {
-                return false;
-            }
+            $config = $existingConfig;
             $config['channel'] = $channel;
         }
 
