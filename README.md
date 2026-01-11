@@ -52,6 +52,7 @@ curl -fsSL https://gitee.com/zhuxbo/cert-manager/raw/main/deploy/upgrade.sh | ba
 # 脚本升级
 curl ... | bash                         # 升级到最新版
 curl ... | bash -s -- --version 1.0.0   # 升级到指定版本
+curl ... | bash -s -- --dir /path/to/app  # 指定安装目录
 curl ... | bash -s -- rollback          # 回滚到上一版本
 
 # artisan 命令（需进入 backend 目录）
@@ -59,6 +60,13 @@ php artisan upgrade:check       # 检查更新
 php artisan upgrade:run         # 执行升级
 php artisan upgrade:rollback    # 回滚
 ```
+
+| 参数 | 说明 |
+|------|------|
+| `--version x.x.x` | 升级到指定版本 |
+| `--dir PATH` | 指定安装目录（自动检测失败时使用） |
+| `-y, --yes` | 自动确认，非交互模式 |
+| `rollback` | 回滚到上一版本 |
 
 </details>
 

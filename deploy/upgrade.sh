@@ -141,11 +141,13 @@ version_gt() {
 detect_install() {
     # 如果已手动指定目录，验证并检测模式
     if [ -n "$INSTALL_DIR" ]; then
-        if [ -f "$INSTALL_DIR/docker-compose.yml" ] && [ -d "$INSTALL_DIR/backend" ]; then
-            DEPLOY_MODE="docker"
-            return 0
-        elif [ -d "$INSTALL_DIR/backend" ] && [ -f "$INSTALL_DIR/backend/artisan" ]; then
-            DEPLOY_MODE="bt"
+        # 优先检测 .ssl-manager 标记文件，回退到 artisan
+        if [ -f "$INSTALL_DIR/backend/.ssl-manager" ] || [ -f "$INSTALL_DIR/backend/artisan" ]; then
+            if [ -f "$INSTALL_DIR/docker-compose.yml" ]; then
+                DEPLOY_MODE="docker"
+            else
+                DEPLOY_MODE="bt"
+            fi
             return 0
         fi
         log_error "指定目录无效: $INSTALL_DIR"
@@ -155,35 +157,63 @@ detect_install() {
     DEPLOY_MODE=""
     INSTALL_DIR=""
 
-    # Docker 模式检测
-    local docker_dirs=(
+    # 搜索所有安装目录
+    local found_dirs=()
+
+    # 预设目录快速检测
+    local preset_dirs=(
         "/opt/ssl-manager"
         "/opt/cert-manager"
-    )
-
-    for dir in "${docker_dirs[@]}"; do
-        if [ -f "$dir/docker-compose.yml" ] && [ -d "$dir/backend" ]; then
-            INSTALL_DIR="$dir"
-            DEPLOY_MODE="docker"
-            return 0
-        fi
-    done
-
-    # 宝塔模式检测
-    local bt_dirs=(
         "/www/wwwroot/ssl-manager"
         "/www/wwwroot/cert-manager"
     )
 
-    for dir in "${bt_dirs[@]}"; do
-        if [ -d "$dir/backend" ] && [ -f "$dir/backend/artisan" ]; then
-            INSTALL_DIR="$dir"
-            DEPLOY_MODE="bt"
-            return 0
+    for dir in "${preset_dirs[@]}"; do
+        # 优先检测 .ssl-manager，回退到 artisan
+        if [ -f "$dir/backend/.ssl-manager" ] || [ -f "$dir/backend/artisan" ]; then
+            found_dirs+=("$dir")
         fi
     done
 
-    return 1
+    # 系统范围搜索（补充非预设目录）
+    while IFS= read -r marker; do
+        [ -z "$marker" ] && continue
+        local dir=$(dirname "$marker" | xargs dirname)
+        # 避免重复
+        local already_found=false
+        for fd in "${found_dirs[@]}"; do
+            [ "$fd" = "$dir" ] && already_found=true && break
+        done
+        $already_found || found_dirs+=("$dir")
+    done < <(find /opt /www/wwwroot /home -maxdepth 4 -name ".ssl-manager" -path "*/backend/*" 2>/dev/null)
+
+    # 根据找到的数量处理
+    if [ ${#found_dirs[@]} -eq 0 ]; then
+        return 1
+    elif [ ${#found_dirs[@]} -eq 1 ]; then
+        INSTALL_DIR="${found_dirs[0]}"
+        [ -f "$INSTALL_DIR/docker-compose.yml" ] && DEPLOY_MODE="docker" || DEPLOY_MODE="bt"
+        return 0
+    else
+        # 多个安装，让用户选择
+        log_info "检测到多个 SSL Manager 安装："
+        for i in "${!found_dirs[@]}"; do
+            local dir="${found_dirs[$i]}"
+            local mode="宝塔"
+            [ -f "$dir/docker-compose.yml" ] && mode="Docker"
+            echo "  $((i+1)). $dir [$mode]"
+        done
+
+        while true; do
+            read -p "请选择 (1-${#found_dirs[@]}): " choice < /dev/tty
+            if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le ${#found_dirs[@]} ]; then
+                INSTALL_DIR="${found_dirs[$((choice-1))]}"
+                [ -f "$INSTALL_DIR/docker-compose.yml" ] && DEPLOY_MODE="docker" || DEPLOY_MODE="bt"
+                return 0
+            fi
+            log_error "无效选择"
+        done
+    fi
 }
 
 # 获取当前版本
@@ -294,27 +324,7 @@ perform_upgrade() {
     # 2. 创建备份
     local backup_path=$(create_backup)
 
-    # 3. 提取需要保留的文件到临时目录
-    log_step "保留关键文件..."
-    local preserve_dir="$TEMP_DIR/preserve"
-    mkdir -p "$preserve_dir"
-
-    # 保留 .env
-    [ -f "$INSTALL_DIR/backend/.env" ] && cp "$INSTALL_DIR/backend/.env" "$preserve_dir/"
-    # 保留 config.json
-    [ -f "$INSTALL_DIR/config.json" ] && cp "$INSTALL_DIR/config.json" "$preserve_dir/"
-    [ -f "$INSTALL_DIR/backend/config.json" ] && cp "$INSTALL_DIR/backend/config.json" "$preserve_dir/backend.config.json"
-    # 保留 storage
-    if [ -d "$INSTALL_DIR/backend/storage" ]; then
-        cp -r "$INSTALL_DIR/backend/storage" "$preserve_dir/"
-    fi
-    # 保留 vendor（加速升级）
-    if [ -d "$INSTALL_DIR/backend/vendor" ]; then
-        log_info "保留 vendor 目录（加速升级）..."
-        mv "$INSTALL_DIR/backend/vendor" "$preserve_dir/"
-    fi
-
-    # 4. 进入维护模式
+    # 3. 进入维护模式（必须在移动 vendor 之前）
     log_step "进入维护模式..."
     if [ "$DEPLOY_MODE" = "docker" ]; then
         local compose_cmd=$(check_docker_compose)
@@ -323,6 +333,23 @@ perform_upgrade() {
     else
         cd "$INSTALL_DIR/backend"
         php artisan down --retry=60 || true
+    fi
+
+    # 4. 提取需要保留的文件到临时目录
+    log_step "保留关键文件..."
+    local preserve_dir="$TEMP_DIR/preserve"
+    mkdir -p "$preserve_dir"
+
+    # 保留 .env（不保留 config.json，升级需要更新版本号）
+    [ -f "$INSTALL_DIR/backend/.env" ] && cp "$INSTALL_DIR/backend/.env" "$preserve_dir/"
+    # 保留 storage
+    if [ -d "$INSTALL_DIR/backend/storage" ]; then
+        cp -r "$INSTALL_DIR/backend/storage" "$preserve_dir/"
+    fi
+    # 保留 vendor（加速升级）
+    if [ -d "$INSTALL_DIR/backend/vendor" ]; then
+        log_info "保留 vendor 目录（加速升级）..."
+        mv "$INSTALL_DIR/backend/vendor" "$preserve_dir/"
     fi
 
     # 5. 删除旧代码
@@ -378,8 +405,7 @@ perform_upgrade() {
     # 8. 恢复保留的文件
     log_step "恢复保留文件..."
     [ -f "$preserve_dir/.env" ] && cp "$preserve_dir/.env" "$INSTALL_DIR/backend/"
-    [ -f "$preserve_dir/config.json" ] && cp "$preserve_dir/config.json" "$INSTALL_DIR/"
-    [ -f "$preserve_dir/backend.config.json" ] && cp "$preserve_dir/backend.config.json" "$INSTALL_DIR/backend/config.json"
+    # 注意：不恢复 config.json，使用升级包中的新版本
 
     # 恢复 storage
     if [ -d "$preserve_dir/storage" ]; then

@@ -381,39 +381,57 @@ class UpgradeService
 
         foreach ($assets as $asset) {
             $name = $asset['name'] ?? '';
-            if (str_contains($name, 'upgrade')) {
+            if (str_contains($name, 'upgrade') || str_contains($name, 'full')) {
                 $size = $asset['size'] ?? 0;
+
+                // Gitee API 不返回 size 字段，显示"未知"
+                if ($size <= 0) {
+                    return '未知';
+                }
 
                 return $this->formatBytes($size);
             }
         }
 
-        return 'unknown';
+        return '未知';
     }
 
     /**
-     * 更新 .env 文件中的版本号
+     * 更新版本号（config.json 和 .env）
      */
     protected function updateEnvVersion(string $version): void
     {
+        // 更新 config.json（VersionManager 读取此文件）
+        $configPaths = [
+            base_path('config.json'),      // backend/config.json
+            base_path('../config.json'),   // 项目根目录 config.json
+        ];
+
+        foreach ($configPaths as $configPath) {
+            if (file_exists($configPath)) {
+                $config = json_decode(file_get_contents($configPath), true) ?? [];
+                $config['version'] = $version;
+                $config['updated_at'] = date('Y-m-d H:i:s');
+
+                file_put_contents($configPath, json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+                Log::info("已更新 config.json 版本号: $configPath -> $version");
+            }
+        }
+
+        // 同时更新 .env（兼容性）
         $envPath = base_path('.env');
+        if (file_exists($envPath)) {
+            $content = file_get_contents($envPath);
 
-        if (! file_exists($envPath)) {
-            return;
+            if (preg_match('/^APP_VERSION=.*/m', $content)) {
+                $content = preg_replace('/^APP_VERSION=.*/m', "APP_VERSION=$version", $content);
+            } else {
+                $content .= "\nAPP_VERSION=$version";
+            }
+
+            file_put_contents($envPath, $content);
+            Log::info("已更新 .env 版本号: $version");
         }
-
-        $content = file_get_contents($envPath);
-
-        // 更新或添加 APP_VERSION
-        if (preg_match('/^APP_VERSION=.*/m', $content)) {
-            $content = preg_replace('/^APP_VERSION=.*/m', "APP_VERSION=$version", $content);
-        } else {
-            $content .= "\nAPP_VERSION=$version";
-        }
-
-        file_put_contents($envPath, $content);
-
-        Log::info("已更新 .env 版本号: $version");
     }
 
     /**

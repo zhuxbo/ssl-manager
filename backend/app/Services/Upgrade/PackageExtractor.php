@@ -125,6 +125,14 @@ class PackageExtractor
                 $this->applyFrontendUpgrade($frontendEasyDir, 'easy');
             }
 
+            // 更新项目根目录的 config.json（版本信息）
+            $rootConfigFile = $this->findRootConfig($extractedPath);
+            if ($rootConfigFile) {
+                $targetConfigFile = base_path('../config.json');
+                File::copy($rootConfigFile, $targetConfigFile);
+                Log::info('已更新项目根目录 config.json');
+            }
+
             // 处理删除的文件
             $this->processDeletedFiles($extractedPath);
 
@@ -166,7 +174,7 @@ class PackageExtractor
         }
 
         // 同步根目录文件
-        $rootFiles = ['composer.json', 'composer.lock'];
+        $rootFiles = ['composer.json', 'composer.lock', 'config.json'];
         foreach ($rootFiles as $file) {
             $sourceFile = "$sourceDir/$file";
             $targetFile = "$targetDir/$file";
@@ -337,6 +345,30 @@ class PackageExtractor
 
         foreach ($possiblePaths as $path) {
             if (File::isDirectory($path)) {
+                return $path;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * 查找项目根目录的 config.json
+     */
+    protected function findRootConfig(string $extractedPath): ?string
+    {
+        $possiblePaths = [
+            "$extractedPath/config.json",
+        ];
+
+        // 在子目录中查找（升级包可能有根目录）
+        $dirs = File::directories($extractedPath);
+        foreach ($dirs as $dir) {
+            $possiblePaths[] = "$dir/config.json";
+        }
+
+        foreach ($possiblePaths as $path) {
+            if (File::exists($path)) {
                 return $path;
             }
         }

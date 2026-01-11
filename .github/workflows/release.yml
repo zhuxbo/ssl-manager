@@ -88,15 +88,43 @@ jobs:
         run: |
           mkdir -p release/ssl-manager
 
-          # 复制后端
-          cp -r backend release/ssl-manager/
-          rm -rf release/ssl-manager/backend/vendor
-          rm -rf release/ssl-manager/backend/storage/logs/*
-          rm -rf release/ssl-manager/backend/storage/framework/cache/*
-          rm -rf release/ssl-manager/backend/storage/framework/sessions/*
-          rm -rf release/ssl-manager/backend/storage/framework/views/*
-          rm -rf release/ssl-manager/backend/bootstrap/cache/*
-          rm -f release/ssl-manager/backend/.env
+          # 后端：使用 rsync 排除不需要的文件
+          rsync -a \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='.gitignore' \
+            --exclude='.gitattributes' \
+            --exclude='.editorconfig' \
+            --exclude='.pint.json' \
+            --exclude='.idea' \
+            --exclude='.vscode' \
+            --exclude='.cursor' \
+            --exclude='.env' \
+            --exclude='.env.*' \
+            --exclude='.phpunit.cache' \
+            --exclude='.phpunit.result.cache' \
+            --exclude='phpunit.xml' \
+            --exclude='phpstan.neon' \
+            --exclude='tests' \
+            --exclude='vendor' \
+            --exclude='storage/logs/*' \
+            --exclude='storage/framework/cache/*' \
+            --exclude='storage/framework/sessions/*' \
+            --exclude='storage/framework/views/*' \
+            --exclude='storage/debugbar' \
+            --exclude='bootstrap/cache/*' \
+            --exclude='*.md' \
+            --exclude='LICENSE' \
+            backend/ release/ssl-manager/backend/
+
+          # 创建 .ssl-manager 标记文件
+          echo "ssl-manager" > release/ssl-manager/backend/.ssl-manager
+
+          # 保留必要的空目录结构
+          mkdir -p release/ssl-manager/backend/storage/{app/public,framework/{cache,sessions,views},logs}
+          mkdir -p release/ssl-manager/backend/bootstrap/cache
+          touch release/ssl-manager/backend/storage/.gitkeep
+          touch release/ssl-manager/backend/bootstrap/cache/.gitkeep
 
           # 复制前端构建产物
           mkdir -p release/ssl-manager/frontend

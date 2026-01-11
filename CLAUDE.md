@@ -147,6 +147,20 @@ deploy/upgrade.sh rollback             # 回滚
 deploy/upgrade.sh --dir /path -y       # 指定目录，自动确认
 ```
 
+### 安装目录自动检测
+
+升级脚本通过 `backend/.ssl-manager` 标记文件自动检测安装目录，按以下顺序搜索：
+
+1. 预设目录快速检测：
+   - `/opt/ssl-manager`
+   - `/opt/cert-manager`
+   - `/www/wwwroot/ssl-manager`
+   - `/www/wwwroot/cert-manager`
+
+2. 系统范围搜索（`/opt`、`/www/wwwroot`、`/home`，深度 4 层）
+
+如检测到多个安装，脚本会列出供用户选择。自定义安装路径需使用 `--dir` 参数指定。
+
 测试环境配置（使用本地 release-server）：
 ```bash
 # backend/.env
