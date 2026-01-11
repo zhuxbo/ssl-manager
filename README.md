@@ -42,7 +42,7 @@ curl ... | bash -s docker -v 0.0.4-beta      # Docker + 指定版本
 ### 脚本升级
 
 ```bash
-curl -fsSL https://gitee.com/zhuxbo/cert-manager/raw/main/deploy/deploy.sh | bash -s upgrade
+curl -fsSL https://gitee.com/zhuxbo/cert-manager/raw/main/deploy/upgrade.sh | bash
 ```
 
 <details>
@@ -50,8 +50,9 @@ curl -fsSL https://gitee.com/zhuxbo/cert-manager/raw/main/deploy/deploy.sh | bas
 
 ```bash
 # 脚本升级
-curl ... | bash -s upgrade              # 宝塔环境升级
-curl ... | bash -s upgrade docker       # Docker 环境升级
+curl ... | bash                         # 升级到最新版
+curl ... | bash -s -- --version 1.0.0   # 升级到指定版本
+curl ... | bash -s -- rollback          # 回滚到上一版本
 
 # artisan 命令（需进入 backend 目录）
 php artisan upgrade:check       # 检查更新
@@ -60,6 +61,15 @@ php artisan upgrade:rollback    # 回滚
 ```
 
 </details>
+
+## 卸载
+
+Docker 部署卸载：
+
+```bash
+cd /opt/ssl-manager  # 进入安装目录
+docker-compose down -v  # 停止并删除容器和数据卷
+```
 
 ## 开发
 

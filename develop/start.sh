@@ -37,8 +37,8 @@ show_help() {
     echo ""
     echo "服务端口:"
     echo "  后端 API:    http://localhost:${BACKEND_PORT:-8001}"
-    echo "  Admin 前端:  http://localhost:${ADMIN_PORT:-5173}"
-    echo "  User 前端:   http://localhost:${USER_PORT:-5174}"
+    echo "  Admin 前端:  http://localhost:${ADMIN_PORT:-5201}"
+    echo "  User 前端:   http://localhost:${USER_PORT:-5202}"
 }
 
 case "$1" in
@@ -48,8 +48,8 @@ case "$1" in
         echo ""
         echo "服务已启动:"
         echo "  后端 API:    http://localhost:${BACKEND_PORT:-8001}"
-        echo "  Admin 前端:  http://localhost:${ADMIN_PORT:-5173}"
-        echo "  User 前端:   http://localhost:${USER_PORT:-5174}"
+        echo "  Admin 前端:  http://localhost:${ADMIN_PORT:-5201}"
+        echo "  User 前端:   http://localhost:${USER_PORT:-5202}"
         ;;
     down)
         echo "停止服务..."

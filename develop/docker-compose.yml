@@ -67,7 +67,7 @@ services:
     ports:
       - "${BACKEND_PORT:-8001}:8000"
     volumes:
-      - ../../backend:/var/www/html
+      - ../backend:/var/www/html
     depends_on:
       mysql:
         condition: service_healthy
@@ -90,16 +90,23 @@ services:
     ports:
       - "${ADMIN_PORT:-5201}:5201"
     volumes:
-      - ../..:/app
+      - ..:/app
       - admin_node_modules:/app/node_modules
       - admin_frontend_modules:/app/frontend/node_modules
       - admin_admin_modules:/app/frontend/admin/node_modules
       - admin_user_modules:/app/frontend/user/node_modules
       - admin_shared_modules:/app/frontend/shared/node_modules
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"require('net').createConnection(5201, 'localhost').on('connect', () => process.exit(0)).on('error', () => process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 180s
     networks:
       - manager-network
 
   # 前端 User (Vite dev server)
+  # 依赖 Admin 健康后启动，避免并行 pnpm install 导致资源耗尽
   user:
     image: node:22-alpine
     container_name: manager-user
@@ -113,12 +120,15 @@ services:
     ports:
       - "${USER_PORT:-5202}:5202"
     volumes:
-      - ../..:/app
+      - ..:/app
       - admin_node_modules:/app/node_modules
       - admin_frontend_modules:/app/frontend/node_modules
       - admin_admin_modules:/app/frontend/admin/node_modules
       - admin_user_modules:/app/frontend/user/node_modules
       - admin_shared_modules:/app/frontend/shared/node_modules
+    depends_on:
+      admin:
+        condition: service_healthy
     networks:
       - manager-network
 

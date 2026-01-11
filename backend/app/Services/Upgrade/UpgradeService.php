@@ -84,8 +84,8 @@ class UpgradeService
                 throw new RuntimeException("不允许升级到版本 $targetVersion（版本相同或低于当前版本）");
             }
 
-            // 检查逐版本升级约束
-            $requireSequential = Config::get('upgrade.constraints.require_sequential', true);
+            // 检查版本顺序约束（默认关闭，支持跨版本升级）
+            $requireSequential = Config::get('upgrade.constraints.require_sequential', false);
             if ($requireSequential) {
                 $steps[] = ['step' => 'check_sequential', 'status' => 'running'];
 
