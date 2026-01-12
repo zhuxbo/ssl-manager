@@ -87,12 +87,13 @@ export function getReleases(): Promise<
   >("get", "/upgrade/releases");
 }
 
-// 执行升级
+// 执行升级（超时 5 分钟，因为升级过程较长）
 export function executeUpgrade(
   version: string = "latest"
 ): Promise<BaseResponse<UpgradeResult>> {
   return http.request<BaseResponse<UpgradeResult>>("post", "/upgrade/execute", {
-    data: { version }
+    data: { version },
+    timeout: 300000
   });
 }
 

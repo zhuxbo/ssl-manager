@@ -427,21 +427,6 @@ class UpgradeService
                 Log::info("已更新 config.json 版本号: $configPath -> $version");
             }
         }
-
-        // 同时更新 .env（兼容性）
-        $envPath = base_path('.env');
-        if (file_exists($envPath)) {
-            $content = file_get_contents($envPath);
-
-            if (preg_match('/^APP_VERSION=.*/m', $content)) {
-                $content = preg_replace('/^APP_VERSION=.*/m', "APP_VERSION=$version", $content);
-            } else {
-                $content .= "\nAPP_VERSION=$version";
-            }
-
-            file_put_contents($envPath, $content);
-            Log::info("已更新 .env 版本号: $version");
-        }
     }
 
     /**
