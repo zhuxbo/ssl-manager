@@ -37,6 +37,7 @@ shared 模块使用依赖注入，需在应用启动时初始化（见 `admin/sr
 
 - **base 目录只读**：通过 git subtree 同步上游代码，不要修改
 - **base 依赖**：本地开发需在 base 目录执行 `pnpm install --ignore-workspace`
+- **不要自动提交**：完成修改后等待用户确认"提交"再执行 git commit/push
 
 ---
 

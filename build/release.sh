@@ -34,7 +34,6 @@ SSL证书管理系统 - 版本发布脚本
   --force             强制发布（删除现有 tag/release 后重新创建）
   --no-push           不推送到远程
   --no-tag            不创建 tag
-  --branch BRANCH     指定推送分支（默认: 根据版本自动选择）
   -h, --help          显示此帮助信息
 
 分支规则:
@@ -56,7 +55,6 @@ VERSION=""
 DO_PUSH=true
 DO_TAG=true
 FORCE=false
-BRANCH=""
 
 # 解析参数
 while [[ $# -gt 0 ]]; do
@@ -72,10 +70,6 @@ while [[ $# -gt 0 ]]; do
         --no-tag)
             DO_TAG=false
             shift
-            ;;
-        --branch)
-            BRANCH="$2"
-            shift 2
             ;;
         -h|--help)
             show_help
@@ -112,18 +106,16 @@ fi
 
 cd "$PROJECT_ROOT"
 
-# 自动选择分支（根据版本号）
-if [ -z "$BRANCH" ]; then
-    case "$VERSION" in
-        *-dev*|*-alpha*|*-beta*|*-rc*)
-            BRANCH="dev"
-            ;;
-        *)
-            BRANCH="main"
-            ;;
-    esac
-    log_info "根据版本号自动选择分支: $BRANCH"
-fi
+# 根据版本号选择分支
+case "$VERSION" in
+    *-dev*|*-alpha*|*-beta*|*-rc*)
+        BRANCH="dev"
+        ;;
+    *)
+        BRANCH="main"
+        ;;
+esac
+log_info "目标分支: $BRANCH"
 
 # 检查当前分支是否匹配
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)

@@ -31,11 +31,11 @@ build/
 # 发布正式版（自动推送到 main 分支）
 ./build/release.sh 1.0.0
 
+# 强制重新发布（删除旧 tag 后重新创建，用于重新触发 CI）
+./build/release.sh 0.0.10-beta --force
+
 # 仅本地提交，不推送
 ./build/release.sh 0.0.10-beta --no-push
-
-# 强制指定分支
-./build/release.sh 1.0.0 --branch dev
 ```
 
 ### 分支规则
