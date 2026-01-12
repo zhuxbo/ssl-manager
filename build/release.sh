@@ -193,11 +193,15 @@ EOF
 
 log_success "version.json 已更新: $VERSION (channel: $CHANNEL)"
 
-# 步骤 2: 提交更改
+# 步骤 2: 提交更改（如果有变化）
 log_info "步骤 2: 提交更改"
 git add "$VERSION_FILE"
-git commit -m "chore: 版本升级至 $VERSION"
-log_success "提交成功"
+if git diff --cached --quiet; then
+    log_info "version.json 无变化，跳过提交"
+else
+    git commit -m "chore: 版本升级至 $VERSION"
+    log_success "提交成功"
+fi
 
 # 步骤 3: 创建 tag
 if [ "$DO_TAG" = true ]; then

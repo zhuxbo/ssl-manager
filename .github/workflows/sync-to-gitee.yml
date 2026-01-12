@@ -141,6 +141,18 @@ jobs:
             echo "No existing release found for tag: $RELEASE_TAG"
           fi
 
+          # 获取 GitHub Release 的 body
+          GH_BODY=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/tags/$RELEASE_TAG" | jq -r '.body // empty')
+
+          # 如果获取失败，使用默认内容
+          if [ -z "$GH_BODY" ]; then
+            GH_BODY="SSL Manager $RELEASE_TAG"
+          fi
+
+          # 转义 JSON 特殊字符
+          GH_BODY_ESCAPED=$(echo "$GH_BODY" | jq -Rs '.')
+
           # 创建新 release
           RESPONSE=$(curl -s -X POST "https://gitee.com/api/v5/repos/${{ env.GITEE_OWNER }}/${{ env.GITEE_REPO }}/releases" \
             -H "Content-Type: application/json" \
@@ -148,7 +160,7 @@ jobs:
               \"access_token\": \"${{ secrets.GITEE_TOKEN }}\",
               \"tag_name\": \"$RELEASE_TAG\",
               \"name\": \"$RELEASE_NAME\",
-              \"body\": \"从 GitHub 同步: https://github.com/${{ github.repository }}/releases/tag/$RELEASE_TAG\",
+              \"body\": $GH_BODY_ESCAPED,
               \"prerelease\": $PRERELEASE,
               \"target_commitish\": \"dev\"
             }")
@@ -220,13 +232,16 @@ jobs:
           fi
 
           # 创建新的 latest release
+          LATEST_BODY="当前最新稳定版本: **${VERSION}**"
+          LATEST_BODY_ESCAPED=$(echo "$LATEST_BODY" | jq -Rs '.')
+
           RESPONSE=$(curl -s -X POST "https://gitee.com/api/v5/repos/${{ env.GITEE_OWNER }}/${{ env.GITEE_REPO }}/releases" \
             -H "Content-Type: application/json" \
             -d "{
               \"access_token\": \"${{ secrets.GITEE_TOKEN }}\",
               \"tag_name\": \"latest\",
               \"name\": \"Latest Stable Release ($VERSION)\",
-              \"body\": \"当前最新稳定版本: $VERSION\\n\\n从 GitHub 同步\",
+              \"body\": $LATEST_BODY_ESCAPED,
               \"prerelease\": false,
               \"target_commitish\": \"main\"
             }")

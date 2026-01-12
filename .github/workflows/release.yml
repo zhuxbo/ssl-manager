@@ -69,10 +69,15 @@ jobs:
           key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
           restore-keys: ${{ runner.os }}-pnpm-store-
 
+      - name: Get Composer Cache Directory
+        id: composer-cache
+        working-directory: backend
+        run: echo "dir=$(composer config cache-files-dir)" >> $GITHUB_OUTPUT
+
       - name: Cache Composer
         uses: actions/cache@v4
         with:
-          path: ~/.composer/cache
+          path: ${{ steps.composer-cache.outputs.dir }}
           key: ${{ runner.os }}-composer-${{ hashFiles('backend/composer.lock') }}
           restore-keys: ${{ runner.os }}-composer-
 

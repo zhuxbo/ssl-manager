@@ -387,10 +387,10 @@ perform_upgrade() {
         src_dir="$extract_dir/cert-manager"
     fi
 
-    # 7. 复制新代码
+    # 7. 复制新代码（使用 /. 确保复制隐藏文件如 .ssl-manager）
     log_step "应用新版本..."
     if [ -d "$src_dir/backend" ]; then
-        cp -r "$src_dir/backend"/* "$INSTALL_DIR/backend/" 2>/dev/null || true
+        cp -r "$src_dir/backend/." "$INSTALL_DIR/backend/"
     fi
 
     # 复制前端
@@ -512,11 +512,21 @@ perform_upgrade() {
         php artisan up
     fi
 
-    # 设置权限（宝塔环境）
-    if [ "$DEPLOY_MODE" = "bt" ]; then
-        chown -R www:www "$INSTALL_DIR/backend/storage" 2>/dev/null || true
-        chmod -R 775 "$INSTALL_DIR/backend/storage" 2>/dev/null || true
-    fi
+    # 设置权限
+    log_step "修复文件权限..."
+    local web_user="www-data"
+    [ "$DEPLOY_MODE" = "bt" ] && web_user="www"
+
+    # 所有者
+    chown -R "$web_user:$web_user" "$INSTALL_DIR" 2>/dev/null || true
+
+    # 目录 755，文件 644
+    find "$INSTALL_DIR" -type d -exec chmod 755 {} \; 2>/dev/null || true
+    find "$INSTALL_DIR" -type f -exec chmod 644 {} \; 2>/dev/null || true
+
+    # .env 文件 600（敏感）
+    [ -f "$INSTALL_DIR/.env" ] && chmod 600 "$INSTALL_DIR/.env"
+    [ -f "$INSTALL_DIR/backend/.env" ] && chmod 600 "$INSTALL_DIR/backend/.env"
 
     log_success "升级完成！版本: $target_version"
     log_info "备份位置: $backup_path"

@@ -225,12 +225,18 @@ class BackupManager
         }
 
         // 备份重要文件
-        $files = ['composer.json', 'composer.lock', '.env'];
+        $files = ['composer.json', 'composer.lock', '.env', 'config.json'];
         foreach ($files as $file) {
             $fullPath = "$backendPath/$file";
             if (File::exists($fullPath)) {
                 $zip->addFile($fullPath, $file);
             }
+        }
+
+        // 备份项目根目录的 config.json（如果存在）
+        $rootConfigPath = dirname($backendPath) . '/config.json';
+        if (File::exists($rootConfigPath)) {
+            $zip->addFile($rootConfigPath, '../config.json');
         }
 
         $zip->close();
@@ -320,7 +326,23 @@ class BackupManager
             throw new RuntimeException('无法打开备份压缩文件');
         }
 
-        $zip->extractTo(base_path());
+        $basePath = base_path();
+        $projectRoot = dirname($basePath);
+
+        // 逐个解压文件，处理特殊路径
+        for ($i = 0; $i < $zip->numFiles; $i++) {
+            $filename = $zip->getNameIndex($i);
+
+            // 根目录 config.json 特殊处理
+            if ($filename === '../config.json') {
+                $content = $zip->getFromIndex($i);
+                File::put("$projectRoot/config.json", $content);
+            } else {
+                // 其他文件解压到 base_path
+                $zip->extractTo($basePath, $filename);
+            }
+        }
+
         $zip->close();
     }
 

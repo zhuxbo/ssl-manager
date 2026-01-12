@@ -57,13 +57,18 @@ const showUpgradeProgress = ref(false);
 // 步骤名称映射
 const stepNames: Record<string, string> = {
   fetch_release: "获取版本信息",
+  check_version: "检查版本",
+  check_sequential: "检查升级顺序",
   backup: "创建备份",
   maintenance_on: "进入维护模式",
   download: "下载升级包",
   extract: "解压升级包",
   apply: "应用升级",
+  composer_install: "安装依赖",
   migrate: "运行数据库迁移",
+  seed: "初始化数据",
   clear_cache: "清理缓存",
+  update_version: "更新版本号",
   cleanup: "清理临时文件",
   maintenance_off: "退出维护模式"
 };
@@ -164,7 +169,7 @@ const handleCheckUpdate = async () => {
 const loadReleases = async () => {
   loadingReleases.value = true;
   try {
-    const { data } = await getReleases(10);
+    const { data } = await getReleases();
     releases.value = data.releases || [];
   } finally {
     loadingReleases.value = false;
@@ -337,7 +342,7 @@ onMounted(() => {
           <el-button
             type="success"
             :loading="upgrading"
-            @click="handleUpgrade('latest')"
+            @click="handleUpgrade(updateInfo.latest_version)"
           >
             立即升级
           </el-button>

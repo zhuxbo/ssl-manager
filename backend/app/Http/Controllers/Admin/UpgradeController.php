@@ -58,11 +58,8 @@ class UpgradeController extends BaseController
 
         $result = $this->upgradeService->performUpgrade($version);
 
-        if ($result['success']) {
-            $this->success($result);
-        } else {
-            $this->error($result['error'] ?? '升级失败', ['steps' => $result['steps'] ?? []]);
-        }
+        // 无论成功失败都返回完整结果（包含 steps），前端需要显示进度
+        $this->success($result);
     }
 
     /**

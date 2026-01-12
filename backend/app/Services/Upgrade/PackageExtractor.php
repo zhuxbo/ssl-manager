@@ -136,9 +136,6 @@ class PackageExtractor
             // 处理删除的文件
             $this->processDeletedFiles($extractedPath);
 
-            // 修复文件权限
-            $this->fixPermissions();
-
             // 清理缓存和临时文件
             $this->cleanupCacheFiles();
 
@@ -280,98 +277,6 @@ class PackageExtractor
                 File::deleteDirectory($dir);
             }
         }
-    }
-
-    /**
-     * 修复文件权限
-     */
-    protected function fixPermissions(): void
-    {
-        $webUser = $this->detectWebUser();
-        if (! $webUser) {
-            Log::warning('无法检测 Web 服务器用户，跳过权限修复');
-            return;
-        }
-
-        $basePath = base_path();
-        $storagePath = storage_path();
-
-        Log::info("修复文件权限，Web 用户: $webUser");
-
-        // 修复 backend 目录权限
-        $this->chownRecursive($basePath, $webUser);
-
-        // 确保 storage 目录可写
-        $this->chmodRecursive($storagePath, 0755, 0644);
-
-        // 确保 bootstrap/cache 可写
-        $cachePath = base_path('bootstrap/cache');
-        if (File::isDirectory($cachePath)) {
-            $this->chmodRecursive($cachePath, 0755, 0644);
-        }
-
-        Log::info('文件权限修复完成');
-    }
-
-    /**
-     * 检测 Web 服务器用户
-     */
-    protected function detectWebUser(): ?string
-    {
-        // 按优先级尝试检测
-        $possibleUsers = ['www-data', 'nginx', 'apache', 'www'];
-
-        foreach ($possibleUsers as $user) {
-            exec("id $user 2>/dev/null", $output, $returnCode);
-            if ($returnCode === 0) {
-                return $user;
-            }
-        }
-
-        // 尝试从当前进程获取
-        $currentUser = posix_getpwuid(posix_geteuid());
-        if ($currentUser && $currentUser['name'] !== 'root') {
-            return $currentUser['name'];
-        }
-
-        return null;
-    }
-
-    /**
-     * 递归修改所有者
-     */
-    protected function chownRecursive(string $path, string $user): void
-    {
-        $command = sprintf('chown -R %s:%s %s 2>&1',
-            escapeshellarg($user),
-            escapeshellarg($user),
-            escapeshellarg($path)
-        );
-        exec($command, $output, $returnCode);
-
-        if ($returnCode !== 0) {
-            Log::warning("chown 失败: $path", ['output' => implode("\n", $output)]);
-        }
-    }
-
-    /**
-     * 递归修改权限
-     */
-    protected function chmodRecursive(string $path, int $dirMode, int $fileMode): void
-    {
-        // 目录权限
-        $command = sprintf('find %s -type d -exec chmod %o {} \; 2>&1',
-            escapeshellarg($path),
-            $dirMode
-        );
-        exec($command);
-
-        // 文件权限
-        $command = sprintf('find %s -type f -exec chmod %o {} \; 2>&1',
-            escapeshellarg($path),
-            $fileMode
-        );
-        exec($command);
     }
 
     /**

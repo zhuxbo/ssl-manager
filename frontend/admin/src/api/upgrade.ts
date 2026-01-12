@@ -79,14 +79,12 @@ export function checkUpdate(): Promise<BaseResponse<UpdateCheckResult>> {
 }
 
 // 获取历史版本列表
-export function getReleases(
-  limit: number = 10
-): Promise<
+export function getReleases(): Promise<
   BaseResponse<{ releases: ReleaseInfo[]; current_version: string }>
 > {
   return http.request<
     BaseResponse<{ releases: ReleaseInfo[]; current_version: string }>
-  >("get", "/upgrade/releases", { params: { limit } });
+  >("get", "/upgrade/releases");
 }
 
 // 执行升级

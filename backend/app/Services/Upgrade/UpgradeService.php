@@ -66,7 +66,8 @@ class UpgradeService
             $steps[] = ['step' => 'fetch_release', 'status' => 'running'];
 
             if ($version === 'latest') {
-                $release = $this->releaseClient->getLatestRelease();
+                $channel = $this->versionManager->getChannel();
+                $release = $this->releaseClient->getLatestRelease($channel);
             } else {
                 $tag = str_starts_with($version, 'v') ? $version : "v$version";
                 $release = $this->releaseClient->getReleaseByTag($tag);
@@ -78,11 +79,20 @@ class UpgradeService
 
             $steps[count($steps) - 1]['status'] = 'completed';
             $targetVersion = $release['version'];
+            $currentVersion = $this->versionManager->getVersionString();
 
-            // 检查是否允许升级
-            if (! $this->versionManager->isUpgradeAllowed($targetVersion)) {
-                throw new RuntimeException("不允许升级到版本 $targetVersion（版本相同或低于当前版本）");
+            // 步骤 2: 检查版本
+            $steps[] = ['step' => 'check_version', 'status' => 'running'];
+
+            if ($targetVersion === $currentVersion) {
+                throw new RuntimeException("当前已是最新版本 $currentVersion，无需升级");
             }
+
+            if (! $this->versionManager->isUpgradeAllowed($targetVersion)) {
+                throw new RuntimeException("不允许从 $currentVersion 升级到 $targetVersion（目标版本低于当前版本）");
+            }
+
+            $steps[count($steps) - 1]['status'] = 'completed';
 
             // 检查版本顺序约束（默认关闭，支持跨版本升级）
             $requireSequential = Config::get('upgrade.constraints.require_sequential', false);
@@ -201,12 +211,7 @@ class UpgradeService
                 $steps[count($steps) - 1]['status'] = 'completed';
             }
 
-            // 步骤 9: 更新版本号
-            $steps[] = ['step' => 'update_version', 'status' => 'running'];
-            $this->updateEnvVersion($targetVersion);
-            $steps[count($steps) - 1]['status'] = 'completed';
-
-            // 步骤 10: 清理缓存
+            // 步骤 9: 清理缓存
             $clearCache = Config::get('upgrade.behavior.clear_cache', true);
             if ($clearCache) {
                 $steps[] = ['step' => 'clear_cache', 'status' => 'running'];
@@ -229,6 +234,11 @@ class UpgradeService
 
                 $steps[count($steps) - 1]['status'] = 'completed';
             }
+
+            // 步骤 10: 更新版本号（所有操作完成后再更新）
+            $steps[] = ['step' => 'update_version', 'status' => 'running'];
+            $this->updateEnvVersion($targetVersion);
+            $steps[count($steps) - 1]['status'] = 'completed';
 
             // 步骤 11: 清理临时文件
             $steps[] = ['step' => 'cleanup', 'status' => 'running'];
