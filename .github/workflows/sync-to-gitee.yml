@@ -12,6 +12,10 @@ on:
     types: [completed]
   workflow_dispatch:
 
+env:
+  GITEE_OWNER: zhuxbo
+  GITEE_REPO: cert-manager
+
 # 并发控制：同一 ref 的 workflow 取消旧的，避免重复上传
 concurrency:
   group: gitee-sync-${{ github.ref }}
@@ -31,7 +35,7 @@ jobs:
 
       - name: Push to Gitee
         run: |
-          git remote add gitee https://oauth2:${{ secrets.GITEE_TOKEN }}@gitee.com/zhuxbo/cert-manager.git
+          git remote add gitee https://oauth2:${{ secrets.GITEE_TOKEN }}@gitee.com/${{ env.GITEE_OWNER }}/${{ env.GITEE_REPO }}.git
 
           if [ "${{ github.ref_type }}" == "branch" ]; then
             git push gitee HEAD:${{ github.ref_name }} --force
@@ -98,7 +102,7 @@ jobs:
           echo "Creating Gitee release for $RELEASE_TAG..."
 
           # 查询并删除 Gitee 现有 release
-          EXISTING=$(curl -s "https://gitee.com/api/v5/repos/zhuxbo/cert-manager/releases/tags/$RELEASE_TAG?access_token=${{ secrets.GITEE_TOKEN }}")
+          EXISTING=$(curl -s "https://gitee.com/api/v5/repos/${{ env.GITEE_OWNER }}/${{ env.GITEE_REPO }}/releases/tags/$RELEASE_TAG?access_token=${{ secrets.GITEE_TOKEN }}")
           EXISTING_ID=$(echo "$EXISTING" | jq -r 'if type == "object" then .id else empty end')
 
           if [ -n "$EXISTING_ID" ]; then
@@ -106,7 +110,7 @@ jobs:
 
             # 删除 release（带响应码检查）
             HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE \
-              "https://gitee.com/api/v5/repos/zhuxbo/cert-manager/releases/$EXISTING_ID?access_token=${{ secrets.GITEE_TOKEN }}")
+              "https://gitee.com/api/v5/repos/${{ env.GITEE_OWNER }}/${{ env.GITEE_REPO }}/releases/$EXISTING_ID?access_token=${{ secrets.GITEE_TOKEN }}")
 
             echo "Delete response code: $HTTP_CODE"
 
@@ -122,7 +126,7 @@ jobs:
             # 验证删除成功（最多重试 3 次）
             for i in 1 2 3; do
               sleep 3
-              VERIFY=$(curl -s "https://gitee.com/api/v5/repos/zhuxbo/cert-manager/releases/tags/$RELEASE_TAG?access_token=${{ secrets.GITEE_TOKEN }}")
+              VERIFY=$(curl -s "https://gitee.com/api/v5/repos/${{ env.GITEE_OWNER }}/${{ env.GITEE_REPO }}/releases/tags/$RELEASE_TAG?access_token=${{ secrets.GITEE_TOKEN }}")
               if ! echo "$VERIFY" | jq -e '.id' > /dev/null 2>&1; then
                 echo "Verified: release deleted successfully"
                 break
@@ -138,7 +142,7 @@ jobs:
           fi
 
           # 创建新 release
-          RESPONSE=$(curl -s -X POST "https://gitee.com/api/v5/repos/zhuxbo/cert-manager/releases" \
+          RESPONSE=$(curl -s -X POST "https://gitee.com/api/v5/repos/${{ env.GITEE_OWNER }}/${{ env.GITEE_REPO }}/releases" \
             -H "Content-Type: application/json" \
             -d "{
               \"access_token\": \"${{ secrets.GITEE_TOKEN }}\",
@@ -163,7 +167,7 @@ jobs:
           for file in assets/*; do
             if [ -f "$file" ]; then
               echo "Uploading: $file"
-              curl -s -X POST "https://gitee.com/api/v5/repos/zhuxbo/cert-manager/releases/$RELEASE_ID/attach_files" \
+              curl -s -X POST "https://gitee.com/api/v5/repos/${{ env.GITEE_OWNER }}/${{ env.GITEE_REPO }}/releases/$RELEASE_ID/attach_files" \
                 -H "Content-Type: multipart/form-data" \
                 -F "access_token=${{ secrets.GITEE_TOKEN }}" \
                 -F "file=@$file"
@@ -176,7 +180,7 @@ jobs:
           echo "Syncing latest release to Gitee..."
 
           # 推送 latest tag
-          git clone --depth 1 https://oauth2:${{ secrets.GITEE_TOKEN }}@gitee.com/zhuxbo/cert-manager.git /tmp/gitee-repo
+          git clone --depth 1 https://oauth2:${{ secrets.GITEE_TOKEN }}@gitee.com/${{ env.GITEE_OWNER }}/${{ env.GITEE_REPO }}.git /tmp/gitee-repo
           cd /tmp/gitee-repo
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
@@ -196,14 +200,14 @@ jobs:
           VERSION="${{ steps.release_info.outputs.tag }}"
 
           # 查询并删除 Gitee 现有 latest release
-          EXISTING=$(curl -s "https://gitee.com/api/v5/repos/zhuxbo/cert-manager/releases/tags/latest?access_token=${{ secrets.GITEE_TOKEN }}")
+          EXISTING=$(curl -s "https://gitee.com/api/v5/repos/${{ env.GITEE_OWNER }}/${{ env.GITEE_REPO }}/releases/tags/latest?access_token=${{ secrets.GITEE_TOKEN }}")
           EXISTING_ID=$(echo "$EXISTING" | jq -r 'if type == "object" then .id else empty end')
 
           if [ -n "$EXISTING_ID" ]; then
             echo "Found existing latest release: $EXISTING_ID, deleting..."
 
             HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE \
-              "https://gitee.com/api/v5/repos/zhuxbo/cert-manager/releases/$EXISTING_ID?access_token=${{ secrets.GITEE_TOKEN }}")
+              "https://gitee.com/api/v5/repos/${{ env.GITEE_OWNER }}/${{ env.GITEE_REPO }}/releases/$EXISTING_ID?access_token=${{ secrets.GITEE_TOKEN }}")
 
             if [ "$HTTP_CODE" = "204" ] || [ "$HTTP_CODE" = "200" ]; then
               echo "Delete successful"
@@ -216,7 +220,7 @@ jobs:
           fi
 
           # 创建新的 latest release
-          RESPONSE=$(curl -s -X POST "https://gitee.com/api/v5/repos/zhuxbo/cert-manager/releases" \
+          RESPONSE=$(curl -s -X POST "https://gitee.com/api/v5/repos/${{ env.GITEE_OWNER }}/${{ env.GITEE_REPO }}/releases" \
             -H "Content-Type: application/json" \
             -d "{
               \"access_token\": \"${{ secrets.GITEE_TOKEN }}\",
@@ -235,7 +239,7 @@ jobs:
             for file in latest-assets/*latest*; do
               if [ -f "$file" ]; then
                 echo "Uploading: $file"
-                curl -s -X POST "https://gitee.com/api/v5/repos/zhuxbo/cert-manager/releases/$RELEASE_ID/attach_files" \
+                curl -s -X POST "https://gitee.com/api/v5/repos/${{ env.GITEE_OWNER }}/${{ env.GITEE_REPO }}/releases/$RELEASE_ID/attach_files" \
                   -H "Content-Type: multipart/form-data" \
                   -F "access_token=${{ secrets.GITEE_TOKEN }}" \
                   -F "file=@$file"
