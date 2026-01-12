@@ -3,7 +3,6 @@
 namespace App\Services\Upgrade;
 
 use Illuminate\Support\Facades\Config;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
@@ -225,7 +224,7 @@ class BackupManager
         }
 
         // 备份重要文件
-        $files = ['composer.json', 'composer.lock', '.env', 'config.json'];
+        $files = ['composer.json', 'composer.lock', '.env'];
         foreach ($files as $file) {
             $fullPath = "$backendPath/$file";
             if (File::exists($fullPath)) {
@@ -233,10 +232,11 @@ class BackupManager
             }
         }
 
-        // 备份项目根目录的 config.json（如果存在）
-        $rootConfigPath = dirname($backendPath) . '/config.json';
-        if (File::exists($rootConfigPath)) {
-            $zip->addFile($rootConfigPath, '../config.json');
+        // 备份项目根目录的 version.json
+        $rootDir = dirname($backendPath);
+        $versionPath = "$rootDir/version.json";
+        if (File::exists($versionPath)) {
+            $zip->addFile($versionPath, '../version.json');
         }
 
         $zip->close();
@@ -333,10 +333,10 @@ class BackupManager
         for ($i = 0; $i < $zip->numFiles; $i++) {
             $filename = $zip->getNameIndex($i);
 
-            // 根目录 config.json 特殊处理
-            if ($filename === '../config.json') {
+            // 根目录 version.json 特殊处理
+            if ($filename === '../version.json') {
                 $content = $zip->getFromIndex($i);
-                File::put("$projectRoot/config.json", $content);
+                File::put("$projectRoot/version.json", $content);
             } else {
                 // 其他文件解压到 base_path
                 $zip->extractTo($basePath, $filename);

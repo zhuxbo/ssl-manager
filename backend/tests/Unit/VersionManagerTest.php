@@ -4,6 +4,7 @@ namespace Tests\Unit;
 
 use App\Services\Upgrade\VersionManager;
 use Illuminate\Support\Facades\Config;
+use Mockery;
 use Tests\TestCase;
 
 class VersionManagerTest extends TestCase
@@ -20,7 +21,21 @@ class VersionManagerTest extends TestCase
         ]);
         Config::set('upgrade.constraints.allow_downgrade', false);
 
-        $this->versionManager = new VersionManager;
+        // 使用部分 mock，覆盖文件读取方法（protected 方法）
+        $this->versionManager = Mockery::mock(VersionManager::class)
+            ->makePartial()
+            ->shouldAllowMockingProtectedMethods();
+        $this->versionManager->shouldReceive('getVersionJson')
+            ->andReturn([
+                'version' => '1.0.0',
+                'channel' => 'main',
+            ]);
+    }
+
+    protected function tearDown(): void
+    {
+        Mockery::close();
+        parent::tearDown();
     }
 
     public function test_get_current_version(): void

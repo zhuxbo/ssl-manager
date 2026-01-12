@@ -589,51 +589,49 @@ class UpgradeService
     }
 
     /**
-     * 更新版本号（config.json 和 .env）
+     * 更新版本号（version.json）
      */
     protected function updateEnvVersion(string $version): void
     {
-        // 更新 config.json（VersionManager 读取此文件）
-        $configPaths = [
-            base_path('config.json'),      // backend/config.json
-            base_path('../config.json'),   // 项目根目录 config.json
+        // 查找 version.json 路径
+        $versionPaths = [
+            base_path('../version.json'),  // 项目根目录（标准部署）
+            base_path('version.json'),     // backend 目录（Docker）
         ];
 
-        $updatedCount = 0;
-        $errors = [];
-
-        foreach ($configPaths as $configPath) {
-            if (file_exists($configPath)) {
-                $config = json_decode(file_get_contents($configPath), true) ?? [];
-                $config['version'] = $version;
-                $config['updated_at'] = date('Y-m-d H:i:s');
-
-                $result = file_put_contents(
-                    $configPath,
-                    json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)
-                );
-
-                if ($result === false) {
-                    $errors[] = $configPath;
-                    Log::error("更新 config.json 版本号失败: $configPath");
-                } else {
-                    $updatedCount++;
-                    Log::info("已更新 config.json 版本号: $configPath -> $version");
-                }
+        $versionPath = null;
+        foreach ($versionPaths as $path) {
+            if (file_exists($path)) {
+                $versionPath = $path;
+                break;
             }
         }
 
-        // 如果没有任何配置文件被更新，记录警告
-        if ($updatedCount === 0) {
-            Log::warning('[Upgrade] 没有找到可更新的 config.json 文件');
+        // 如果没找到，使用项目根目录
+        if (! $versionPath) {
+            $versionPath = base_path('../version.json');
         }
 
-        // 如果有错误，抛出异常
-        if (! empty($errors)) {
-            throw new RuntimeException(
-                '更新版本号失败: ' . implode(', ', $errors) . '。请检查文件权限。'
-            );
+        // 读取现有配置
+        $config = [];
+        if (file_exists($versionPath)) {
+            $config = json_decode(file_get_contents($versionPath), true) ?? [];
         }
+
+        // 更新版本信息
+        $config['version'] = $version;
+        $config['updated_at'] = date('Y-m-d H:i:s');
+
+        $result = file_put_contents(
+            $versionPath,
+            json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)
+        );
+
+        if ($result === false) {
+            throw new RuntimeException("更新版本号失败: $versionPath。请检查文件权限。");
+        }
+
+        Log::info("已更新 version.json: $versionPath -> $version");
     }
 
     /**

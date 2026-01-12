@@ -218,20 +218,21 @@ detect_install() {
 
 # 获取当前版本
 get_current_version() {
-    local config_json="$INSTALL_DIR/config.json"
-    local backend_config="$INSTALL_DIR/backend/config.json"
+    local version_json="$INSTALL_DIR/version.json"
+    local backend_version="$INSTALL_DIR/backend/version.json"
 
-    # 优先从 config.json 读取
-    if [ -f "$config_json" ]; then
-        local ver=$(grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_json" | head -1 | cut -d'"' -f4)
+    # 优先从项目根目录的 version.json 读取
+    if [ -f "$version_json" ]; then
+        local ver=$(grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' "$version_json" | head -1 | cut -d'"' -f4)
         if [ -n "$ver" ]; then
             echo "$ver"
             return 0
         fi
     fi
 
-    if [ -f "$backend_config" ]; then
-        local ver=$(grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' "$backend_config" | head -1 | cut -d'"' -f4)
+    # 回退到 backend 目录（Docker 环境）
+    if [ -f "$backend_version" ]; then
+        local ver=$(grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' "$backend_version" | head -1 | cut -d'"' -f4)
         if [ -n "$ver" ]; then
             echo "$ver"
             return 0
@@ -297,9 +298,9 @@ create_backup() {
 
     # 备份配置文件
     [ -f "$INSTALL_DIR/.env" ] && cp "$INSTALL_DIR/.env" "$backup_path/"
-    [ -f "$INSTALL_DIR/config.json" ] && cp "$INSTALL_DIR/config.json" "$backup_path/"
+    [ -f "$INSTALL_DIR/version.json" ] && cp "$INSTALL_DIR/version.json" "$backup_path/"
     [ -f "$INSTALL_DIR/backend/.env" ] && cp "$INSTALL_DIR/backend/.env" "$backup_path/backend.env"
-    [ -f "$INSTALL_DIR/backend/config.json" ] && cp "$INSTALL_DIR/backend/config.json" "$backup_path/backend.config.json"
+    [ -f "$INSTALL_DIR/backend/version.json" ] && cp "$INSTALL_DIR/backend/version.json" "$backup_path/backend.version.json"
 
     # 记录备份信息
     echo "{\"version\": \"$(get_current_version)\", \"timestamp\": \"$timestamp\"}" > "$backup_path/backup.json"
@@ -342,7 +343,7 @@ perform_upgrade() {
     local preserve_dir="$TEMP_DIR/preserve"
     mkdir -p "$preserve_dir"
 
-    # 保留 .env（不保留 config.json，升级需要更新版本号）
+    # 保留 .env（不保留 version.json，升级需要更新版本号）
     [ -f "$INSTALL_DIR/backend/.env" ] && cp "$INSTALL_DIR/backend/.env" "$preserve_dir/"
     # 保留 storage
     if [ -d "$INSTALL_DIR/backend/storage" ]; then
@@ -401,13 +402,13 @@ perform_upgrade() {
         fi
     done
 
-    # 复制根目录配置
-    [ -f "$src_dir/config.json" ] && cp "$src_dir/config.json" "$INSTALL_DIR/"
+    # 复制根目录版本配置
+    [ -f "$src_dir/version.json" ] && cp "$src_dir/version.json" "$INSTALL_DIR/"
 
     # 8. 恢复保留的文件
     log_step "恢复保留文件..."
     [ -f "$preserve_dir/.env" ] && cp "$preserve_dir/.env" "$INSTALL_DIR/backend/"
-    # 注意：不恢复 config.json，使用升级包中的新版本
+    # 注意：不恢复 version.json，使用升级包中的新版本
 
     # 恢复 storage
     if [ -d "$preserve_dir/storage" ]; then
@@ -569,7 +570,7 @@ rollback() {
 
     # 恢复配置
     [ -f "$latest_backup/backend.env" ] && cp "$latest_backup/backend.env" "$INSTALL_DIR/backend/.env"
-    [ -f "$latest_backup/config.json" ] && cp "$latest_backup/config.json" "$INSTALL_DIR/"
+    [ -f "$latest_backup/version.json" ] && cp "$latest_backup/version.json" "$INSTALL_DIR/"
 
     # 退出维护模式
     if [ "$DEPLOY_MODE" = "docker" ]; then
@@ -725,7 +726,7 @@ main() {
             # 获取目标版本（如果是 latest，需要从包中读取）
             if [ "$target_version" = "latest" ] || [ "$target_version" = "dev" ]; then
                 # 尝试从升级包中读取版本
-                local pkg_version=$(unzip -p "$upgrade_file" "*/config.json" 2>/dev/null | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4 || echo "")
+                local pkg_version=$(unzip -p "$upgrade_file" "*/version.json" 2>/dev/null | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4 || echo "")
                 if [ -n "$pkg_version" ]; then
                     target_version="$pkg_version"
                 fi

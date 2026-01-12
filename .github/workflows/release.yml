@@ -147,10 +147,9 @@ jobs:
 
           # 复制配置文件（不含 deploy，deploy 单独打包）
           cp -r build/nginx release/ssl-manager/ 2>/dev/null || true
-          cp version.json release/ssl-manager/
 
-          # 更新版本信息
-          cat > release/ssl-manager/config.json <<EOF
+          # 生成版本信息文件
+          cat > release/ssl-manager/version.json <<EOF
           {
             "version": "${{ steps.version.outputs.version }}",
             "channel": "${{ steps.version.outputs.channel }}",
@@ -178,7 +177,7 @@ jobs:
           mkdir -p upgrade
           cp -r ssl-manager/backend upgrade/
           cp -r ssl-manager/frontend upgrade/
-          cp ssl-manager/config.json upgrade/
+          cp ssl-manager/version.json upgrade/
           cp ssl-manager/manifest.json upgrade/
           rm -rf upgrade/backend/vendor
           rm -rf upgrade/backend/.env*

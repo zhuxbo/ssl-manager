@@ -195,8 +195,8 @@ download_application() {
     fi
 
     # 复制版本配置
-    if [ -f "$extract_dir/config.json" ]; then
-        cp "$extract_dir/config.json" "$INSTALL_DIR/"
+    if [ -f "$extract_dir/version.json" ]; then
+        cp "$extract_dir/version.json" "$INSTALL_DIR/"
     fi
 
     # 清理临时文件
