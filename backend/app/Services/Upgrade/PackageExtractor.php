@@ -136,6 +136,9 @@ class PackageExtractor
             // 处理删除的文件
             $this->processDeletedFiles($extractedPath);
 
+            // 修复文件权限
+            $this->fixPermissions();
+
             // 清理缓存和临时文件
             $this->cleanupCacheFiles();
 
@@ -204,17 +207,32 @@ class PackageExtractor
      */
     protected function syncDirectory(string $source, string $target): void
     {
+        // 确保目标目录存在
+        if (! File::isDirectory($target)) {
+            File::makeDirectory($target, 0755, true);
+        }
+
         // 使用 rsync 如果可用（不使用 --delete，只覆盖文件）
         if ($this->isRsyncAvailable()) {
             $command = sprintf(
-                'rsync -a %s/ %s/',
+                'rsync -av %s/ %s/ 2>&1',
                 escapeshellarg($source),
                 escapeshellarg($target)
             );
             exec($command, $output, $returnCode);
 
             if ($returnCode !== 0) {
-                throw new RuntimeException("同步目录失败: $source -> $target");
+                $errorOutput = implode("\n", $output);
+                Log::error("rsync 同步失败", [
+                    'source' => $source,
+                    'target' => $target,
+                    'return_code' => $returnCode,
+                    'output' => $errorOutput,
+                ]);
+
+                // rsync 失败时降级到 PHP 方式
+                Log::info("rsync 失败，降级到 PHP 文件复制");
+                $this->syncDirectoryPhp($source, $target);
             }
         } else {
             // 降级到 PHP 文件操作
@@ -262,6 +280,98 @@ class PackageExtractor
                 File::deleteDirectory($dir);
             }
         }
+    }
+
+    /**
+     * 修复文件权限
+     */
+    protected function fixPermissions(): void
+    {
+        $webUser = $this->detectWebUser();
+        if (! $webUser) {
+            Log::warning('无法检测 Web 服务器用户，跳过权限修复');
+            return;
+        }
+
+        $basePath = base_path();
+        $storagePath = storage_path();
+
+        Log::info("修复文件权限，Web 用户: $webUser");
+
+        // 修复 backend 目录权限
+        $this->chownRecursive($basePath, $webUser);
+
+        // 确保 storage 目录可写
+        $this->chmodRecursive($storagePath, 0755, 0644);
+
+        // 确保 bootstrap/cache 可写
+        $cachePath = base_path('bootstrap/cache');
+        if (File::isDirectory($cachePath)) {
+            $this->chmodRecursive($cachePath, 0755, 0644);
+        }
+
+        Log::info('文件权限修复完成');
+    }
+
+    /**
+     * 检测 Web 服务器用户
+     */
+    protected function detectWebUser(): ?string
+    {
+        // 按优先级尝试检测
+        $possibleUsers = ['www-data', 'nginx', 'apache', 'www'];
+
+        foreach ($possibleUsers as $user) {
+            exec("id $user 2>/dev/null", $output, $returnCode);
+            if ($returnCode === 0) {
+                return $user;
+            }
+        }
+
+        // 尝试从当前进程获取
+        $currentUser = posix_getpwuid(posix_geteuid());
+        if ($currentUser && $currentUser['name'] !== 'root') {
+            return $currentUser['name'];
+        }
+
+        return null;
+    }
+
+    /**
+     * 递归修改所有者
+     */
+    protected function chownRecursive(string $path, string $user): void
+    {
+        $command = sprintf('chown -R %s:%s %s 2>&1',
+            escapeshellarg($user),
+            escapeshellarg($user),
+            escapeshellarg($path)
+        );
+        exec($command, $output, $returnCode);
+
+        if ($returnCode !== 0) {
+            Log::warning("chown 失败: $path", ['output' => implode("\n", $output)]);
+        }
+    }
+
+    /**
+     * 递归修改权限
+     */
+    protected function chmodRecursive(string $path, int $dirMode, int $fileMode): void
+    {
+        // 目录权限
+        $command = sprintf('find %s -type d -exec chmod %o {} \; 2>&1',
+            escapeshellarg($path),
+            $dirMode
+        );
+        exec($command);
+
+        // 文件权限
+        $command = sprintf('find %s -type f -exec chmod %o {} \; 2>&1',
+            escapeshellarg($path),
+            $fileMode
+        );
+        exec($command);
     }
 
     /**
