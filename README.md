@@ -1,4 +1,4 @@
-# cert-manager
+# SSL Manager
 
 [![GitHub Release](https://img.shields.io/github/v/release/zhuxbo/cert-manager?include_prereleases)](https://github.com/zhuxbo/cert-manager/releases)
 [![CI](https://github.com/zhuxbo/cert-manager/actions/workflows/ci.yml/badge.svg)](https://github.com/zhuxbo/cert-manager/actions/workflows/ci.yml)
@@ -79,47 +79,23 @@ cd /opt/ssl-manager  # 进入安装目录
 docker-compose down -v  # 停止并删除容器和数据卷
 ```
 
-## 开发
-
-```bash
-# 前端
-pnpm install
-pnpm dev           # 启动 admin + user
-pnpm dev:admin     # 仅启动管理端
-pnpm build         # 构建所有前端
-
-# 后端
-cd backend
-composer install
-php artisan serve
-```
-
-## 生产构建
-
-```bash
-cd build
-./build.sh --test           # 测试构建
-./build.sh --prod           # 生产构建（推送）
-./build.sh --test admin     # 仅构建管理端
-```
-
 ## 架构
 
 ```
-frontend/
-├── shared/     # 共享组件库
-├── admin/      # 管理端
-└── user/       # 用户端
-backend/        # Laravel 11 API
-build/          # Docker 构建
-deploy/         # 部署脚本
+frontend/           # Vue 3 前端
+├── shared/         # 共享组件库
+├── admin/          # 管理端
+└── user/           # 用户端
+backend/            # Laravel 11 后端
+build/              # 构建系统（见 build/README.md）
+deploy/             # 部署脚本
+develop/            # 开发环境（见 develop/README.md）
 ```
 
 | 组件 | 技术栈 |
 |------|--------|
 | 后端 | Laravel 11, PHP 8.3+, MySQL, Redis |
 | 前端 | Vue 3, TypeScript, Element Plus, Vite |
-| 构建 | Docker 容器化，pnpm workspace |
 
 ## 自动化部署
 
@@ -133,7 +109,7 @@ _acme-challenge.example.com  →  *******.your-platform.com
 
 配置后，平台自动完成 DNS 验证，无需手动操作。
 
-### 自动部署
+### 自动部署工具
 
 配合 [cert-deploy](https://github.com/zhuxbo/cert-deploy) 工具实现全自动化：
 
@@ -159,6 +135,14 @@ POST /api/auto/callback  # 部署回调
 
 Authorization: Bearer <refer_id>
 ```
+
+## 文档
+
+| 文档 | 说明 |
+|------|------|
+| [build/README.md](build/README.md) | 构建系统、版本发布 |
+| [develop/README.md](develop/README.md) | 开发环境搭建 |
+| [deploy/docker/README.md](deploy/docker/README.md) | Docker 部署详细说明 |
 
 ## License
 
