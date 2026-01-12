@@ -40,7 +40,7 @@ class UpgradeController extends BaseController
      */
     public function releases(Request $request): void
     {
-        $limit = $request->input('limit', 10);
+        $limit = $request->input('limit', 5);
         $releases = $this->upgradeService->getReleaseHistory($limit);
 
         $this->success([

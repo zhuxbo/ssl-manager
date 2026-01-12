@@ -349,7 +349,7 @@ class UpgradeService
     /**
      * 获取版本历史
      */
-    public function getReleaseHistory(int $limit = 10): array
+    public function getReleaseHistory(int $limit = 5): array
     {
         $channel = $this->versionManager->getChannel();
 

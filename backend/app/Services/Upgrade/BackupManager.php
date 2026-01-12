@@ -72,9 +72,9 @@ class BackupManager
     }
 
     /**
-     * 列出所有备份
+     * 列出备份
      */
-    public function listBackups(): array
+    public function listBackups(int $limit = 5): array
     {
         $backups = [];
         $dirs = File::directories($this->backupPath);
@@ -94,7 +94,7 @@ class BackupManager
         // 按时间倒序排列
         usort($backups, fn ($a, $b) => strcmp($b['created_at'] ?? '', $a['created_at'] ?? ''));
 
-        return $backups;
+        return $limit > 0 ? array_slice($backups, 0, $limit) : $backups;
     }
 
     /**
@@ -185,7 +185,7 @@ class BackupManager
      */
     public function cleanOldBackups(): int
     {
-        $backups = $this->listBackups();
+        $backups = $this->listBackups(0);
         $deleted = 0;
 
         if (count($backups) > $this->maxBackups) {

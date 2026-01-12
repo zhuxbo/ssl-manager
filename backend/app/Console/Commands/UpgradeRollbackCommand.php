@@ -37,8 +37,8 @@ class UpgradeRollbackCommand extends Command
         $force = $this->option('force');
         $delete = $this->option('delete');
 
-        // 获取备份列表
-        $backups = $this->backupManager->listBackups();
+        // 获取备份列表（命令行显示全部）
+        $backups = $this->backupManager->listBackups(0);
 
         if (empty($backups)) {
             $this->warn('没有可用的备份');

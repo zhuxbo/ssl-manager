@@ -82,7 +82,7 @@ class ReleaseClient
     /**
      * 获取历史版本列表
      */
-    public function getReleaseHistory(int $limit = 10, ?string $channel = null): array
+    public function getReleaseHistory(int $limit = 5, ?string $channel = null): array
     {
         $channel = $channel ?? Config::get('version.channel', 'main');
 
