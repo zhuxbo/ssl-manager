@@ -100,6 +100,9 @@ class PackageExtractor
     {
         $this->validatePackage($extractedPath);
 
+        // 升级前检查目标目录权限
+        $this->checkWritableBeforeApply();
+
         try {
             // 应用后端更新
             $backendDir = $this->findBackendDir($extractedPath);
@@ -577,5 +580,66 @@ class PackageExtractor
         }
 
         return $deleted;
+    }
+
+    /**
+     * 升级前检查目标目录是否可写
+     *
+     * @throws RuntimeException 如果目录不可写
+     */
+    protected function checkWritableBeforeApply(): void
+    {
+        $targetDir = base_path();
+        $testDirs = ['app', 'config', 'database', 'routes', 'bootstrap'];
+
+        $notWritable = [];
+
+        foreach ($testDirs as $dir) {
+            $path = "$targetDir/$dir";
+            if (is_dir($path) && ! is_writable($path)) {
+                $notWritable[] = $path;
+            }
+        }
+
+        if (! empty($notWritable)) {
+            $webUser = $this->detectWebUser();
+            $dirsStr = implode(', ', $notWritable);
+
+            throw new RuntimeException(
+                "以下目录不可写: $dirsStr。" .
+                "请检查文件权限，确保 Web 服务用户 ($webUser) 有写权限。" .
+                "可以尝试运行: chown -R $webUser:$webUser $targetDir"
+            );
+        }
+
+        // 检查 storage 目录
+        $storagePath = "$targetDir/storage";
+        if (is_dir($storagePath) && ! is_writable($storagePath)) {
+            throw new RuntimeException(
+                "storage 目录不可写: $storagePath。" .
+                '请确保 storage 目录及其子目录有写权限。'
+            );
+        }
+
+        Log::info('[Upgrade] 目录权限检查通过');
+    }
+
+    /**
+     * 检测 Web 服务用户
+     */
+    protected function detectWebUser(): string
+    {
+        // 检测宝塔环境
+        if (is_dir('/www/server')) {
+            return 'www';
+        }
+
+        // 检查安装目录
+        $basePath = base_path();
+        if (str_starts_with($basePath, '/www/wwwroot/')) {
+            return 'www';
+        }
+
+        return 'www-data';
     }
 }

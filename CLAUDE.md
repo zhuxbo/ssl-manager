@@ -111,6 +111,38 @@ php artisan upgrade:run                # 执行升级
 php artisan upgrade:rollback           # 回滚
 ```
 
+### 升级模式
+
+系统支持两种升级模式：
+
+| 特性 | PHP API 升级 | Shell 脚本升级 |
+|------|-------------|---------------|
+| 触发方式 | 管理后台 API | `deploy/upgrade.sh` |
+| 升级包 | `upgrade` 包 | `full` 包 |
+| 维护模式 | ✅ 自动进入/退出 | ✅ 自动进入/退出 |
+| 权限修复 | ✅ 自动检测和修复 | ✅ 自动修复 |
+| 适用环境 | Docker / 宝塔 | Docker / 宝塔 |
+
+### 关键服务
+
+- `UpgradeService` - 升级主逻辑，包含 `performUpgradeWithStatus()` 后台升级方法
+- `UpgradeStatusManager` - 状态管理，支持动态步骤计算
+- `PackageExtractor` - 包解压和应用，包含权限检查
+- `ReleaseClient` - Release 获取，支持 Gitee/GitHub/Local 多源
+- `BackupManager` - 备份和恢复
+- `VersionManager` - 版本比较和约束检查
+
+### 环境检测
+
+升级系统自动检测部署环境：
+- **Docker**: Web 用户 `www-data`，路径 `/var/www/html`
+- **宝塔**: Web 用户 `www`，路径 `/www/wwwroot/*`
+
+检测标志：
+1. 存在 `/www/server` 目录
+2. 存在 `www` 系统用户
+3. 安装目录在 `/www/wwwroot/` 下
+
 ### 安装目录自动检测
 
 升级脚本通过 `backend/.ssl-manager` 标记文件自动检测安装目录，按以下顺序搜索：

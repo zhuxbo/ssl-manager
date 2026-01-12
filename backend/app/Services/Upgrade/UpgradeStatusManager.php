@@ -2,16 +2,27 @@
 
 namespace App\Services\Upgrade;
 
+use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Log;
 
 class UpgradeStatusManager
 {
     protected string $statusFile;
 
+    protected ?int $expectedSteps = null;
+
     public function __construct()
     {
         $this->statusFile = storage_path('upgrades/status.json');
         $this->ensureDirectory();
+    }
+
+    /**
+     * 设置预期步骤数
+     */
+    public function setExpectedSteps(int $steps): void
+    {
+        $this->expectedSteps = $steps;
     }
 
     protected function ensureDirectory(): void
@@ -181,11 +192,40 @@ class UpgradeStatusManager
     }
 
     /**
-     * 获取总步骤数（预估）
+     * 获取总步骤数
+     * 根据配置动态计算实际步骤数
      */
     protected function getTotalSteps(): int
     {
-        // 基本步骤：fetch_release, check_version, backup, download, extract, apply, clear_cache, update_version, cleanup
-        return 9;
+        // 如果已设置预期步骤数，使用设置的值
+        if ($this->expectedSteps !== null) {
+            return $this->expectedSteps;
+        }
+
+        // 基本步骤（必须执行）
+        // fetch_release, check_version, download, extract, apply, update_version, cleanup, fix_permissions
+        $steps = 8;
+
+        // 可选步骤（根据配置）
+        if (Config::get('upgrade.behavior.force_backup', true)) {
+            $steps++; // backup
+        }
+
+        if (Config::get('upgrade.behavior.maintenance_mode', true)) {
+            $steps += 2; // maintenance_on, maintenance_off
+        }
+
+        if (Config::get('upgrade.behavior.auto_migrate', true)) {
+            $steps++; // migrate
+        }
+
+        if (Config::get('upgrade.behavior.clear_cache', true)) {
+            $steps++; // clear_cache
+        }
+
+        // composer_install 是动态的，暂不计入
+        // 实际执行时会通过 setExpectedSteps 设置
+
+        return $steps;
     }
 }

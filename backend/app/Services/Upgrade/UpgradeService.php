@@ -300,6 +300,7 @@ class UpgradeService
     public function performUpgradeWithStatus(string $version, UpgradeStatusManager $statusManager): array
     {
         $currentVersion = $this->versionManager->getVersionString();
+        $inMaintenanceMode = false;
 
         try {
             // 步骤 1: 获取目标版本信息
@@ -347,6 +348,16 @@ class UpgradeService
                 $statusManager->startStep('backup');
                 $backupId = $this->backupManager->createBackup();
                 $statusManager->completeStep('backup');
+            }
+
+            // 步骤 3.5: 进入维护模式
+            $maintenanceMode = Config::get('upgrade.behavior.maintenance_mode', true);
+
+            if ($maintenanceMode) {
+                $statusManager->startStep('maintenance_on');
+                Artisan::call('down', ['--retry' => 60]);
+                $inMaintenanceMode = true;
+                $statusManager->completeStep('maintenance_on');
             }
 
             // 步骤 4: 下载升级包
@@ -416,6 +427,19 @@ class UpgradeService
             $this->packageExtractor->cleanupOldPackages();
             $statusManager->completeStep('cleanup');
 
+            // 步骤 11: 退出维护模式
+            if ($inMaintenanceMode) {
+                $statusManager->startStep('maintenance_off');
+                Artisan::call('up');
+                $inMaintenanceMode = false;
+                $statusManager->completeStep('maintenance_off');
+            }
+
+            // 步骤 12: 修复文件权限
+            $statusManager->startStep('fix_permissions');
+            $this->fixPermissions();
+            $statusManager->completeStep('fix_permissions');
+
             // 最终清理
             if (function_exists('opcache_reset')) {
                 opcache_reset();
@@ -432,11 +456,14 @@ class UpgradeService
             ];
 
         } catch (\Exception $e) {
-            // 尝试退出维护模式
-            try {
-                Artisan::call('up');
-            } catch (\Exception $upError) {
-                Log::error("退出维护模式失败: {$upError->getMessage()}");
+            // 如果在维护模式中，尝试退出
+            if ($inMaintenanceMode) {
+                try {
+                    Artisan::call('up');
+                    Log::info('[Upgrade] 升级失败后已退出维护模式');
+                } catch (\Exception $upError) {
+                    Log::error("退出维护模式失败: {$upError->getMessage()}");
+                }
             }
 
             Log::error("升级失败: {$e->getMessage()}");
@@ -572,15 +599,40 @@ class UpgradeService
             base_path('../config.json'),   // 项目根目录 config.json
         ];
 
+        $updatedCount = 0;
+        $errors = [];
+
         foreach ($configPaths as $configPath) {
             if (file_exists($configPath)) {
                 $config = json_decode(file_get_contents($configPath), true) ?? [];
                 $config['version'] = $version;
                 $config['updated_at'] = date('Y-m-d H:i:s');
 
-                file_put_contents($configPath, json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
-                Log::info("已更新 config.json 版本号: $configPath -> $version");
+                $result = file_put_contents(
+                    $configPath,
+                    json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)
+                );
+
+                if ($result === false) {
+                    $errors[] = $configPath;
+                    Log::error("更新 config.json 版本号失败: $configPath");
+                } else {
+                    $updatedCount++;
+                    Log::info("已更新 config.json 版本号: $configPath -> $version");
+                }
             }
+        }
+
+        // 如果没有任何配置文件被更新，记录警告
+        if ($updatedCount === 0) {
+            Log::warning('[Upgrade] 没有找到可更新的 config.json 文件');
+        }
+
+        // 如果有错误，抛出异常
+        if (! empty($errors)) {
+            throw new RuntimeException(
+                '更新版本号失败: ' . implode(', ', $errors) . '。请检查文件权限。'
+            );
         }
     }
 
@@ -793,5 +845,98 @@ class UpgradeService
         }
 
         return null;
+    }
+
+    /**
+     * 检测 Web 服务用户
+     * Docker 环境返回 www-data，宝塔环境返回 www
+     */
+    protected function detectWebUser(): string
+    {
+        // 检测宝塔环境标志
+        // 1. 存在 /www/server 目录
+        // 2. 存在 www 系统用户
+        // 3. 安装目录在 /www/wwwroot/ 下
+        if (is_dir('/www/server')) {
+            // 检查 www 用户是否存在
+            if (function_exists('posix_getpwnam') && posix_getpwnam('www')) {
+                return 'www';
+            }
+            // 回退检查
+            exec('id www 2>/dev/null', $output, $returnCode);
+            if ($returnCode === 0) {
+                return 'www';
+            }
+        }
+
+        // 检查安装目录是否在宝塔目录下
+        $basePath = base_path();
+        if (str_starts_with($basePath, '/www/wwwroot/')) {
+            return 'www';
+        }
+
+        // 默认返回 www-data（Docker/Ubuntu/Debian 默认）
+        return 'www-data';
+    }
+
+    /**
+     * 修复文件权限
+     * 参考 deploy/upgrade.sh 的权限修复逻辑
+     */
+    protected function fixPermissions(): void
+    {
+        $basePath = base_path();
+        $webUser = $this->detectWebUser();
+
+        Log::info("[Upgrade] 开始修复权限，Web 用户: $webUser");
+
+        // 使用 shell 命令修复权限（需要适当的权限）
+        // 注意：PHP 进程可能没有 chown 权限，这里尝试执行但不强制要求成功
+        $commands = [
+            // 修改所有者
+            "chown -R $webUser:$webUser " . escapeshellarg($basePath) . ' 2>/dev/null',
+            // 目录权限 755
+            'find ' . escapeshellarg($basePath) . " -type d -exec chmod 755 {} \\; 2>/dev/null",
+            // 文件权限 644
+            'find ' . escapeshellarg($basePath) . " -type f -exec chmod 644 {} \\; 2>/dev/null",
+        ];
+
+        foreach ($commands as $command) {
+            exec($command, $output, $returnCode);
+            if ($returnCode !== 0) {
+                Log::warning("[Upgrade] 权限修复命令执行失败 (可能需要 root 权限): $command");
+            }
+        }
+
+        // .env 文件特殊处理（敏感文件，权限 600）
+        $envFile = "$basePath/.env";
+        if (file_exists($envFile)) {
+            @chmod($envFile, 0600);
+        }
+
+        // storage 目录需要可写
+        $storageDirs = [
+            "$basePath/storage",
+            "$basePath/storage/app",
+            "$basePath/storage/framework",
+            "$basePath/storage/framework/cache",
+            "$basePath/storage/framework/sessions",
+            "$basePath/storage/framework/views",
+            "$basePath/storage/logs",
+        ];
+
+        foreach ($storageDirs as $dir) {
+            if (is_dir($dir)) {
+                @chmod($dir, 0775);
+            }
+        }
+
+        // bootstrap/cache 目录需要可写
+        $cacheDir = "$basePath/bootstrap/cache";
+        if (is_dir($cacheDir)) {
+            @chmod($cacheDir, 0775);
+        }
+
+        Log::info('[Upgrade] 权限修复完成');
     }
 }

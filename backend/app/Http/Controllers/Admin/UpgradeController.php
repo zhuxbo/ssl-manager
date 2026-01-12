@@ -89,13 +89,41 @@ class UpgradeController extends BaseController
 
         exec($command);
 
-        // 等待一小段时间让进程启动
-        usleep(500000); // 0.5秒
+        // 等待并检查进程是否成功启动
+        // 多次重试，最多等待 3 秒
+        $maxRetries = 6;
+        $status = null;
+
+        for ($i = 0; $i < $maxRetries; $i++) {
+            usleep(500000); // 0.5秒
+
+            $status = $this->statusManager->get();
+            if ($status) {
+                break;
+            }
+        }
 
         // 检查状态文件是否已创建
-        $status = $this->statusManager->get();
         if (! $status) {
-            Log::warning('[Upgrade] 状态文件未创建，进程可能启动失败');
+            Log::error('[Upgrade] 状态文件未创建，进程启动失败', [
+                'command' => $command,
+                'log_file' => $logFile,
+            ]);
+
+            // 检查日志文件是否有错误信息
+            $errorMessage = '升级进程启动失败';
+            if (file_exists($logFile)) {
+                $logContent = file_get_contents($logFile);
+                if (! empty($logContent)) {
+                    // 获取最后几行日志
+                    $lines = array_slice(explode("\n", trim($logContent)), -5);
+                    $errorMessage .= '：' . implode(' ', $lines);
+                }
+            }
+
+            $this->error($errorMessage);
+
+            return;
         }
 
         $this->success([
