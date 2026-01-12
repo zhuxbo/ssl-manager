@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { onMounted, ref, computed } from "vue";
+import { onMounted, onUnmounted, ref, computed } from "vue";
 import {
   getVersion,
   checkUpdate,
   getReleases,
   executeUpgrade,
+  getUpgradeStatus,
   getBackups,
   executeRollback,
   deleteBackup,
@@ -13,7 +14,8 @@ import {
   type UpdateCheckResult,
   type ReleaseInfo,
   type BackupInfo,
-  type UpgradeStep
+  type UpgradeStep,
+  type UpgradeStatus
 } from "@/api/upgrade";
 import { message } from "@shared/utils";
 import {
@@ -53,6 +55,8 @@ const rollingBack = ref(false);
 // 升级步骤
 const upgradeSteps = ref<UpgradeStep[]>([]);
 const showUpgradeProgress = ref(false);
+const upgradeStatus = ref<UpgradeStatus | null>(null);
+const pollingInterval = ref<ReturnType<typeof setInterval> | null>(null);
 
 // 步骤名称映射
 const stepNames: Record<string, string> = {
@@ -75,6 +79,10 @@ const stepNames: Record<string, string> = {
 
 // 计算当前升级进度
 const upgradeProgress = computed(() => {
+  // 优先使用服务器返回的进度
+  if (upgradeStatus.value?.progress !== undefined) {
+    return upgradeStatus.value.progress;
+  }
   if (!upgradeSteps.value.length) return 0;
   const completed = upgradeSteps.value.filter(
     s => s.status === "completed"
@@ -187,30 +195,72 @@ const loadBackups = async () => {
   }
 };
 
-// 执行升级
-const handleUpgrade = async (version: string = "latest") => {
-  upgrading.value = true;
-  showUpgradeProgress.value = true;
-  upgradeSteps.value = [];
+// 停止轮询
+const stopPolling = () => {
+  if (pollingInterval.value) {
+    clearInterval(pollingInterval.value);
+    pollingInterval.value = null;
+  }
+};
 
+// 轮询升级状态
+const pollUpgradeStatus = async () => {
   try {
-    const { data } = await executeUpgrade(version);
+    const { data } = await getUpgradeStatus();
+    upgradeStatus.value = data;
     upgradeSteps.value = data.steps || [];
 
-    if (data.success) {
+    if (data.status === "completed") {
+      stopPolling();
+      upgrading.value = false;
       message(`升级成功！${data.from_version} -> ${data.to_version}`, {
         type: "success"
       });
       // 刷新版本信息
       await loadVersion();
       await loadBackups();
-    } else {
+      // 清除更新提示
+      updateInfo.value = null;
+    } else if (data.status === "failed") {
+      stopPolling();
+      upgrading.value = false;
       message("升级失败: " + (data.error || "未知错误"), { type: "error" });
     }
   } catch {
-    message("升级请求失败", { type: "error" });
-  } finally {
+    // 轮询失败时继续尝试，不中断
+    console.error("轮询升级状态失败");
+  }
+};
+
+// 启动轮询
+const startPolling = () => {
+  stopPolling();
+  pollingInterval.value = setInterval(pollUpgradeStatus, 2000);
+  // 立即执行一次
+  pollUpgradeStatus();
+};
+
+// 执行升级
+const handleUpgrade = async (version: string = "latest") => {
+  upgrading.value = true;
+  showUpgradeProgress.value = true;
+  upgradeSteps.value = [];
+  upgradeStatus.value = null;
+
+  try {
+    const { data } = await executeUpgrade(version);
+
+    if (data.started) {
+      message("升级任务已启动", { type: "info" });
+      // 启动轮询获取升级状态
+      startPolling();
+    } else {
+      upgrading.value = false;
+      message("启动升级任务失败", { type: "error" });
+    }
+  } catch {
     upgrading.value = false;
+    message("升级请求失败", { type: "error" });
   }
 };
 
@@ -245,8 +295,10 @@ const handleDeleteBackup = async (backupId: string) => {
 
 // 关闭升级进度
 const closeUpgradeProgress = () => {
+  stopPolling();
   showUpgradeProgress.value = false;
   upgradeSteps.value = [];
+  upgradeStatus.value = null;
 };
 
 // 通道切换状态
@@ -277,6 +329,10 @@ const handleChangeChannel = async (newChannel: "main" | "dev") => {
 onMounted(() => {
   loadVersion();
   loadBackups();
+});
+
+onUnmounted(() => {
+  stopPolling();
 });
 </script>
 
@@ -392,6 +448,12 @@ onMounted(() => {
           :status="upgrading ? '' : upgradeProgress === 100 ? 'success' : 'exception'"
           class="mb-4"
         />
+        <div
+          v-if="upgradeStatus?.current_step && upgrading"
+          class="text-blue-500 text-sm mb-4"
+        >
+          正在执行：{{ stepNames[upgradeStatus.current_step] || upgradeStatus.current_step }}
+        </div>
         <div class="steps">
           <div
             v-for="step in upgradeSteps"

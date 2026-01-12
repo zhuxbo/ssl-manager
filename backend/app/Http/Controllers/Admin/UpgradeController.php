@@ -3,14 +3,17 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Services\Upgrade\UpgradeService;
+use App\Services\Upgrade\UpgradeStatusManager;
 use App\Services\Upgrade\VersionManager;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 class UpgradeController extends BaseController
 {
     public function __construct(
         protected VersionManager $versionManager,
         protected UpgradeService $upgradeService,
+        protected UpgradeStatusManager $statusManager,
     ) {
         parent::__construct();
     }
@@ -50,16 +53,57 @@ class UpgradeController extends BaseController
     }
 
     /**
-     * 执行升级
+     * 启动升级任务（后台执行）
      */
     public function execute(Request $request): void
     {
         $version = $request->input('version', 'latest');
 
-        $result = $this->upgradeService->performUpgrade($version);
+        // 检查是否已有升级任务在运行
+        if ($this->statusManager->isRunning()) {
+            $this->error('已有升级任务在运行中');
 
-        // 无论成功失败都返回完整结果（包含 steps），前端需要显示进度
-        $this->success($result);
+            return;
+        }
+
+        // 启动后台升级进程
+        $phpBinary = PHP_BINARY;
+        $artisan = base_path('artisan');
+        $command = sprintf(
+            '%s %s upgrade:run %s > /dev/null 2>&1 &',
+            escapeshellarg($phpBinary),
+            escapeshellarg($artisan),
+            escapeshellarg($version)
+        );
+
+        exec($command);
+
+        Log::info("升级任务已启动: $version");
+
+        $this->success([
+            'started' => true,
+            'version' => $version,
+            'message' => '升级任务已启动，请轮询状态接口获取进度',
+        ]);
+    }
+
+    /**
+     * 获取升级状态
+     */
+    public function status(): void
+    {
+        $status = $this->statusManager->get();
+
+        if (! $status) {
+            $this->success([
+                'status' => 'idle',
+                'message' => '没有进行中的升级任务',
+            ]);
+
+            return;
+        }
+
+        $this->success($status);
     }
 
     /**

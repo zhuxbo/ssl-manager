@@ -206,6 +206,7 @@ Route::prefix('admin')->middleware('api.admin')->group(function () {
         Route::get('check', [UpgradeController::class, 'check']);
         Route::get('releases', [UpgradeController::class, 'releases']);
         Route::post('execute', [UpgradeController::class, 'execute']);
+        Route::get('status', [UpgradeController::class, 'status']);
         Route::get('backups', [UpgradeController::class, 'backups']);
         Route::post('rollback', [UpgradeController::class, 'rollback']);
         Route::delete('backup', [UpgradeController::class, 'deleteBackup']);

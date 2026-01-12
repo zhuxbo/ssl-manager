@@ -295,6 +295,161 @@ class UpgradeService
     }
 
     /**
+     * 执行升级（带状态管理，用于后台任务）
+     */
+    public function performUpgradeWithStatus(string $version, UpgradeStatusManager $statusManager): array
+    {
+        $currentVersion = $this->versionManager->getVersionString();
+
+        try {
+            // 步骤 1: 获取目标版本信息
+            $statusManager->startStep('fetch_release');
+
+            if ($version === 'latest') {
+                $channel = $this->versionManager->getChannel();
+                $release = $this->releaseClient->getLatestRelease($channel);
+            } else {
+                $tag = str_starts_with($version, 'v') ? $version : "v$version";
+                $release = $this->releaseClient->getReleaseByTag($tag);
+            }
+
+            if (! $release) {
+                throw new RuntimeException("无法获取版本 $version 的信息");
+            }
+
+            $statusManager->completeStep('fetch_release');
+            $targetVersion = $release['version'];
+
+            // 步骤 2: 检查版本
+            $statusManager->startStep('check_version');
+
+            if ($targetVersion === $currentVersion) {
+                throw new RuntimeException("当前已是最新版本 $currentVersion，无需升级");
+            }
+
+            if (! $this->versionManager->isUpgradeAllowed($targetVersion)) {
+                throw new RuntimeException("不允许从 $currentVersion 升级到 $targetVersion（目标版本低于当前版本）");
+            }
+
+            // 检查 PHP 版本
+            if (! $this->versionManager->checkPhpVersion()) {
+                $minVersion = $this->versionManager->getMinPhpVersion();
+                throw new RuntimeException("PHP 版本不满足要求，需要 PHP >= $minVersion");
+            }
+
+            $statusManager->completeStep('check_version');
+
+            // 步骤 3: 创建备份
+            $forceBackup = Config::get('upgrade.behavior.force_backup', true);
+            $backupId = null;
+
+            if ($forceBackup) {
+                $statusManager->startStep('backup');
+                $backupId = $this->backupManager->createBackup();
+                $statusManager->completeStep('backup');
+            }
+
+            // 步骤 4: 下载升级包
+            $statusManager->startStep('download');
+            $packagePath = $this->packageExtractor->getDownloadPath() . "/upgrade-$targetVersion.zip";
+
+            if (! $this->releaseClient->downloadUpgradePackage($release, $packagePath)) {
+                throw new RuntimeException('下载升级包失败');
+            }
+            $statusManager->completeStep('download');
+
+            // 步骤 5: 解压并验证
+            $statusManager->startStep('extract');
+            $extractedPath = $this->packageExtractor->extract($packagePath);
+            $this->packageExtractor->validatePackage($extractedPath);
+            $statusManager->completeStep('extract');
+
+            // 步骤 6: 应用升级
+            $statusManager->startStep('apply');
+            $this->packageExtractor->applyUpgrade($extractedPath);
+            $statusManager->completeStep('apply');
+
+            // 步骤 6.5: Composer 依赖
+            $backendDir = $this->findBackendDirInPackage($extractedPath);
+            $needComposerInstall = $backendDir && (
+                file_exists("$backendDir/composer.json") ||
+                file_exists("$backendDir/composer.lock")
+            );
+
+            if ($needComposerInstall) {
+                $statusManager->startStep('composer_install');
+                if (! $this->runComposerInstall()) {
+                    throw new RuntimeException('Composer 依赖安装失败');
+                }
+                $statusManager->completeStep('composer_install');
+            }
+
+            // 清理 opcache
+            if (function_exists('opcache_reset')) {
+                opcache_reset();
+            }
+
+            // 步骤 7: 运行迁移
+            if (Config::get('upgrade.behavior.auto_migrate', true)) {
+                $statusManager->startStep('migrate');
+                Artisan::call('migrate', ['--force' => true]);
+                $statusManager->completeStep('migrate');
+            }
+
+            // 步骤 8: 清理缓存
+            if (Config::get('upgrade.behavior.clear_cache', true)) {
+                $statusManager->startStep('clear_cache');
+                Artisan::call('optimize:clear');
+                Artisan::call('config:cache');
+                Artisan::call('route:cache');
+                $statusManager->completeStep('clear_cache');
+            }
+
+            // 步骤 9: 更新版本号
+            $statusManager->startStep('update_version');
+            $this->updateEnvVersion($targetVersion);
+            $statusManager->completeStep('update_version');
+
+            // 步骤 10: 清理临时文件
+            $statusManager->startStep('cleanup');
+            $this->packageExtractor->cleanup($extractedPath);
+            $this->packageExtractor->cleanupOldPackages();
+            $statusManager->completeStep('cleanup');
+
+            // 最终清理
+            if (function_exists('opcache_reset')) {
+                opcache_reset();
+            }
+
+            Log::info("升级完成: $currentVersion -> $targetVersion");
+            $statusManager->complete($currentVersion, $targetVersion);
+
+            return [
+                'success' => true,
+                'from_version' => $currentVersion,
+                'to_version' => $targetVersion,
+                'backup_id' => $backupId,
+            ];
+
+        } catch (\Exception $e) {
+            // 尝试退出维护模式
+            try {
+                Artisan::call('up');
+            } catch (\Exception $upError) {
+                Log::error("退出维护模式失败: {$upError->getMessage()}");
+            }
+
+            Log::error("升级失败: {$e->getMessage()}");
+            $statusManager->fail($e->getMessage());
+
+            return [
+                'success' => false,
+                'error' => $e->getMessage(),
+            ];
+        }
+    }
+
+    /**
      * 回滚到指定备份
      */
     public function rollback(string $backupId): array
