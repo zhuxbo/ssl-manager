@@ -203,10 +203,17 @@ const stopPolling = () => {
   }
 };
 
+// 轮询计数器（用于超时检测）
+const pollCount = ref(0);
+const maxPollCount = 300; // 最多轮询 300 次（10分钟，每2秒一次）
+
 // 轮询升级状态
 const pollUpgradeStatus = async () => {
   try {
+    pollCount.value++;
     const { data } = await getUpgradeStatus();
+    console.log("[Upgrade] 轮询状态:", data);
+
     upgradeStatus.value = data;
     upgradeSteps.value = data.steps || [];
 
@@ -224,17 +231,40 @@ const pollUpgradeStatus = async () => {
     } else if (data.status === "failed") {
       stopPolling();
       upgrading.value = false;
-      message("升级失败: " + (data.error || "未知错误"), { type: "error" });
+      const errorMsg = data.error || "未知错误（请查看服务器日志）";
+      console.error("[Upgrade] 升级失败:", errorMsg);
+      message("升级失败: " + errorMsg, { type: "error" });
+    } else if (data.status === "idle") {
+      // 状态文件不存在，可能进程启动失败或还未创建
+      if (pollCount.value > 5) {
+        // 超过5次仍为 idle，可能进程启动失败
+        stopPolling();
+        upgrading.value = false;
+        console.error("[Upgrade] 进程可能启动失败，状态一直为 idle");
+        message("升级进程启动失败，请查看服务器日志", { type: "error" });
+      }
+    } else if (pollCount.value >= maxPollCount) {
+      // 超时
+      stopPolling();
+      upgrading.value = false;
+      console.error("[Upgrade] 轮询超时");
+      message("升级超时，请查看服务器状态", { type: "warning" });
     }
-  } catch {
-    // 轮询失败时继续尝试，不中断
-    console.error("轮询升级状态失败");
+  } catch (err) {
+    console.error("[Upgrade] 轮询失败:", err);
+    // 轮询失败时继续尝试，但如果连续失败太多次则停止
+    if (pollCount.value > 10) {
+      stopPolling();
+      upgrading.value = false;
+      message("无法获取升级状态，请检查网络连接", { type: "error" });
+    }
   }
 };
 
 // 启动轮询
 const startPolling = () => {
   stopPolling();
+  pollCount.value = 0; // 重置计数器
   pollingInterval.value = setInterval(pollUpgradeStatus, 2000);
   // 立即执行一次
   pollUpgradeStatus();

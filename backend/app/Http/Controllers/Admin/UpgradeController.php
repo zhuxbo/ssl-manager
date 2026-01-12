@@ -66,19 +66,37 @@ class UpgradeController extends BaseController
             return;
         }
 
-        // 启动后台升级进程
+        // 清理旧的状态文件
+        $this->statusManager->clear();
+
+        // 启动后台升级进程，输出重定向到日志文件
         $phpBinary = PHP_BINARY;
         $artisan = base_path('artisan');
+        $logFile = storage_path('logs/upgrade-process.log');
+
         $command = sprintf(
-            '%s %s upgrade:run %s > /dev/null 2>&1 &',
+            '%s %s upgrade:run %s >> %s 2>&1 &',
             escapeshellarg($phpBinary),
             escapeshellarg($artisan),
-            escapeshellarg($version)
+            escapeshellarg($version),
+            escapeshellarg($logFile)
         );
+
+        Log::info("[Upgrade] 启动升级任务: $version", [
+            'command' => $command,
+            'log_file' => $logFile,
+        ]);
 
         exec($command);
 
-        Log::info("升级任务已启动: $version");
+        // 等待一小段时间让进程启动
+        usleep(500000); // 0.5秒
+
+        // 检查状态文件是否已创建
+        $status = $this->statusManager->get();
+        if (! $status) {
+            Log::warning('[Upgrade] 状态文件未创建，进程可能启动失败');
+        }
 
         $this->success([
             'started' => true,
