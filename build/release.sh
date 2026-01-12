@@ -31,6 +31,7 @@ SSL证书管理系统 - 版本发布脚本
   版本号              例如: 0.0.10-beta, 1.0.0
 
 选项:
+  --force             强制发布（删除现有 tag/release 后重新创建）
   --no-push           不推送到远程
   --no-tag            不创建 tag
   --branch BRANCH     指定推送分支（默认: 根据版本自动选择）
@@ -43,8 +44,8 @@ SSL证书管理系统 - 版本发布脚本
 示例:
   $0 0.0.10-beta              # 发布到 dev 分支
   $0 1.0.0                    # 发布到 main 分支
+  $0 0.0.10-beta --force      # 强制重新发布（删除旧 tag 和 release）
   $0 0.0.10-beta --no-push    # 仅本地提交和打 tag
-  $0 1.0.0 --branch dev       # 强制发布到 dev 分支
 
 EOF
     exit 0
@@ -54,11 +55,16 @@ EOF
 VERSION=""
 DO_PUSH=true
 DO_TAG=true
+FORCE=false
 BRANCH=""
 
 # 解析参数
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        --force)
+            FORCE=true
+            shift
+            ;;
         --no-push)
             DO_PUSH=false
             shift
@@ -148,8 +154,17 @@ fi
 # 检查 tag 是否已存在
 TAG_NAME="v$VERSION"
 if git tag -l "$TAG_NAME" | grep -q "$TAG_NAME"; then
-    log_error "Tag $TAG_NAME 已存在"
-    exit 1
+    if [ "$FORCE" = true ]; then
+        log_warning "Tag $TAG_NAME 已存在，强制模式将删除重建"
+        # 删除远程 tag
+        git push origin ":refs/tags/$TAG_NAME" 2>/dev/null || true
+        # 删除本地 tag
+        git tag -d "$TAG_NAME"
+        log_success "已删除旧 tag $TAG_NAME"
+    else
+        log_error "Tag $TAG_NAME 已存在（使用 --force 强制重新发布）"
+        exit 1
+    fi
 fi
 
 log_info "============================================"
@@ -159,6 +174,7 @@ log_info "版本号:  $VERSION"
 log_info "Tag:     $TAG_NAME"
 log_info "分支:    $BRANCH"
 log_info "推送:    $DO_PUSH"
+[ "$FORCE" = true ] && log_info "强制模式: 是"
 log_info "============================================"
 echo ""
 
