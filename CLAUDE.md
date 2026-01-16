@@ -101,6 +101,29 @@ ACME_DEFAULT_PRODUCT_ID=xxx
 
 ---
 
+## 安装流程
+
+### 宝塔面板安装（两阶段）
+
+| 阶段 | 执行者 | 职责 |
+|------|--------|------|
+| 环境准备 | `deploy/scripts/bt-install.sh` | PHP 版本选择、扩展检测、Composer 安装、代码下载、权限设置 |
+| 应用安装 | `backend/public/install.php` | Composer 依赖安装、环境配置、数据库迁移、初始化 |
+
+### Composer 依赖安装
+
+Composer 依赖在 Web 安装向导中安装（`InstallExecutor.php` → `ComposerRunner.php`）。
+
+网络检测优先级：
+1. `FORCE_CHINA_MIRROR` 环境变量强制指定
+2. 云服务商元数据检测（阿里云、腾讯云、华为云中国区域）
+3. 百度可达 + Google 不可达检测
+4. GitHub API 访问速度检测
+
+中国大陆网络自动使用腾讯云 Composer 镜像。
+
+---
+
 ## 在线升级
 
 版本号在 `version.json` 配置，升级服务位于 `backend/app/Services/Upgrade/`。
@@ -128,9 +151,24 @@ php artisan upgrade:rollback           # 回滚
 - `UpgradeService` - 升级主逻辑，包含 `performUpgradeWithStatus()` 后台升级方法
 - `UpgradeStatusManager` - 状态管理，支持动态步骤计算
 - `PackageExtractor` - 包解压和应用，包含权限检查
-- `ReleaseClient` - Release 获取，支持 Gitee/GitHub/Local 多源
+- `ReleaseClient` - Release 获取，从 `version.json` 读取自定义 URL
 - `BackupManager` - 备份和恢复
-- `VersionManager` - 版本比较和约束检查
+- `VersionManager` - 版本比较和约束检查，支持 `getReleaseUrl()`
+
+### 自定义 Release URL
+
+通过 `version.json` 的 `release_url` 字段配置自定义升级源：
+
+```json
+{
+  "version": "0.0.9-beta",
+  "channel": "dev",
+  "release_url": "http://localhost:10002"
+}
+```
+
+- 升级时 `release_url` 自动保留，不会被升级包覆盖
+- 如果未配置，默认使用 Gitee 源
 
 ### 环境检测
 
@@ -149,6 +187,30 @@ php artisan upgrade:rollback           # 回滚
 
 1. 预设目录快速检测：`/opt/ssl-manager`、`/opt/cert-manager`、`/www/wwwroot/ssl-manager`
 2. 系统范围搜索（`/opt`、`/www/wwwroot`、`/home`，深度 4 层）
+
+### 本地开发测试
+
+使用本地 release 服务测试升级流程：
+
+```bash
+# 1. 构建并发布到本地 release 服务
+cd build && ./local-release.sh
+
+# 2. 脚本升级测试
+sudo ./deploy/upgrade.sh --url http://localhost:10002 --version 0.0.10-beta --dir /path/to/install -y
+
+# 3. 后台升级测试（需先配置 version.json 的 release_url）
+```
+
+Release 服务目录结构：
+```
+/www/wwwroot/dev/release.test/
+├── releases.json     # Release 索引
+├── main/            # 正式版
+├── dev/             # 开发版
+├── latest/          # 最新稳定版符号链接
+└── dev-latest/      # 最新开发版符号链接
+```
 
 ---
 

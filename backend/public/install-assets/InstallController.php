@@ -143,6 +143,11 @@ class InstallController
             $this->stage = 'install';
 
             if (isset($_POST['install'])) {
+                // 检测是否为 AJAX 请求
+                if (isset($_POST['ajax']) && $_POST['ajax'] === '1') {
+                    $this->executeInstallStream();
+                    exit;
+                }
                 $this->handleInstall();
             }
         }
@@ -475,6 +480,28 @@ class InstallController
 
         if ($result['success']) {
             $this->renderInstallSuccess($result['steps']);
+        }
+    }
+
+    /**
+     * 执行安装（流模式，用于 AJAX 请求）
+     */
+    private function executeInstallStream(): void
+    {
+        // 从 POST 数据重建配置
+        $this->config = InstallConfig::fromPost();
+
+        $executor = new InstallExecutor($this->projectRoot);
+        $reporter = $executor->getReporter();
+
+        // 启用流模式
+        $reporter->setStreamMode(true);
+
+        $result = $executor->execute($this->config);
+
+        if ($result['success']) {
+            // 发送成功事件
+            $reporter->sendSuccess($result['steps']);
         }
     }
 

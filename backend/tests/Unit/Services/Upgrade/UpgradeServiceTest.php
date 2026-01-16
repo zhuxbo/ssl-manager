@@ -118,24 +118,6 @@ class UpgradeServiceTest extends TestCase
         $this->assertEquals('无法获取最新版本信息', $result['message']);
     }
 
-    public function test_detect_web_user_returns_www_for_baota(): void
-    {
-        $service = app(UpgradeService::class);
-
-        $reflection = new \ReflectionClass($service);
-        $method = $reflection->getMethod('detectWebUser');
-        $method->setAccessible(true);
-
-        $result = $method->invoke($service);
-
-        // 在宝塔环境应返回 www
-        if (is_dir('/www/server') || str_starts_with(base_path(), '/www/wwwroot/')) {
-            $this->assertEquals('www', $result);
-        } else {
-            $this->assertEquals('www-data', $result);
-        }
-    }
-
     public function test_get_release_history_returns_releases(): void
     {
         $versionManager = Mockery::mock(VersionManager::class);
@@ -239,20 +221,6 @@ class UpgradeServiceTest extends TestCase
 
         // 在开发环境中，composer 应该是可用的
         $this->assertNotNull($result);
-    }
-
-    public function test_fix_permissions_method_exists_and_callable(): void
-    {
-        $service = app(UpgradeService::class);
-
-        $reflection = new \ReflectionClass($service);
-        $method = $reflection->getMethod('fixPermissions');
-
-        $this->assertTrue($method->isProtected());
-
-        // 验证方法可以被调用（不实际执行，因为可能需要 root 权限）
-        $method->setAccessible(true);
-        $this->assertNull($method->invoke($service));
     }
 
     public function test_check_network_access_method(): void

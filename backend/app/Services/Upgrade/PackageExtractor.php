@@ -128,12 +128,10 @@ class PackageExtractor
                 $this->applyFrontendUpgrade($frontendEasyDir, 'easy');
             }
 
-            // 更新项目根目录的 version.json
+            // 更新项目根目录的 version.json（保留用户自定义的 release_url）
             $versionFile = $this->findVersionConfig($extractedPath);
             if ($versionFile) {
-                $targetFile = base_path('../version.json');
-                File::copy($versionFile, $targetFile);
-                Log::info('已更新项目根目录 version.json');
+                $this->updateVersionJsonWithPreservedFields($versionFile);
             }
 
             // 处理删除的文件
@@ -393,6 +391,42 @@ class PackageExtractor
     }
 
     /**
+     * 更新 version.json 并保留用户自定义字段（如 release_url）
+     */
+    protected function updateVersionJsonWithPreservedFields(string $newVersionFile): void
+    {
+        $targetFile = base_path('../version.json');
+
+        // 读取现有配置中需要保留的字段
+        $existingConfig = [];
+        if (File::exists($targetFile)) {
+            $content = File::get($targetFile);
+            $existingConfig = json_decode($content, true) ?: [];
+        }
+
+        // 需要保留的用户自定义字段（安装时配置的 release_url 和 network）
+        $preservedFields = ['release_url', 'network'];
+        $preserved = [];
+        foreach ($preservedFields as $field) {
+            if (isset($existingConfig[$field])) {
+                $preserved[$field] = $existingConfig[$field];
+            }
+        }
+
+        // 读取新版本配置
+        $newConfig = json_decode(File::get($newVersionFile), true) ?: [];
+
+        // 合并：保留用户自定义字段
+        foreach ($preserved as $field => $value) {
+            $newConfig[$field] = $value;
+        }
+
+        // 写入合并后的配置
+        File::put($targetFile, json_encode($newConfig, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) . "\n");
+        Log::info('已更新项目根目录 version.json', ['preserved' => array_keys($preserved)]);
+    }
+
+    /**
      * 处理删除的文件
      */
     protected function processDeletedFiles(string $extractedPath): void
@@ -588,7 +622,8 @@ class PackageExtractor
     protected function checkWritableBeforeApply(): void
     {
         $targetDir = base_path();
-        $testDirs = ['app', 'config', 'database', 'routes', 'bootstrap'];
+        // 检查核心目录和 vendor（仅顶层目录，无性能影响）
+        $testDirs = ['app', 'config', 'database', 'routes', 'bootstrap', 'vendor'];
 
         $notWritable = [];
 

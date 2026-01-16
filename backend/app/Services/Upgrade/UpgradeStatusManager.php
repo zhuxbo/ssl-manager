@@ -203,8 +203,8 @@ class UpgradeStatusManager
         }
 
         // 基本步骤（必须执行）
-        // fetch_release, check_version, download, extract, apply, update_version, cleanup, fix_permissions
-        $steps = 8;
+        // fetch_release, check_version, download, extract, apply, update_version, cleanup
+        $steps = 7;
 
         // 可选步骤（根据配置）
         if (Config::get('upgrade.behavior.force_backup', true)) {

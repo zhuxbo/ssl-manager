@@ -230,6 +230,7 @@ class UpgradeController extends BaseController
     /**
      * 查找 PHP CLI 二进制路径
      * PHP_BINARY 在 PHP-FPM 环境下返回 php-fpm 路径，需要找到 php CLI
+     * 注意：宝塔面板有 open_basedir 限制，需要优先检查允许范围内的路径
      */
     protected function findPhpBinary(): string
     {
@@ -238,33 +239,34 @@ class UpgradeController extends BaseController
             return PHP_BINARY;
         }
 
+        // 优先：从 php-fpm 路径推断 php 路径（在宝塔环境下通常在 open_basedir 允许范围内）
+        $phpFpmPath = PHP_BINARY;
+        $phpPath = str_replace(['php-fpm', 'sbin'], ['php', 'bin'], $phpFpmPath);
+        if ($phpPath !== $phpFpmPath && @file_exists($phpPath) && @is_executable($phpPath)) {
+            return $phpPath;
+        }
+
         // 尝试常见的 PHP CLI 路径（最低支持 PHP 8.3）
+        // 使用 @ 抑制 open_basedir 限制错误
         $candidates = [
+            '/www/server/php/84/bin/php',  // 宝塔 PHP 8.4（优先新版本）
+            '/www/server/php/83/bin/php',  // 宝塔 PHP 8.3
             '/usr/bin/php',
             '/usr/local/bin/php',
             '/opt/php/bin/php',
-            '/www/server/php/83/bin/php',  // 宝塔 PHP 8.3
-            '/www/server/php/84/bin/php',  // 宝塔 PHP 8.4
         ];
 
         foreach ($candidates as $path) {
-            if (file_exists($path) && is_executable($path)) {
+            if (@file_exists($path) && @is_executable($path)) {
                 return $path;
             }
         }
 
         // 尝试从 PATH 中查找
         $output = [];
-        exec('which php 2>/dev/null', $output);
-        if (! empty($output[0]) && file_exists($output[0])) {
+        @exec('which php 2>/dev/null', $output);
+        if (! empty($output[0]) && @file_exists($output[0])) {
             return $output[0];
-        }
-
-        // 回退：尝试从 php-fpm 路径推断 php 路径
-        $phpFpmPath = PHP_BINARY;
-        $phpPath = str_replace(['php-fpm', 'sbin'], ['php', 'bin'], $phpFpmPath);
-        if ($phpPath !== $phpFpmPath && file_exists($phpPath)) {
-            return $phpPath;
         }
 
         // 最后尝试直接使用 'php' 命令

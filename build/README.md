@@ -5,15 +5,15 @@
 ```
 build/
 ├── build.sh              # 主构建脚本
-├── release.sh            # 版本发布脚本
+├── git-release.sh        # Git 版本发布（打 tag、push）
+├── local-release.sh      # 本地发布测试
+├── remote-release.sh     # 远程服务器发布
 ├── config.json           # 构建配置
 ├── build.env             # 构建环境变量
-├── Dockerfile.base       # 基础镜像
-├── Dockerfile.build      # 构建镜像
 ├── scripts/              # 辅助脚本
-│   ├── sync-to-production.sh   # 同步到生产目录
+│   ├── release-common.sh       # 发布公共函数库
 │   ├── package.sh              # 打包脚本
-│   ├── release.sh              # Gitee Release 上传
+│   ├── sync-to-production.sh   # 同步到生产目录
 │   └── container-build.sh      # 容器化构建
 ├── nginx/                # Nginx 配置模板
 ├── web/                  # Web 服务配置
@@ -22,20 +22,20 @@ build/
 
 ## 版本发布
 
-### 快速发布
+### Git 版本发布
 
 ```bash
 # 发布测试版（自动推送到 dev 分支）
-./build/release.sh 0.0.10-beta
+./build/git-release.sh 0.0.10-beta
 
 # 发布正式版（自动推送到 main 分支）
-./build/release.sh 1.0.0
+./build/git-release.sh 1.0.0
 
-# 强制重新发布（删除旧 tag 后重新创建，用于重新触发 CI）
-./build/release.sh 0.0.10-beta --force
+# 强制重新发布（删除旧 tag 后重新创建）
+./build/git-release.sh 0.0.10-beta --force
 
 # 仅本地提交，不推送
-./build/release.sh 0.0.10-beta --no-push
+./build/git-release.sh 0.0.10-beta --no-push
 ```
 
 ### 分支规则
@@ -48,13 +48,12 @@ build/
 
 ### 发布流程
 
-1. `release.sh` 自动更新 `version.json`
+1. `git-release.sh` 自动更新 `version.json`
 2. 提交更改并创建 tag
 3. 推送到远程仓库
-4. GitHub Actions 自动触发：
-   - 构建并打包
-   - 创建 GitHub Release
-   - 同步到 Gitee
+4. 本地/远程发布：
+   - `local-release.sh` - 发布到本地测试服务
+   - `remote-release.sh` - 发布到远程服务器
 
 ## 构建命令
 
@@ -107,22 +106,144 @@ build/
 
 | Workflow | 触发条件 | 功能 |
 |----------|---------|------|
-| `release.yml` | 推送 `v*` tag | 构建、打包、创建 Release |
-| `sync-to-gitee.yml` | push/release | 同步代码和 Release 到 Gitee |
-| `ci.yml` | PR/push | 代码检查 |
+| `release.yml` | 推送 `v*` tag | 构建、打包、创建 GitHub Release |
+| `ci.yml` | PR/push | 代码检查、构建测试 |
+
+GitHub Release 仅用于代码存档，实际部署使用自建 release 服务。
+
+## 本地发布测试
+
+### 环境准备
+
+搭建本地 release 服务用于测试升级流程：
+
+```
+/www/wwwroot/dev/release.test/     # Release 服务目录 (http://localhost:10002)
+├── install.sh                      # 安装脚本（自动注入 release_url）
+├── upgrade.sh                      # 升级脚本（自动注入 release_url）
+├── releases.json                   # Release 索引
+├── main/v1.0.0/                   # 正式版
+│   └── ssl-manager-*.zip
+├── dev/v0.0.10-beta/              # 开发版
+│   └── ssl-manager-*.zip
+├── latest/                         # 最新稳定版符号链接
+└── dev-latest/                     # 最新开发版符号链接
+```
+
+### 一键发布
+
+```bash
+# 构建并发布到本地 release 服务
+./build/local-release.sh              # 使用 version.json 版本
+./build/local-release.sh 0.0.10-beta  # 指定版本
+```
+
+脚本会自动：
+1. 构建所有包（full、upgrade、script）
+2. 复制到对应版本目录
+3. 更新 releases.json
+4. 部署 install.sh/upgrade.sh 到根目录（替换 `__RELEASE_URL__` 占位符）
+5. 创建 latest 符号链接
+6. 设置权限
+
+### 测试安装/升级
+
+```bash
+# 一键安装（curl 方式）
+curl -fsSL http://localhost:10002/install.sh | sudo bash
+
+# 一键升级
+curl -fsSL http://localhost:10002/upgrade.sh | sudo bash
+
+# 指定版本安装
+curl -fsSL http://localhost:10002/install.sh | sudo bash -s -- --version 0.0.10-beta
+
+# 手动升级（指定目录）
+./deploy/upgrade.sh --url http://localhost:10002 --version 0.0.10-beta --dir /path/to/app -y
+```
+
+### version.json 配置
+
+```json
+{
+  "version": "0.0.9-beta",
+  "channel": "dev",
+  "release_url": "http://localhost:10002"
+}
+```
+
+| 字段 | 说明 |
+|------|------|
+| `version` | 当前版本号 |
+| `channel` | 渠道：`main`（正式）或 `dev`（开发） |
+| `release_url` | 自定义 release 服务 URL（可选，升级时保留） |
+
+`release_url` 在升级过程中会被保留，不会被新版本覆盖。
+
+## 远程发布
 
 ### 配置
 
-Gitee 同步配置在 `.github/workflows/sync-to-gitee.yml`：
+```bash
+# 1. 创建配置文件
+cp build/remote-release.conf.example build/remote-release.conf
+chmod 600 build/remote-release.conf
 
-```yaml
-env:
-  GITEE_OWNER: zhuxbo
-  GITEE_REPO: cert-manager
+# 2. 编辑配置
+vim build/remote-release.conf
 ```
 
-需要在 GitHub 仓库设置 Secrets：
-- `GITEE_TOKEN`: Gitee 访问令牌
+配置文件示例：
+
+```bash
+# 服务器列表（格式: "名称:主机:端口:目录:URL"）
+SERVERS=(
+    "cn:release-cn.example.com:22:/var/www/release:https://release-cn.example.com"
+    "global:release.example.com:22:/var/www/release:https://release.example.com"
+)
+
+SSH_USER="deploy"
+SSH_KEY="~/.ssh/release_deploy"
+KEEP_VERSIONS=5
+```
+
+### 发布命令
+
+```bash
+# 发布到所有服务器（使用 version.json 版本）
+./build/remote-release.sh
+
+# 发布指定版本
+./build/remote-release.sh 0.1.0
+
+# 只发布到指定服务器
+./build/remote-release.sh --server cn
+
+# 只上传（跳过构建）
+./build/remote-release.sh --upload-only
+
+# 测试 SSH 连接
+./build/remote-release.sh --test
+```
+
+### 远程目录结构
+
+```
+/var/www/release/
+├── releases.json           # Release 索引
+├── install.sh              # 安装脚本（已替换 RELEASE_URL）
+├── upgrade.sh              # 升级脚本（已替换 RELEASE_URL）
+├── main/v1.0.0/           # 正式版
+│   └── ssl-manager-*.zip
+├── dev/v0.0.15-beta/      # 开发版
+│   └── ssl-manager-*.zip
+├── latest/                 # 最新正式版符号链接
+└── dev-latest/             # 最新开发版符号链接
+```
+
+### 版本清理
+
+每个通道自动保留最新 5 个版本（可通过 `KEEP_VERSIONS` 配置）。
 
 ## 定制构建
 

@@ -26,6 +26,7 @@ BUILD_DIR="${BUILD_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 PRODUCTION_DIR="${PRODUCTION_DIR:-$BUILD_DIR/temp/production-code}"
 OUTPUT_DIR="${OUTPUT_DIR:-$BUILD_DIR/temp/packages}"
 CHANNEL="${RELEASE_CHANNEL:-main}"
+BUILD_CONFIG="$BUILD_DIR/config.json"
 
 # 显示帮助
 show_help() {
@@ -89,6 +90,43 @@ if [ ! -f "$PRODUCTION_DIR/config.json" ]; then
     exit 1
 fi
 
+# 从 build/config.json 读取排除列表到临时文件
+# 用法: create_exclude_file <package_type> <output_file>
+# package_type: full 或 upgrade
+create_exclude_file() {
+    local pkg_type="$1"
+    local output_file="$2"
+
+    # 清空文件
+    > "$output_file"
+
+    if [ -f "$BUILD_CONFIG" ] && command -v jq &> /dev/null; then
+        jq -r ".package.$pkg_type.exclude[]?" "$BUILD_CONFIG" 2>/dev/null >> "$output_file" || true
+    fi
+
+    # 如果配置读取失败，使用默认值
+    if [ ! -s "$output_file" ]; then
+        if [ "$pkg_type" = "full" ]; then
+            cat >> "$output_file" <<EOF
+vendor/
+deploy/
+storage/upgrades/
+storage/backups/
+storage/logs/*.log
+storage/framework/cache/*
+EOF
+        elif [ "$pkg_type" = "upgrade" ]; then
+            cat >> "$output_file" <<EOF
+.env
+.env.*
+storage/*
+bootstrap/cache/*
+vendor/*
+EOF
+        fi
+    fi
+}
+
 # 读取版本号
 VERSION=$(grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' "$PRODUCTION_DIR/config.json" | head -1 | sed 's/.*"\([^"]*\)"$/\1/')
 if [ -z "$VERSION" ]; then
@@ -125,8 +163,12 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 FULL_DIR="$WORK_DIR/full"
 mkdir -p "$FULL_DIR"
 
-# 复制文件，排除 vendor 目录（由 install.php 安装）和 deploy 目录（独立脚本包）
-rsync -a --exclude='vendor/' --exclude='deploy/' "$PRODUCTION_DIR/" "$FULL_DIR/"
+# 创建排除列表文件
+FULL_EXCLUDE_FILE="$WORK_DIR/full-exclude.txt"
+create_exclude_file "full" "$FULL_EXCLUDE_FILE"
+
+# 复制文件，使用配置的排除列表
+rsync -a --exclude-from="$FULL_EXCLUDE_FILE" "$PRODUCTION_DIR/" "$FULL_DIR/"
 
 # 确保前端目录完整
 for app in admin user easy web; do
@@ -173,14 +215,12 @@ UPGRADE_DIR="$WORK_DIR/upgrade"
 mkdir -p "$UPGRADE_DIR"
 
 # 升级包只包含代码，不包含 vendor、配置和用户数据
-# 后端：排除 .env, storage/*, bootstrap/cache/*, vendor/*
+# 创建排除列表文件
+UPGRADE_EXCLUDE_FILE="$WORK_DIR/upgrade-exclude.txt"
+create_exclude_file "upgrade" "$UPGRADE_EXCLUDE_FILE"
+
 mkdir -p "$UPGRADE_DIR/backend"
-rsync -a --exclude='.env' \
-         --exclude='.env.*' \
-         --exclude='storage/*' \
-         --exclude='bootstrap/cache/*' \
-         --exclude='vendor/*' \
-         "$PRODUCTION_DIR/backend/" "$UPGRADE_DIR/backend/"
+rsync -a --exclude-from="$UPGRADE_EXCLUDE_FILE" "$PRODUCTION_DIR/backend/" "$UPGRADE_DIR/backend/"
 
 # 只保留 composer.json 和 composer.lock（升级时由 install.php 安装依赖）
 # vendor 目录创建空占位
@@ -209,31 +249,6 @@ cat > "$UPGRADE_DIR/manifest.json" <<EOF
   "build_time": "$(date -u "+%Y-%m-%dT%H:%M:%SZ")"
 }
 EOF
-
-# 生成 deleted-files.txt（基于 git diff 自动检测删除的文件）
-if [ -d "$PRODUCTION_DIR/.git" ]; then
-    cd "$PRODUCTION_DIR"
-    # 获取上一个版本的 tag
-    PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
-
-    if [ -n "$PREV_TAG" ]; then
-        log_info "检测删除的文件（对比 $PREV_TAG）..."
-
-        # 获取删除的文件列表（D = deleted）
-        git diff --name-status "$PREV_TAG" HEAD | grep "^D" | cut -f2 > "$UPGRADE_DIR/deleted-files.txt"
-
-        DELETED_COUNT=$(wc -l < "$UPGRADE_DIR/deleted-files.txt" | tr -d ' ')
-        if [ "$DELETED_COUNT" -gt 0 ]; then
-            log_info "发现 $DELETED_COUNT 个删除的文件"
-        else
-            rm -f "$UPGRADE_DIR/deleted-files.txt"
-            log_info "没有删除的文件"
-        fi
-    else
-        log_warning "无法获取上一个版本 tag，跳过删除文件检测"
-    fi
-    cd - > /dev/null
-fi
 
 # 复制 nginx 配置
 if [ -d "$PRODUCTION_DIR/nginx" ]; then

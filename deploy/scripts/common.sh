@@ -4,14 +4,10 @@
 # 提供日志、检测、工具等通用函数
 
 # ========================================
-# 仓库配置（硬编码）
+# Release 服务配置
 # ========================================
-REPO_OWNER="zhuxbo"
-REPO_NAME="cert-manager"
-GITEE_BASE_URL="https://gitee.com/$REPO_OWNER/$REPO_NAME"
-GITHUB_BASE_URL="https://github.com/$REPO_OWNER/$REPO_NAME"
-GITEE_RAW_URL="https://gitee.com/$REPO_OWNER/$REPO_NAME/raw"
-GITHUB_RAW_URL="https://raw.githubusercontent.com/$REPO_OWNER/$REPO_NAME"
+# 通过环境变量 CUSTOM_RELEASE_URL 或 --url 参数指定自建 release 服务 URL
+# 示例: CUSTOM_RELEASE_URL="http://localhost:10002"
 
 # 颜色定义
 RED='\033[0;31m'
@@ -390,70 +386,51 @@ resolve_version_tag() {
     esac
 }
 
-# 下载 Release 包（支持版本回退）
+# 下载 Release 包
 # 用法: download_release_file <filename> <save_path> [version]
 # version: latest（默认）、dev、或具体版本号如 1.0.0
+# 必须配置环境变量 CUSTOM_RELEASE_URL 指定 release 服务
 download_release_file() {
     local filename="$1"
     local save_path="$2"
     local version="${3:-latest}"
 
+    # 检查必须的配置
+    if [ -z "$CUSTOM_RELEASE_URL" ]; then
+        log_error "未配置 release 服务 URL"
+        log_info "请使用 --url 参数指定，或设置环境变量 CUSTOM_RELEASE_URL"
+        return 1
+    fi
+
+    local base_url="${CUSTOM_RELEASE_URL%/}"  # 移除末尾斜杠
+    local url=""
+
     # 处理特殊版本标识
     local tag=$(resolve_version_tag "$version")
 
-    # 构建 URL 列表
-    local urls=()
-
+    # 构建 URL
     if [[ "$tag" == "dev-latest" ]]; then
-        # 开发版只尝试 dev 分支
-        urls+=("$GITEE_BASE_URL/releases/download/dev-latest/$filename")
-        urls+=("$GITHUB_BASE_URL/releases/download/dev-latest/$filename")
+        url="$base_url/dev-latest/$filename"
     elif [[ "$tag" == "latest" ]]; then
-        # 稳定版只尝试 main 分支
-        urls+=("$GITEE_BASE_URL/releases/download/latest/$filename")
-        urls+=("$GITHUB_BASE_URL/releases/download/latest/$filename")
+        url="$base_url/latest/$filename"
     else
-        # 指定版本：先尝试 main 分支 tag (v1.0.0)，再尝试 dev 分支 tag (dev-v1.0.0)
-        urls+=("$GITEE_BASE_URL/releases/download/v$tag/$filename")
-        urls+=("$GITHUB_BASE_URL/releases/download/v$tag/$filename")
-        urls+=("$GITEE_BASE_URL/releases/download/dev-v$tag/$filename")
-        urls+=("$GITHUB_BASE_URL/releases/download/dev-v$tag/$filename")
+        # 开发版放在 dev/ 目录，正式版放在 main/ 目录
+        if [[ "$version" =~ -(dev|alpha|beta|rc) ]]; then
+            url="$base_url/dev/v$version/$filename"
+        else
+            url="$base_url/main/v$version/$filename"
+        fi
     fi
 
     log_info "下载: $filename (版本: $version)"
+    log_info "URL: $url"
 
-    for url in "${urls[@]}"; do
-        log_info "尝试: $url"
-        if curl -fsSL --connect-timeout 10 --max-time 300 -o "$save_path" "$url" 2>/dev/null; then
-            log_success "下载成功"
-            return 0
-        fi
-    done
-
-    log_error "下载失败: $filename (版本: $version)"
-    return 1
-}
-
-# 下载 Raw 文件（从仓库源码）
-# 用法: download_raw_file <file_path> <save_path> [branch]
-download_raw_file() {
-    local file_path="$1"
-    local save_path="$2"
-    local branch="${3:-main}"
-
-    local gitee_url="$GITEE_RAW_URL/$branch/$file_path"
-    local github_url="$GITHUB_RAW_URL/$branch/$file_path"
-
-    # 优先尝试 Gitee
-    if curl -fsSL --connect-timeout 10 -o "$save_path" "$gitee_url" 2>/dev/null; then
+    if curl -fsSL --connect-timeout 10 --max-time 300 -o "$save_path" "$url" 2>/dev/null; then
+        log_success "下载成功"
         return 0
     fi
 
-    # 回退到 GitHub
-    if curl -fsSL --connect-timeout 10 -o "$save_path" "$github_url" 2>/dev/null; then
-        return 0
-    fi
-
+    log_error "下载失败: $filename"
     return 1
 }
 

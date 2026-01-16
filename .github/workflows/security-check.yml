@@ -1,0 +1,128 @@
+name: Security Check
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+jobs:
+  check-secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for SSH private keys
+        run: |
+          echo "检查 SSH 私钥文件..."
+
+          # 检查是否有私钥文件
+          if find . -type f \( -name "id_rsa" -o -name "id_ed25519" -o -name "id_dsa" -o -name "id_ecdsa" \) \
+               ! -path "./.git/*" | grep -q .; then
+            echo "::error::发现 SSH 私钥文件！请勿提交私钥到仓库"
+            find . -type f \( -name "id_rsa" -o -name "id_ed25519" -o -name "id_dsa" -o -name "id_ecdsa" \) \
+               ! -path "./.git/*"
+            exit 1
+          fi
+
+          # 检查 .pem 文件（排除证书）
+          if find . -type f -name "*.pem" ! -path "./.git/*" | while read f; do
+            if grep -q "PRIVATE KEY" "$f" 2>/dev/null; then
+              echo "$f"
+              exit 1
+            fi
+          done; then
+            :
+          else
+            echo "::error::发现包含私钥的 .pem 文件！"
+            exit 1
+          fi
+
+          echo "✅ 未发现 SSH 私钥文件"
+
+      - name: Check for private key content
+        run: |
+          echo "检查文件内容是否包含私钥..."
+
+          # 检查文件内容是否包含私钥
+          if grep -rE "BEGIN (RSA|OPENSSH|EC|DSA|ENCRYPTED) PRIVATE KEY" \
+               --include="*.conf" --include="*.sh" --include="*.json" \
+               --include="*.yml" --include="*.yaml" --include="*.env*" \
+               --include="*.php" --include="*.js" --include="*.ts" \
+               --include="*.md" --include="*.txt" \
+               . 2>/dev/null; then
+            echo "::error::文件内容包含 SSH 私钥！请勿提交私钥到仓库"
+            exit 1
+          fi
+
+          echo "✅ 文件内容未包含私钥"
+
+      - name: Check for sensitive config files
+        run: |
+          echo "检查敏感配置文件..."
+
+          # 检查敏感配置文件是否被提交
+          SENSITIVE_FILES=(
+            "build/remote-release.conf"
+            ".env"
+            "backend/.env"
+            ".env.local"
+            ".env.production"
+          )
+
+          found_sensitive=false
+          for file in "${SENSITIVE_FILES[@]}"; do
+            if [ -f "$file" ]; then
+              echo "::error::敏感文件 $file 不应提交到仓库"
+              found_sensitive=true
+            fi
+          done
+
+          if [ "$found_sensitive" = true ]; then
+            exit 1
+          fi
+
+          echo "✅ 未发现敏感配置文件"
+
+      - name: Check for hardcoded credentials
+        run: |
+          echo "检查硬编码凭证..."
+
+          # 检查可能的硬编码密码/密钥（排除示例和测试文件）
+          patterns=(
+            "password[[:space:]]*=[[:space:]]*['\"][^'\"]{8,}['\"]"
+            "secret[[:space:]]*=[[:space:]]*['\"][^'\"]{8,}['\"]"
+            "api_key[[:space:]]*=[[:space:]]*['\"][^'\"]{8,}['\"]"
+          )
+
+          found_credentials=false
+          for pattern in "${patterns[@]}"; do
+            if grep -rEi "$pattern" \
+                 --include="*.php" --include="*.js" --include="*.ts" \
+                 --exclude-dir=".git" --exclude-dir="vendor" --exclude-dir="node_modules" \
+                 --exclude="*.example*" --exclude="*test*" --exclude="*Test*" \
+                 . 2>/dev/null | grep -v "env(" | grep -v "getenv(" | grep -v "config(" | head -5; then
+              found_credentials=true
+            fi
+          done
+
+          if [ "$found_credentials" = true ]; then
+            echo "::warning::发现可能的硬编码凭证，请检查是否为敏感信息"
+          fi
+
+          echo "✅ 凭证检查完成"
+
+      - name: Summary
+        run: |
+          echo ""
+          echo "╔═══════════════════════════════════════╗"
+          echo "║       安全检查通过                    ║"
+          echo "╚═══════════════════════════════════════╝"
+          echo ""
+          echo "检查项目："
+          echo "  ✅ SSH 私钥文件"
+          echo "  ✅ 私钥内容"
+          echo "  ✅ 敏感配置文件"
+          echo "  ✅ 硬编码凭证"

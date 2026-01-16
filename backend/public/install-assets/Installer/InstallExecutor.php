@@ -68,6 +68,8 @@ class InstallExecutor
                 $this->reporter->startStep(++$step, '安装 Composer 依赖');
                 $this->reporter->showOutput('正在安装依赖，可能需要较长时间...');
                 if (! $this->composerRunner->install()) {
+                    // 失败时输出详细错误信息
+                    $this->reporter->showOutput($this->composerRunner->getOutputString());
                     throw new \Exception('Composer 依赖安装失败 (返回码 ' . $this->composerRunner->getReturnCode() . ')');
                 }
                 $this->reporter->showOutput($this->composerRunner->getOutputString());

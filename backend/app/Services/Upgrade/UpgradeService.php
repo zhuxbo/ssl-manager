@@ -435,11 +435,6 @@ class UpgradeService
                 $statusManager->completeStep('maintenance_off');
             }
 
-            // 步骤 12: 修复文件权限
-            $statusManager->startStep('fix_permissions');
-            $this->fixPermissions();
-            $statusManager->completeStep('fix_permissions');
-
             // 最终清理
             if (function_exists('opcache_reset')) {
                 opcache_reset();
@@ -571,17 +566,25 @@ class UpgradeService
     {
         $assets = $release['assets'] ?? [];
 
+        // 优先查找 upgrade 包大小
         foreach ($assets as $asset) {
             $name = $asset['name'] ?? '';
-            if (str_contains($name, 'upgrade') || str_contains($name, 'full')) {
+            if (str_contains($name, 'upgrade') && str_ends_with($name, '.zip')) {
                 $size = $asset['size'] ?? 0;
-
-                // Gitee API 不返回 size 字段，显示"未知"
-                if ($size <= 0) {
-                    return '未知';
+                if ($size > 0) {
+                    return $this->formatBytes($size);
                 }
+            }
+        }
 
-                return $this->formatBytes($size);
+        // 回退到 full 包
+        foreach ($assets as $asset) {
+            $name = $asset['name'] ?? '';
+            if (str_contains($name, 'full') && str_ends_with($name, '.zip')) {
+                $size = $asset['size'] ?? 0;
+                if ($size > 0) {
+                    return $this->formatBytes($size);
+                }
             }
         }
 
@@ -843,98 +846,5 @@ class UpgradeService
         }
 
         return null;
-    }
-
-    /**
-     * 检测 Web 服务用户
-     * Docker 环境返回 www-data，宝塔环境返回 www
-     */
-    protected function detectWebUser(): string
-    {
-        // 检测宝塔环境标志
-        // 1. 存在 /www/server 目录
-        // 2. 存在 www 系统用户
-        // 3. 安装目录在 /www/wwwroot/ 下
-        if (is_dir('/www/server')) {
-            // 检查 www 用户是否存在
-            if (function_exists('posix_getpwnam') && posix_getpwnam('www')) {
-                return 'www';
-            }
-            // 回退检查
-            exec('id www 2>/dev/null', $output, $returnCode);
-            if ($returnCode === 0) {
-                return 'www';
-            }
-        }
-
-        // 检查安装目录是否在宝塔目录下
-        $basePath = base_path();
-        if (str_starts_with($basePath, '/www/wwwroot/')) {
-            return 'www';
-        }
-
-        // 默认返回 www-data（Docker/Ubuntu/Debian 默认）
-        return 'www-data';
-    }
-
-    /**
-     * 修复文件权限
-     * 参考 deploy/upgrade.sh 的权限修复逻辑
-     */
-    protected function fixPermissions(): void
-    {
-        $basePath = base_path();
-        $webUser = $this->detectWebUser();
-
-        Log::info("[Upgrade] 开始修复权限，Web 用户: $webUser");
-
-        // 使用 shell 命令修复权限（需要适当的权限）
-        // 注意：PHP 进程可能没有 chown 权限，这里尝试执行但不强制要求成功
-        $commands = [
-            // 修改所有者
-            "chown -R $webUser:$webUser " . escapeshellarg($basePath) . ' 2>/dev/null',
-            // 目录权限 755
-            'find ' . escapeshellarg($basePath) . " -type d -exec chmod 755 {} \\; 2>/dev/null",
-            // 文件权限 644
-            'find ' . escapeshellarg($basePath) . " -type f -exec chmod 644 {} \\; 2>/dev/null",
-        ];
-
-        foreach ($commands as $command) {
-            exec($command, $output, $returnCode);
-            if ($returnCode !== 0) {
-                Log::warning("[Upgrade] 权限修复命令执行失败 (可能需要 root 权限): $command");
-            }
-        }
-
-        // .env 文件特殊处理（敏感文件，权限 600）
-        $envFile = "$basePath/.env";
-        if (file_exists($envFile)) {
-            @chmod($envFile, 0600);
-        }
-
-        // storage 目录需要可写
-        $storageDirs = [
-            "$basePath/storage",
-            "$basePath/storage/app",
-            "$basePath/storage/framework",
-            "$basePath/storage/framework/cache",
-            "$basePath/storage/framework/sessions",
-            "$basePath/storage/framework/views",
-            "$basePath/storage/logs",
-        ];
-
-        foreach ($storageDirs as $dir) {
-            if (is_dir($dir)) {
-                @chmod($dir, 0775);
-            }
-        }
-
-        // bootstrap/cache 目录需要可写
-        $cacheDir = "$basePath/bootstrap/cache";
-        if (is_dir($cacheDir)) {
-            @chmod($cacheDir, 0775);
-        }
-
-        Log::info('[Upgrade] 权限修复完成');
     }
 }

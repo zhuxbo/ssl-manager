@@ -8,7 +8,7 @@ SSL 证书管理系统，支持多级代理、自动签发、在线升级。
 ## 安装
 
 ```bash
-curl -fsSL https://gitee.com/zhuxbo/cert-manager/raw/main/deploy/install.sh | bash
+curl -fsSL http://release.example.com/install.sh | bash
 ```
 
 <details>
@@ -20,15 +20,15 @@ curl ... | bash -s docker   # Docker 部署
 curl ... | bash -s bt       # 宝塔面板部署
 
 # 指定版本安装
-curl ... | bash -s -- --version 0.0.4-beta   # 安装指定版本
-curl ... | bash -s docker -v 0.0.4-beta      # Docker + 指定版本
+curl ... | bash -s -- --version 0.0.10-beta
 ```
 
 | 参数 | 说明 |
 |------|------|
-| `docker` | Docker 部署（推荐，7 步交互式配置） |
+| `docker` | Docker 部署（推荐） |
 | `bt` | 宝塔面板部署 |
 | `--version latest` | 最新稳定版（默认） |
+| `--version dev` | 最新开发版 |
 | `--version x.x.x` | 指定版本号 |
 
 </details>
@@ -42,14 +42,13 @@ curl ... | bash -s docker -v 0.0.4-beta      # Docker + 指定版本
 ### 脚本升级
 
 ```bash
-curl -fsSL https://gitee.com/zhuxbo/cert-manager/raw/main/deploy/upgrade.sh | bash
+curl -fsSL http://release.example.com/upgrade.sh | bash
 ```
 
 <details>
 <summary>更多升级选项</summary>
 
 ```bash
-# 脚本升级
 curl ... | bash                         # 升级到最新版
 curl ... | bash -s -- --version 1.0.0   # 升级到指定版本
 curl ... | bash -s -- --dir /path/to/app  # 指定安装目录

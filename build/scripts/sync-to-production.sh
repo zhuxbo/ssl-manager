@@ -245,9 +245,18 @@ if [ -d "$SOURCE_DIR/.git" ]; then
     MONOREPO_COMMIT=$(cd "$SOURCE_DIR" && git rev-parse HEAD 2>/dev/null || echo "")
 fi
 
-# 优先从 git tag 读取版本号（构建时注入）
+# 优先从 version.json 读取版本号
 VERSION=""
-if [ -d "$SOURCE_DIR/.git" ]; then
+VERSION_FILE="$SOURCE_DIR/version.json"
+if [ -f "$VERSION_FILE" ]; then
+    VERSION=$(jq -r '.version // ""' "$VERSION_FILE")
+    if [ -n "$VERSION" ]; then
+        log_info "从 version.json 读取版本号: $VERSION"
+    fi
+fi
+
+# 回退到 git tag
+if [ -z "$VERSION" ] && [ -d "$SOURCE_DIR/.git" ]; then
     GIT_TAG=$(cd "$SOURCE_DIR" && git describe --tags --exact-match HEAD 2>/dev/null || echo "")
     if [ -n "$GIT_TAG" ]; then
         VERSION=$(echo "$GIT_TAG" | sed 's/^v//')
@@ -255,12 +264,8 @@ if [ -d "$SOURCE_DIR/.git" ]; then
     fi
 fi
 
-# 回退到 version.json
-VERSION_FILE="$SOURCE_DIR/version.json"
-if [ -z "$VERSION" ] && [ -f "$VERSION_FILE" ]; then
-    VERSION=$(jq -r '.version // "1.0.0"' "$VERSION_FILE")
-    log_info "从 version.json 读取版本号: $VERSION"
-elif [ -z "$VERSION" ]; then
+# 默认版本
+if [ -z "$VERSION" ]; then
     VERSION="1.0.0"
     log_warning "无法获取版本号，使用默认版本 $VERSION"
 fi

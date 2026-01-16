@@ -2,22 +2,29 @@
 
 # SSL Manager 一键安装入口脚本
 # 用法:
-#   curl -fsSL https://gitee.com/zhuxbo/cert-manager/raw/main/deploy/install.sh | bash
-#   curl -fsSL https://gitee.com/zhuxbo/cert-manager/raw/main/deploy/install.sh | bash -s docker
-#   curl -fsSL https://gitee.com/zhuxbo/cert-manager/raw/main/deploy/install.sh | bash -s bt
-#   curl -fsSL https://gitee.com/zhuxbo/cert-manager/raw/main/deploy/install.sh | bash -s -- --version dev
+#   ./install.sh --url http://release.example.com
+#   ./install.sh --url http://release.example.com --version 0.0.10-beta
+#   ./install.sh --url http://release.example.com docker
+#   ./install.sh --url http://release.example.com bt
 
 set -e
 
 # ========================================
 # 配置
 # ========================================
-REPO_OWNER="zhuxbo"
-REPO_NAME="cert-manager"
-GITEE_BASE_URL="https://gitee.com/$REPO_OWNER/$REPO_NAME"
-GITHUB_BASE_URL="https://github.com/$REPO_OWNER/$REPO_NAME"
 TEMP_DIR="/tmp/ssl-manager-install-$$"
 SCRIPT_PACKAGE="ssl-manager-script-latest.zip"
+REPO_OWNER="zhuxbo"
+REPO_NAME="cert-manager"
+# release 服务 URL
+# - 部署到 release 服务时，__RELEASE_URL__ 会被替换为实际地址
+# - 如果未替换（本地运行），则需要通过 --url 参数指定
+RELEASE_URL_PLACEHOLDER="__RELEASE_URL__"
+if [[ "$RELEASE_URL_PLACEHOLDER" != "__RELEASE_URL__" ]]; then
+    CUSTOM_RELEASE_URL="${CUSTOM_RELEASE_URL:-$RELEASE_URL_PLACEHOLDER}"
+else
+    CUSTOM_RELEASE_URL="${CUSTOM_RELEASE_URL:-}"
+fi
 
 # ========================================
 # 颜色定义
@@ -149,28 +156,37 @@ download_script_package() {
     local save_path="$1"
     local version="${2:-latest}"
 
-    # 构建 URL 列表
-    local urls=()
+    # 检查必须的配置
+    if [ -z "$CUSTOM_RELEASE_URL" ]; then
+        log_error "未配置 release 服务 URL"
+        log_info "请使用 --url 参数指定 release 服务地址"
+        return 1
+    fi
 
+    local base_url="${CUSTOM_RELEASE_URL%/}"  # 移除末尾斜杠
+    local url=""
+
+    # 构建 URL
     if [[ "$version" == "latest" ]]; then
-        # 最新稳定版：使用 latest tag
-        urls+=("$GITEE_BASE_URL/releases/download/latest/ssl-manager-script-latest.zip")
-        urls+=("$GITHUB_BASE_URL/releases/download/latest/ssl-manager-script-latest.zip")
+        url="$base_url/latest/ssl-manager-script-latest.zip"
+    elif [[ "$version" == "dev" ]]; then
+        url="$base_url/dev-latest/ssl-manager-script-latest.zip"
     else
-        # 指定版本：使用版本号命名的包（如 ssl-manager-script-0.0.4-beta.zip）
-        urls+=("$GITEE_BASE_URL/releases/download/v$version/ssl-manager-script-$version.zip")
-        urls+=("$GITHUB_BASE_URL/releases/download/v$version/ssl-manager-script-$version.zip")
+        # 开发版放在 dev/ 目录，正式版放在 main/ 目录
+        if [[ "$version" =~ -(dev|alpha|beta|rc) ]]; then
+            url="$base_url/dev/v$version/ssl-manager-script-$version.zip"
+        else
+            url="$base_url/main/v$version/ssl-manager-script-$version.zip"
+        fi
     fi
 
     log_info "下载脚本包 (版本: $version)..."
+    log_info "URL: $url"
 
-    for url in "${urls[@]}"; do
-        log_info "尝试: $url"
-        if curl -fsSL --connect-timeout 10 --max-time 120 -o "$save_path" "$url" 2>/dev/null; then
-            log_success "下载成功"
-            return 0
-        fi
-    done
+    if curl -fsSL --connect-timeout 10 --max-time 120 -o "$save_path" "$url" 2>/dev/null; then
+        log_success "下载成功"
+        return 0
+    fi
 
     log_error "下载失败"
     return 1
@@ -193,7 +209,7 @@ show_banner() {
 # ========================================
 show_help() {
     cat <<EOF
-用法: $0 [选项] [模式]
+用法: $0 --url <release_url> [选项] [模式]
 
 模式:
   auto    自动检测环境（默认）
@@ -201,15 +217,18 @@ show_help() {
   bt      使用宝塔面板安装
 
 选项:
+  --url URL              指定 release 服务 URL（必需）
   --version, -v VERSION  指定安装版本
                          latest   最新稳定版（默认）
+                         dev      最新开发版
                          x.x.x    指定版本号
   -h, --help             显示此帮助信息
 
 示例:
-  $0                        # 安装最新稳定版
-  $0 --version 0.0.4-beta   # 安装指定版本
-  $0 docker -v 0.0.4-beta   # Docker 安装指定版本
+  $0 --url http://release.example.com                           # 安装最新稳定版
+  $0 --url http://release.example.com --version 0.0.10-beta     # 安装指定版本
+  $0 --url http://release.example.com docker                    # Docker 安装
+  $0 --url http://release.example.com bt                        # 宝塔安装
 
 环境变量:
   FORCE_CHINA_MIRROR=1   强制使用国内镜像
@@ -232,6 +251,10 @@ main() {
                 version="$2"
                 shift 2
                 ;;
+            --url)
+                CUSTOM_RELEASE_URL="$2"
+                shift 2
+                ;;
             -h|--help)
                 show_help
                 ;;
@@ -245,6 +268,11 @@ main() {
                 ;;
         esac
     done
+
+    # 显示自定义 release URL
+    if [ -n "$CUSTOM_RELEASE_URL" ]; then
+        log_info "使用自定义 release URL: $CUSTOM_RELEASE_URL"
+    fi
 
     show_banner
 
@@ -269,20 +297,37 @@ main() {
         fi
     done
 
-    # 检测网络环境（如果用户未手动指定）
-    log_step "检测网络环境..."
+    # 网络环境选择（如果用户未手动指定）
+    log_step "配置网络环境..."
     if [ -n "$FORCE_CHINA_MIRROR" ]; then
         if [ "$FORCE_CHINA_MIRROR" = "1" ]; then
-            log_info "FORCE_CHINA_MIRROR=1，强制使用国内镜像源"
+            log_info "FORCE_CHINA_MIRROR=1，使用国内镜像源"
+            export NETWORK_ENV="china"
         else
-            log_info "FORCE_CHINA_MIRROR=0，强制使用国际源"
+            log_info "FORCE_CHINA_MIRROR=0，使用国际源"
+            export NETWORK_ENV="global"
         fi
-    elif is_china_server; then
-        log_info "检测到中国大陆网络环境，将使用国内镜像源"
-        export FORCE_CHINA_MIRROR=1
     else
-        log_info "使用国际源"
-        export FORCE_CHINA_MIRROR=0
+        echo ""
+        echo "请选择网络环境:"
+        echo "  1. 中国大陆（使用国内镜像源，推荐国内服务器）"
+        echo "  2. 国际网络（使用官方源）"
+        echo ""
+        read -p "请选择 (1/2) [1]: " network_choice < /dev/tty
+        network_choice="${network_choice:-1}"
+
+        case "$network_choice" in
+            2)
+                log_info "使用国际源"
+                export FORCE_CHINA_MIRROR=0
+                export NETWORK_ENV="global"
+                ;;
+            *)
+                log_info "使用国内镜像源"
+                export FORCE_CHINA_MIRROR=1
+                export NETWORK_ENV="china"
+                ;;
+        esac
     fi
 
     # 创建临时目录
@@ -290,6 +335,7 @@ main() {
 
     # 导出版本变量供子脚本使用
     export INSTALL_VERSION="$version"
+    export CUSTOM_RELEASE_URL
 
     # 下载脚本包
     log_step "下载安装脚本..."

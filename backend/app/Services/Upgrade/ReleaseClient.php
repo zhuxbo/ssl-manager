@@ -7,38 +7,32 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
+/**
+ * Release 客户端
+ * 仅支持自建 release 服务
+ */
 class ReleaseClient
 {
-    protected string $provider;
-
-    protected array $config;
+    protected ?string $baseUrl = null;
 
     public function __construct()
     {
-        $this->provider = Config::get('upgrade.source.provider', 'gitee');
-        $this->config = Config::get("upgrade.source.$this->provider", []);
+        $versionManager = new VersionManager;
+        $releaseUrl = $versionManager->getReleaseUrl();
+
+        if ($releaseUrl) {
+            $this->baseUrl = rtrim($releaseUrl, '/');
+        }
     }
 
     /**
-     * 获取下载基础 URL
+     * 确保已配置 release_url
      */
-    protected function getDownloadBaseUrl(string $provider): string
+    protected function ensureConfigured(): void
     {
-        // local provider 直接使用 base_url
-        if ($provider === 'local') {
-            return Config::get('upgrade.source.local.base_url', '');
+        if (! $this->baseUrl) {
+            throw new RuntimeException('未配置 release_url，请在 version.json 中配置');
         }
-
-        $config = Config::get("upgrade.source.$provider", []);
-        $downloadBase = $config['download_base'] ?? '';
-        $owner = $config['owner'] ?? '';
-        $repo = $config['repo'] ?? '';
-
-        if ($downloadBase && $owner && $repo) {
-            return "$downloadBase/$owner/$repo/releases/download";
-        }
-
-        return '';
     }
 
     /**
@@ -46,14 +40,31 @@ class ReleaseClient
      */
     public function getLatestRelease(?string $channel = null): ?array
     {
+        $this->ensureConfigured();
         $channel = $channel ?? Config::get('version.channel', 'main');
 
         try {
-            return match ($this->provider) {
-                'local' => $this->getLatestLocalRelease($channel),
-                'gitee' => $this->getLatestGiteeRelease($channel),
-                default => $this->getLatestGithubRelease($channel),
-            };
+            $releases = $this->fetchReleases();
+
+            // 根据通道过滤并找到最高版本
+            $latestRelease = null;
+            $latestVersion = '0.0.0';
+
+            foreach ($releases as $release) {
+                $tagName = $release['tag_name'] ?? '';
+                if ($this->matchChannel($tagName, $channel)) {
+                    $version = ltrim($tagName, 'vV');
+                    $compareVersion = $this->stripPreReleaseSuffix($version);
+                    $compareLatest = $this->stripPreReleaseSuffix($latestVersion);
+
+                    if (version_compare($compareVersion, $compareLatest, '>')) {
+                        $latestVersion = $version;
+                        $latestRelease = $release;
+                    }
+                }
+            }
+
+            return $latestRelease ? $this->normalizeRelease($latestRelease) : null;
         } catch (\Exception $e) {
             Log::error("获取最新 Release 失败: {$e->getMessage()}");
 
@@ -66,12 +77,17 @@ class ReleaseClient
      */
     public function getReleaseByTag(string $tag): ?array
     {
+        $this->ensureConfigured();
         try {
-            return match ($this->provider) {
-                'local' => $this->getLocalReleaseByTag($tag),
-                'gitee' => $this->getGiteeReleaseByTag($tag),
-                default => $this->getGithubReleaseByTag($tag),
-            };
+            $releases = $this->fetchReleases();
+
+            foreach ($releases as $release) {
+                if (($release['tag_name'] ?? '') === $tag) {
+                    return $this->normalizeRelease($release);
+                }
+            }
+
+            return null;
         } catch (\Exception $e) {
             Log::error("获取 Release $tag 失败: {$e->getMessage()}");
 
@@ -84,14 +100,32 @@ class ReleaseClient
      */
     public function getReleaseHistory(int $limit = 5, ?string $channel = null): array
     {
+        $this->ensureConfigured();
         $channel = $channel ?? Config::get('version.channel', 'main');
 
         try {
-            return match ($this->provider) {
-                'local' => $this->getLocalReleaseHistory($limit, $channel),
-                'gitee' => $this->getGiteeReleaseHistory($limit, $channel),
-                default => $this->getGithubReleaseHistory($limit, $channel),
-            };
+            $releases = $this->fetchReleases();
+            $filtered = [];
+
+            // 按版本号降序排序
+            usort($releases, function ($a, $b) {
+                $va = ltrim($a['tag_name'] ?? '', 'vV');
+                $vb = ltrim($b['tag_name'] ?? '', 'vV');
+
+                return version_compare($vb, $va);
+            });
+
+            foreach ($releases as $release) {
+                $tagName = $release['tag_name'] ?? '';
+                if ($this->matchChannel($tagName, $channel)) {
+                    $filtered[] = $this->normalizeRelease($release);
+                    if (count($filtered) >= $limit) {
+                        break;
+                    }
+                }
+            }
+
+            return $filtered;
         } catch (\Exception $e) {
             Log::error("获取 Release 历史失败: {$e->getMessage()}");
 
@@ -106,24 +140,16 @@ class ReleaseClient
     {
         $timeout = Config::get('upgrade.package.download_timeout', 300);
 
-        // 优先使用 curl 命令（解决 Gitee 403 问题）
+        // 优先使用 curl 命令
         if ($this->downloadWithCurl($url, $savePath, $timeout)) {
             return true;
         }
 
         // 回退到 PHP HTTP 客户端
         try {
-            $request = Http::timeout($timeout)
-                ->withOptions(['sink' => $savePath]);
-
-            // 私有仓库需要认证（Gitee 使用 Authorization header）
-            if ($this->provider === 'gitee' && ! empty($this->config['access_token'])) {
-                $request = $request->withHeaders([
-                    'Authorization' => "token {$this->config['access_token']}",
-                ]);
-            }
-
-            $response = $request->get($url);
+            $response = Http::timeout($timeout)
+                ->withOptions(['sink' => $savePath])
+                ->get($url);
 
             if ($response->successful() && file_exists($savePath)) {
                 return true;
@@ -140,52 +166,32 @@ class ReleaseClient
     }
 
     /**
-     * 下载升级包（多源回退，优先 Gitee）
-     *
-     * @param  string  $filename  文件名，如 ssl-manager-upgrade-1.0.0.zip
-     * @param  string  $tag  版本标签，如 v1.0.0
-     * @param  string  $savePath  保存路径
+     * 下载升级包（从自建服务）
      */
     public function downloadPackageWithFallback(string $filename, string $tag, string $savePath): bool
     {
-        // 如果是 local provider，只尝试 local（用于发布前测试）
-        if ($this->provider === 'local') {
-            $providers = ['local'];
-        } else {
-            // 下载顺序：Gitee -> GitHub（使用配置）
-            $providers = ['gitee', 'github'];
+        $this->ensureConfigured();
+        $url = "$this->baseUrl/$tag/$filename";
+        Log::info("下载: $url");
+
+        if ($this->downloadPackage($url, $savePath)) {
+            Log::info("下载成功");
+
+            return true;
         }
 
-        foreach ($providers as $provider) {
-            $downloadBase = $this->getDownloadBaseUrl($provider);
-            if (empty($downloadBase)) {
-                continue;
-            }
-
-            // local provider URL 格式不同：base_url/tag/filename
-            $url = "$downloadBase/$tag/$filename";
-            Log::info("尝试从 $provider 下载: $url");
-
-            if ($this->downloadPackage($url, $savePath)) {
-                Log::info("从 $provider 下载成功");
-
-                return true;
-            }
-
-            Log::warning("从 $provider 下载失败，尝试下一个源");
-            // 清理可能的部分下载文件
-            if (file_exists($savePath)) {
-                @unlink($savePath);
-            }
+        // 清理可能的部分下载文件
+        if (file_exists($savePath)) {
+            @unlink($savePath);
         }
 
-        Log::error("所有下载源都失败: $filename");
+        Log::error("下载失败: $filename");
 
         return false;
     }
 
     /**
-     * 根据 Release 下载升级包（多源回退）
+     * 根据 Release 下载升级包
      */
     public function downloadUpgradePackage(array $release, string $savePath): bool
     {
@@ -204,22 +210,23 @@ class ReleaseClient
             }
         }
 
-        // 如果没有找到 assets，构造标准文件名
-        if (! $filename) {
-            $filename = "ssl-manager-upgrade-$version.zip";
+        // 如果找到 asset URL，直接使用
+        if ($assetUrl) {
+            Log::info("下载: $assetUrl");
+
+            return $this->downloadPackage($assetUrl, $savePath);
         }
 
-        // local provider 直接使用 assets 中的 URL（已包含完整路径）
-        if ($this->provider === 'local' && $assetUrl) {
-            Log::info("Local provider 直接下载: $assetUrl");
-            return $this->downloadPackage($assetUrl, $savePath);
+        // 否则构造标准文件名
+        if (! $filename) {
+            $filename = "ssl-manager-upgrade-$version.zip";
         }
 
         return $this->downloadPackageWithFallback($filename, $tagName, $savePath);
     }
 
     /**
-     * 根据 Release 下载完整包（多源回退）
+     * 根据 Release 下载完整包
      */
     public function downloadFullPackage(array $release, string $savePath): bool
     {
@@ -238,32 +245,31 @@ class ReleaseClient
             }
         }
 
-        // 如果没有找到 assets，构造标准文件名
-        if (! $filename) {
-            $filename = "ssl-manager-full-$version.zip";
+        // 如果找到 asset URL，直接使用
+        if ($assetUrl) {
+            Log::info("下载: $assetUrl");
+
+            return $this->downloadPackage($assetUrl, $savePath);
         }
 
-        // local provider 直接使用 assets 中的 URL（已包含完整路径）
-        if ($this->provider === 'local' && $assetUrl) {
-            Log::info("Local provider 直接下载: $assetUrl");
-            return $this->downloadPackage($assetUrl, $savePath);
+        // 否则构造标准文件名
+        if (! $filename) {
+            $filename = "ssl-manager-full-$version.zip";
         }
 
         return $this->downloadPackageWithFallback($filename, $tagName, $savePath);
     }
 
     /**
-     * 使用 curl 命令下载（解决某些环境下 PHP HTTP 客户端的兼容性问题）
+     * 使用 curl 命令下载
      */
     protected function downloadWithCurl(string $url, string $savePath, int $timeout): bool
     {
-        // 检查 curl 是否可用
         $curlPath = trim(shell_exec('which curl 2>/dev/null') ?? '');
         if (empty($curlPath)) {
             return false;
         }
 
-        // 构建命令参数数组（安全转义）
         $args = [
             escapeshellarg($curlPath),
             '-sL',
@@ -271,19 +277,11 @@ class ReleaseClient
             escapeshellarg((string) $timeout),
             '-o',
             escapeshellarg($savePath),
+            escapeshellarg($url),
+            '2>&1',
         ];
 
-        // Gitee 私有仓库需要 Authorization header
-        if ($this->provider === 'gitee' && ! empty($this->config['access_token'])) {
-            $args[] = '-H';
-            $args[] = escapeshellarg('Authorization: token ' . $this->config['access_token']);
-        }
-
-        $args[] = escapeshellarg($url);
-        $args[] = '2>&1';
-
         $command = implode(' ', $args);
-
         exec($command, $output, $exitCode);
 
         if ($exitCode === 0 && file_exists($savePath) && filesize($savePath) > 0) {
@@ -292,7 +290,7 @@ class ReleaseClient
             return true;
         }
 
-        Log::warning("curl 下载失败 (exit: $exitCode): " . implode("\n", $output));
+        Log::warning("curl 下载失败 (exit: $exitCode): ".implode("\n", $output));
 
         return false;
     }
@@ -306,7 +304,6 @@ class ReleaseClient
 
         foreach ($assets as $asset) {
             $name = $asset['name'] ?? '';
-            // 查找升级包（包含 upgrade 关键字）
             if (str_contains($name, 'upgrade') && str_ends_with($name, '.zip')) {
                 return $asset['browser_download_url'] ?? null;
             }
@@ -324,7 +321,6 @@ class ReleaseClient
 
         foreach ($assets as $asset) {
             $name = $asset['name'] ?? '';
-            // 查找完整包（包含 full 关键字）
             if (str_contains($name, 'full') && str_ends_with($name, '.zip')) {
                 return $asset['browser_download_url'] ?? null;
             }
@@ -334,182 +330,19 @@ class ReleaseClient
     }
 
     /**
-     * 获取 Gitee 最新 Release
+     * 获取所有 Release
      */
-    protected function getLatestGiteeRelease(string $channel): ?array
+    protected function fetchReleases(): array
     {
-        $releases = $this->fetchGiteeReleases();
+        $indexUrl = "$this->baseUrl/releases.json";
 
-        // 根据通道过滤并找到最高版本
-        $latestRelease = null;
-        $latestVersion = '0.0.0';
-
-        foreach ($releases as $release) {
-            $tagName = $release['tag_name'] ?? '';
-            if ($this->matchChannel($tagName, $channel)) {
-                $version = ltrim($tagName, 'vV');
-                // 移除预发布后缀进行比较
-                $compareVersion = $this->stripPreReleaseSuffix($version);
-                $compareLatest = $this->stripPreReleaseSuffix($latestVersion);
-
-                if (version_compare($compareVersion, $compareLatest, '>')) {
-                    $latestVersion = $version;
-                    $latestRelease = $release;
-                }
+        try {
+            $response = Http::timeout(10)->get($indexUrl);
+            if ($response->successful()) {
+                return $response->json()['releases'] ?? [];
             }
-        }
-
-        return $latestRelease ? $this->normalizeRelease($latestRelease) : null;
-    }
-
-    /**
-     * 获取 Gitee 指定版本 Release
-     */
-    protected function getGiteeReleaseByTag(string $tag): ?array
-    {
-        $url = "{$this->config['api_base']}/repos/{$this->config['owner']}/{$this->config['repo']}/releases/tags/$tag";
-
-        $params = [];
-        if (! empty($this->config['access_token'])) {
-            $params['access_token'] = $this->config['access_token'];
-        }
-
-        $response = Http::get($url, $params);
-
-        if ($response->successful()) {
-            return $this->normalizeRelease($response->json());
-        }
-
-        return null;
-    }
-
-    /**
-     * 获取 Gitee Release 历史
-     */
-    protected function getGiteeReleaseHistory(int $limit, string $channel): array
-    {
-        $releases = $this->fetchGiteeReleases($limit * 2);
-        $filtered = [];
-
-        foreach ($releases as $release) {
-            $tagName = $release['tag_name'] ?? '';
-            if ($this->matchChannel($tagName, $channel)) {
-                $filtered[] = $this->normalizeRelease($release);
-            }
-        }
-
-        // 按版本号降序排序
-        usort($filtered, fn ($a, $b) => version_compare(
-            $this->stripPreReleaseSuffix(ltrim($b['version'] ?? '', 'vV')),
-            $this->stripPreReleaseSuffix(ltrim($a['version'] ?? '', 'vV'))
-        ));
-
-        return array_slice($filtered, 0, $limit);
-    }
-
-    /**
-     * 获取 Gitee 所有 Release
-     */
-    protected function fetchGiteeReleases(int $perPage = 20): array
-    {
-        $url = "{$this->config['api_base']}/repos/{$this->config['owner']}/{$this->config['repo']}/releases";
-
-        $params = ['per_page' => $perPage];
-
-        // 私有仓库需要 access_token
-        if (! empty($this->config['access_token'])) {
-            $params['access_token'] = $this->config['access_token'];
-        }
-
-        $response = Http::get($url, $params);
-
-        if ($response->successful()) {
-            return $response->json() ?? [];
-        }
-
-        return [];
-    }
-
-    /**
-     * 获取 GitHub 最新 Release
-     */
-    protected function getLatestGithubRelease(string $channel): ?array
-    {
-        // 遍历所有 releases，找到匹配通道的最高版本（与 Gitee 逻辑一致）
-        // 不使用 /releases/latest API，避免获取到 latest tag
-        $releases = $this->fetchGithubReleases();
-        $latestRelease = null;
-        $latestVersion = '0.0.0';
-
-        foreach ($releases as $release) {
-            $tagName = $release['tag_name'] ?? '';
-            if ($this->matchChannel($tagName, $channel)) {
-                $version = ltrim($tagName, 'vV');
-                $compareVersion = $this->stripPreReleaseSuffix($version);
-                $compareLatest = $this->stripPreReleaseSuffix($latestVersion);
-
-                if (version_compare($compareVersion, $compareLatest, '>')) {
-                    $latestVersion = $version;
-                    $latestRelease = $release;
-                }
-            }
-        }
-
-        return $latestRelease ? $this->normalizeRelease($latestRelease) : null;
-    }
-
-    /**
-     * 获取 GitHub 指定版本 Release
-     */
-    protected function getGithubReleaseByTag(string $tag): ?array
-    {
-        $url = "{$this->config['api_base']}/repos/{$this->config['owner']}/{$this->config['repo']}/releases/tags/$tag";
-
-        $response = Http::withHeaders(['Accept' => 'application/vnd.github.v3+json'])->get($url);
-
-        if ($response->successful()) {
-            return $this->normalizeRelease($response->json());
-        }
-
-        return null;
-    }
-
-    /**
-     * 获取 GitHub Release 历史
-     */
-    protected function getGithubReleaseHistory(int $limit, string $channel): array
-    {
-        $releases = $this->fetchGithubReleases($limit * 2);
-        $filtered = [];
-
-        foreach ($releases as $release) {
-            $tagName = $release['tag_name'] ?? '';
-            if ($this->matchChannel($tagName, $channel)) {
-                $filtered[] = $this->normalizeRelease($release);
-            }
-        }
-
-        // 按版本号降序排序
-        usort($filtered, fn ($a, $b) => version_compare(
-            $this->stripPreReleaseSuffix(ltrim($b['version'] ?? '', 'vV')),
-            $this->stripPreReleaseSuffix(ltrim($a['version'] ?? '', 'vV'))
-        ));
-
-        return array_slice($filtered, 0, $limit);
-    }
-
-    /**
-     * 获取 GitHub 所有 Release
-     */
-    protected function fetchGithubReleases(int $perPage = 20): array
-    {
-        $url = "{$this->config['api_base']}/repos/{$this->config['owner']}/{$this->config['repo']}/releases";
-
-        $response = Http::withHeaders(['Accept' => 'application/vnd.github.v3+json'])
-            ->get($url, ['per_page' => $perPage]);
-
-        if ($response->successful()) {
-            return $response->json() ?? [];
+        } catch (\Exception $e) {
+            Log::warning("获取 releases.json 失败: {$e->getMessage()}");
         }
 
         return [];
@@ -520,7 +353,7 @@ class ReleaseClient
      */
     protected function matchChannel(string $tagName, string $channel): bool
     {
-        // 过滤 latest tag（latest 只用于安装，不用于在线升级）
+        // 过滤 latest tag
         if (strtolower($tagName) === 'latest') {
             return false;
         }
@@ -545,7 +378,6 @@ class ReleaseClient
      */
     protected function stripPreReleaseSuffix(string $version): string
     {
-        // 移除 -dev, -alpha, -alpha.1, -beta, -beta.2, -rc, -rc.1 等后缀
         return preg_replace('/-(dev|alpha|beta|rc)(\.\d+)?$/', '', $version);
     }
 
@@ -560,136 +392,10 @@ class ReleaseClient
         // 解析资源文件
         $assets = [];
         foreach ($release['assets'] ?? [] as $asset) {
-            $assets[] = [
-                'name' => $asset['name'] ?? '',
-                'size' => $asset['size'] ?? 0,
-                'browser_download_url' => $asset['browser_download_url'] ?? '',
-            ];
-        }
-
-        return [
-            'version' => $version,
-            'tag_name' => $tagName,
-            'name' => $release['name'] ?? $tagName,
-            'body' => $release['body'] ?? '',
-            'prerelease' => $release['prerelease'] ?? false,
-            'created_at' => $release['created_at'] ?? '',
-            'published_at' => $release['published_at'] ?? $release['created_at'] ?? '',
-            'assets' => $assets,
-        ];
-    }
-
-    // ==================== Local Provider ====================
-
-    /**
-     * Fetch local releases from releases.json
-     */
-    protected function fetchLocalReleases(): array
-    {
-        $baseUrl = rtrim($this->config['base_url'] ?? '', '/');
-        $indexUrl = "$baseUrl/releases.json";
-
-        try {
-            $response = Http::timeout(10)->get($indexUrl);
-            if ($response->successful()) {
-                return $response->json()['releases'] ?? [];
-            }
-        } catch (\Exception $e) {
-            Log::warning("Failed to fetch local releases.json: {$e->getMessage()}");
-        }
-
-        return [];
-    }
-
-    /**
-     * Get latest local release
-     */
-    protected function getLatestLocalRelease(string $channel): ?array
-    {
-        $releases = $this->fetchLocalReleases();
-
-        // Filter by channel and find highest version
-        $latestRelease = null;
-        $latestVersion = '0.0.0';
-
-        foreach ($releases as $release) {
-            $tagName = $release['tag_name'] ?? '';
-            if ($this->matchChannel($tagName, $channel)) {
-                $version = ltrim($tagName, 'vV');
-                $compareVersion = $this->stripPreReleaseSuffix($version);
-                $compareLatest = $this->stripPreReleaseSuffix($latestVersion);
-
-                if (version_compare($compareVersion, $compareLatest, '>')) {
-                    $latestVersion = $version;
-                    $latestRelease = $release;
-                }
-            }
-        }
-
-        return $latestRelease ? $this->normalizeLocalRelease($latestRelease) : null;
-    }
-
-    /**
-     * Get local release by tag
-     */
-    protected function getLocalReleaseByTag(string $tag): ?array
-    {
-        $releases = $this->fetchLocalReleases();
-
-        foreach ($releases as $release) {
-            if (($release['tag_name'] ?? '') === $tag) {
-                return $this->normalizeLocalRelease($release);
-            }
-        }
-
-        return null;
-    }
-
-    /**
-     * Get local release history
-     */
-    protected function getLocalReleaseHistory(int $limit, string $channel): array
-    {
-        $releases = $this->fetchLocalReleases();
-        $filtered = [];
-
-        // Sort by version (descending)
-        usort($releases, function ($a, $b) {
-            $va = ltrim($a['tag_name'] ?? '', 'vV');
-            $vb = ltrim($b['tag_name'] ?? '', 'vV');
-
-            return version_compare($vb, $va);
-        });
-
-        foreach ($releases as $release) {
-            $tagName = $release['tag_name'] ?? '';
-            if ($this->matchChannel($tagName, $channel)) {
-                $filtered[] = $this->normalizeLocalRelease($release);
-                if (count($filtered) >= $limit) {
-                    break;
-                }
-            }
-        }
-
-        return $filtered;
-    }
-
-    /**
-     * Normalize local release data
-     */
-    protected function normalizeLocalRelease(array $release): array
-    {
-        $tagName = $release['tag_name'] ?? '';
-        $version = ltrim($tagName, 'vV');
-        $baseUrl = rtrim($this->config['base_url'] ?? '', '/');
-
-        // Parse assets
-        $assets = [];
-        foreach ($release['assets'] ?? [] as $asset) {
             $url = $asset['browser_download_url'] ?? '';
-            // Convert relative path to full URL
+            // 相对路径转换为完整 URL
             if ($url && ! str_starts_with($url, 'http')) {
-                $url = "$baseUrl/$url";
+                $url = "$this->baseUrl/$url";
             }
             $assets[] = [
                 'name' => $asset['name'] ?? '',

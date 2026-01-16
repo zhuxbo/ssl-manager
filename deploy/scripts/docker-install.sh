@@ -130,42 +130,39 @@ step_mirror_selection() {
     log_step "步骤 2/7: 镜像源选择"
     echo ""
 
-    # 自动检测
-    local detected="国际"
-    if is_china_server; then
-        detected="中国大陆"
-    fi
-
-    echo "检测到服务器位置: $detected"
-    echo ""
-    echo "请选择镜像源（影响下载速度）："
-    echo "  1. 自动检测（当前: $detected）（推荐）"
-    echo "  2. 中国大陆镜像"
-    echo "  3. 国际镜像"
-    echo ""
-
-    read -p "请选择 (1-3) [1]: " choice < /dev/tty
-    choice="${choice:-1}"
-
-    case "$choice" in
-        2)
+    # 如果 install.sh 已经设置了 NETWORK_ENV，直接使用
+    if [ -n "$NETWORK_ENV" ]; then
+        if [ "$NETWORK_ENV" = "china" ]; then
             MIRROR_REGION="china"
-            log_info "使用中国大陆镜像源"
-            ;;
-        3)
+            log_info "使用中国大陆镜像源（继承自安装配置）"
+        else
             MIRROR_REGION="intl"
-            log_info "使用国际镜像源"
-            ;;
-        *)
-            if is_china_server; then
-                MIRROR_REGION="china"
-                log_info "自动选择: 中国大陆镜像源"
-            else
+            log_info "使用国际镜像源（继承自安装配置）"
+        fi
+    else
+        # 没有预设，让用户选择
+        echo "请选择镜像源（影响下载速度）："
+        echo "  1. 中国大陆镜像（推荐国内服务器）"
+        echo "  2. 国际镜像"
+        echo ""
+
+        read -p "请选择 (1/2) [1]: " choice < /dev/tty
+        choice="${choice:-1}"
+
+        case "$choice" in
+            2)
                 MIRROR_REGION="intl"
-                log_info "自动选择: 国际镜像源"
-            fi
-            ;;
-    esac
+                NETWORK_ENV="global"
+                log_info "使用国际镜像源"
+                ;;
+            *)
+                MIRROR_REGION="china"
+                NETWORK_ENV="china"
+                log_info "使用中国大陆镜像源"
+                ;;
+        esac
+        export NETWORK_ENV
+    fi
 
     # 配置 Docker 镜像加速
     if [ "$MIRROR_REGION" = "china" ]; then
@@ -516,6 +513,40 @@ download_application() {
         cp -r "$extract_dir/frontend"/* "$INSTALL_DIR/frontend/"
     fi
 
+    # 复制版本配置并注入 release_url 和 network
+    if [ -f "$extract_dir/version.json" ]; then
+        cp "$extract_dir/version.json" "$INSTALL_DIR/"
+        local version_file="$INSTALL_DIR/version.json"
+
+        # 使用 Python 处理 JSON
+        if command -v python3 &> /dev/null; then
+            python3 -c "
+import json
+import os
+with open('$version_file', 'r') as f:
+    data = json.load(f)
+# 注入 release_url
+if '$CUSTOM_RELEASE_URL':
+    data['release_url'] = '$CUSTOM_RELEASE_URL'
+# 注入 network 配置
+network = os.environ.get('NETWORK_ENV', 'china')
+data['network'] = network
+with open('$version_file', 'w') as f:
+    json.dump(data, f, indent=2, ensure_ascii=False)
+    f.write('\n')
+"
+        else
+            log_warning "未找到 python3，无法写入配置到 version.json"
+        fi
+
+        if [ -n "$CUSTOM_RELEASE_URL" ]; then
+            log_info "已配置 release_url: $CUSTOM_RELEASE_URL"
+        fi
+        if [ -n "$NETWORK_ENV" ]; then
+            log_info "已配置 network: $NETWORK_ENV"
+        fi
+    fi
+
     # 清理临时文件
     rm -rf "$temp_dir"
 
@@ -720,10 +751,10 @@ init_application() {
 
     # 安装 Composer 依赖
     log_info "安装 Composer 依赖..."
-    # 检测并配置镜像
-    if is_china_server; then
+    # 根据 NETWORK_ENV 配置镜像
+    if [ "$NETWORK_ENV" = "china" ] || [ "$MIRROR_REGION" = "china" ]; then
         log_info "配置 Composer 中国镜像..."
-        $compose_cmd exec -T -u root php composer config repo.packagist composer https://mirrors.tencent.com/composer/ --working-dir=/var/www/html 2>&1 || true
+        $compose_cmd exec -T -u root php composer config repo.packagist composer https://mirrors.aliyun.com/composer/ --working-dir=/var/www/html 2>&1 || true
     fi
     $compose_cmd exec -T -u root php composer install --no-dev --optimize-autoloader --working-dir=/var/www/html 2>&1 || true
 

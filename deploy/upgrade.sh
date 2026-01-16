@@ -2,20 +2,25 @@
 
 # SSL Manager 在线升级脚本
 # 用法:
-#   curl -fsSL https://gitee.com/zhuxbo/cert-manager/raw/main/deploy/upgrade.sh | bash
-#   curl -fsSL https://gitee.com/zhuxbo/cert-manager/raw/main/deploy/upgrade.sh | bash -s -- --version 1.0.0
+#   ./upgrade.sh --url http://release.example.com
+#   ./upgrade.sh --url http://release.example.com --version 0.0.11-beta
+#   ./upgrade.sh --dir /www/wwwroot/mysite  # 从 version.json 读取 release_url
 
 set -e
 
 # ========================================
 # 配置
 # ========================================
-REPO_OWNER="zhuxbo"
-REPO_NAME="cert-manager"
-GITEE_BASE_URL="https://gitee.com/$REPO_OWNER/$REPO_NAME"
-GITHUB_BASE_URL="https://github.com/$REPO_OWNER/$REPO_NAME"
 TEMP_DIR="/tmp/ssl-manager-upgrade-$$"
-SCRIPT_PACKAGE="ssl-manager-script-latest.zip"
+# release 服务 URL
+# - 部署到 release 服务时，__RELEASE_URL__ 会被替换为实际地址
+# - 如果未替换（本地运行），则需要通过 --url 参数或 version.json 配置
+RELEASE_URL_PLACEHOLDER="__RELEASE_URL__"
+if [[ "$RELEASE_URL_PLACEHOLDER" != "__RELEASE_URL__" ]]; then
+    CUSTOM_RELEASE_URL="${CUSTOM_RELEASE_URL:-$RELEASE_URL_PLACEHOLDER}"
+else
+    CUSTOM_RELEASE_URL="${CUSTOM_RELEASE_URL:-}"
+fi
 
 # ========================================
 # 颜色定义
@@ -47,7 +52,8 @@ cleanup() {
 trap cleanup EXIT
 
 get_timestamp() {
-    date '+%Y%m%d_%H%M%S'
+    # 与 PHP BackupManager 格式一致：2026-01-15_021459
+    date '+%Y-%m-%d_%H%M%S'
 }
 
 # 全局变量：自动确认
@@ -242,6 +248,58 @@ get_current_version() {
     echo "unknown"
 }
 
+# 从 version.json 读取 release_url
+get_release_url() {
+    local version_json="$INSTALL_DIR/version.json"
+    local backend_version="$INSTALL_DIR/backend/version.json"
+
+    # 优先从项目根目录读取
+    if [ -f "$version_json" ]; then
+        local url=$(grep -o '"release_url"[[:space:]]*:[[:space:]]*"[^"]*"' "$version_json" | head -1 | cut -d'"' -f4)
+        if [ -n "$url" ]; then
+            echo "$url"
+            return 0
+        fi
+    fi
+
+    # 回退到 backend 目录
+    if [ -f "$backend_version" ]; then
+        local url=$(grep -o '"release_url"[[:space:]]*:[[:space:]]*"[^"]*"' "$backend_version" | head -1 | cut -d'"' -f4)
+        if [ -n "$url" ]; then
+            echo "$url"
+            return 0
+        fi
+    fi
+
+    echo ""
+}
+
+# 从 version.json 读取 channel
+get_channel() {
+    local version_json="$INSTALL_DIR/version.json"
+    local backend_version="$INSTALL_DIR/backend/version.json"
+
+    # 优先从项目根目录读取
+    if [ -f "$version_json" ]; then
+        local channel=$(grep -o '"channel"[[:space:]]*:[[:space:]]*"[^"]*"' "$version_json" | head -1 | cut -d'"' -f4)
+        if [ -n "$channel" ]; then
+            echo "$channel"
+            return 0
+        fi
+    fi
+
+    # 回退到 backend 目录
+    if [ -f "$backend_version" ]; then
+        local channel=$(grep -o '"channel"[[:space:]]*:[[:space:]]*"[^"]*"' "$backend_version" | head -1 | cut -d'"' -f4)
+        if [ -n "$channel" ]; then
+            echo "$channel"
+            return 0
+        fi
+    fi
+
+    echo "main"
+}
+
 # ========================================
 # 下载函数
 # ========================================
@@ -250,26 +308,36 @@ download_upgrade_package() {
     local version="$1"
     local save_path="$2"
 
-    local urls=()
-
-    if [[ "$version" == "latest" ]]; then
-        urls+=("$GITEE_BASE_URL/releases/download/latest/ssl-manager-full-latest.zip")
-        urls+=("$GITHUB_BASE_URL/releases/download/latest/ssl-manager-full-latest.zip")
-    elif [[ "$version" == "dev" ]]; then
-        urls+=("$GITEE_BASE_URL/releases/download/dev-latest/ssl-manager-full-latest.zip")
-        urls+=("$GITHUB_BASE_URL/releases/download/dev-latest/ssl-manager-full-latest.zip")
-    else
-        urls+=("$GITEE_BASE_URL/releases/download/v$version/ssl-manager-full-$version.zip")
-        urls+=("$GITHUB_BASE_URL/releases/download/v$version/ssl-manager-full-$version.zip")
+    # 检查必须的配置
+    if [ -z "$CUSTOM_RELEASE_URL" ]; then
+        log_error "未配置 release 服务 URL"
+        log_info "请使用 --url 参数指定，或在 version.json 中配置 release_url"
+        return 1
     fi
 
-    for url in "${urls[@]}"; do
-        log_info "尝试下载: $url"
-        if curl -fsSL --connect-timeout 10 --max-time 300 -o "$save_path" "$url" 2>/dev/null; then
-            log_success "下载成功"
-            return 0
+    local base_url="${CUSTOM_RELEASE_URL%/}"  # 移除末尾斜杠
+    local url=""
+
+    # 构建 URL
+    if [[ "$version" == "latest" ]]; then
+        url="$base_url/latest/ssl-manager-upgrade-latest.zip"
+    elif [[ "$version" == "dev" ]]; then
+        url="$base_url/dev-latest/ssl-manager-upgrade-latest.zip"
+    else
+        # 开发版放在 dev/ 目录，正式版放在 main/ 目录
+        if [[ "$version" =~ -(dev|alpha|beta|rc) ]]; then
+            url="$base_url/dev/v$version/ssl-manager-upgrade-$version.zip"
+        else
+            url="$base_url/main/v$version/ssl-manager-upgrade-$version.zip"
         fi
-    done
+    fi
+
+    log_info "下载: $url"
+
+    if curl -fsSL --connect-timeout 10 --max-time 300 -o "$save_path" "$url" 2>/dev/null; then
+        log_success "下载成功"
+        return 0
+    fi
 
     log_error "下载失败"
     return 1
@@ -285,25 +353,62 @@ create_backup() {
     log_step "创建备份..." >&2
 
     local backup_dir="$INSTALL_DIR/storage/backups"
-    local timestamp=$(get_timestamp)
-    local backup_path="$backup_dir/$timestamp"
+    local backup_id=$(get_timestamp)
+    local backup_path="$backup_dir/$backup_id"
+    local current_version=$(get_current_version)
 
-    mkdir -p "$backup_path/code"
+    mkdir -p "$backup_path"
 
-    # 备份代码目录（排除 storage、vendor）
-    log_info "备份代码..." >&2
+    # 备份后端代码（压缩包格式，与 PHP BackupManager 一致）
+    log_info "备份后端代码..." >&2
+    local backend_tmp="$TEMP_DIR/backup_backend"
+    mkdir -p "$backend_tmp"
+
+    # 复制后端代码（排除 storage、vendor、node_modules）
     rsync -a --exclude='storage' --exclude='vendor' --exclude='node_modules' \
-        "$INSTALL_DIR/backend/" "$backup_path/code/backend/" 2>/dev/null || \
-        cp -r "$INSTALL_DIR/backend" "$backup_path/code/" 2>/dev/null || true
+        "$INSTALL_DIR/backend/" "$backend_tmp/" 2>/dev/null || \
+        cp -r "$INSTALL_DIR/backend" "$backend_tmp/" 2>/dev/null || true
 
-    # 备份配置文件
-    [ -f "$INSTALL_DIR/.env" ] && cp "$INSTALL_DIR/.env" "$backup_path/"
-    [ -f "$INSTALL_DIR/version.json" ] && cp "$INSTALL_DIR/version.json" "$backup_path/"
-    [ -f "$INSTALL_DIR/backend/.env" ] && cp "$INSTALL_DIR/backend/.env" "$backup_path/backend.env"
-    [ -f "$INSTALL_DIR/backend/version.json" ] && cp "$INSTALL_DIR/backend/version.json" "$backup_path/backend.version.json"
+    # 复制 version.json 到备份（放在 backend 同级目录）
+    [ -f "$INSTALL_DIR/version.json" ] && cp "$INSTALL_DIR/version.json" "$backend_tmp/../version.json"
 
-    # 记录备份信息
-    echo "{\"version\": \"$(get_current_version)\", \"timestamp\": \"$timestamp\"}" > "$backup_path/backup.json"
+    # 创建 backend.zip
+    (cd "$backend_tmp" && zip -qr "$backup_path/backend.zip" .)
+    # 添加 version.json 到 zip（使用相对路径 ../version.json）
+    [ -f "$backend_tmp/../version.json" ] && (cd "$backend_tmp" && zip -q "$backup_path/backend.zip" "../version.json")
+
+    # 备份前端代码
+    local has_frontend=false
+    if [ -d "$INSTALL_DIR/frontend" ]; then
+        log_info "备份前端代码..." >&2
+        local frontend_tmp="$TEMP_DIR/backup_frontend"
+        mkdir -p "$frontend_tmp"
+
+        for app in admin user easy; do
+            if [ -d "$INSTALL_DIR/frontend/$app" ]; then
+                cp -r "$INSTALL_DIR/frontend/$app" "$frontend_tmp/"
+                has_frontend=true
+            fi
+        done
+
+        if [ "$has_frontend" = true ]; then
+            (cd "$frontend_tmp" && zip -qr "$backup_path/frontend.zip" .)
+        fi
+    fi
+
+    # 记录备份信息（与 PHP BackupManager 格式一致）
+    cat > "$backup_path/backup.json" << EOF
+{
+    "id": "$backup_id",
+    "version": "$current_version",
+    "created_at": "$(date -Iseconds)",
+    "includes": {
+        "backend": true,
+        "frontend": $has_frontend,
+        "database": false
+    }
+}
+EOF
 
     log_success "备份完成: $backup_path" >&2
     # 只输出路径到 stdout，供调用者捕获
@@ -317,11 +422,16 @@ perform_upgrade() {
 
     log_step "开始升级到版本 $target_version"
 
-    # 1. 记录旧版本 composer.lock hash
-    local old_composer_hash=""
+    # 1. 记录旧版本 composer.json 和 composer.lock hash
+    local old_composer_json_hash=""
+    local old_composer_lock_hash=""
+    if [ -f "$INSTALL_DIR/backend/composer.json" ]; then
+        old_composer_json_hash=$(file_sha256 "$INSTALL_DIR/backend/composer.json")
+        log_info "当前 composer.json hash: ${old_composer_json_hash:0:16}..."
+    fi
     if [ -f "$INSTALL_DIR/backend/composer.lock" ]; then
-        old_composer_hash=$(file_sha256 "$INSTALL_DIR/backend/composer.lock")
-        log_info "当前 composer.lock hash: ${old_composer_hash:0:16}..."
+        old_composer_lock_hash=$(file_sha256 "$INSTALL_DIR/backend/composer.lock")
+        log_info "当前 composer.lock hash: ${old_composer_lock_hash:0:16}..."
     fi
 
     # 2. 创建备份
@@ -370,7 +480,8 @@ perform_upgrade() {
     rm -f "$INSTALL_DIR/backend/composer.json"
     rm -f "$INSTALL_DIR/backend/composer.lock"
 
-    # 删除前端目录
+    # 删除前端目录（新结构 frontend/，兼容旧结构 admin/user/）
+    rm -rf "$INSTALL_DIR/frontend" 2>/dev/null || true
     rm -rf "$INSTALL_DIR/admin" 2>/dev/null || true
     rm -rf "$INSTALL_DIR/user" 2>/dev/null || true
 
@@ -386,6 +497,10 @@ perform_upgrade() {
         src_dir="$extract_dir/ssl-manager"
     elif [ -d "$extract_dir/cert-manager" ]; then
         src_dir="$extract_dir/cert-manager"
+    elif [ -d "$extract_dir/upgrade" ]; then
+        src_dir="$extract_dir/upgrade"
+    elif [ -d "$extract_dir/full" ]; then
+        src_dir="$extract_dir/full"
     fi
 
     # 7. 复制新代码（使用 /. 确保复制隐藏文件如 .ssl-manager）
@@ -394,16 +509,43 @@ perform_upgrade() {
         cp -r "$src_dir/backend/." "$INSTALL_DIR/backend/"
     fi
 
-    # 复制前端
+    # 复制前端（frontend 目录结构）
+    if [ -d "$src_dir/frontend" ]; then
+        mkdir -p "$INSTALL_DIR/frontend"
+        cp -r "$src_dir/frontend"/* "$INSTALL_DIR/frontend/" 2>/dev/null || true
+    fi
+    # 兼容旧的目录结构（admin/user 在根目录）
     for app in admin user; do
-        if [ -d "$src_dir/$app" ]; then
+        if [ -d "$src_dir/$app" ] && [ ! -d "$src_dir/frontend/$app" ]; then
             mkdir -p "$INSTALL_DIR/$app"
             cp -r "$src_dir/$app"/* "$INSTALL_DIR/$app/" 2>/dev/null || true
         fi
     done
 
-    # 复制根目录版本配置
-    [ -f "$src_dir/version.json" ] && cp "$src_dir/version.json" "$INSTALL_DIR/"
+    # 复制根目录版本配置（保留用户的 release_url）
+    if [ -f "$src_dir/version.json" ]; then
+        local old_release_url=""
+        # 读取旧的 release_url
+        if [ -f "$INSTALL_DIR/version.json" ]; then
+            old_release_url=$(grep -o '"release_url"[[:space:]]*:[[:space:]]*"[^"]*"' "$INSTALL_DIR/version.json" | head -1 | cut -d'"' -f4 || echo "")
+        fi
+
+        # 复制新的 version.json
+        cp "$src_dir/version.json" "$INSTALL_DIR/"
+
+        # 如果存在旧的 release_url，合并到新的 version.json
+        if [ -n "$old_release_url" ]; then
+            # 使用 sed 在 JSON 末尾添加 release_url
+            if grep -q '"release_url"' "$INSTALL_DIR/version.json"; then
+                # 如果新配置中已存在 release_url，替换它
+                sed -i "s|\"release_url\"[[:space:]]*:[[:space:]]*\"[^\"]*\"|\"release_url\": \"$old_release_url\"|" "$INSTALL_DIR/version.json"
+            else
+                # 如果不存在，在最后一个 } 前添加
+                sed -i "s|}$|, \"release_url\": \"$old_release_url\"}|" "$INSTALL_DIR/version.json"
+            fi
+            log_info "保留 release_url 配置: $old_release_url"
+        fi
+    fi
 
     # 8. 恢复保留的文件
     log_step "恢复保留文件..."
@@ -423,32 +565,52 @@ perform_upgrade() {
 
     # 9. 检测依赖变化，决定是否运行 composer install
     log_step "检测依赖变化..."
-    local new_composer_hash=""
+    local new_composer_json_hash=""
+    local new_composer_lock_hash=""
+    if [ -f "$INSTALL_DIR/backend/composer.json" ]; then
+        new_composer_json_hash=$(file_sha256 "$INSTALL_DIR/backend/composer.json")
+        log_info "新版本 composer.json hash: ${new_composer_json_hash:0:16}..."
+    fi
     if [ -f "$INSTALL_DIR/backend/composer.lock" ]; then
-        new_composer_hash=$(file_sha256 "$INSTALL_DIR/backend/composer.lock")
-        log_info "新版本 composer.lock hash: ${new_composer_hash:0:16}..."
+        new_composer_lock_hash=$(file_sha256 "$INSTALL_DIR/backend/composer.lock")
+        log_info "新版本 composer.lock hash: ${new_composer_lock_hash:0:16}..."
     fi
 
     local need_composer=false
-    if [ -z "$old_composer_hash" ] || [ "$old_composer_hash" != "$new_composer_hash" ]; then
+    # 检查 composer.json 或 composer.lock 是否有变化
+    if [ -z "$old_composer_json_hash" ] || [ "$old_composer_json_hash" != "$new_composer_json_hash" ]; then
         need_composer=true
-        log_info "依赖已变化，需要更新"
+        log_info "composer.json 已变化，需要更新依赖"
+    elif [ -z "$old_composer_lock_hash" ] || [ "$old_composer_lock_hash" != "$new_composer_lock_hash" ]; then
+        need_composer=true
+        log_info "composer.lock 已变化，需要更新依赖"
     else
         log_info "依赖未变化，跳过 composer install"
     fi
 
     if [ "$need_composer" = true ]; then
         log_step "安装 Composer 依赖..."
+
+        # 从 version.json 读取网络配置（安装时用户选择）
+        local use_china_mirror=false
+        if [ -f "$INSTALL_DIR/version.json" ]; then
+            local network=$(grep -o '"network"[[:space:]]*:[[:space:]]*"[^"]*"' "$INSTALL_DIR/version.json" 2>/dev/null | head -1 | cut -d'"' -f4)
+            if [ "$network" = "china" ]; then
+                use_china_mirror=true
+                log_info "从 version.json 读取网络配置: 使用国内镜像"
+            fi
+        fi
+
         if [ "$DEPLOY_MODE" = "docker" ]; then
             cd "$INSTALL_DIR"
-            if is_china_server; then
-                $compose_cmd exec -T php composer config repo.packagist composer https://mirrors.tencent.com/composer/
+            if [ "$use_china_mirror" = true ]; then
+                $compose_cmd exec -T php composer config repo.packagist composer https://mirrors.aliyun.com/composer/
             fi
             $compose_cmd exec -T php composer install --no-dev --optimize-autoloader
         else
             cd "$INSTALL_DIR/backend"
-            if is_china_server; then
-                composer config repo.packagist composer https://mirrors.tencent.com/composer/
+            if [ "$use_china_mirror" = true ]; then
+                composer config repo.packagist composer https://mirrors.aliyun.com/composer/
             fi
             COMPOSER_ALLOW_SUPERUSER=1 composer install --no-dev --optimize-autoloader
         fi
@@ -513,17 +675,14 @@ perform_upgrade() {
         php artisan up
     fi
 
-    # 设置权限
+    # 设置权限（使用批量操作提升性能）
     log_step "修复文件权限..."
     local web_user="www-data"
     [ "$DEPLOY_MODE" = "bt" ] && web_user="www"
 
-    # 所有者
+    # 批量设置所有者和权限
     chown -R "$web_user:$web_user" "$INSTALL_DIR" 2>/dev/null || true
-
-    # 目录 755，文件 644
-    find "$INSTALL_DIR" -type d -exec chmod 755 {} \; 2>/dev/null || true
-    find "$INSTALL_DIR" -type f -exec chmod 644 {} \; 2>/dev/null || true
+    chmod -R u=rwX,go=rX "$INSTALL_DIR" 2>/dev/null || true
 
     # .env 文件 600（敏感）
     [ -f "$INSTALL_DIR/.env" ] && chmod 600 "$INSTALL_DIR/.env"
@@ -545,7 +704,15 @@ rollback() {
         exit 1
     fi
 
-    log_info "使用备份: $latest_backup"
+    # 读取备份信息
+    local backup_info="$latest_backup/backup.json"
+    if [ -f "$backup_info" ]; then
+        local backup_version=$(grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' "$backup_info" | head -1 | cut -d'"' -f4)
+        log_info "使用备份: $latest_backup"
+        log_info "备份版本: $backup_version"
+    else
+        log_info "使用备份: $latest_backup"
+    fi
 
     if ! confirm "确认回滚到此备份？"; then
         exit 0
@@ -561,16 +728,58 @@ rollback() {
         php artisan down || true
     fi
 
-    # 恢复文件
+    # 恢复文件（支持新旧两种备份格式）
     log_info "恢复文件..."
-    if [ -d "$latest_backup/code/backend" ]; then
+
+    # 新格式：backend.zip
+    if [ -f "$latest_backup/backend.zip" ]; then
+        log_info "从 backend.zip 恢复后端代码..."
+        local restore_tmp="$TEMP_DIR/restore_backend"
+        mkdir -p "$restore_tmp"
+        unzip -qo "$latest_backup/backend.zip" -d "$restore_tmp"
+
+        # 恢复后端目录（保留 storage 和 vendor）
+        for dir in app config database routes bootstrap; do
+            if [ -d "$restore_tmp/$dir" ]; then
+                rm -rf "$INSTALL_DIR/backend/$dir"
+                cp -r "$restore_tmp/$dir" "$INSTALL_DIR/backend/"
+            fi
+        done
+
+        # 恢复重要文件
+        for file in composer.json composer.lock; do
+            if [ -f "$restore_tmp/$file" ]; then
+                cp "$restore_tmp/$file" "$INSTALL_DIR/backend/"
+            fi
+        done
+
+        # 恢复 .env（如果存在）
+        [ -f "$restore_tmp/.env" ] && cp "$restore_tmp/.env" "$INSTALL_DIR/backend/"
+
+        # 恢复 version.json（在 ../version.json 路径）
+        [ -f "$restore_tmp/../version.json" ] && cp "$restore_tmp/../version.json" "$INSTALL_DIR/"
+
+        rm -rf "$restore_tmp"
+    # 旧格式：code/backend 目录
+    elif [ -d "$latest_backup/code/backend" ]; then
+        log_info "从 code/backend 恢复后端代码（旧格式）..."
         rm -rf "$INSTALL_DIR/backend"
         cp -r "$latest_backup/code/backend" "$INSTALL_DIR/"
+
+        # 恢复配置（旧格式）
+        [ -f "$latest_backup/backend.env" ] && cp "$latest_backup/backend.env" "$INSTALL_DIR/backend/.env"
+        [ -f "$latest_backup/version.json" ] && cp "$latest_backup/version.json" "$INSTALL_DIR/"
+    else
+        log_error "未找到有效的备份文件"
+        exit 1
     fi
 
-    # 恢复配置
-    [ -f "$latest_backup/backend.env" ] && cp "$latest_backup/backend.env" "$INSTALL_DIR/backend/.env"
-    [ -f "$latest_backup/version.json" ] && cp "$latest_backup/version.json" "$INSTALL_DIR/"
+    # 恢复前端代码
+    if [ -f "$latest_backup/frontend.zip" ]; then
+        log_info "从 frontend.zip 恢复前端代码..."
+        mkdir -p "$INSTALL_DIR/frontend"
+        unzip -qo "$latest_backup/frontend.zip" -d "$INSTALL_DIR/frontend/"
+    fi
 
     # 退出维护模式
     if [ "$DEPLOY_MODE" = "docker" ]; then
@@ -593,11 +802,12 @@ SSL Manager 在线升级脚本
 用法: $0 [选项]
 
 选项:
+  --url URL              指定 release 服务 URL（覆盖 version.json 配置）
   --version, -v VERSION  指定升级版本
                          latest   最新稳定版（默认）
                          dev      最新开发版
                          x.x.x    指定版本号
-  --file FILE            使用本地升级包
+  --file FILE            使用本地升级包（跳过下载）
   --dir DIR              指定安装目录（默认自动检测）
   -y, --yes              自动确认，非交互模式
   check                  仅检查更新
@@ -608,11 +818,13 @@ SSL Manager 在线升级脚本
   FORCE_CHINA_MIRROR=1   强制使用国内镜像
 
 示例:
-  $0                         # 升级到最新稳定版
-  $0 --version 1.0.0         # 升级到指定版本
-  $0 --file /path/to/pkg.zip # 使用本地包升级
-  $0 --dir /www/wwwroot/mysite # 指定安装目录
-  $0 rollback                # 回滚
+  $0 --url http://release.example.com              # 升级到最新稳定版
+  $0 --url http://release.example.com -v 1.0.0     # 升级到指定版本
+  $0 --dir /www/wwwroot/mysite                     # 从 version.json 读取 release_url
+  $0 --file /path/to/pkg.zip                       # 使用本地包升级
+  $0 rollback                                      # 回滚
+
+注意: release 服务 URL 必须通过 --url 参数指定，或在 version.json 中配置 release_url
 
 EOF
     exit 0
@@ -625,7 +837,6 @@ show_banner() {
     echo ""
     echo -e "${CYAN}╔═══════════════════════════════════════════════════════════╗${NC}"
     echo -e "${CYAN}║${NC}           ${GREEN}SSL Manager 在线升级程序${NC}                        ${CYAN}║${NC}"
-    echo -e "${CYAN}║${NC}           ${BLUE}https://github.com/$REPO_OWNER/$REPO_NAME${NC}         ${CYAN}║${NC}"
     echo -e "${CYAN}╚═══════════════════════════════════════════════════════════╝${NC}"
     echo ""
 }
@@ -643,6 +854,10 @@ main() {
         case "$1" in
             --version|-v)
                 target_version="$2"
+                shift 2
+                ;;
+            --url)
+                CUSTOM_RELEASE_URL="$2"
                 shift 2
                 ;;
             --file)
@@ -695,6 +910,25 @@ main() {
     local current_version=$(get_current_version)
     log_info "当前版本: $current_version"
 
+    # 如果没有指定目标版本，根据 version.json 的 channel 选择
+    if [ "$target_version" = "latest" ]; then
+        local current_channel=$(get_channel)
+        if [ "$current_channel" = "dev" ]; then
+            target_version="dev"
+            log_info "当前通道: dev，自动使用 dev 通道升级"
+        fi
+    fi
+
+    # 如果没有通过命令行指定 --url，则从 version.json 读取 release_url
+    if [ -z "$CUSTOM_RELEASE_URL" ]; then
+        CUSTOM_RELEASE_URL=$(get_release_url)
+        if [ -n "$CUSTOM_RELEASE_URL" ]; then
+            log_info "使用 version.json 配置的 release URL: $CUSTOM_RELEASE_URL"
+        fi
+    else
+        log_info "使用命令行指定的 release URL: $CUSTOM_RELEASE_URL"
+    fi
+
     # 执行动作
     case "$action" in
         check)
@@ -710,7 +944,7 @@ main() {
             # 如果没有指定本地包，则下载
             if [ -z "$upgrade_file" ]; then
                 log_step "下载升级包..."
-                upgrade_file="$TEMP_DIR/ssl-manager-full.zip"
+                upgrade_file="$TEMP_DIR/ssl-manager-upgrade.zip"
                 if ! download_upgrade_package "$target_version" "$upgrade_file"; then
                     log_error "无法下载升级包"
                     exit 1

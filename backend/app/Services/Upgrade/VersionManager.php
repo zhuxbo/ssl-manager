@@ -89,6 +89,17 @@ class VersionManager
     }
 
     /**
+     * 获取自定义 release 服务 URL
+     * 如果配置了此字段，将使用 local provider 模式
+     */
+    public function getReleaseUrl(): ?string
+    {
+        $config = $this->getVersionJson();
+
+        return $config['release_url'] ?? null;
+    }
+
+    /**
      * 设置发布通道
      */
     public function setChannel(string $channel): bool

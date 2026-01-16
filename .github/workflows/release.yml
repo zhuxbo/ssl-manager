@@ -338,12 +338,6 @@ jobs:
 
             当前最新稳定版本: **${{ steps.version.outputs.version }}**
 
-            ### 快速安装
-
-            ```bash
-            curl -fsSL https://gitee.com/zhuxbo/cert-manager/raw/main/deploy/install.sh | bash
-            ```
-
             ### 下载
 
             | 包类型 | 说明 |

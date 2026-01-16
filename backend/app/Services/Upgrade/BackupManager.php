@@ -46,8 +46,13 @@ class BackupManager
                 $this->backupBackend($backupDir);
             }
 
+            // 备份前端代码
+            if ($includeConfig['frontend'] ?? true) {
+                $this->backupFrontend($backupDir);
+            }
+
             // 备份数据库
-            if ($includeConfig['database'] ?? true) {
+            if ($includeConfig['database'] ?? false) {
                 $this->backupDatabase($backupDir);
             }
 
@@ -98,10 +103,16 @@ class BackupManager
 
     /**
      * 验证备份 ID 格式（防止路径遍历）
+     * 支持两种格式：
+     * - PHP API: 2026-01-15_021459
+     * - upgrade.sh: 20260114_180232
      */
     protected function validateBackupId(string $backupId): void
     {
-        if (! preg_match('/^\d{4}-\d{2}-\d{2}_\d{6}$/', $backupId)) {
+        $phpFormat = '/^\d{4}-\d{2}-\d{2}_\d{6}$/';
+        $shellFormat = '/^\d{8}_\d{6}$/';
+
+        if (! preg_match($phpFormat, $backupId) && ! preg_match($shellFormat, $backupId)) {
             throw new RuntimeException("无效的备份 ID: $backupId");
         }
     }
@@ -147,6 +158,11 @@ class BackupManager
             // 恢复后端代码
             if ($info['includes']['backend'] ?? false) {
                 $this->restoreBackend($backupDir);
+            }
+
+            // 恢复前端代码
+            if ($info['includes']['frontend'] ?? false) {
+                $this->restoreFrontend($backupDir);
             }
 
             // 不自动恢复数据库（避免数据丢失风险）
@@ -240,6 +256,48 @@ class BackupManager
         }
 
         $zip->close();
+    }
+
+    /**
+     * 备份前端代码
+     */
+    protected function backupFrontend(string $backupDir): void
+    {
+        $projectRoot = dirname(base_path());
+        $frontendPath = "$projectRoot/frontend";
+
+        if (! File::isDirectory($frontendPath)) {
+            Log::warning('前端目录不存在，跳过备份');
+
+            return;
+        }
+
+        $zipFile = "$backupDir/frontend.zip";
+
+        $zip = new ZipArchive;
+        if ($zip->open($zipFile, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+            throw new RuntimeException('无法创建前端备份压缩文件');
+        }
+
+        // 备份前端应用（生产环境直接部署，没有 dist 子目录）
+        $apps = ['admin', 'user', 'easy'];
+        $hasContent = false;
+
+        foreach ($apps as $app) {
+            $appPath = "$frontendPath/$app";
+            if (File::isDirectory($appPath)) {
+                $this->addDirectoryToZip($zip, $appPath, $app);
+                $hasContent = true;
+            }
+        }
+
+        $zip->close();
+
+        // 如果没有内容，删除空 zip
+        if (! $hasContent) {
+            File::delete($zipFile);
+            Log::warning('前端应用目录不存在，跳过备份');
+        }
     }
 
     /**
@@ -347,6 +405,36 @@ class BackupManager
     }
 
     /**
+     * 恢复前端代码
+     */
+    protected function restoreFrontend(string $backupDir): void
+    {
+        $zipFile = "$backupDir/frontend.zip";
+
+        if (! File::exists($zipFile)) {
+            Log::warning('前端备份文件不存在，跳过恢复');
+
+            return;
+        }
+
+        $zip = new ZipArchive;
+        if ($zip->open($zipFile) !== true) {
+            throw new RuntimeException('无法打开前端备份压缩文件');
+        }
+
+        $projectRoot = dirname(base_path());
+        $frontendPath = "$projectRoot/frontend";
+
+        // 确保前端目录存在
+        if (! File::isDirectory($frontendPath)) {
+            File::makeDirectory($frontendPath, 0755, true);
+        }
+
+        $zip->extractTo($frontendPath);
+        $zip->close();
+    }
+
+    /**
      * 恢复数据库
      */
     protected function restoreDatabase(string $backupDir): void
@@ -413,7 +501,7 @@ class BackupManager
 
         $info = [
             'id' => $backupId,
-            'version' => Config::get('version.version', 'unknown'),
+            'version' => $this->readVersionFromFile(),
             'created_at' => date('c'),
             'includes' => [
                 'backend' => $includeConfig['backend'] ?? true,
@@ -423,6 +511,30 @@ class BackupManager
         ];
 
         File::put("$backupDir/backup.json", json_encode($info, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+    }
+
+    /**
+     * 直接从 version.json 读取版本号
+     * 避免使用 Config::get 因为配置缓存可能导致版本号不准确
+     */
+    protected function readVersionFromFile(): string
+    {
+        $versionPaths = [
+            dirname(base_path()) . '/version.json',  // 项目根目录（标准部署）
+            base_path('version.json'),               // backend 目录（Docker）
+        ];
+
+        foreach ($versionPaths as $path) {
+            if (File::exists($path)) {
+                $content = File::get($path);
+                $data = json_decode($content, true);
+                if (! empty($data['version'])) {
+                    return $data['version'];
+                }
+            }
+        }
+
+        return 'unknown';
     }
 
     /**
