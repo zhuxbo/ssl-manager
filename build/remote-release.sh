@@ -78,11 +78,11 @@ load_config() {
 
 # ========================================
 # 解析服务器配置
-# 格式: "名称:主机:端口:目录:URL"
+# 格式: "名称,主机,端口,目录,URL"
 # ========================================
 parse_server() {
     local server_str="$1"
-    IFS=':' read -r SERVER_NAME SERVER_HOST SERVER_PORT SERVER_DIR SERVER_URL <<< "$server_str"
+    IFS=',' read -r SERVER_NAME SERVER_HOST SERVER_PORT SERVER_DIR SERVER_URL <<< "$server_str"
     SERVER_PORT=${SERVER_PORT:-22}
 }
 

@@ -5,7 +5,7 @@
 # ========================================
 # 服务器配置
 # ========================================
-# 格式: "名称:主机:端口:目录:URL"
+# 格式: "名称,主机,端口,目录,URL"
 # - 名称: 服务器标识，用于 --server 参数
 # - 主机: SSH 主机地址
 # - 端口: SSH 端口（默认 22）
@@ -13,8 +13,8 @@
 # - URL: 公网访问 URL（用于替换脚本中的 RELEASE_URL）
 
 SERVERS=(
-    "cn:release-cn.example.com:22:/var/www/release:https://release-cn.example.com"
-    "global:release.example.com:22:/var/www/release:https://release.example.com"
+    "cn,release-cn.example.com,22,/var/www/release,https://release-cn.example.com"
+    "global,release.example.com,22,/var/www/release,https://release.example.com"
 )
 
 # ========================================

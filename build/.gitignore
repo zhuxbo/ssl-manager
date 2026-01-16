@@ -4,5 +4,6 @@ temp/
 # 定制目录
 custom/
 
-# 远程发布配置（包含敏感信息）
+# 发布配置文件（包含敏感信息或本地配置）
+local-release.conf
 remote-release.conf

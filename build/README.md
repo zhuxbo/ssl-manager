@@ -113,6 +113,14 @@ GitHub Release 仅用于代码存档，实际部署使用自建 release 服务�
 
 ## 本地发布测试
 
+### 配置
+
+```bash
+# 创建配置文件（可选，有默认值）
+cp build/local-release.conf.example build/local-release.conf
+vim build/local-release.conf
+```
+
 ### 环境准备
 
 搭建本地 release 服务用于测试升级流程：
@@ -196,10 +204,10 @@ vim build/remote-release.conf
 配置文件示例：
 
 ```bash
-# 服务器列表（格式: "名称:主机:端口:目录:URL"）
+# 服务器列表（格式: "名称,主机,端口,目录,URL"）
 SERVERS=(
-    "cn:release-cn.example.com:22:/var/www/release:https://release-cn.example.com"
-    "global:release.example.com:22:/var/www/release:https://release.example.com"
+    "cn,release-cn.example.com,22,/var/www/release,https://release-cn.example.com"
+    "global,release.example.com,22,/var/www/release,https://release.example.com"
 )
 
 SSH_USER="deploy"

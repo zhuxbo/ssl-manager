@@ -16,16 +16,41 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 BUILD_DIR="$SCRIPT_DIR"
+CONFIG_FILE="$SCRIPT_DIR/local-release.conf"
 
-# 本地 release 服务配置
-RELEASE_DIR="/www/wwwroot/dev/release.test"
-RELEASE_URL="http://localhost:10002"
+# 默认配置
 KEEP_VERSIONS=5
 
 # ========================================
 # 加载公共函数库
 # ========================================
 source "$SCRIPT_DIR/scripts/release-common.sh"
+
+# ========================================
+# 加载配置
+# ========================================
+load_config() {
+    if [ ! -f "$CONFIG_FILE" ]; then
+        log_error "配置文件不存在: $CONFIG_FILE"
+        log_info "请复制 local-release.conf.example 并配置:"
+        log_info "  cp $SCRIPT_DIR/local-release.conf.example $CONFIG_FILE"
+        exit 1
+    fi
+
+    # 加载配置
+    source "$CONFIG_FILE"
+
+    # 验证必要配置
+    if [ -z "$RELEASE_DIR" ]; then
+        log_error "配置缺失: RELEASE_DIR"
+        exit 1
+    fi
+
+    if [ -z "$RELEASE_URL" ]; then
+        log_error "配置缺失: RELEASE_URL"
+        exit 1
+    fi
+}
 
 # ========================================
 # 显示帮助
@@ -38,8 +63,18 @@ show_help() {
   --upload-only     只上传，跳过构建
   -h, --help        显示帮助
 
+版本号获取优先级:
+  1. 命令行参数指定
+  2. git tag（当前 HEAD）
+  3. version.json
+  4. 默认值 0.0.0-dev
+
+配置文件:
+  首次使用前需创建配置文件:
+  cp $SCRIPT_DIR/local-release.conf.example $SCRIPT_DIR/local-release.conf
+
 示例:
-  $0                    发布 version.json 中的版本
+  $0                    自动检测版本
   $0 0.0.15-beta        发布指定版本
   $0 --upload-only      只上传已构建的包
 EOF
@@ -75,16 +110,25 @@ main() {
         esac
     done
 
-    # 如果没有指定版本，从 version.json 读取
+    print_release_banner "SSL Manager 本地发布脚本"
+
+    # 加载配置
+    load_config
+
+    # 如果没有指定版本，从 version.json 或 git tag 读取
     if [ -z "$version" ]; then
-        version=$(get_version "$PROJECT_ROOT")
+        # 优先从 git tag 获取
+        version=$(git describe --tags --exact-match 2>/dev/null | sed 's/^v//' || true)
+        # 回退到 version.json
         if [ -z "$version" ]; then
-            log_error "无法获取版本号，请指定版本或检查 version.json"
-            exit 1
+            version=$(get_version "$PROJECT_ROOT")
+        fi
+        # 最终回退到默认值
+        if [ -z "$version" ]; then
+            version="0.0.0-dev"
+            log_warning "无法获取版本号，使用默认值: $version"
         fi
     fi
-
-    print_release_banner "SSL Manager 本地发布脚本"
 
     # 确定通道和目标目录
     local channel=$(get_channel "$version")
