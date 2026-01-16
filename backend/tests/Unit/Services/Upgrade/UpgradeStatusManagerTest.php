@@ -162,13 +162,13 @@ class UpgradeStatusManagerTest extends TestCase
         $manager = new UpgradeStatusManager;
         $manager->start('v1.0.0');
 
-        // 基础步骤 8 + backup 1 + maintenance 2 + migrate 1 + cache 1 = 13
+        // 基础步骤 7 + backup 1 + maintenance 2 + migrate 1 + cache 1 = 12
         $reflection = new \ReflectionClass($manager);
         $method = $reflection->getMethod('getTotalSteps');
         $method->setAccessible(true);
 
         $totalSteps = $method->invoke($manager);
-        $this->assertEquals(13, $totalSteps);
+        $this->assertEquals(12, $totalSteps);
     }
 
     public function test_update_step_updates_existing_step(): void
