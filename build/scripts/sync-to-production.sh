@@ -292,6 +292,17 @@ cat > "$PRODUCTION_DIR/config.json" <<EOF
 }
 EOF
 
+# 生成 version.json（运行时使用）
+cat > "$PRODUCTION_DIR/version.json" <<EOF
+{
+  "version": "$VERSION",
+  "channel": "$RELEASE_CHANNEL",
+  "build_time": "$BUILD_TIME",
+  "build_commit": "$MONOREPO_COMMIT"
+}
+EOF
+log_success "version.json 已生成"
+
 # 更新后端 version.php 配置（写入构建时信息）
 VERSION_PHP="$PRODUCTION_DIR/backend/config/version.php"
 if [ -f "$VERSION_PHP" ]; then

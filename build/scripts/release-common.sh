@@ -24,9 +24,17 @@ log_step() { echo -e "${CYAN}[STEP]${NC} $1"; }
 
 # ========================================
 # 获取版本号
+# 优先级：git tag > version.json
 # ========================================
 get_version() {
     local project_root="$1"
+    # 优先从 git tag 获取
+    local tag_version=$(git describe --tags --exact-match 2>/dev/null | sed 's/^v//')
+    if [ -n "$tag_version" ]; then
+        echo "$tag_version"
+        return
+    fi
+    # 回退到 version.json
     local version_file="$project_root/version.json"
     if [ -f "$version_file" ]; then
         grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' "$version_file" | head -1 | cut -d'"' -f4

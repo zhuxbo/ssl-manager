@@ -392,13 +392,15 @@ main() {
         exit $?
     fi
 
-    # 获取版本号
+    # 获取版本号（仅支持命令行参数或 exact-match tag）
     if [ -z "$version" ]; then
-        version=$(get_version "$PROJECT_ROOT")
+        version=$(git describe --tags --exact-match 2>/dev/null | sed 's/^v//')
         if [ -z "$version" ]; then
-            log_error "无法获取版本号，请指定版本或检查 version.json"
+            log_error "远程发布必须指定版本号或打 git tag"
+            log_info "用法: $0 <版本号>  或  git tag v1.0.0 && $0"
             exit 1
         fi
+        log_info "从 git tag 获取版本: $version"
     fi
 
     # 确定通道

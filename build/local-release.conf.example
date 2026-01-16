@@ -5,10 +5,10 @@
 # Release 服务配置
 # ========================================
 # 本地 release 服务目录
-RELEASE_DIR="/www/wwwroot/dev/release.test"
+RELEASE_DIR="/www/wwwroot/release.test"
 
 # 本地 release 服务 URL
-RELEASE_URL="http://localhost:10002"
+RELEASE_URL="http://localhost:8888"
 
 # ========================================
 # 可选配置

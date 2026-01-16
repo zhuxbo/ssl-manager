@@ -89,16 +89,21 @@ build/
 ./build/scripts/package.sh
 ```
 
-## 版本号注入
+## 版本号管理
 
-构建时版本号获取优先级：
+`version.json` 不在仓库中，由构建时自动生成。
 
-1. **Git Tag**：如果当前 HEAD 有 tag，使用 tag 版本
-2. **version.json**：回退到 version.json 中的版本号
+### 版本获取优先级
 
-这意味着：
-- 开发时使用 version.json 中的版本
-- 正式发布时打 tag，构建自动使用 tag 版本
+| 场景 | 优先级 | 说明 |
+|------|--------|------|
+| **remote-release.sh** | 命令行参数 > git tag | 必须明确指定，不回退 |
+| **GitHub CI** | git tag | 由 tag push 触发 |
+| **local-release.sh** | 命令行参数 > git tag > 默认值 | 灵活，方便本地测试 |
+
+### 本地开发
+
+无 `version.json` 时，PHP 返回默认值：`version=0.0.0-beta, channel=dev`
 
 ## CI/CD
 
@@ -116,7 +121,7 @@ GitHub Release 仅用于代码存档，实际部署使用自建 release 服务�
 ### 配置
 
 ```bash
-# 创建配置文件（可选，有默认值）
+# 创建配置文件（必须）
 cp build/local-release.conf.example build/local-release.conf
 vim build/local-release.conf
 ```
@@ -126,13 +131,13 @@ vim build/local-release.conf
 搭建本地 release 服务用于测试升级流程：
 
 ```
-/www/wwwroot/dev/release.test/     # Release 服务目录 (http://localhost:10002)
+/www/wwwroot/dev/release/           # Release 服务目录 (https://release.example.com)
 ├── install.sh                      # 安装脚本（自动注入 release_url）
 ├── upgrade.sh                      # 升级脚本（自动注入 release_url）
 ├── releases.json                   # Release 索引
-├── main/v1.0.0/                   # 正式版
+├── main/v1.0.0/                    # 正式版
 │   └── ssl-manager-*.zip
-├── dev/v0.0.10-beta/              # 开发版
+├── dev/v0.0.10-beta/               # 开发版
 │   └── ssl-manager-*.zip
 ├── latest/                         # 最新稳定版符号链接
 └── dev-latest/                     # 最新开发版符号链接
@@ -142,8 +147,8 @@ vim build/local-release.conf
 
 ```bash
 # 构建并发布到本地 release 服务
-./build/local-release.sh              # 使用 version.json 版本
-./build/local-release.sh 0.0.10-beta  # 指定版本
+./build/local-release.sh              # 自动检测版本（git tag 或默认值）
+./build/local-release.sh 0.0.10-beta  # 指定版本（推荐）
 ```
 
 脚本会自动：
@@ -158,31 +163,33 @@ vim build/local-release.conf
 
 ```bash
 # 一键安装（curl 方式）
-curl -fsSL http://localhost:10002/install.sh | sudo bash
+curl -fsSL https://release.example.com/install.sh | sudo bash
 
 # 一键升级
-curl -fsSL http://localhost:10002/upgrade.sh | sudo bash
+curl -fsSL https://release.example.com/upgrade.sh | sudo bash
 
 # 指定版本安装
-curl -fsSL http://localhost:10002/install.sh | sudo bash -s -- --version 0.0.10-beta
+curl -fsSL https://release.example.com/install.sh | sudo bash -s -- --version 0.0.10-beta
 
 # 手动升级（指定目录）
-./deploy/upgrade.sh --url http://localhost:10002 --version 0.0.10-beta --dir /path/to/app -y
+./deploy/upgrade.sh --url https://release.example.com --version 0.0.10-beta --dir /path/to/app -y
 ```
 
-### version.json 配置
+### version.json（运行时）
+
+`version.json` 由构建自动生成，包含在安装/升级包中：
 
 ```json
 {
   "version": "0.0.9-beta",
   "channel": "dev",
-  "release_url": "http://localhost:10002"
+  "release_url": "https://release.example.com"
 }
 ```
 
 | 字段 | 说明 |
 |------|------|
-| `version` | 当前版本号 |
+| `version` | 当前版本号（构建时注入） |
 | `channel` | 渠道：`main`（正式）或 `dev`（开发） |
 | `release_url` | 自定义 release 服务 URL（可选，升级时保留） |
 
@@ -207,11 +214,11 @@ vim build/remote-release.conf
 # 服务器列表（格式: "名称,主机,端口,目录,URL"）
 SERVERS=(
     "cn,release-cn.example.com,22,/var/www/release,https://release-cn.example.com"
-    "global,release.example.com,22,/var/www/release,https://release.example.com"
+    "us,release-us.example.com,22,/var/www/release,https://release-us.example.com"
 )
 
-SSH_USER="deploy"
-SSH_KEY="~/.ssh/release_deploy"
+SSH_USER="release"
+SSH_KEY="~/.ssh/release"
 KEEP_VERSIONS=5
 ```
 

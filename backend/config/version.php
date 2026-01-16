@@ -25,7 +25,7 @@ foreach ($versionPaths as $versionPath) {
 
 return [
     // 当前版本号（语义化版本）
-    'version' => $versionJson['version'] ?? '0.0.0',
+    'version' => $versionJson['version'] ?? '0.0.0-beta',
 
     // 版本名称
     'name' => 'SSL Manager',
@@ -37,5 +37,5 @@ return [
     'build_commit' => $versionJson['build_commit'] ?? '',
 
     // 发布通道：main（正式版）或 dev（开发版）
-    'channel' => $versionJson['channel'] ?? 'main',
+    'channel' => $versionJson['channel'] ?? 'dev',
 ];

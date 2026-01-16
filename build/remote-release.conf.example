@@ -14,17 +14,17 @@
 
 SERVERS=(
     "cn,release-cn.example.com,22,/var/www/release,https://release-cn.example.com"
-    "global,release.example.com,22,/var/www/release,https://release.example.com"
+    "us,release-us.example.com,22,/var/www/release,https://release-us.example.com"
 )
 
 # ========================================
 # SSH 认证
 # ========================================
 # SSH 用户名
-SSH_USER="deploy"
+SSH_USER="release"
 
 # SSH 私钥路径（支持 ~ 展开）
-SSH_KEY="~/.ssh/release_deploy"
+SSH_KEY="~/.ssh/release"
 
 # ========================================
 # 可选配置
