@@ -101,11 +101,178 @@ function prepareAndSubmitInstall(button) {
     }
 
     var form = button.form;
-    if (form) {
-        form.submit();
-    } else {
+    if (!form) {
         console.error("找不到安装按钮的表单");
+        return;
     }
+
+    // 使用 fetch API 流式读取安装进度
+    var formData = new FormData(form);
+    formData.append('ajax', '1');
+
+    fetch(form.getAttribute('action') || window.location.href, {
+        method: 'POST',
+        body: formData
+    })
+    .then(function(response) {
+        if (!response.ok) {
+            throw new Error('HTTP error ' + response.status);
+        }
+        return handleStreamResponse(response, logDiv);
+    })
+    .catch(function(error) {
+        console.error('安装请求失败:', error);
+        logDiv.innerHTML = '<div class="error">✘ 安装请求失败: ' + error.message + '</div>';
+        button.disabled = false;
+        button.innerHTML = '重试安装';
+        button.style.background = '';
+        button.style.cursor = '';
+    });
+}
+
+// 处理流式响应
+function handleStreamResponse(response, logDiv) {
+    var reader = response.body.getReader();
+    var decoder = new TextDecoder();
+    var buffer = '';
+
+    // 清空日志区域
+    logDiv.innerHTML = '';
+
+    function processText(result) {
+        if (result.done) {
+            // 处理剩余缓冲区
+            if (buffer.trim()) {
+                processLine(buffer.trim(), logDiv);
+            }
+            return;
+        }
+
+        buffer += decoder.decode(result.value, {stream: true});
+
+        // 按行处理
+        var lines = buffer.split('\n');
+        buffer = lines.pop(); // 保留不完整的行
+
+        lines.forEach(function(line) {
+            if (line.trim()) {
+                processLine(line.trim(), logDiv);
+            }
+        });
+
+        return reader.read().then(processText);
+    }
+
+    return reader.read().then(processText);
+}
+
+// 处理单行进度信息
+function processLine(line, logDiv) {
+    try {
+        var event = JSON.parse(line);
+
+        switch(event.type) {
+            case 'start':
+                var stepDiv = document.createElement('div');
+                stepDiv.innerHTML = '<strong>[' + event.step + '/' + event.total + '] ' + event.message + '...</strong>';
+                stepDiv.style.marginTop = '15px';
+                stepDiv.id = 'step-' + event.step;
+                logDiv.appendChild(stepDiv);
+                break;
+
+            case 'complete':
+                var successDiv = document.createElement('div');
+                successDiv.className = 'success';
+                successDiv.innerHTML = '✓ ' + event.message;
+                successDiv.style.color = '#4CAF50';
+                successDiv.style.borderLeft = '4px solid #4CAF50';
+                successDiv.style.padding = '5px 10px';
+                successDiv.style.margin = '5px 0';
+                logDiv.appendChild(successDiv);
+                break;
+
+            case 'output':
+                var preElement = document.createElement('pre');
+                preElement.className = 'dark-output';
+                preElement.textContent = event.message;
+                preElement.style.maxHeight = '200px';
+                preElement.style.overflow = 'auto';
+                logDiv.appendChild(preElement);
+                break;
+
+            case 'warning':
+                var warningDiv = document.createElement('div');
+                warningDiv.className = 'warning';
+                warningDiv.innerHTML = '⚠ ' + event.message;
+                warningDiv.style.color = '#FFC107';
+                warningDiv.style.borderLeft = '4px solid #FFC107';
+                warningDiv.style.padding = '5px 10px';
+                warningDiv.style.margin = '5px 0';
+                logDiv.appendChild(warningDiv);
+                break;
+
+            case 'error':
+                var errorDiv = document.createElement('div');
+                errorDiv.className = 'error';
+                errorDiv.innerHTML = '✘ ' + event.message;
+                errorDiv.style.color = '#F44336';
+                errorDiv.style.borderLeft = '4px solid #F44336';
+                errorDiv.style.padding = '5px 10px';
+                errorDiv.style.margin = '5px 0';
+                logDiv.appendChild(errorDiv);
+                break;
+
+            case 'success':
+                // 安装成功，显示完成信息
+                renderInstallSuccess(event, logDiv);
+                break;
+        }
+
+        // 自动滚动到底部
+        logDiv.scrollTop = logDiv.scrollHeight;
+
+    } catch (e) {
+        // 非 JSON 行，可能是普通文本
+        if (line.trim()) {
+            console.log('非 JSON 行:', line);
+        }
+    }
+}
+
+// 渲染安装成功信息
+function renderInstallSuccess(event, logDiv) {
+    // 隐藏安装按钮（不隐藏表单，因为 logDiv 在表单内）
+    var installButton = document.getElementById("install-button");
+    if (installButton) {
+        installButton.style.display = "none";
+    }
+
+    var successHtml = '<h2 style="color: #4CAF50; margin-top: 20px;">✓ 安装完成</h2>';
+    successHtml += '<div class="requirement success" style="background: rgba(76, 175, 80, 0.1); border: 1px solid #4CAF50; padding: 15px; border-radius: 8px; margin: 10px 0;">';
+    successHtml += '安装过程已完成！系统已成功完成以下步骤：';
+    successHtml += '<ul style="margin: 10px 0; padding-left: 20px;">';
+
+    if (event.steps && event.steps.length) {
+        event.steps.forEach(function(step) {
+            successHtml += '<li>' + step + '</li>';
+        });
+    }
+
+    successHtml += '</ul>';
+    successHtml += '初始管理员账号: <strong>admin</strong><br>';
+    successHtml += '初始密码: <strong>123456</strong><br><br>';
+    successHtml += '请立即登录并修改默认密码！';
+    successHtml += '</div>';
+
+    successHtml += '<div class="requirement success" style="background: rgba(76, 175, 80, 0.1); border: 1px solid #4CAF50; padding: 15px; border-radius: 8px; margin: 10px 0;">';
+    successHtml += '<strong>安全提示：</strong> 安装文件和资源目录已自动清理。';
+    successHtml += '</div>';
+
+    successHtml += '<div style="margin-top: 20px; text-align: center;">';
+    successHtml += '<a href="/" class="btn" style="display: inline-block; padding: 12px 30px; background: #4CAF50; color: white; text-decoration: none; border-radius: 6px;">进入系统</a>';
+    successHtml += '</div>';
+
+    logDiv.innerHTML = successHtml;
 }
 
 // 处理安装日志中的HTML转义

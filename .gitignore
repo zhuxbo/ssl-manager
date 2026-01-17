@@ -58,3 +58,6 @@ coverage/
 
 # 开发/测试目录
 deploy/release-server/
+
+# 版本文件（构建时生成）
+version.json

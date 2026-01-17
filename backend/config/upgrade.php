@@ -5,38 +5,10 @@
  */
 
 return [
-    // 更新源配置
-    'source' => [
-        // 默认使用 Gitee
-        'provider' => env('UPGRADE_PROVIDER', 'gitee'),
-
-        // Gitee 仓库
-        'gitee' => [
-            'owner' => env('UPGRADE_GITEE_OWNER', 'zhuxbo'),
-            'repo' => env('UPGRADE_GITEE_REPO', 'cert-manager'),
-            'api_base' => 'https://gitee.com/api/v5',
-            'download_base' => 'https://gitee.com',
-            'access_token' => env('UPGRADE_GITEE_TOKEN', ''),
-        ],
-
-        // GitHub 仓库（备用）
-        'github' => [
-            'owner' => env('UPGRADE_GITHUB_OWNER', 'zhuxbo'),
-            'repo' => env('UPGRADE_GITHUB_REPO', 'cert-manager'),
-            'api_base' => 'https://api.github.com',
-            'download_base' => 'https://github.com',
-        ],
-
-        // 本地服务器（开发测试用）
-        'local' => [
-            'base_url' => env('UPGRADE_LOCAL_URL', 'http://release-server'),
-        ],
-    ],
-
     // 备份配置
     'backup' => [
-        // 备份存储目录
-        'path' => storage_path('backups'),
+        // 备份存储目录（项目根目录，与 upgrade.sh 一致）
+        'path' => dirname(base_path()) . '/storage/backups',
 
         // 最大保留备份数量
         'max_backups' => env('UPGRADE_MAX_BACKUPS', 5),
@@ -44,8 +16,8 @@ return [
         // 备份内容
         'include' => [
             'backend' => true,      // 后端代码
+            'frontend' => true,     // 前端（编译后的 dist 目录）
             'database' => false,    // 数据库（Docker 环境无 mysqldump）
-            'frontend' => false,    // 前端（静态文件，不需要备份）
         ],
 
         // 数据库备份排除的表（日志表、队列表、通知记录等非核心数据）

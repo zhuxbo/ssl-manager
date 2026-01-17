@@ -1,5 +1,46 @@
 # Manager Monorepo
 
+## 文档原则
+
+- **根目录 README**：给用户看，只写部署相关和简单系统架构说明
+- **功能目录 README**：详细文档放在各自功能目录
+  - `build/README.md` - 构建系统、版本发布
+  - `develop/README.md` - 开发环境搭建
+  - `deploy/docker/README.md` - Docker 部署详细说明
+- **CLAUDE.md**：AI 助手参考，记录项目内部结构和开发约定
+
+---
+
+## 项目结构
+
+```
+frontend/
+├── shared/     # 共享代码库（组件、工具、指令）
+├── admin/      # 管理端应用
+└── user/       # 用户端应用
+backend/        # Laravel 11 后端
+build/          # 构建系统（见 build/README.md）
+deploy/         # 部署脚本
+develop/        # 开发环境（见 develop/README.md）
+```
+
+## 共享包 (shared)
+
+使用 `@shared/*` 别名访问：
+- `@shared/components` - ReIcon, ReDialog, Auth, Perms, PureTableBar 等
+- `@shared/utils` - http, auth, message 等
+- `@shared/directives` - auth, perms, copy 等
+
+shared 模块使用依赖注入，需在应用启动时初始化（见 `admin/src/utils/setup.ts`）。
+
+## 工作流程
+
+- **base 目录只读**：通过 git subtree 同步上游代码，不要修改
+- **base 依赖**：本地开发需在 base 目录执行 `pnpm install --ignore-workspace`
+- **不要自动提交**：完成修改后等待用户确认"提交"再执行 git commit/push
+
+---
+
 ## ACME 模块
 
 Manager 实现了 ACME RFC 8555 协议服务端，供 certbot 等 ACME 客户端使用。
@@ -58,133 +99,120 @@ ACME_DEFAULT_PRODUCT_ID=xxx
 - **EAB 强制要求** - 必须提供有效的外部账户绑定凭证
 - **时序攻击防护** - EAB HMAC 验证使用 `hash_equals()`
 
-### 安全测试
-
-```bash
-php artisan test tests/Unit/AcmeSecurityTest.php
-```
-
 ---
 
-## 工作流程
+## 安装流程
 
-- **base 目录只读**：通过 git subtree 同步上游代码，不要修改
-- **base 依赖**：本地开发需在 base 目录执行 `pnpm install --ignore-workspace`
+### 宝塔面板安装（两阶段）
 
-## 包结构
+| 阶段 | 执行者 | 职责 |
+|------|--------|------|
+| 环境准备 | `deploy/scripts/bt-install.sh` | PHP 版本选择、扩展检测、Composer 安装、代码下载、权限设置 |
+| 应用安装 | `backend/public/install.php` | Composer 依赖安装、环境配置、数据库迁移、初始化 |
 
-```
-frontend/
-├── shared/     # 共享代码库（组件、工具、指令、构建工具）
-├── admin/      # 管理端应用
-└── user/       # 用户端应用
-backend/        # Laravel 11 后端
-build/          # Docker 容器化构建
-deploy/         # 部署脚本
-```
+### Composer 依赖安装
 
-## 共享包 (shared)
+Composer 依赖在 Web 安装向导中安装（`InstallExecutor.php` → `ComposerRunner.php`）。
 
-使用 `@shared/*` 别名访问：
-- `@shared/components` - ReIcon, ReDialog, Auth, Perms, PureTableBar 等
-- `@shared/utils` - http, auth, message 等
-- `@shared/directives` - auth, perms, copy 等
+网络检测优先级：
+1. `FORCE_CHINA_MIRROR` 环境变量强制指定
+2. 云服务商元数据检测（阿里云、腾讯云、华为云中国区域）
+3. 百度可达 + Google 不可达检测
+4. GitHub API 访问速度检测
 
-shared 模块使用依赖注入，需在应用启动时初始化（见 `admin/src/utils/setup.ts`）。
+中国大陆网络自动使用腾讯云 Composer 镜像。
 
-## 开发命令
-
-```bash
-pnpm dev           # 同时启动 admin 和 user
-pnpm dev:admin     # 仅启动 admin
-pnpm build         # 构建所有前端
-```
-
-## 生产构建
-
-```bash
-cd build
-./build.sh --test           # 测试构建
-./build.sh --prod           # 生产构建（推送）
-./build.sh --test admin     # 仅构建管理端
-```
-
-定制目录 `build/custom/` 存放 `build.env`、`config.json`、logo 等定制资源，不纳入版本控制。
-
-## 开发环境
-
-```bash
-cd develop
-./start.sh up      # 启动所有服务
-./start.sh down    # 停止
-./start.sh init    # 初始化（首次）
-./start.sh logs    # 查看日志
-```
-
-服务端口：
-- Admin: http://localhost:5201
-- User: http://localhost:5202
-- Backend: http://localhost:8001
-- MySQL: 3306
-- Redis: 6379
-
-容器顺序启动：MySQL/Redis → Backend → Admin → User（Admin 健康后 User 才启动）
+---
 
 ## 在线升级
 
 版本号在 `version.json` 配置，升级服务位于 `backend/app/Services/Upgrade/`。
 
 ```bash
-# artisan 命令
 php artisan upgrade:check              # 检查更新
 php artisan upgrade:run                # 执行升级
 php artisan upgrade:rollback           # 回滚
-
-# 脚本升级
-deploy/upgrade.sh                      # 升级到最新版
-deploy/upgrade.sh --version 1.0.0      # 指定版本
-deploy/upgrade.sh rollback             # 回滚
-deploy/upgrade.sh --dir /path -y       # 指定目录，自动确认
 ```
+
+### 升级模式
+
+系统支持两种升级模式：
+
+| 特性 | PHP API 升级 | Shell 脚本升级 |
+|------|-------------|---------------|
+| 触发方式 | 管理后台 API | `deploy/upgrade.sh` |
+| 升级包 | `upgrade` 包 | `full` 包 |
+| 维护模式 | ✅ 自动进入/退出 | ✅ 自动进入/退出 |
+| 权限修复 | ✅ 自动检测和修复 | ✅ 自动修复 |
+| 适用环境 | Docker / 宝塔 | Docker / 宝塔 |
+
+### 关键服务
+
+- `UpgradeService` - 升级主逻辑，包含 `performUpgradeWithStatus()` 后台升级方法
+- `UpgradeStatusManager` - 状态管理，支持动态步骤计算
+- `PackageExtractor` - 包解压和应用，包含权限检查
+- `ReleaseClient` - Release 获取，从 `version.json` 读取自定义 URL
+- `BackupManager` - 备份和恢复
+- `VersionManager` - 版本比较和约束检查，支持 `getReleaseUrl()`
+
+### 自定义 Release URL
+
+通过 `version.json` 的 `release_url` 字段配置自定义升级源：
+
+```json
+{
+  "version": "0.0.9-beta",
+  "channel": "dev",
+  "release_url": "http://localhost:10002"
+}
+```
+
+- 升级时 `release_url` 自动保留，不会被升级包覆盖
+- 如果未配置，默认使用 Gitee 源
+
+### 环境检测
+
+升级系统自动检测部署环境：
+- **Docker**: Web 用户 `www-data`，路径 `/var/www/html`
+- **宝塔**: Web 用户 `www`，路径 `/www/wwwroot/*`
+
+检测标志：
+1. 存在 `/www/server` 目录
+2. 存在 `www` 系统用户
+3. 安装目录在 `/www/wwwroot/` 下
 
 ### 安装目录自动检测
 
 升级脚本通过 `backend/.ssl-manager` 标记文件自动检测安装目录，按以下顺序搜索：
 
-1. 预设目录快速检测：
-   - `/opt/ssl-manager`
-   - `/opt/cert-manager`
-   - `/www/wwwroot/ssl-manager`
-   - `/www/wwwroot/cert-manager`
-
+1. 预设目录快速检测：`/opt/ssl-manager`、`/opt/cert-manager`、`/www/wwwroot/ssl-manager`
 2. 系统范围搜索（`/opt`、`/www/wwwroot`、`/home`，深度 4 层）
 
-如检测到多个安装，脚本会列出供用户选择。自定义安装路径需使用 `--dir` 参数指定。
+### 本地开发测试
 
-测试环境配置（使用本地 release-server）：
-```bash
-# backend/.env
-UPGRADE_PROVIDER=local
-UPGRADE_LOCAL_URL=http://release-server
-
-# 启动 release-server
-cd deploy/release-server && docker compose up -d
-```
-
-## 部署
+使用本地 release 服务测试升级流程：
 
 ```bash
-# 自动检测环境
-curl -fsSL https://gitee.com/zhuxbo/cert-manager/raw/main/deploy/install.sh | bash
+# 1. 构建并发布到本地 release 服务
+cd build && ./local-release.sh
 
-# 指定 Docker/宝塔
-bash -s docker  # 或 bash -s bt
+# 2. 脚本升级测试
+sudo ./deploy/upgrade.sh --url http://localhost:10002 --version 0.0.10-beta --dir /path/to/install -y
 
-# 强制使用国内 Composer 镜像
-FORCE_CHINA_MIRROR=1 bash install.sh
+# 3. 后台升级测试（需先配置 version.json 的 release_url）
 ```
 
-脚本自动检测网络环境（云服务商元数据 + GitHub 可达性），决定是否使用阿里云镜像。
+Release 服务目录结构：
+```
+/www/wwwroot/dev/release.test/
+├── releases.json     # Release 索引
+├── main/            # 正式版
+├── dev/             # 开发版
+├── latest/          # 最新稳定版符号链接
+└── dev-latest/      # 最新开发版符号链接
+```
+
+---
 
 ## Auto API
 

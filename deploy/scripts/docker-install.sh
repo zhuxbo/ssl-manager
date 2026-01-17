@@ -130,42 +130,39 @@ step_mirror_selection() {
     log_step "步骤 2/7: 镜像源选择"
     echo ""
 
-    # 自动检测
-    local detected="国际"
-    if is_china_server; then
-        detected="中国大陆"
-    fi
-
-    echo "检测到服务器位置: $detected"
-    echo ""
-    echo "请选择镜像源（影响下载速度）："
-    echo "  1. 自动检测（当前: $detected）（推荐）"
-    echo "  2. 中国大陆镜像"
-    echo "  3. 国际镜像"
-    echo ""
-
-    read -p "请选择 (1-3) [1]: " choice < /dev/tty
-    choice="${choice:-1}"
-
-    case "$choice" in
-        2)
+    # 如果 install.sh 已经设置了 NETWORK_ENV，直接使用
+    if [ -n "$NETWORK_ENV" ]; then
+        if [ "$NETWORK_ENV" = "china" ]; then
             MIRROR_REGION="china"
-            log_info "使用中国大陆镜像源"
-            ;;
-        3)
+            log_info "使用中国大陆镜像源（继承自安装配置）"
+        else
             MIRROR_REGION="intl"
-            log_info "使用国际镜像源"
-            ;;
-        *)
-            if is_china_server; then
-                MIRROR_REGION="china"
-                log_info "自动选择: 中国大陆镜像源"
-            else
+            log_info "使用国际镜像源（继承自安装配置）"
+        fi
+    else
+        # 没有预设，让用户选择
+        echo "请选择镜像源（影响下载速度）："
+        echo "  1. 中国大陆镜像（推荐国内服务器）"
+        echo "  2. 国际镜像"
+        echo ""
+
+        read -p "请选择 (1/2) [1]: " choice < /dev/tty
+        choice="${choice:-1}"
+
+        case "$choice" in
+            2)
                 MIRROR_REGION="intl"
-                log_info "自动选择: 国际镜像源"
-            fi
-            ;;
-    esac
+                NETWORK_ENV="global"
+                log_info "使用国际镜像源"
+                ;;
+            *)
+                MIRROR_REGION="china"
+                NETWORK_ENV="china"
+                log_info "使用中国大陆镜像源"
+                ;;
+        esac
+        export NETWORK_ENV
+    fi
 
     # 配置 Docker 镜像加速
     if [ "$MIRROR_REGION" = "china" ]; then
@@ -459,9 +456,8 @@ create_directories() {
     ensure_dir "$INSTALL_DIR/data/storage/framework/sessions"
     ensure_dir "$INSTALL_DIR/data/storage/framework/views"
     ensure_dir "$INSTALL_DIR/data/logs/nginx"
-    ensure_dir "$INSTALL_DIR/config/nginx"
+    ensure_dir "$INSTALL_DIR/config"
     ensure_dir "$INSTALL_DIR/config/ssl"
-    ensure_dir "$INSTALL_DIR/docker"
 
     log_success "目录结构已创建"
 }
@@ -517,6 +513,40 @@ download_application() {
         cp -r "$extract_dir/frontend"/* "$INSTALL_DIR/frontend/"
     fi
 
+    # 复制版本配置并注入 release_url 和 network
+    if [ -f "$extract_dir/version.json" ]; then
+        cp "$extract_dir/version.json" "$INSTALL_DIR/"
+        local version_file="$INSTALL_DIR/version.json"
+
+        # 使用 Python 处理 JSON
+        if command -v python3 &> /dev/null; then
+            python3 -c "
+import json
+import os
+with open('$version_file', 'r') as f:
+    data = json.load(f)
+# 注入 release_url
+if '$CUSTOM_RELEASE_URL':
+    data['release_url'] = '$CUSTOM_RELEASE_URL'
+# 注入 network 配置
+network = os.environ.get('NETWORK_ENV', 'china')
+data['network'] = network
+with open('$version_file', 'w') as f:
+    json.dump(data, f, indent=2, ensure_ascii=False)
+    f.write('\n')
+"
+        else
+            log_warning "未找到 python3，无法写入配置到 version.json"
+        fi
+
+        if [ -n "$CUSTOM_RELEASE_URL" ]; then
+            log_info "已配置 release_url: $CUSTOM_RELEASE_URL"
+        fi
+        if [ -n "$NETWORK_ENV" ]; then
+            log_info "已配置 network: $NETWORK_ENV"
+        fi
+    fi
+
     # 清理临时文件
     rm -rf "$temp_dir"
 
@@ -528,413 +558,79 @@ download_application() {
 }
 
 # ========================================
-# 生成 Dockerfile
+# 配置 Docker 文件（使用模板）
 # ========================================
-generate_dockerfile() {
-    log_info "生成 Dockerfile..."
+setup_docker_files() {
+    log_info "配置 Docker 文件..."
 
-    local alpine_mirror_cmd=$(get_alpine_mirror_cmd "$MIRROR_REGION")
-    local composer_mirror_cmd=$(get_composer_mirror_cmd "$MIRROR_REGION")
+    local docker_template_dir="$SCRIPT_DIR/../docker"
 
-    cat > "$INSTALL_DIR/docker/Dockerfile" <<EOF
-FROM php:8.3-fpm-alpine
+    # 1. 复制 Dockerfile
+    cp "$docker_template_dir/Dockerfile" "$INSTALL_DIR/Dockerfile"
 
-# 配置镜像源
-RUN $alpine_mirror_cmd
+    # 处理镜像源
+    if [ "$MIRROR_REGION" = "china" ]; then
+        sed -i 's|# __ALPINE_MIRROR__|RUN sed -i "s/dl-cdn.alpinelinux.org/mirrors.tencent.com/g" /etc/apk/repositories|' "$INSTALL_DIR/Dockerfile"
+        sed -i 's|# __COMPOSER_MIRROR__|RUN composer config -g repo.packagist composer https://mirrors.tencent.com/composer/|' "$INSTALL_DIR/Dockerfile"
+    else
+        # 移除占位符注释
+        sed -i '/# __ALPINE_MIRROR__/d' "$INSTALL_DIR/Dockerfile"
+        sed -i '/# __COMPOSER_MIRROR__/d' "$INSTALL_DIR/Dockerfile"
+    fi
 
-# 安装依赖
-RUN apk add --no-cache \\
-    freetype-dev \\
-    libjpeg-turbo-dev \\
-    libpng-dev \\
-    libzip-dev \\
-    icu-dev \\
-    oniguruma-dev \\
-    libxml2-dev \\
-    curl-dev \\
-    openssl-dev \\
-    linux-headers \\
-    \$PHPIZE_DEPS
+    # 2. 复制 Nginx 配置
+    cp "$docker_template_dir/config/nginx.conf" "$INSTALL_DIR/config/nginx.conf"
+    cp "$docker_template_dir/config/site.conf" "$INSTALL_DIR/config/site.conf"
+    cp "$docker_template_dir/config/php.ini" "$INSTALL_DIR/config/php.ini"
 
-# 安装 PHP 扩展
-RUN docker-php-ext-configure gd --with-freetype --with-jpeg \\
-    && docker-php-ext-install -j\$(nproc) \\
-        pdo_mysql \\
-        mysqli \\
-        gd \\
-        zip \\
-        intl \\
-        bcmath \\
-        pcntl \\
-        opcache \\
-        exif
+    # 3. 创建 .env 文件
+    cp "$docker_template_dir/.env.example" "$INSTALL_DIR/.env"
 
-# 安装 Redis 扩展
-RUN pecl install redis && docker-php-ext-enable redis
+    # 替换变量
+    sed -i "s/__DB_PASSWORD__/$DB_PASSWORD/g" "$INSTALL_DIR/.env"
+    sed -i "s/DB_HOST=mysql/DB_HOST=$DB_HOST/g" "$INSTALL_DIR/.env"
+    sed -i "s/DB_PORT=3306/DB_PORT=$DB_PORT/g" "$INSTALL_DIR/.env"
+    sed -i "s/DB_DATABASE=ssl_manager/DB_DATABASE=$DB_DATABASE/g" "$INSTALL_DIR/.env"
+    sed -i "s/DB_USERNAME=ssl_manager/DB_USERNAME=$DB_USERNAME/g" "$INSTALL_DIR/.env"
+    sed -i "s/REDIS_HOST=redis/REDIS_HOST=$REDIS_HOST/g" "$INSTALL_DIR/.env"
+    sed -i "s/REDIS_PORT=6379/REDIS_PORT=$REDIS_PORT/g" "$INSTALL_DIR/.env"
+    sed -i "s/REDIS_PASSWORD=/REDIS_PASSWORD=$REDIS_PASSWORD/g" "$INSTALL_DIR/.env"
+    sed -i "s/HTTP_PORT=80/HTTP_PORT=$WEB_PORT/g" "$INSTALL_DIR/.env"
 
-# 安装 Composer
-COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
+    # 4. 创建 docker-compose.yml
+    cp "$docker_template_dir/docker-compose.example.yml" "$INSTALL_DIR/docker-compose.yml"
 
-# 配置 Composer 镜像
-RUN $composer_mirror_cmd
+    # 处理外部数据库（移除 mysql 服务）
+    if [ "$USE_CONTAINER_DB" = false ]; then
+        # 移除 mysql 服务块和相关依赖
+        sed -i '/^  # MySQL 数据库/,/^  # Redis 缓存/{ /^  # Redis 缓存/!d }' "$INSTALL_DIR/docker-compose.yml"
+        # 移除 depends_on mysql
+        sed -i '/mysql:/d' "$INSTALL_DIR/docker-compose.yml"
+        sed -i '/condition: service_healthy/{ N; /mysql/d }' "$INSTALL_DIR/docker-compose.yml"
+    fi
 
-WORKDIR /var/www/html
+    # 处理外部 Redis（移除 redis 服务）
+    if [ "$USE_CONTAINER_REDIS" = false ]; then
+        # 移除 redis 服务块
+        sed -i '/^  # Redis 缓存/,/^networks:/{ /^networks:/!d }' "$INSTALL_DIR/docker-compose.yml"
+        # 移除 depends_on redis
+        sed -i '/redis:/d' "$INSTALL_DIR/docker-compose.yml"
+    fi
 
-RUN chown -R www-data:www-data /var/www/html
-
-EXPOSE 9000
-
-CMD ["php-fpm"]
-EOF
-
-    log_success "Dockerfile 已生成"
-}
-
-# ========================================
-# 生成 Nginx 配置
-# ========================================
-generate_nginx_config() {
-    log_info "生成 Nginx 配置..."
-
-    local nginx_conf="$INSTALL_DIR/config/nginx/default.conf"
-
-    cat > "$nginx_conf" <<'EOF'
-server {
-    listen 80;
-    server_name _;
-    root /var/www/html/public;
-    index index.php index.html;
-
-    client_max_body_size 50M;
-
-    # API 和回调
-    location ~ ^/(api|callback|_ignition) {
-        try_files $uri /index.php?$query_string;
-    }
-
-    # 前端应用
-    location /admin {
-        alias /var/www/frontend/admin;
-        index index.html;
-        try_files $uri $uri/ /admin/index.html;
-    }
-
-    location /user {
-        alias /var/www/frontend/user;
-        index index.html;
-        try_files $uri $uri/ /user/index.html;
-    }
-
-    # Laravel 处理
-    location / {
-        try_files $uri $uri/ /index.php?$query_string;
-    }
-
-    # PHP 处理
-    location ~ \.php$ {
-        fastcgi_pass php:9000;
-        fastcgi_index index.php;
-        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
-        include fastcgi_params;
-        fastcgi_read_timeout 300;
-    }
-
-    location ~ /\. {
-        deny all;
-    }
-
-    access_log /var/log/nginx/access.log;
-    error_log /var/log/nginx/error.log;
-}
-EOF
-
-    # 如果启用 SSL，添加 SSL 配置
+    # 处理 SSL 端口
     if [ "$SSL_ENABLED" = true ]; then
-        cat > "$INSTALL_DIR/config/nginx/ssl.conf" <<'EOF'
-server {
-    listen 443 ssl http2;
-    server_name _;
-    root /var/www/html/public;
-    index index.php index.html;
-
-    ssl_certificate /etc/nginx/ssl/cert.pem;
-    ssl_certificate_key /etc/nginx/ssl/key.pem;
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256;
-    ssl_prefer_server_ciphers off;
-
-    client_max_body_size 50M;
-
-    location ~ ^/(api|callback|_ignition) {
-        try_files $uri /index.php?$query_string;
-    }
-
-    location /admin {
-        alias /var/www/frontend/admin;
-        index index.html;
-        try_files $uri $uri/ /admin/index.html;
-    }
-
-    location /user {
-        alias /var/www/frontend/user;
-        index index.html;
-        try_files $uri $uri/ /user/index.html;
-    }
-
-    location / {
-        try_files $uri $uri/ /index.php?$query_string;
-    }
-
-    location ~ \.php$ {
-        fastcgi_pass php:9000;
-        fastcgi_index index.php;
-        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
-        include fastcgi_params;
-        fastcgi_read_timeout 300;
-    }
-
-    location ~ /\. {
-        deny all;
-    }
-
-    access_log /var/log/nginx/access.log;
-    error_log /var/log/nginx/error.log;
-}
-EOF
+        sed -i "s/# HTTPS_PORT=443/HTTPS_PORT=$SSL_PORT/g" "$INSTALL_DIR/.env"
+        # 添加 SSL 端口映射到 nginx
+        sed -i "/\${HTTP_PORT:-80}:80/a\\      - \"\${HTTPS_PORT:-443}:443\"" "$INSTALL_DIR/docker-compose.yml"
         # 复制 SSL 证书
         cp "$SSL_CERT_PATH" "$INSTALL_DIR/config/ssl/cert.pem"
         cp "$SSL_KEY_PATH" "$INSTALL_DIR/config/ssl/key.pem"
         chmod 600 "$INSTALL_DIR/config/ssl"/*
     fi
 
-    log_success "Nginx 配置已生成"
+    log_success "Docker 文件配置完成"
 }
 
-# ========================================
-# 生成 docker-compose.yml
-# ========================================
-generate_docker_compose() {
-    log_info "生成 docker-compose.yml..."
-
-    local compose_file="$INSTALL_DIR/docker-compose.yml"
-
-    # 基础服务
-    cat > "$compose_file" <<EOF
-version: '3.8'
-
-services:
-  nginx:
-    image: nginx:alpine
-    container_name: ssl-manager-nginx
-    restart: unless-stopped
-    ports:
-      - "$WEB_PORT:80"
-EOF
-
-    # SSL 端口映射
-    if [ "$SSL_ENABLED" = true ]; then
-        cat >> "$compose_file" <<EOF
-      - "$SSL_PORT:443"
-EOF
-    fi
-
-    cat >> "$compose_file" <<EOF
-    volumes:
-      - ./backend/public:/var/www/html/public:ro
-      - ./frontend:/var/www/frontend:ro
-      - ./config/nginx:/etc/nginx/conf.d:ro
-      - ./data/logs/nginx:/var/log/nginx
-EOF
-
-    if [ "$SSL_ENABLED" = true ]; then
-        cat >> "$compose_file" <<EOF
-      - ./config/ssl:/etc/nginx/ssl:ro
-EOF
-    fi
-
-    cat >> "$compose_file" <<EOF
-    depends_on:
-      - php
-    networks:
-      - ssl-manager
-
-  php:
-    build:
-      context: ./docker
-      dockerfile: Dockerfile
-    container_name: ssl-manager-php
-    restart: unless-stopped
-    volumes:
-      - ./backend:/var/www/html
-      - ./data/storage:/var/www/html/storage
-    environment:
-      - APP_ENV=production
-      - APP_DEBUG=false
-      - DB_CONNECTION=mysql
-      - DB_HOST=$DB_HOST
-      - DB_PORT=$DB_PORT
-      - DB_DATABASE=$DB_DATABASE
-      - DB_USERNAME=$DB_USERNAME
-      - DB_PASSWORD=$DB_PASSWORD
-      - REDIS_HOST=$REDIS_HOST
-      - REDIS_PORT=$REDIS_PORT
-      - REDIS_PASSWORD=$REDIS_PASSWORD
-EOF
-
-    # PHP 服务依赖
-    local has_deps=false
-    if [ "$USE_CONTAINER_DB" = true ]; then
-        cat >> "$compose_file" <<EOF
-    depends_on:
-      mysql:
-        condition: service_healthy
-EOF
-        has_deps=true
-    fi
-
-    if [ "$USE_CONTAINER_REDIS" = true ]; then
-        if [ "$has_deps" = true ]; then
-            cat >> "$compose_file" <<EOF
-      redis:
-        condition: service_healthy
-EOF
-        else
-            cat >> "$compose_file" <<EOF
-    depends_on:
-      redis:
-        condition: service_healthy
-EOF
-        fi
-    fi
-
-    cat >> "$compose_file" <<EOF
-    networks:
-      - ssl-manager
-EOF
-
-    # MySQL 服务
-    if [ "$USE_CONTAINER_DB" = true ]; then
-        cat >> "$compose_file" <<EOF
-
-  mysql:
-    image: mysql:8.0
-    container_name: ssl-manager-mysql
-    restart: unless-stopped
-    environment:
-      - MYSQL_ROOT_PASSWORD=$DB_PASSWORD
-      - MYSQL_DATABASE=$DB_DATABASE
-      - MYSQL_USER=$DB_USERNAME
-      - MYSQL_PASSWORD=$DB_PASSWORD
-    volumes:
-      - ./data/mysql:/var/lib/mysql
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p$DB_PASSWORD"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - ssl-manager
-EOF
-    fi
-
-    # Redis 服务
-    if [ "$USE_CONTAINER_REDIS" = true ]; then
-        cat >> "$compose_file" <<EOF
-
-  redis:
-    image: redis:7-alpine
-    container_name: ssl-manager-redis
-    restart: unless-stopped
-    volumes:
-      - ./data/redis:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - ssl-manager
-EOF
-    fi
-
-    # Queue Worker
-    cat >> "$compose_file" <<EOF
-
-  queue:
-    build:
-      context: ./docker
-      dockerfile: Dockerfile
-    container_name: ssl-manager-queue
-    restart: unless-stopped
-    command: php /var/www/html/artisan queue:work --sleep=3 --tries=3 --max-time=3600
-    volumes:
-      - ./backend:/var/www/html
-      - ./data/storage:/var/www/html/storage
-    environment:
-      - APP_ENV=production
-      - DB_HOST=$DB_HOST
-      - DB_PORT=$DB_PORT
-      - DB_DATABASE=$DB_DATABASE
-      - DB_USERNAME=$DB_USERNAME
-      - DB_PASSWORD=$DB_PASSWORD
-      - REDIS_HOST=$REDIS_HOST
-      - REDIS_PORT=$REDIS_PORT
-      - REDIS_PASSWORD=$REDIS_PASSWORD
-EOF
-
-    if [ "$USE_CONTAINER_DB" = true ]; then
-        cat >> "$compose_file" <<EOF
-    depends_on:
-      mysql:
-        condition: service_healthy
-EOF
-    fi
-
-    cat >> "$compose_file" <<EOF
-    networks:
-      - ssl-manager
-
-  scheduler:
-    build:
-      context: ./docker
-      dockerfile: Dockerfile
-    container_name: ssl-manager-scheduler
-    restart: unless-stopped
-    command: sh -c "while true; do php /var/www/html/artisan schedule:run --verbose --no-interaction; sleep 60; done"
-    volumes:
-      - ./backend:/var/www/html
-      - ./data/storage:/var/www/html/storage
-    environment:
-      - APP_ENV=production
-      - DB_HOST=$DB_HOST
-      - DB_PORT=$DB_PORT
-      - DB_DATABASE=$DB_DATABASE
-      - DB_USERNAME=$DB_USERNAME
-      - DB_PASSWORD=$DB_PASSWORD
-      - REDIS_HOST=$REDIS_HOST
-      - REDIS_PORT=$REDIS_PORT
-      - REDIS_PASSWORD=$REDIS_PASSWORD
-EOF
-
-    if [ "$USE_CONTAINER_DB" = true ]; then
-        cat >> "$compose_file" <<EOF
-    depends_on:
-      mysql:
-        condition: service_healthy
-EOF
-    fi
-
-    cat >> "$compose_file" <<EOF
-    networks:
-      - ssl-manager
-
-networks:
-  ssl-manager:
-    driver: bridge
-EOF
-
-    log_success "docker-compose.yml 已生成"
-}
 
 # ========================================
 # 生成环境配置
@@ -1055,10 +751,10 @@ init_application() {
 
     # 安装 Composer 依赖
     log_info "安装 Composer 依赖..."
-    # 检测并配置镜像
-    if is_china_server; then
+    # 根据 NETWORK_ENV 配置镜像
+    if [ "$NETWORK_ENV" = "china" ] || [ "$MIRROR_REGION" = "china" ]; then
         log_info "配置 Composer 中国镜像..."
-        $compose_cmd exec -T -u root php composer config repo.packagist composer https://mirrors.tencent.com/composer/ --working-dir=/var/www/html 2>&1 || true
+        $compose_cmd exec -T -u root php composer config repo.packagist composer https://mirrors.aliyun.com/composer/ --working-dir=/var/www/html 2>&1 || true
     fi
     $compose_cmd exec -T -u root php composer install --no-dev --optimize-autoloader --working-dir=/var/www/html 2>&1 || true
 
@@ -1152,9 +848,7 @@ main() {
     # 执行部署
     create_directories
     download_application
-    generate_dockerfile
-    generate_nginx_config
-    generate_docker_compose
+    setup_docker_files
     generate_env_file
     start_services
     init_application

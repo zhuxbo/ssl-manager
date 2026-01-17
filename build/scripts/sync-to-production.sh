@@ -245,15 +245,36 @@ if [ -d "$SOURCE_DIR/.git" ]; then
     MONOREPO_COMMIT=$(cd "$SOURCE_DIR" && git rev-parse HEAD 2>/dev/null || echo "")
 fi
 
-# 从 version.json 读取版本号
+# 优先从 version.json 读取版本号
+VERSION=""
 VERSION_FILE="$SOURCE_DIR/version.json"
 if [ -f "$VERSION_FILE" ]; then
-    VERSION=$(jq -r '.version // "1.0.0"' "$VERSION_FILE")
+    VERSION=$(jq -r '.version // ""' "$VERSION_FILE")
+    if [ -n "$VERSION" ]; then
+        log_info "从 version.json 读取版本号: $VERSION"
+    fi
+fi
+
+# 回退到 git tag
+if [ -z "$VERSION" ] && [ -d "$SOURCE_DIR/.git" ]; then
+    GIT_TAG=$(cd "$SOURCE_DIR" && git describe --tags --exact-match HEAD 2>/dev/null || echo "")
+    if [ -n "$GIT_TAG" ]; then
+        VERSION=$(echo "$GIT_TAG" | sed 's/^v//')
+        log_info "从 git tag 读取版本号: $VERSION"
+    fi
+fi
+
+# 默认版本
+if [ -z "$VERSION" ]; then
+    VERSION="1.0.0"
+    log_warning "无法获取版本号，使用默认版本 $VERSION"
+fi
+
+# 读取发布通道
+if [ -f "$VERSION_FILE" ]; then
     RELEASE_CHANNEL=$(jq -r '.channel // "main"' "$VERSION_FILE")
 else
-    VERSION="1.0.0"
     RELEASE_CHANNEL="main"
-    log_warning "version.json 不存在，使用默认版本 $VERSION"
 fi
 
 # 生成构建信息
@@ -270,6 +291,17 @@ cat > "$PRODUCTION_DIR/config.json" <<EOF
   "monorepo_commit": "$MONOREPO_COMMIT"
 }
 EOF
+
+# 生成 version.json（运行时使用）
+cat > "$PRODUCTION_DIR/version.json" <<EOF
+{
+  "version": "$VERSION",
+  "channel": "$RELEASE_CHANNEL",
+  "build_time": "$BUILD_TIME",
+  "build_commit": "$MONOREPO_COMMIT"
+}
+EOF
+log_success "version.json 已生成"
 
 # 更新后端 version.php 配置（写入构建时信息）
 VERSION_PHP="$PRODUCTION_DIR/backend/config/version.php"

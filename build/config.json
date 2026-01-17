@@ -56,5 +56,28 @@
       "docker-compose.yml",
       "docker/"
     ]
+  },
+  "package": {
+    "full": {
+      "exclude": [
+        "vendor/",
+        "deploy/",
+        "storage/upgrades/",
+        "storage/backups/",
+        "storage/logs/*.log",
+        "storage/framework/cache/*",
+        "backend/.env.build",
+        "config.json"
+      ]
+    },
+    "upgrade": {
+      "exclude": [
+        ".env",
+        ".env.*",
+        "storage/*",
+        "bootstrap/cache/*",
+        "vendor/*"
+      ]
+    }
   }
 }

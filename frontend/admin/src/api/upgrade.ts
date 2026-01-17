@@ -58,7 +58,7 @@ export interface UpgradeStep {
   backup_id?: string;
 }
 
-// 升级结果类型
+// 升级结果类型（执行后返回）
 export interface UpgradeResult {
   success: boolean;
   from_version?: string;
@@ -66,6 +66,29 @@ export interface UpgradeResult {
   backup_id?: string;
   steps: UpgradeStep[];
   error?: string;
+}
+
+// 升级启动响应类型
+export interface UpgradeStartResult {
+  started: boolean;
+  version: string;
+  message: string;
+}
+
+// 升级状态类型（轮询获取）
+export interface UpgradeStatus {
+  status: "idle" | "running" | "completed" | "failed";
+  version?: string;
+  started_at?: string;
+  completed_at?: string;
+  failed_at?: string;
+  current_step?: string;
+  steps: UpgradeStep[];
+  progress: number;
+  from_version?: string;
+  to_version?: string;
+  error?: string;
+  message?: string;
 }
 
 // 获取当前版本信息
@@ -79,23 +102,28 @@ export function checkUpdate(): Promise<BaseResponse<UpdateCheckResult>> {
 }
 
 // 获取历史版本列表
-export function getReleases(
-  limit: number = 10
-): Promise<
+export function getReleases(): Promise<
   BaseResponse<{ releases: ReleaseInfo[]; current_version: string }>
 > {
   return http.request<
     BaseResponse<{ releases: ReleaseInfo[]; current_version: string }>
-  >("get", "/upgrade/releases", { params: { limit } });
+  >("get", "/upgrade/releases");
 }
 
-// 执行升级
+// 启动升级任务（后台执行）
 export function executeUpgrade(
   version: string = "latest"
-): Promise<BaseResponse<UpgradeResult>> {
-  return http.request<BaseResponse<UpgradeResult>>("post", "/upgrade/execute", {
-    data: { version }
-  });
+): Promise<BaseResponse<UpgradeStartResult>> {
+  return http.request<BaseResponse<UpgradeStartResult>>(
+    "post",
+    "/upgrade/execute",
+    { data: { version } }
+  );
+}
+
+// 获取升级状态（轮询使用）
+export function getUpgradeStatus(): Promise<BaseResponse<UpgradeStatus>> {
+  return http.request<BaseResponse<UpgradeStatus>>("get", "/upgrade/status");
 }
 
 // 获取备份列表

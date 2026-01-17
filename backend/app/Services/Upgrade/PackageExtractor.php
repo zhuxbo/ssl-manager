@@ -100,6 +100,9 @@ class PackageExtractor
     {
         $this->validatePackage($extractedPath);
 
+        // 升级前检查目标目录权限
+        $this->checkWritableBeforeApply();
+
         try {
             // 应用后端更新
             $backendDir = $this->findBackendDir($extractedPath);
@@ -125,12 +128,10 @@ class PackageExtractor
                 $this->applyFrontendUpgrade($frontendEasyDir, 'easy');
             }
 
-            // 更新项目根目录的 config.json（版本信息）
-            $rootConfigFile = $this->findRootConfig($extractedPath);
-            if ($rootConfigFile) {
-                $targetConfigFile = base_path('../config.json');
-                File::copy($rootConfigFile, $targetConfigFile);
-                Log::info('已更新项目根目录 config.json');
+            // 更新项目根目录的 version.json（保留用户自定义的 release_url）
+            $versionFile = $this->findVersionConfig($extractedPath);
+            if ($versionFile) {
+                $this->updateVersionJsonWithPreservedFields($versionFile);
             }
 
             // 处理删除的文件
@@ -174,7 +175,7 @@ class PackageExtractor
         }
 
         // 同步根目录文件
-        $rootFiles = ['composer.json', 'composer.lock', 'config.json'];
+        $rootFiles = ['composer.json', 'composer.lock'];
         foreach ($rootFiles as $file) {
             $sourceFile = "$sourceDir/$file";
             $targetFile = "$targetDir/$file";
@@ -204,17 +205,32 @@ class PackageExtractor
      */
     protected function syncDirectory(string $source, string $target): void
     {
+        // 确保目标目录存在
+        if (! File::isDirectory($target)) {
+            File::makeDirectory($target, 0755, true);
+        }
+
         // 使用 rsync 如果可用（不使用 --delete，只覆盖文件）
         if ($this->isRsyncAvailable()) {
             $command = sprintf(
-                'rsync -a %s/ %s/',
+                'rsync -av %s/ %s/ 2>&1',
                 escapeshellarg($source),
                 escapeshellarg($target)
             );
             exec($command, $output, $returnCode);
 
             if ($returnCode !== 0) {
-                throw new RuntimeException("同步目录失败: $source -> $target");
+                $errorOutput = implode("\n", $output);
+                Log::error("rsync 同步失败", [
+                    'source' => $source,
+                    'target' => $target,
+                    'return_code' => $returnCode,
+                    'output' => $errorOutput,
+                ]);
+
+                // rsync 失败时降级到 PHP 方式
+                Log::info("rsync 失败，降级到 PHP 文件复制");
+                $this->syncDirectoryPhp($source, $target);
             }
         } else {
             // 降级到 PHP 文件操作
@@ -353,18 +369,16 @@ class PackageExtractor
     }
 
     /**
-     * 查找项目根目录的 config.json
+     * 查找版本配置文件（version.json）
      */
-    protected function findRootConfig(string $extractedPath): ?string
+    protected function findVersionConfig(string $extractedPath): ?string
     {
-        $possiblePaths = [
-            "$extractedPath/config.json",
-        ];
+        $possiblePaths = ["$extractedPath/version.json"];
 
         // 在子目录中查找（升级包可能有根目录）
         $dirs = File::directories($extractedPath);
         foreach ($dirs as $dir) {
-            $possiblePaths[] = "$dir/config.json";
+            $possiblePaths[] = "$dir/version.json";
         }
 
         foreach ($possiblePaths as $path) {
@@ -374,6 +388,42 @@ class PackageExtractor
         }
 
         return null;
+    }
+
+    /**
+     * 更新 version.json 并保留用户自定义字段（如 release_url）
+     */
+    protected function updateVersionJsonWithPreservedFields(string $newVersionFile): void
+    {
+        $targetFile = base_path('../version.json');
+
+        // 读取现有配置中需要保留的字段
+        $existingConfig = [];
+        if (File::exists($targetFile)) {
+            $content = File::get($targetFile);
+            $existingConfig = json_decode($content, true) ?: [];
+        }
+
+        // 需要保留的用户自定义字段（安装时配置的 release_url 和 network）
+        $preservedFields = ['release_url', 'network'];
+        $preserved = [];
+        foreach ($preservedFields as $field) {
+            if (isset($existingConfig[$field])) {
+                $preserved[$field] = $existingConfig[$field];
+            }
+        }
+
+        // 读取新版本配置
+        $newConfig = json_decode(File::get($newVersionFile), true) ?: [];
+
+        // 合并：保留用户自定义字段
+        foreach ($preserved as $field => $value) {
+            $newConfig[$field] = $value;
+        }
+
+        // 写入合并后的配置
+        File::put($targetFile, json_encode($newConfig, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . "\n");
+        Log::info('已更新项目根目录 version.json', ['preserved' => array_keys($preserved)]);
     }
 
     /**
@@ -562,5 +612,67 @@ class PackageExtractor
         }
 
         return $deleted;
+    }
+
+    /**
+     * 升级前检查目标目录是否可写
+     *
+     * @throws RuntimeException 如果目录不可写
+     */
+    protected function checkWritableBeforeApply(): void
+    {
+        $targetDir = base_path();
+        // 检查核心目录和 vendor（仅顶层目录，无性能影响）
+        $testDirs = ['app', 'config', 'database', 'routes', 'bootstrap', 'vendor'];
+
+        $notWritable = [];
+
+        foreach ($testDirs as $dir) {
+            $path = "$targetDir/$dir";
+            if (is_dir($path) && ! is_writable($path)) {
+                $notWritable[] = $path;
+            }
+        }
+
+        if (! empty($notWritable)) {
+            $webUser = $this->detectWebUser();
+            $dirsStr = implode(', ', $notWritable);
+
+            throw new RuntimeException(
+                "以下目录不可写: $dirsStr。" .
+                "请检查文件权限，确保 Web 服务用户 ($webUser) 有写权限。" .
+                "可以尝试运行: chown -R $webUser:$webUser $targetDir"
+            );
+        }
+
+        // 检查 storage 目录
+        $storagePath = "$targetDir/storage";
+        if (is_dir($storagePath) && ! is_writable($storagePath)) {
+            throw new RuntimeException(
+                "storage 目录不可写: $storagePath。" .
+                '请确保 storage 目录及其子目录有写权限。'
+            );
+        }
+
+        Log::info('[Upgrade] 目录权限检查通过');
+    }
+
+    /**
+     * 检测 Web 服务用户
+     */
+    protected function detectWebUser(): string
+    {
+        // 检测宝塔环境
+        if (is_dir('/www/server')) {
+            return 'www';
+        }
+
+        // 检查安装目录
+        $basePath = base_path();
+        if (str_starts_with($basePath, '/www/wwwroot/')) {
+            return 'www';
+        }
+
+        return 'www-data';
     }
 }

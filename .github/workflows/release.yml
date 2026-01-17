@@ -69,10 +69,15 @@ jobs:
           key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
           restore-keys: ${{ runner.os }}-pnpm-store-
 
+      - name: Get Composer Cache Directory
+        id: composer-cache
+        working-directory: backend
+        run: echo "dir=$(composer config cache-files-dir)" >> $GITHUB_OUTPUT
+
       - name: Cache Composer
         uses: actions/cache@v4
         with:
-          path: ~/.composer/cache
+          path: ${{ steps.composer-cache.outputs.dir }}
           key: ${{ runner.os }}-composer-${{ hashFiles('backend/composer.lock') }}
           restore-keys: ${{ runner.os }}-composer-
 
@@ -142,10 +147,9 @@ jobs:
 
           # 复制配置文件（不含 deploy，deploy 单独打包）
           cp -r build/nginx release/ssl-manager/ 2>/dev/null || true
-          cp version.json release/ssl-manager/
 
-          # 更新版本信息
-          cat > release/ssl-manager/config.json <<EOF
+          # 生成版本信息文件
+          cat > release/ssl-manager/version.json <<EOF
           {
             "version": "${{ steps.version.outputs.version }}",
             "channel": "${{ steps.version.outputs.channel }}",
@@ -173,7 +177,7 @@ jobs:
           mkdir -p upgrade
           cp -r ssl-manager/backend upgrade/
           cp -r ssl-manager/frontend upgrade/
-          cp ssl-manager/config.json upgrade/
+          cp ssl-manager/version.json upgrade/
           cp ssl-manager/manifest.json upgrade/
           rm -rf upgrade/backend/vendor
           rm -rf upgrade/backend/.env*
@@ -333,12 +337,6 @@ jobs:
             ## Latest Stable Release
 
             当前最新稳定版本: **${{ steps.version.outputs.version }}**
-
-            ### 快速安装
-
-            ```bash
-            curl -fsSL https://gitee.com/zhuxbo/cert-manager/raw/main/deploy/install.sh | bash
-            ```
 
             ### 下载
 

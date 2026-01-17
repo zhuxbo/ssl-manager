@@ -1,0 +1,39 @@
+# SSL Manager 远程发布配置
+# 复制为 remote-release.conf 并填写实际值
+# 重要：设置文件权限 chmod 600 remote-release.conf
+
+# ========================================
+# 服务器配置
+# ========================================
+# 格式: "名称,主机,端口,目录,URL"
+# - 名称: 服务器标识，用于 --server 参数
+# - 主机: SSH 主机地址
+# - 端口: SSH 端口（默认 22）
+# - 目录: 远程发布目录
+# - URL: 公网访问 URL（用于替换脚本中的 RELEASE_URL）
+
+SERVERS=(
+    "cn,release-cn.example.com,22,/var/www/release,https://release-cn.example.com"
+    "us,release-us.example.com,22,/var/www/release,https://release-us.example.com"
+)
+
+# ========================================
+# SSH 认证
+# ========================================
+# SSH 用户名
+SSH_USER="release"
+
+# SSH 私钥路径（支持 ~ 展开）
+SSH_KEY="~/.ssh/release"
+
+# ========================================
+# 可选配置
+# ========================================
+# 是否并行上传到多服务器（默认 false）
+# PARALLEL_UPLOAD=false
+
+# 每个通道保留的版本数量（默认 5）
+# KEEP_VERSIONS=5
+
+# SSH 连接超时秒数（默认 10）
+# SSH_TIMEOUT=10

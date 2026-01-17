@@ -12,9 +12,10 @@ source "$SCRIPT_DIR/common.sh"
 
 # 全局变量
 FORCE_REPO="${1:-}"
-INSTALL_DIR=""
+INSTALL_DIR="${INSTALL_DIR:-}"  # 支持通过环境变量预设
 PHP_VERSION=""
 PHP_CMD=""
+AUTO_YES="${AUTO_YES:-false}"   # 非交互模式
 
 # 检测宝塔环境
 check_environment() {
@@ -32,21 +33,21 @@ check_environment() {
     log_success "检测到宝塔面板环境"
 }
 
-# 选择 PHP 版本
+# 选择 PHP 版本（仅支持 8.3/8.4）
 select_php_version() {
     log_step "检测 PHP 版本"
 
     local php_versions=()
 
-    for ver in 85 84 83; do
+    for ver in 84 83; do
         if [ -d "/www/server/php/$ver" ] && [ -x "/www/server/php/$ver/bin/php" ]; then
             php_versions+=("$ver")
         fi
     done
 
     if [ ${#php_versions[@]} -eq 0 ]; then
-        log_error "未检测到 PHP 8.3 或更高版本"
-        log_info "请在宝塔面板中安装 PHP 8.3+"
+        log_error "未检测到 PHP 8.3 或 8.4"
+        log_info "请在宝塔面板中安装 PHP 8.3 或 8.4"
         exit 1
     elif [ ${#php_versions[@]} -eq 1 ]; then
         PHP_VERSION="${php_versions[0]}"
@@ -77,7 +78,10 @@ check_dependencies() {
 
     # 运行依赖检测脚本
     if [ -f "$SCRIPT_DIR/bt-deps.sh" ]; then
-        bash "$SCRIPT_DIR/bt-deps.sh"
+        if ! bash "$SCRIPT_DIR/bt-deps.sh"; then
+            log_error "依赖检测未通过，请按提示处理后重试"
+            exit 1
+        fi
     fi
 
     log_success "依赖检测完成"
@@ -87,36 +91,47 @@ check_dependencies() {
 select_install_dir() {
     log_step "选择安装目录"
 
-    echo "请选择安装方式："
-    echo "  1. 安装到宝塔网站目录（推荐，方便管理）"
-    echo "  2. 自定义安装目录"
-    echo
+    # 如果已通过环境变量设置了 INSTALL_DIR，直接使用
+    if [ -n "$INSTALL_DIR" ]; then
+        log_info "使用预设安装目录: $INSTALL_DIR"
+    else
+        echo "请选择安装方式："
+        echo "  1. 安装到宝塔网站目录（推荐，方便管理）"
+        echo "  2. 自定义安装目录"
+        echo
 
-    read -p "请选择 (1/2): " choice < /dev/tty
+        read -p "请选择 (1/2): " choice < /dev/tty
 
-    case "$choice" in
-        1)
-            echo
-            read -p "请输入网站域名或目录名: " site_name < /dev/tty
-            INSTALL_DIR="/www/wwwroot/$site_name"
-            ;;
-        2)
-            read -p "请输入安装目录: " INSTALL_DIR < /dev/tty
-            ;;
-        *)
-            INSTALL_DIR="/www/wwwroot/ssl-manager"
-            ;;
-    esac
+        case "$choice" in
+            1)
+                echo
+                read -p "请输入网站域名或目录名: " site_name < /dev/tty
+                INSTALL_DIR="/www/wwwroot/$site_name"
+                ;;
+            2)
+                read -p "请输入安装目录: " INSTALL_DIR < /dev/tty
+                ;;
+            *)
+                INSTALL_DIR="/www/wwwroot/ssl-manager"
+                ;;
+        esac
+    fi
 
     # 检查目录
-    if [ -d "$INSTALL_DIR" ]; then
+    if [ -d "$INSTALL_DIR" ] && [ "$(ls -A "$INSTALL_DIR" 2>/dev/null | grep -v '^\.' | head -1)" ]; then
         log_warning "目录已存在: $INSTALL_DIR"
-        if ! confirm "是否覆盖安装？"; then
-            exit 0
+        if [ -z "$AUTO_YES" ] || [ "$AUTO_YES" != "true" ]; then
+            if ! confirm "是否覆盖安装？"; then
+                exit 0
+            fi
         fi
     fi
 
-    ensure_dir "$INSTALL_DIR"
+    # 创建目录（如果不存在）
+    if [ ! -d "$INSTALL_DIR" ]; then
+        mkdir -p "$INSTALL_DIR"
+        chown www:www "$INSTALL_DIR"
+    fi
     log_success "安装目录: $INSTALL_DIR"
 }
 
@@ -130,20 +145,33 @@ download_application() {
     local temp_dir="/tmp/ssl-manager-download-$$"
     mkdir -p "$temp_dir"
 
-    # 下载完整包
-    if ! download_and_extract_full "$temp_dir" "$version"; then
+    # 下载完整包到临时目录
+    local zip_file="$temp_dir/full.zip"
+    local filename
+    case "$version" in
+        latest|dev|dev-latest)
+            filename="ssl-manager-full-latest.zip"
+            ;;
+        *)
+            filename="ssl-manager-full-${version}.zip"
+            ;;
+    esac
+
+    if ! download_release_file "$filename" "$zip_file" "$version"; then
         log_error "下载失败"
         rm -rf "$temp_dir"
         exit 1
     fi
 
+    # 解压文件
+    log_info "解压文件..."
+    unzip -qo "$zip_file" -d "$temp_dir"
+
     # 找到解压后的目录
     local extract_dir="$temp_dir/ssl-manager"
     if [ ! -d "$extract_dir" ]; then
-        extract_dir=$(find "$temp_dir" -maxdepth 1 -type d -name "ssl-manager*" | head -1)
+        extract_dir=$(find "$temp_dir" -mindepth 1 -maxdepth 1 -type d -name "ssl-manager*" | head -1)
     fi
-
-    # 有时候完整包直接解压在根目录（full 目录）
     if [ ! -d "$extract_dir" ]; then
         extract_dir="$temp_dir/full"
     fi
@@ -154,7 +182,7 @@ download_application() {
         exit 1
     fi
 
-    # 复制后端代码
+    # 复制文件到安装目录
     if [ -d "$extract_dir/backend" ]; then
         log_info "复制后端代码..."
         cp -r "$extract_dir/backend" "$INSTALL_DIR/"
@@ -164,7 +192,6 @@ download_application() {
         exit 1
     fi
 
-    # 复制前端代码
     if [ -d "$extract_dir/frontend" ]; then
         log_info "复制前端代码..."
         cp -r "$extract_dir/frontend" "$INSTALL_DIR/"
@@ -172,7 +199,7 @@ download_application() {
 
     # 复制 Nginx 配置
     if [ -d "$extract_dir/nginx" ]; then
-        ensure_dir "$INSTALL_DIR/nginx"
+        mkdir -p "$INSTALL_DIR/nginx"
         cp "$extract_dir/nginx"/*.conf "$INSTALL_DIR/nginx/" 2>/dev/null || true
 
         # 替换 nginx 配置中的占位符
@@ -194,9 +221,30 @@ download_application() {
         done
     fi
 
-    # 复制版本配置
-    if [ -f "$extract_dir/config.json" ]; then
-        cp "$extract_dir/config.json" "$INSTALL_DIR/"
+    # 复制版本配置并注入 release_url 和 network
+    if [ -f "$extract_dir/version.json" ]; then
+        cp "$extract_dir/version.json" "$INSTALL_DIR/"
+        local version_file="$INSTALL_DIR/version.json"
+
+        # 使用 PHP 处理 JSON（确保格式正确）
+        $PHP_CMD -r "
+            \$json = json_decode(file_get_contents('$version_file'), true);
+            // 注入 release_url
+            if (!empty('$CUSTOM_RELEASE_URL')) {
+                \$json['release_url'] = '$CUSTOM_RELEASE_URL';
+            }
+            // 注入 network 配置（从环境变量读取）
+            \$network = getenv('NETWORK_ENV') ?: 'china';
+            \$json['network'] = \$network;
+            file_put_contents('$version_file', json_encode(\$json, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . \"\\n\");
+        "
+
+        if [ -n "$CUSTOM_RELEASE_URL" ]; then
+            log_info "已配置 release_url: $CUSTOM_RELEASE_URL"
+        fi
+        if [ -n "$NETWORK_ENV" ]; then
+            log_info "已配置 network: $NETWORK_ENV"
+        fi
     fi
 
     # 清理临时文件
@@ -205,57 +253,57 @@ download_application() {
     log_success "下载完成"
 }
 
-# 安装 Composer 依赖
-install_composer_deps() {
-    log_step "安装 Composer 依赖"
-
-    cd "$INSTALL_DIR/backend"
+# 检测 Composer（仅检测，不安装依赖，依赖安装在 Web 安装向导中执行）
+check_composer() {
+    log_step "检测 Composer"
 
     # 检查 Composer
-    if ! command -v composer &> /dev/null; then
-        log_info "安装 Composer..."
-        curl -sS https://getcomposer.org/installer | $PHP_CMD
-        sudo mv composer.phar /usr/local/bin/composer
-        sudo chmod +x /usr/local/bin/composer
+    if command -v composer &> /dev/null; then
+        log_success "Composer 已安装: $(which composer)"
+        return 0
+    elif [ -f "/usr/local/bin/composer" ]; then
+        log_success "Composer 已安装: /usr/local/bin/composer"
+        return 0
     fi
 
-    # 配置中国镜像
-    if is_china_server; then
-        log_info "配置 Composer 中国镜像..."
-        # 使用腾讯云镜像（对 GitHub 包有更好的代理）
-        composer config -g repo.packagist composer https://mirrors.tencent.com/composer/
-        # 配置 GitHub 使用 OAuth 或增加超时（避免 GitHub 下载超时）
-        composer config -g process-timeout 600
-        composer config -g github-protocols https
-    fi
-
-    # 安装依赖
-    log_info "安装依赖包..."
-    COMPOSER_ALLOW_SUPERUSER=1 composer install --no-dev --optimize-autoloader
-
-    log_success "Composer 依赖安装完成"
+    # 安装 Composer（在临时目录中执行，避免污染当前目录）
+    log_info "安装 Composer..."
+    local temp_composer_dir="/tmp/composer-install-$$"
+    mkdir -p "$temp_composer_dir"
+    cd "$temp_composer_dir"
+    curl -sS https://getcomposer.org/installer | $PHP_CMD
+    mv composer.phar /usr/local/bin/composer
+    chmod +x /usr/local/bin/composer
+    cd - > /dev/null
+    rm -rf "$temp_composer_dir"
+    log_success "Composer 安装完成"
 }
 
 # 设置权限
 set_permissions() {
     log_step "设置文件权限"
 
-    cd "$INSTALL_DIR"
+    # 使用 chown -R 一次性设置权限（比 find -exec 快得多）
+    # 忽略 .user.ini 的错误（宝塔会锁定此文件）
+    chown -R www:www "$INSTALL_DIR" 2>/dev/null || true
 
-    # 设置所有者（排除 .user.ini，宝塔会锁定此文件）
-    find "$INSTALL_DIR" -not -name ".user.ini" -exec chown www:www {} \; 2>/dev/null || true
+    # 确保 storage 和 cache 目录可写
+    if [ -d "$INSTALL_DIR/backend/storage" ]; then
+        chmod -R 775 "$INSTALL_DIR/backend/storage" 2>/dev/null || true
+    fi
 
-    # 设置目录权限
-    find "$INSTALL_DIR" -type d -exec chmod 755 {} \; 2>/dev/null || true
+    if [ -d "$INSTALL_DIR/backend/bootstrap/cache" ]; then
+        chmod -R 775 "$INSTALL_DIR/backend/bootstrap/cache" 2>/dev/null || true
+    fi
 
-    # 设置文件权限（排除 .user.ini）
-    find "$INSTALL_DIR" -type f -not -name ".user.ini" -exec chmod 644 {} \; 2>/dev/null || true
-
-    # 设置 storage 和 cache 目录权限
-    chmod -R 775 "$INSTALL_DIR/backend/storage" 2>/dev/null || true
-    chmod -R 775 "$INSTALL_DIR/backend/bootstrap/cache" 2>/dev/null || true
-
-    log_success "权限设置完成"
+    # 验证权限设置
+    local owner=$(stat -c '%U' "$INSTALL_DIR/backend" 2>/dev/null || echo "unknown")
+    if [ "$owner" = "www" ]; then
+        log_success "权限设置完成"
+    else
+        log_warning "权限设置可能未完全生效，当前所有者: $owner"
+        log_info "请手动执行: chown -R www:www $INSTALL_DIR"
+    fi
 }
 
 # 显示 Nginx 配置提示
@@ -280,7 +328,7 @@ show_nginx_tips() {
 show_complete_info() {
     echo
     echo "============================================"
-    echo "       安装完成"
+    echo "       环境准备完成"
     echo "============================================"
     echo
     echo "安装目录: $INSTALL_DIR"
@@ -288,7 +336,9 @@ show_complete_info() {
     echo
     echo "下一步操作:"
     echo "  1. 在宝塔面板中配置 Nginx（见上方提示）"
-    echo "  2. 访问 http://您的域名/install 完成安装向导"
+    echo "  2. 访问 http://您的域名/install.php 完成安装向导"
+    echo "     - 安装向导将自动安装 Composer 依赖"
+    echo "     - 根据网络环境自动选择国内或国际镜像源"
     echo "  3. 配置队列和定时任务"
     echo
     echo "队列配置（宝塔 → 计划任务 → 添加守护进程）:"
@@ -320,8 +370,8 @@ main() {
     # 下载应用代码
     download_application
 
-    # 安装 Composer 依赖
-    install_composer_deps
+    # 检测 Composer（仅检测，依赖安装在 Web 向导中执行）
+    check_composer
 
     # 设置权限
     set_permissions

@@ -7,35 +7,41 @@ use Illuminate\Support\Facades\Config;
 class VersionManager
 {
     /**
-     * 获取 config.json 的路径
-     * 优先使用项目根目录，如果不可用则使用 backend 目录
+     * 获取版本配置文件的路径
      */
-    protected function getConfigPath(): string
+    protected function getVersionPath(): string
     {
-        // 优先使用项目根目录（backend 的上级目录）
-        $rootPath = dirname(base_path()) . '/config.json';
-        if (file_exists($rootPath) || is_writable(dirname(base_path()))) {
+        $rootDir = dirname(base_path());
+
+        // 优先检查项目根目录
+        $rootPath = "$rootDir/version.json";
+        if (file_exists($rootPath)) {
             return $rootPath;
         }
 
         // 回退到 backend 目录（Docker 环境）
-        return base_path('config.json');
+        $backendPath = base_path('version.json');
+        if (file_exists($backendPath)) {
+            return $backendPath;
+        }
+
+        // 默认使用项目根目录（用于新建）
+        return is_writable($rootDir) ? $rootPath : $backendPath;
     }
 
     /**
-     * 从 config.json 读取版本配置（实时读取，避免缓存问题）
+     * 从 version.json 读取版本配置（实时读取，避免缓存问题）
      */
-    protected function getConfigJson(): array
+    protected function getVersionJson(): array
     {
-        // 尝试两个位置
         $paths = [
-            dirname(base_path()) . '/config.json',
-            base_path('config.json'),
+            dirname(base_path()) . '/version.json',  // 项目根目录
+            base_path('version.json'),               // backend 目录（Docker）
         ];
 
-        foreach ($paths as $configPath) {
-            if (file_exists($configPath)) {
-                $content = file_get_contents($configPath);
+        foreach ($paths as $path) {
+            if (file_exists($path)) {
+                $content = file_get_contents($path);
                 $config = json_decode($content, true);
                 if (json_last_error() === JSON_ERROR_NONE) {
                     return $config;
@@ -51,7 +57,7 @@ class VersionManager
      */
     public function getCurrentVersion(): array
     {
-        $configJson = $this->getConfigJson();
+        $configJson = $this->getVersionJson();
 
         return [
             'version' => $configJson['version'] ?? Config::get('version.version', '0.0.0'),
@@ -67,7 +73,7 @@ class VersionManager
      */
     public function getVersionString(): string
     {
-        $configJson = $this->getConfigJson();
+        $configJson = $this->getVersionJson();
 
         return $configJson['version'] ?? Config::get('version.version', '0.0.0');
     }
@@ -77,9 +83,20 @@ class VersionManager
      */
     public function getChannel(): string
     {
-        $configJson = $this->getConfigJson();
+        $configJson = $this->getVersionJson();
 
         return $configJson['channel'] ?? Config::get('version.channel', 'main');
+    }
+
+    /**
+     * 获取自定义 release 服务 URL
+     * 如果配置了此字段，将使用 local provider 模式
+     */
+    public function getReleaseUrl(): ?string
+    {
+        $config = $this->getVersionJson();
+
+        return $config['release_url'] ?? null;
     }
 
     /**
@@ -91,9 +108,8 @@ class VersionManager
             return false;
         }
 
-        // 使用智能路径检测
-        $configPath = $this->getConfigPath();
-        $existingConfig = $this->getConfigJson();
+        $versionPath = $this->getVersionPath();
+        $existingConfig = $this->getVersionJson();
 
         if (empty($existingConfig)) {
             // 如果没有现有配置，创建新的
@@ -108,8 +124,8 @@ class VersionManager
         }
 
         $result = file_put_contents(
-            $configPath,
-            json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)
+            $versionPath,
+            json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
         );
 
         if ($result !== false) {

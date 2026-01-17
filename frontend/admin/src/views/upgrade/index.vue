@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { onMounted, ref, computed } from "vue";
+import { onMounted, onUnmounted, ref, computed } from "vue";
 import {
   getVersion,
   checkUpdate,
   getReleases,
   executeUpgrade,
+  getUpgradeStatus,
   getBackups,
   executeRollback,
   deleteBackup,
@@ -13,7 +14,8 @@ import {
   type UpdateCheckResult,
   type ReleaseInfo,
   type BackupInfo,
-  type UpgradeStep
+  type UpgradeStep,
+  type UpgradeStatus
 } from "@/api/upgrade";
 import { message } from "@shared/utils";
 import {
@@ -53,23 +55,34 @@ const rollingBack = ref(false);
 // 升级步骤
 const upgradeSteps = ref<UpgradeStep[]>([]);
 const showUpgradeProgress = ref(false);
+const upgradeStatus = ref<UpgradeStatus | null>(null);
+const pollingInterval = ref<ReturnType<typeof setInterval> | null>(null);
 
 // 步骤名称映射
 const stepNames: Record<string, string> = {
   fetch_release: "获取版本信息",
+  check_version: "检查版本",
+  check_sequential: "检查升级顺序",
   backup: "创建备份",
   maintenance_on: "进入维护模式",
   download: "下载升级包",
   extract: "解压升级包",
   apply: "应用升级",
+  composer_install: "安装依赖",
   migrate: "运行数据库迁移",
+  seed: "初始化数据",
   clear_cache: "清理缓存",
+  update_version: "更新版本号",
   cleanup: "清理临时文件",
   maintenance_off: "退出维护模式"
 };
 
 // 计算当前升级进度
 const upgradeProgress = computed(() => {
+  // 优先使用服务器返回的进度
+  if (upgradeStatus.value?.progress !== undefined) {
+    return upgradeStatus.value.progress;
+  }
   if (!upgradeSteps.value.length) return 0;
   const completed = upgradeSteps.value.filter(
     s => s.status === "completed"
@@ -164,7 +177,7 @@ const handleCheckUpdate = async () => {
 const loadReleases = async () => {
   loadingReleases.value = true;
   try {
-    const { data } = await getReleases(10);
+    const { data } = await getReleases();
     releases.value = data.releases || [];
   } finally {
     loadingReleases.value = false;
@@ -182,30 +195,102 @@ const loadBackups = async () => {
   }
 };
 
-// 执行升级
-const handleUpgrade = async (version: string = "latest") => {
-  upgrading.value = true;
-  showUpgradeProgress.value = true;
-  upgradeSteps.value = [];
+// 停止轮询
+const stopPolling = () => {
+  if (pollingInterval.value) {
+    clearInterval(pollingInterval.value);
+    pollingInterval.value = null;
+  }
+};
 
+// 轮询计数器（用于超时检测）
+const pollCount = ref(0);
+const maxPollCount = 300; // 最多轮询 300 次（10分钟，每2秒一次）
+
+// 轮询升级状态
+const pollUpgradeStatus = async () => {
   try {
-    const { data } = await executeUpgrade(version);
+    pollCount.value++;
+    const { data } = await getUpgradeStatus();
+    console.log("[Upgrade] 轮询状态:", data);
+
+    upgradeStatus.value = data;
     upgradeSteps.value = data.steps || [];
 
-    if (data.success) {
+    if (data.status === "completed") {
+      stopPolling();
+      upgrading.value = false;
       message(`升级成功！${data.from_version} -> ${data.to_version}`, {
         type: "success"
       });
       // 刷新版本信息
       await loadVersion();
       await loadBackups();
+      // 清除更新提示
+      updateInfo.value = null;
+    } else if (data.status === "failed") {
+      stopPolling();
+      upgrading.value = false;
+      const errorMsg = data.error || "未知错误（请查看服务器日志）";
+      console.error("[Upgrade] 升级失败:", errorMsg);
+      message("升级失败: " + errorMsg, { type: "error" });
+    } else if (data.status === "idle") {
+      // 状态文件不存在，可能进程启动失败或还未创建
+      if (pollCount.value > 5) {
+        // 超过5次仍为 idle，可能进程启动失败
+        stopPolling();
+        upgrading.value = false;
+        console.error("[Upgrade] 进程可能启动失败，状态一直为 idle");
+        message("升级进程启动失败，请查看服务器日志", { type: "error" });
+      }
+    } else if (pollCount.value >= maxPollCount) {
+      // 超时
+      stopPolling();
+      upgrading.value = false;
+      console.error("[Upgrade] 轮询超时");
+      message("升级超时，请查看服务器状态", { type: "warning" });
+    }
+  } catch (err) {
+    console.error("[Upgrade] 轮询失败:", err);
+    // 轮询失败时继续尝试，但如果连续失败太多次则停止
+    if (pollCount.value > 10) {
+      stopPolling();
+      upgrading.value = false;
+      message("无法获取升级状态，请检查网络连接", { type: "error" });
+    }
+  }
+};
+
+// 启动轮询
+const startPolling = () => {
+  stopPolling();
+  pollCount.value = 0; // 重置计数器
+  pollingInterval.value = setInterval(pollUpgradeStatus, 2000);
+  // 立即执行一次
+  pollUpgradeStatus();
+};
+
+// 执行升级
+const handleUpgrade = async (version: string = "latest") => {
+  upgrading.value = true;
+  showUpgradeProgress.value = true;
+  upgradeSteps.value = [];
+  upgradeStatus.value = null;
+
+  try {
+    const { data } = await executeUpgrade(version);
+
+    if (data.started) {
+      message("升级任务已启动", { type: "info" });
+      // 启动轮询获取升级状态
+      startPolling();
     } else {
-      message("升级失败: " + (data.error || "未知错误"), { type: "error" });
+      upgrading.value = false;
+      message("启动升级任务失败", { type: "error" });
     }
   } catch {
-    message("升级请求失败", { type: "error" });
-  } finally {
     upgrading.value = false;
+    message("升级请求失败", { type: "error" });
   }
 };
 
@@ -240,8 +325,10 @@ const handleDeleteBackup = async (backupId: string) => {
 
 // 关闭升级进度
 const closeUpgradeProgress = () => {
+  stopPolling();
   showUpgradeProgress.value = false;
   upgradeSteps.value = [];
+  upgradeStatus.value = null;
 };
 
 // 通道切换状态
@@ -272,6 +359,10 @@ const handleChangeChannel = async (newChannel: "main" | "dev") => {
 onMounted(() => {
   loadVersion();
   loadBackups();
+});
+
+onUnmounted(() => {
+  stopPolling();
 });
 </script>
 
@@ -337,7 +428,7 @@ onMounted(() => {
           <el-button
             type="success"
             :loading="upgrading"
-            @click="handleUpgrade('latest')"
+            @click="handleUpgrade(updateInfo.latest_version)"
           >
             立即升级
           </el-button>
@@ -387,6 +478,12 @@ onMounted(() => {
           :status="upgrading ? '' : upgradeProgress === 100 ? 'success' : 'exception'"
           class="mb-4"
         />
+        <div
+          v-if="upgradeStatus?.current_step && upgrading"
+          class="text-blue-500 text-sm mb-4"
+        >
+          正在执行：{{ stepNames[upgradeStatus.current_step] || upgradeStatus.current_step }}
+        </div>
         <div class="steps">
           <div
             v-for="step in upgradeSteps"
