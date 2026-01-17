@@ -65,7 +65,9 @@
         "storage/upgrades/",
         "storage/backups/",
         "storage/logs/*.log",
-        "storage/framework/cache/*"
+        "storage/framework/cache/*",
+        "backend/.env.build",
+        "config.json"
       ]
     },
     "upgrade": {

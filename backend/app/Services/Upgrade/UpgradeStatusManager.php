@@ -29,7 +29,14 @@ class UpgradeStatusManager
     {
         $dir = dirname($this->statusFile);
         if (! is_dir($dir)) {
-            mkdir($dir, 0755, true);
+            if (! @mkdir($dir, 0755, true)) {
+                Log::warning("无法创建升级状态目录: $dir");
+            }
+        }
+
+        // 确保目录可写
+        if (is_dir($dir) && ! is_writable($dir)) {
+            @chmod($dir, 0755);
         }
     }
 
@@ -185,10 +192,29 @@ class UpgradeStatusManager
      */
     protected function save(array $data): void
     {
-        file_put_contents(
+        // 确保目录存在且可写
+        $this->ensureDirectory();
+
+        $result = @file_put_contents(
             $this->statusFile,
-            json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)
+            json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
         );
+
+        if ($result === false) {
+            $dir = dirname($this->statusFile);
+            $error = "无法写入升级状态文件: {$this->statusFile}";
+
+            if (! is_dir($dir)) {
+                $error .= " (目录不存在)";
+            } elseif (! is_writable($dir)) {
+                $error .= " (目录不可写)";
+            } elseif (file_exists($this->statusFile) && ! is_writable($this->statusFile)) {
+                $error .= " (文件不可写)";
+            }
+
+            Log::error($error);
+            throw new \RuntimeException($error);
+        }
     }
 
     /**

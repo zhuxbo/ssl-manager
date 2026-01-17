@@ -125,7 +125,7 @@ class VersionManager
 
         $result = file_put_contents(
             $versionPath,
-            json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)
+            json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
         );
 
         if ($result !== false) {

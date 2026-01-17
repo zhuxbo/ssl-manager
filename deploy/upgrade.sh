@@ -464,6 +464,12 @@ perform_upgrade() {
         log_info "保留 vendor 目录（加速升级）..."
         mv "$INSTALL_DIR/backend/vendor" "$preserve_dir/"
     fi
+    # 保留 frontend/web（用户自定义前端，不随升级更新）
+    if [ -d "$INSTALL_DIR/frontend/web" ]; then
+        log_info "保留 frontend/web 目录..."
+        mkdir -p "$preserve_dir/frontend"
+        mv "$INSTALL_DIR/frontend/web" "$preserve_dir/frontend/"
+    fi
 
     # 5. 删除旧代码
     log_step "清理旧代码..."
@@ -525,9 +531,19 @@ perform_upgrade() {
     # 复制根目录版本配置（保留用户的 release_url）
     if [ -f "$src_dir/version.json" ]; then
         local old_release_url=""
-        # 读取旧的 release_url
-        if [ -f "$INSTALL_DIR/version.json" ]; then
-            old_release_url=$(grep -o '"release_url"[[:space:]]*:[[:space:]]*"[^"]*"' "$INSTALL_DIR/version.json" | head -1 | cut -d'"' -f4 || echo "")
+        local old_version_json="$INSTALL_DIR/version.json"
+
+        # 使用 Python 读取旧的 release_url（正确处理 JSON 转义）
+        if [ -f "$old_version_json" ] && command -v python3 &> /dev/null; then
+            old_release_url=$(python3 -c "
+import json
+try:
+    with open('$old_version_json', 'r') as f:
+        data = json.load(f)
+    print(data.get('release_url', ''))
+except:
+    pass
+" 2>/dev/null)
         fi
 
         # 复制新的 version.json
@@ -535,14 +551,15 @@ perform_upgrade() {
 
         # 如果存在旧的 release_url，合并到新的 version.json
         if [ -n "$old_release_url" ]; then
-            # 使用 sed 在 JSON 末尾添加 release_url
-            if grep -q '"release_url"' "$INSTALL_DIR/version.json"; then
-                # 如果新配置中已存在 release_url，替换它
-                sed -i "s|\"release_url\"[[:space:]]*:[[:space:]]*\"[^\"]*\"|\"release_url\": \"$old_release_url\"|" "$INSTALL_DIR/version.json"
-            else
-                # 如果不存在，在最后一个 } 前添加
-                sed -i "s|}$|, \"release_url\": \"$old_release_url\"}|" "$INSTALL_DIR/version.json"
-            fi
+            # 使用 Python 处理 JSON 合并
+            python3 << PYEOF
+import json
+with open("$INSTALL_DIR/version.json", "r") as f:
+    data = json.load(f)
+data["release_url"] = "$old_release_url"
+with open("$INSTALL_DIR/version.json", "w") as f:
+    json.dump(data, f, indent=2)
+PYEOF
             log_info "保留 release_url 配置: $old_release_url"
         fi
     fi
@@ -561,6 +578,13 @@ perform_upgrade() {
     # 恢复 vendor
     if [ -d "$preserve_dir/vendor" ]; then
         mv "$preserve_dir/vendor" "$INSTALL_DIR/backend/"
+    fi
+
+    # 恢复 frontend/web（用户自定义前端）
+    if [ -d "$preserve_dir/frontend/web" ]; then
+        mkdir -p "$INSTALL_DIR/frontend"
+        mv "$preserve_dir/frontend/web" "$INSTALL_DIR/frontend/"
+        log_info "已恢复 frontend/web 目录"
     fi
 
     # 9. 检测依赖变化，决定是否运行 composer install
@@ -683,6 +707,15 @@ perform_upgrade() {
     # 批量设置所有者和权限
     chown -R "$web_user:$web_user" "$INSTALL_DIR" 2>/dev/null || true
     chmod -R u=rwX,go=rX "$INSTALL_DIR" 2>/dev/null || true
+
+    # storage 目录需要可写
+    chmod -R u+w "$INSTALL_DIR/backend/storage" 2>/dev/null || true
+
+    # 确保关键 storage 子目录存在且可写
+    for subdir in logs upgrades backups framework/cache framework/sessions framework/views; do
+        mkdir -p "$INSTALL_DIR/backend/storage/$subdir" 2>/dev/null || true
+    done
+    chown -R "$web_user:$web_user" "$INSTALL_DIR/backend/storage" 2>/dev/null || true
 
     # .env 文件 600（敏感）
     [ -f "$INSTALL_DIR/.env" ] && chmod 600 "$INSTALL_DIR/.env"

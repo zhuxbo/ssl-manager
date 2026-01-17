@@ -68,15 +68,21 @@ get_channel() {
 
 # ========================================
 # 构建打包
+# 参数: build_dir [version]
 # ========================================
 build_packages() {
     local build_dir="$1"
+    local version="${2:-}"
 
     log_step "开始构建..."
 
     cd "$build_dir"
     if [ -f "scripts/package.sh" ]; then
-        bash scripts/package.sh
+        if [ -n "$version" ]; then
+            bash scripts/package.sh --version "$version"
+        else
+            bash scripts/package.sh
+        fi
     else
         log_error "未找到构建脚本: scripts/package.sh"
         return 1
@@ -95,8 +101,8 @@ generate_releases_update_script() {
     local rel_path="$5"
 
     local created_at=$(date -Iseconds)
-    local prerelease="false"
-    [ "$channel" = "dev" ] && prerelease="true"
+    local prerelease="False"
+    [ "$channel" = "dev" ] && prerelease="True"
 
     cat << PYEOF
 import json

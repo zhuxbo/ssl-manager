@@ -510,7 +510,7 @@ class BackupManager
             ],
         ];
 
-        File::put("$backupDir/backup.json", json_encode($info, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+        File::put("$backupDir/backup.json", json_encode($info, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
     }
 
     /**

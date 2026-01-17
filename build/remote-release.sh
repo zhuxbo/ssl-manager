@@ -257,7 +257,7 @@ upload_to_server() {
 
     # 创建远程目录
     log_info "创建目录: $remote_version_dir"
-    ssh_cmd "$SERVER_HOST" "$SERVER_PORT" "mkdir -p $remote_version_dir"
+    ssh_cmd "$SERVER_HOST" "$SERVER_PORT" "mkdir -p $remote_version_dir && rm -f $remote_version_dir/*.zip"
 
     # 上传包文件
     log_info "上传包文件..."
@@ -419,7 +419,7 @@ main() {
     # 构建
     local packages_dir="$BUILD_DIR/temp/packages"
     if [ "$upload_only" = false ]; then
-        build_packages "$BUILD_DIR"
+        build_packages "$BUILD_DIR" "$version"
     else
         log_info "跳过构建，使用已有包"
     fi

@@ -422,7 +422,7 @@ class PackageExtractor
         }
 
         // 写入合并后的配置
-        File::put($targetFile, json_encode($newConfig, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) . "\n");
+        File::put($targetFile, json_encode($newConfig, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . "\n");
         Log::info('已更新项目根目录 version.json', ['preserved' => array_keys($preserved)]);
     }
 

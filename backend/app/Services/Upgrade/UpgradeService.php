@@ -160,17 +160,20 @@ class UpgradeService
             $this->packageExtractor->validatePackage($extractedPath);
             $steps[count($steps) - 1]['status'] = 'completed';
 
+            // 记录当前 composer 文件的 hash（用于检测变化）
+            $oldComposerHashes = $this->getComposerHashes(base_path());
+            Log::info('[Upgrade] Current composer hashes', $oldComposerHashes);
+
             // 步骤 6: 应用升级
             $steps[] = ['step' => 'apply', 'status' => 'running'];
             $this->packageExtractor->applyUpgrade($extractedPath);
             $steps[count($steps) - 1]['status'] = 'completed';
 
-            // 步骤 6.5: 检测并安装 Composer 依赖
-            $backendDir = $this->findBackendDirInPackage($extractedPath);
-            $needComposerInstall = $backendDir && (
-                file_exists("$backendDir/composer.json") ||
-                file_exists("$backendDir/composer.lock")
-            );
+            // 步骤 6.5: 检测并安装 Composer 依赖（比较 hash 决定是否需要安装）
+            $newComposerHashes = $this->getComposerHashes(base_path());
+            Log::info('[Upgrade] New composer hashes', $newComposerHashes);
+
+            $needComposerInstall = $this->hasComposerChanges($oldComposerHashes, $newComposerHashes);
 
             if ($needComposerInstall) {
                 $steps[] = ['step' => 'composer_install', 'status' => 'running'];
@@ -182,6 +185,8 @@ class UpgradeService
                 }
 
                 $steps[count($steps) - 1]['status'] = 'completed';
+            } else {
+                Log::info('[Upgrade] No composer changes detected, skipping composer install');
             }
 
             // 清理 opcache 以便加载新代码
@@ -375,24 +380,30 @@ class UpgradeService
             $this->packageExtractor->validatePackage($extractedPath);
             $statusManager->completeStep('extract');
 
+            // 记录当前 composer 文件的 hash（用于检测变化）
+            $oldComposerHashes = $this->getComposerHashes(base_path());
+            Log::info('[Upgrade] Current composer hashes', $oldComposerHashes);
+
             // 步骤 6: 应用升级
             $statusManager->startStep('apply');
             $this->packageExtractor->applyUpgrade($extractedPath);
             $statusManager->completeStep('apply');
 
-            // 步骤 6.5: Composer 依赖
-            $backendDir = $this->findBackendDirInPackage($extractedPath);
-            $needComposerInstall = $backendDir && (
-                file_exists("$backendDir/composer.json") ||
-                file_exists("$backendDir/composer.lock")
-            );
+            // 步骤 6.5: Composer 依赖（比较 hash 决定是否需要安装）
+            $newComposerHashes = $this->getComposerHashes(base_path());
+            Log::info('[Upgrade] New composer hashes', $newComposerHashes);
+
+            $needComposerInstall = $this->hasComposerChanges($oldComposerHashes, $newComposerHashes);
 
             if ($needComposerInstall) {
                 $statusManager->startStep('composer_install');
+                Log::info('[Upgrade] Detected composer changes, running composer install');
                 if (! $this->runComposerInstall()) {
                     throw new RuntimeException('Composer 依赖安装失败');
                 }
                 $statusManager->completeStep('composer_install');
+            } else {
+                Log::info('[Upgrade] No composer changes detected, skipping composer install');
             }
 
             // 清理 opcache
@@ -627,7 +638,7 @@ class UpgradeService
 
         $result = file_put_contents(
             $versionPath,
-            json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)
+            json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
         );
 
         if ($result === false) {
@@ -846,5 +857,64 @@ class UpgradeService
         }
 
         return null;
+    }
+
+    /**
+     * 获取 composer 文件的 hash
+     */
+    protected function getComposerHashes(string $basePath): array
+    {
+        $hashes = [
+            'composer_json' => null,
+            'composer_lock' => null,
+        ];
+
+        $composerJsonPath = "$basePath/composer.json";
+        $composerLockPath = "$basePath/composer.lock";
+
+        if (file_exists($composerJsonPath)) {
+            $hashes['composer_json'] = hash_file('sha256', $composerJsonPath);
+        }
+
+        if (file_exists($composerLockPath)) {
+            $hashes['composer_lock'] = hash_file('sha256', $composerLockPath);
+        }
+
+        return $hashes;
+    }
+
+    /**
+     * 检测 composer 文件是否有变化
+     */
+    protected function hasComposerChanges(array $oldHashes, array $newHashes): bool
+    {
+        // 如果旧文件不存在但新文件存在，需要安装
+        if (empty($oldHashes['composer_json']) && ! empty($newHashes['composer_json'])) {
+            Log::info('[Upgrade] composer.json is new, need install');
+
+            return true;
+        }
+
+        if (empty($oldHashes['composer_lock']) && ! empty($newHashes['composer_lock'])) {
+            Log::info('[Upgrade] composer.lock is new, need install');
+
+            return true;
+        }
+
+        // 如果 composer.json hash 变化
+        if ($oldHashes['composer_json'] !== $newHashes['composer_json']) {
+            Log::info('[Upgrade] composer.json changed');
+
+            return true;
+        }
+
+        // 如果 composer.lock hash 变化
+        if ($oldHashes['composer_lock'] !== $newHashes['composer_lock']) {
+            Log::info('[Upgrade] composer.lock changed');
+
+            return true;
+        }
+
+        return false;
     }
 }

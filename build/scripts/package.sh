@@ -25,8 +25,9 @@ log_step() { echo -e "${CYAN}[STEP]${NC} $1"; }
 BUILD_DIR="${BUILD_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 PRODUCTION_DIR="${PRODUCTION_DIR:-$BUILD_DIR/temp/production-code}"
 OUTPUT_DIR="${OUTPUT_DIR:-$BUILD_DIR/temp/packages}"
-CHANNEL="${RELEASE_CHANNEL:-main}"
+CHANNEL="${RELEASE_CHANNEL:-}"
 BUILD_CONFIG="$BUILD_DIR/config.json"
+VERSION=""
 
 # 显示帮助
 show_help() {
@@ -36,17 +37,19 @@ SSL证书管理系统 - 打包脚本
 用法: $0 [选项]
 
 选项:
+  --version VER     指定版本号（优先级最高）
   --source DIR      指定生产代码目录（默认: $PRODUCTION_DIR）
   --output DIR      指定输出目录（默认: $OUTPUT_DIR）
-  --channel NAME    指定发布通道 main|dev（默认: main）
+  --channel NAME    指定发布通道 main|dev（自动根据版本号判断）
   -h, --help        显示此帮助信息
 
-说明:
-  此脚本会生成两种包：
-  1. ssl-manager-full-{version}.zip    - 完整安装包
-  2. ssl-manager-upgrade-{version}.zip - 升级包
+版本号获取优先级:
+  1. --version 参数
+  2. config.json 中的 version 字段
 
-  同时生成 manifest.json 包含版本信息和校验和
+通道自动判断:
+  - 包含 -beta/-alpha/-rc/-dev 的版本 → dev 通道
+  - 其他版本 → main 通道
 
 EOF
     exit 0
@@ -55,6 +58,10 @@ EOF
 # 解析参数
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        --version)
+            VERSION="$2"
+            shift 2
+            ;;
         --source)
             PRODUCTION_DIR="$2"
             shift 2
@@ -127,15 +134,27 @@ EOF
     fi
 }
 
-# 读取版本号
-VERSION=$(grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' "$PRODUCTION_DIR/config.json" | head -1 | sed 's/.*"\([^"]*\)"$/\1/')
+# 读取版本号（如果未通过参数指定）
 if [ -z "$VERSION" ]; then
-    log_error "无法读取版本号"
-    exit 1
+    VERSION=$(grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' "$PRODUCTION_DIR/config.json" | head -1 | sed 's/.*"\([^"]*\)"$/\1/')
+    if [ -z "$VERSION" ]; then
+        log_error "无法读取版本号，请使用 --version 参数指定"
+        exit 1
+    fi
 fi
 
-# 创建输出目录
+# 自动判断通道（如果未通过参数指定）
+if [ -z "$CHANNEL" ]; then
+    if [[ "$VERSION" =~ -(dev|alpha|beta|rc) ]]; then
+        CHANNEL="dev"
+    else
+        CHANNEL="main"
+    fi
+fi
+
+# 创建输出目录（清空旧文件）
 mkdir -p "$OUTPUT_DIR"
+rm -f "$OUTPUT_DIR"/ssl-manager-*.zip "$OUTPUT_DIR"/manifest.json 2>/dev/null || true
 
 log_info "============================================"
 log_info "SSL证书管理系统 - 打包"
@@ -189,7 +208,16 @@ touch "$FULL_DIR/backend/vendor/.gitkeep"
 find "$FULL_DIR/backend/storage" -type d -empty -exec touch {}/.gitkeep \;
 touch "$FULL_DIR/backend/bootstrap/cache/.gitkeep" 2>/dev/null || true
 
-# 创建 manifest.json（完整包也需要版本信息）
+# 创建 version.json（运行时版本信息）
+cat > "$FULL_DIR/version.json" <<EOF
+{
+  "version": "$VERSION",
+  "channel": "$CHANNEL",
+  "build_time": "$(date -u "+%Y-%m-%dT%H:%M:%SZ")"
+}
+EOF
+
+# 创建 manifest.json（包元信息）
 cat > "$FULL_DIR/manifest.json" <<EOF
 {
   "version": "$VERSION",
@@ -238,8 +266,14 @@ if [ -d "$PRODUCTION_DIR/frontend" ]; then
     done
 fi
 
-# 复制配置文件（但不覆盖现有）
-cp "$PRODUCTION_DIR/config.json" "$UPGRADE_DIR/"
+# 创建 version.json（运行时版本信息）
+cat > "$UPGRADE_DIR/version.json" <<EOF
+{
+  "version": "$VERSION",
+  "channel": "$CHANNEL",
+  "build_time": "$(date -u "+%Y-%m-%dT%H:%M:%SZ")"
+}
+EOF
 
 # 创建 manifest.json（升级服务需要此文件验证包有效性）
 cat > "$UPGRADE_DIR/manifest.json" <<EOF

@@ -149,7 +149,7 @@ main() {
     # 1. 构建
     local packages_dir="$BUILD_DIR/temp/packages"
     if [ "$upload_only" = false ]; then
-        build_packages "$BUILD_DIR"
+        build_packages "$BUILD_DIR" "$version"
     else
         log_info "跳过构建，使用已有包"
     fi
