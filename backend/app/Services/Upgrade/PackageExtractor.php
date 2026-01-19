@@ -128,6 +128,12 @@ class PackageExtractor
                 $this->applyFrontendUpgrade($frontendEasyDir, 'easy');
             }
 
+            // 应用 nginx 配置更新
+            $nginxDir = $this->findNginxDir($extractedPath);
+            if ($nginxDir) {
+                $this->applyNginxUpgrade($nginxDir);
+            }
+
             // 更新项目根目录的 version.json（保留用户自定义的 release_url）
             $versionFile = $this->findVersionConfig($extractedPath);
             if ($versionFile) {
@@ -198,6 +204,89 @@ class PackageExtractor
         }
 
         $this->syncDirectory($sourceDir, $targetDir);
+    }
+
+    /**
+     * 应用 nginx 配置升级
+     */
+    protected function applyNginxUpgrade(string $sourceDir): void
+    {
+        $targetDir = base_path('../nginx');
+
+        if (! File::isDirectory($targetDir)) {
+            File::makeDirectory($targetDir, 0755, true);
+        }
+
+        $this->syncDirectory($sourceDir, $targetDir);
+
+        // 替换 __PROJECT_ROOT__ 占位符
+        $projectRoot = $this->getProjectRoot();
+
+        $managerConf = "$targetDir/manager.conf";
+        if (File::exists($managerConf)) {
+            $content = File::get($managerConf);
+            $content = str_replace('__PROJECT_ROOT__', $projectRoot, $content);
+            File::put($managerConf, $content);
+            Log::info("已替换 manager.conf 中的 __PROJECT_ROOT__ 为 $projectRoot");
+        }
+
+        // 同时处理 frontend/web/web.conf
+        $webConf = base_path('../frontend/web/web.conf');
+        if (File::exists($webConf)) {
+            $content = File::get($webConf);
+            $content = str_replace('__PROJECT_ROOT__', $projectRoot, $content);
+            File::put($webConf, $content);
+            Log::info("已替换 web.conf 中的 __PROJECT_ROOT__ 为 $projectRoot");
+        }
+
+        Log::info('已更新 nginx 配置');
+    }
+
+    /**
+     * 查找 nginx 配置目录
+     */
+    protected function findNginxDir(string $extractedPath): ?string
+    {
+        $possiblePaths = ["$extractedPath/nginx"];
+
+        // 在子目录中查找
+        $dirs = File::directories($extractedPath);
+        foreach ($dirs as $dir) {
+            $possiblePaths[] = "$dir/nginx";
+        }
+
+        foreach ($possiblePaths as $path) {
+            if (File::isDirectory($path)) {
+                return $path;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * 获取项目根目录路径（用于 nginx 配置占位符替换）
+     */
+    protected function getProjectRoot(): string
+    {
+        // Docker 环境使用固定路径
+        if ($this->isDockerEnvironment()) {
+            return '/var/www/html';
+        }
+
+        // 宝塔环境使用实际安装目录（backend 的上级目录）
+        return dirname(base_path());
+    }
+
+    /**
+     * 检测是否为 Docker 环境
+     */
+    protected function isDockerEnvironment(): bool
+    {
+        // 检查 docker-compose.yml 是否存在
+        $dockerCompose = base_path('../docker-compose.yml');
+
+        return File::exists($dockerCompose);
     }
 
     /**
@@ -395,7 +484,8 @@ class PackageExtractor
      */
     protected function updateVersionJsonWithPreservedFields(string $newVersionFile): void
     {
-        $targetFile = base_path('../version.json');
+        $versionManager = new VersionManager;
+        $targetFile = $versionManager->getVersionPath();
 
         // 读取现有配置中需要保留的字段
         $existingConfig = [];
@@ -639,7 +729,7 @@ class PackageExtractor
             $dirsStr = implode(', ', $notWritable);
 
             throw new RuntimeException(
-                "以下目录不可写: $dirsStr。" .
+                "以下目录不可写: {$dirsStr}。" .
                 "请检查文件权限，确保 Web 服务用户 ($webUser) 有写权限。" .
                 "可以尝试运行: chown -R $webUser:$webUser $targetDir"
             );
@@ -649,7 +739,7 @@ class PackageExtractor
         $storagePath = "$targetDir/storage";
         if (is_dir($storagePath) && ! is_writable($storagePath)) {
             throw new RuntimeException(
-                "storage 目录不可写: $storagePath。" .
+                "storage 目录不可写: {$storagePath}。" .
                 '请确保 storage 目录及其子目录有写权限。'
             );
         }

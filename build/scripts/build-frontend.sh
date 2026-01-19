@@ -90,22 +90,52 @@ fix_bin_permissions "$WORKSPACE_DIR/frontend/shared"
 [ "${BUILD_ADMIN:-false}" = "true" ] && fix_bin_permissions "$WORKSPACE_DIR/frontend/admin"
 [ "${BUILD_USER:-false}" = "true" ] && fix_bin_permissions "$WORKSPACE_DIR/frontend/user"
 
+# 计算目录内容 hash（用于增量构建检测）
+# 参数：主目录 [依赖目录...]
+calc_dir_hash() {
+    local dirs=("$@")
+    # 对目录下所有源文件内容计算 hash，排除 node_modules 和 dist
+    for dir in "${dirs[@]}"; do
+        find "$dir" -type f \( -name "*.ts" -o -name "*.tsx" -o -name "*.vue" -o -name "*.js" -o -name "*.css" -o -name "*.scss" -o -name "*.json" -o -name "*.html" \) \
+            ! -path "*/node_modules/*" ! -path "*/dist/*" \
+            -exec sha256sum {} \; 2>/dev/null
+    done | sort | sha256sum | awk '{print $1}'
+}
+
 # 构建函数
 build_component() {
     local component="$1"
     local filter="$2"
 
+    local src_dir="$WORKSPACE_DIR/frontend/$filter"
+    local shared_dir="$WORKSPACE_DIR/frontend/shared"
+    local dist_dir="$src_dir/dist"
+    local hash_file="/workspace/.dep_hashes/${filter}_src.sha256"
+
+    # 增量构建检测：检查源码是否变更（包括 shared 依赖）
+    local current_hash=$(calc_dir_hash "$src_dir" "$shared_dir")
+    local prev_hash=""
+    [ -f "$hash_file" ] && prev_hash=$(cat "$hash_file" 2>/dev/null || echo "")
+
+    if [ "${FORCE_BUILD:-false}" != "true" ] && \
+       [ "$current_hash" = "$prev_hash" ] && \
+       [ -d "$dist_dir" ] && \
+       [ "$(find "$dist_dir" -type f | wc -l)" -gt 0 ]; then
+        log_success "[$component] 源码未变更，跳过构建（使用缓存）"
+        return 0
+    fi
+
     log_info "[$component] 开始构建..."
+    [ "$current_hash" != "$prev_hash" ] && log_info "[$component] 检测到源码变更"
 
     # 清理旧的构建产物
-    local dist_dir="$WORKSPACE_DIR/frontend/$filter/dist"
     if [ -d "$dist_dir" ]; then
         log_info "[$component] 清理 dist..."
         rm -rf "$dist_dir"
     fi
 
     # 释放内存：清理 pnpm 缓存和临时文件
-    sync && echo 3 > /proc/sys/vm/drop_caches 2>/dev/null || true
+    { sync && echo 3 > /proc/sys/vm/drop_caches; } 2>/dev/null || true
 
     # 低内存构建策略：
     # - 跳过类型检查（vue-tsc 需要大量内存）
@@ -143,6 +173,8 @@ build_component() {
         log_success "[$component] 构建完成"
         log_info "[$component] Dist 大小: $DIST_SIZE"
         log_info "[$component] 文件数量: $DIST_FILES"
+        # 保存源码 hash，用于下次增量构建检测
+        echo "$current_hash" > "$hash_file"
     else
         log_error "[$component] 构建失败：dist 目录不存在"
         return 1
@@ -153,7 +185,7 @@ build_component() {
 if [ "${BUILD_ADMIN:-false}" = "true" ]; then
     build_component "管理端" "admin"
     # 构建完成后释放内存，为下一个构建做准备
-    sync && echo 3 > /proc/sys/vm/drop_caches 2>/dev/null || true
+    { sync && echo 3 > /proc/sys/vm/drop_caches; } 2>/dev/null || true
     echo ""
 fi
 

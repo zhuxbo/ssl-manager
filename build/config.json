@@ -76,7 +76,9 @@
         ".env.*",
         "storage/*",
         "bootstrap/cache/*",
-        "vendor/*"
+        "vendor/*",
+        "public/install.php",
+        "public/install-assets/"
       ]
     }
   }

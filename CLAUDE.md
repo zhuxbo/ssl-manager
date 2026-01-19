@@ -103,6 +103,39 @@ ACME_DEFAULT_PRODUCT_ID=xxx
 
 ## 安装流程
 
+### Docker 安装
+
+```bash
+# 一键安装（自动检测环境）
+curl -fsSL https://release-cn.cnssl.com/install.sh | sudo bash
+
+# 指定 Docker 模式
+curl -fsSL https://release-cn.cnssl.com/install.sh | sudo bash -s -- docker
+
+# 非交互式安装
+curl -fsSL https://release-cn.cnssl.com/install.sh | sudo bash -s -- docker -y
+```
+
+Docker 部署目录结构：
+```
+/opt/ssl-manager/
+├── backend/              # Laravel 后端代码
+├── frontend/             # 前端静态文件
+├── nginx/                # nginx 配置
+├── data/
+│   ├── version.json      # 版本配置（挂载到容器）
+│   ├── mysql/            # MySQL 数据
+│   ├── redis/            # Redis 数据
+│   ├── storage/          # Laravel storage
+│   └── logs/             # 日志
+└── docker-compose.yml
+```
+
+容器挂载关系：
+- `./backend:/var/www/html/backend` - 后端代码
+- `./data/version.json:/var/www/html/data/version.json` - 版本配置
+- `./data/storage:/var/www/html/backend/storage` - 存储目录
+
 ### 宝塔面板安装（两阶段）
 
 | 阶段 | 执行者 | 职责 |
@@ -151,9 +184,30 @@ php artisan upgrade:rollback           # 回滚
 - `UpgradeService` - 升级主逻辑，包含 `performUpgradeWithStatus()` 后台升级方法
 - `UpgradeStatusManager` - 状态管理，支持动态步骤计算
 - `PackageExtractor` - 包解压和应用，包含权限检查
-- `ReleaseClient` - Release 获取，从 `version.json` 读取自定义 URL
+- `ReleaseClient` - Release 获取，支持 Docker 容器内 localhost 地址转换
 - `BackupManager` - 备份和恢复
-- `VersionManager` - 版本比较和约束检查，支持 `getReleaseUrl()`
+- `VersionManager` - 版本比较和环境检测，支持 Docker/宝塔双模式
+
+### version.json 路径
+
+根据部署环境自动选择：
+
+| 环境 | 路径 | 说明 |
+|------|------|------|
+| Docker | `/var/www/html/data/version.json` | 挂载到 data 目录确保可写 |
+| 宝塔 | `/www/wwwroot/xxx/version.json` | 项目根目录 |
+
+`VersionManager.isDockerEnvironment()` 检测方式：
+1. 检查 `/.dockerenv` 文件存在
+2. 检查 `/proc/1/cgroup` 包含 `docker` 或 `kubepods`
+
+### Docker 容器内地址转换
+
+`ReleaseClient` 在 Docker 环境下自动转换 localhost 地址：
+- `http://localhost:10002` → `http://172.17.0.1:10002`（Linux Docker）
+- `http://localhost:10002` → `http://host.docker.internal:10002`（Docker Desktop）
+
+检测逻辑：检查 `/etc/hosts` 是否有 `host.docker.internal` 条目
 
 ### 自定义 Release URL
 

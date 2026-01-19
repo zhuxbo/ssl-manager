@@ -53,6 +53,7 @@ trap cleanup EXIT
 
 get_timestamp() {
     # 与 PHP BackupManager 格式一致：2026-01-15_021459
+    # 使用系统本机时区
     date '+%Y-%m-%d_%H%M%S'
 }
 
@@ -352,7 +353,7 @@ create_backup() {
     # 日志输出到 stderr，避免被 $() 捕获
     log_step "创建备份..." >&2
 
-    local backup_dir="$INSTALL_DIR/storage/backups"
+    local backup_dir="$INSTALL_DIR/backups"
     local backup_id=$(get_timestamp)
     local backup_path="$backup_dir/$backup_id"
     local current_version=$(get_current_version)
@@ -364,13 +365,23 @@ create_backup() {
     local backend_tmp="$TEMP_DIR/backup_backend"
     mkdir -p "$backend_tmp"
 
-    # 复制后端代码（排除 storage、vendor、node_modules）
-    rsync -a --exclude='storage' --exclude='vendor' --exclude='node_modules' \
-        "$INSTALL_DIR/backend/" "$backend_tmp/" 2>/dev/null || \
-        cp -r "$INSTALL_DIR/backend" "$backend_tmp/" 2>/dev/null || true
+    # 只复制与 PHP BackupManager 相同的目录：app, config, database, routes, bootstrap
+    for dir in app config database routes bootstrap; do
+        if [ -d "$INSTALL_DIR/backend/$dir" ]; then
+            cp -r "$INSTALL_DIR/backend/$dir" "$backend_tmp/"
+        fi
+    done
+
+    # 只复制与 PHP BackupManager 相同的文件：composer.json, composer.lock, .env
+    for file in composer.json composer.lock .env; do
+        if [ -f "$INSTALL_DIR/backend/$file" ]; then
+            cp "$INSTALL_DIR/backend/$file" "$backend_tmp/"
+        fi
+    done
 
     # 复制 version.json 到备份（放在 backend 同级目录）
-    [ -f "$INSTALL_DIR/version.json" ] && cp "$INSTALL_DIR/version.json" "$backend_tmp/../version.json"
+    local version_src="$INSTALL_DIR/version.json"
+    [ -f "$version_src" ] && cp "$version_src" "$backend_tmp/../version.json"
 
     # 创建 backend.zip
     (cd "$backend_tmp" && zip -qr "$backup_path/backend.zip" .)
@@ -442,7 +453,7 @@ perform_upgrade() {
     if [ "$DEPLOY_MODE" = "docker" ]; then
         local compose_cmd=$(check_docker_compose)
         cd "$INSTALL_DIR"
-        $compose_cmd exec -T php php artisan down --retry=60 || true
+        $compose_cmd exec -T php sh -c "cd /var/www/html/backend && php artisan down --retry=60" || true
     else
         cd "$INSTALL_DIR/backend"
         php artisan down --retry=60 || true
@@ -528,6 +539,39 @@ perform_upgrade() {
         fi
     done
 
+    # 复制 nginx 配置目录（路由配置）
+    if [ -d "$src_dir/nginx" ]; then
+        mkdir -p "$INSTALL_DIR/nginx"
+        cp -r "$src_dir/nginx"/* "$INSTALL_DIR/nginx/"
+        log_info "已更新 nginx 配置"
+
+        # 替换 __PROJECT_ROOT__ 占位符
+        local project_root
+        if [ "$DEPLOY_MODE" = "docker" ]; then
+            project_root="/var/www/html"
+        else
+            # 宝塔环境使用实际安装目录
+            project_root="$INSTALL_DIR"
+        fi
+
+        if [ -f "$INSTALL_DIR/nginx/manager.conf" ]; then
+            sed -i "s|__PROJECT_ROOT__|$project_root|g" "$INSTALL_DIR/nginx/manager.conf"
+            log_info "已替换 manager.conf 中的路径占位符"
+        fi
+    fi
+
+    # 替换 web.conf 中的占位符
+    if [ -f "$INSTALL_DIR/frontend/web/web.conf" ]; then
+        local project_root
+        if [ "$DEPLOY_MODE" = "docker" ]; then
+            project_root="/var/www/html"
+        else
+            project_root="$INSTALL_DIR"
+        fi
+        sed -i "s|__PROJECT_ROOT__|$project_root|g" "$INSTALL_DIR/frontend/web/web.conf"
+        log_info "已替换 web.conf 中的路径占位符"
+    fi
+
     # 复制根目录版本配置（保留用户的 release_url）
     if [ -f "$src_dir/version.json" ]; then
         local old_release_url=""
@@ -587,6 +631,49 @@ PYEOF
         log_info "已恢复 frontend/web 目录"
     fi
 
+    # 8.1 预先修复权限（在执行 artisan 命令前）
+    log_step "预设权限..."
+
+    # backend/storage（Laravel storage）和根目录 backups（备份、升级包）
+    local backend_storage="$INSTALL_DIR/backend/storage"
+    local backups_dir="$INSTALL_DIR/backups"
+    local version_file="$INSTALL_DIR/version.json"
+
+    # 确保目录存在（宿主机上创建）
+    for subdir in logs framework/cache framework/sessions framework/views app/public; do
+        mkdir -p "$backend_storage/$subdir" 2>/dev/null || true
+    done
+    mkdir -p "$backups_dir" "$backups_dir/upgrades" 2>/dev/null || true
+
+    if [ "$DEPLOY_MODE" = "docker" ]; then
+        # 在容器内执行权限修复（宿主机可能没有 www-data 用户）
+        cd "$INSTALL_DIR"
+        # backend/storage
+        $compose_cmd exec -T php chown -R www-data:www-data /var/www/html/backend/storage 2>/dev/null || true
+        $compose_cmd exec -T php chmod -R 775 /var/www/html/backend/storage 2>/dev/null || true
+        # 根目录 backups
+        $compose_cmd exec -T php chown -R www-data:www-data /var/www/html/backups 2>/dev/null || true
+        $compose_cmd exec -T php chmod -R 775 /var/www/html/backups 2>/dev/null || true
+        # version.json（版本配置，需要可写以支持切换通道）
+        $compose_cmd exec -T php chown www-data:www-data /var/www/html/version.json 2>/dev/null || true
+        $compose_cmd exec -T php chmod 664 /var/www/html/version.json 2>/dev/null || true
+        # .env 文件（让 www-data 可读，用于升级时备份）
+        $compose_cmd exec -T php chown www-data:www-data /var/www/html/backend/.env 2>/dev/null || true
+        $compose_cmd exec -T php chmod 600 /var/www/html/backend/.env 2>/dev/null || true
+        # frontend 目录（宿主机上设置，让 www-data 可读以支持备份）
+        chown -R 82:82 "$INSTALL_DIR/frontend" 2>/dev/null || true
+        chmod -R 755 "$INSTALL_DIR/frontend" 2>/dev/null || true
+    else
+        # 宝塔模式
+        chown -R www:www "$backend_storage" 2>/dev/null || true
+        chmod -R 775 "$backend_storage" 2>/dev/null || true
+        chown -R www:www "$backups_dir" 2>/dev/null || true
+        chmod -R 775 "$backups_dir" 2>/dev/null || true
+        [ -f "$version_file" ] && chown www:www "$version_file" && chmod 664 "$version_file"
+        # .env 文件（让 www 可读，用于升级时备份）
+        [ -f "$INSTALL_DIR/backend/.env" ] && chown www:www "$INSTALL_DIR/backend/.env" && chmod 600 "$INSTALL_DIR/backend/.env"
+    fi
+
     # 9. 检测依赖变化，决定是否运行 composer install
     log_step "检测依赖变化..."
     local new_composer_json_hash=""
@@ -625,6 +712,7 @@ PYEOF
             fi
         fi
 
+        # 执行 composer install
         if [ "$DEPLOY_MODE" = "docker" ]; then
             cd "$INSTALL_DIR"
             if [ "$use_china_mirror" = true ]; then
@@ -644,19 +732,29 @@ PYEOF
     log_step "运行数据库迁移..."
     if [ "$DEPLOY_MODE" = "docker" ]; then
         cd "$INSTALL_DIR"
-        $compose_cmd exec -T php php artisan migrate --force
+        $compose_cmd exec -T php sh -c "cd /var/www/html/backend && php artisan migrate --force"
     else
         cd "$INSTALL_DIR/backend"
         php artisan migrate --force
+    fi
+
+    # 10.1 初始化/更新数据
+    log_step "更新数据..."
+    if [ "$DEPLOY_MODE" = "docker" ]; then
+        cd "$INSTALL_DIR"
+        $compose_cmd exec -T php sh -c "cd /var/www/html/backend && php artisan db:seed --force" || true
+    else
+        cd "$INSTALL_DIR/backend"
+        php artisan db:seed --force || true
     fi
 
     # 11. 清理缓存
     log_step "清理缓存..."
     if [ "$DEPLOY_MODE" = "docker" ]; then
         cd "$INSTALL_DIR"
-        $compose_cmd exec -T php php artisan config:cache || true
-        $compose_cmd exec -T php php artisan route:cache || true
-        $compose_cmd exec -T php php artisan view:cache || true
+        $compose_cmd exec -T php sh -c "cd /var/www/html/backend && php artisan config:cache" || true
+        $compose_cmd exec -T php sh -c "cd /var/www/html/backend && php artisan route:cache" || true
+        $compose_cmd exec -T php sh -c "cd /var/www/html/backend && php artisan view:cache" || true
     else
         cd "$INSTALL_DIR/backend"
         php artisan config:cache || true
@@ -693,33 +791,55 @@ PYEOF
     log_step "退出维护模式..."
     if [ "$DEPLOY_MODE" = "docker" ]; then
         cd "$INSTALL_DIR"
-        $compose_cmd exec -T php php artisan up
+        $compose_cmd exec -T php sh -c "cd /var/www/html/backend && php artisan up"
     else
         cd "$INSTALL_DIR/backend"
         php artisan up
     fi
 
-    # 设置权限（使用批量操作提升性能）
-    log_step "修复文件权限..."
-    local web_user="www-data"
-    [ "$DEPLOY_MODE" = "bt" ] && web_user="www"
+    # 最终权限检查
+    log_step "确认文件权限..."
 
-    # 批量设置所有者和权限
-    chown -R "$web_user:$web_user" "$INSTALL_DIR" 2>/dev/null || true
-    chmod -R u=rwX,go=rX "$INSTALL_DIR" 2>/dev/null || true
+    if [ "$DEPLOY_MODE" = "docker" ]; then
+        # Docker 模式：在容器内执行权限修复
+        cd "$INSTALL_DIR"
+        # backend 整个目录需要 www-data 可写以支持在线升级
+        $compose_cmd exec -T php chown -R www-data:www-data /var/www/html/backend 2>/dev/null || true
+        $compose_cmd exec -T php chmod -R 755 /var/www/html/backend 2>/dev/null || true
+        $compose_cmd exec -T php chmod -R 775 /var/www/html/backend/storage 2>/dev/null || true
+        # 根目录 backups
+        $compose_cmd exec -T php chown -R www-data:www-data /var/www/html/backups 2>/dev/null || true
+        $compose_cmd exec -T php chmod -R 775 /var/www/html/backups 2>/dev/null || true
+        # version.json（版本配置，需要可写以支持切换通道）
+        $compose_cmd exec -T php chown www-data:www-data /var/www/html/version.json 2>/dev/null || true
+        $compose_cmd exec -T php chmod 664 /var/www/html/version.json 2>/dev/null || true
+        # .env 文件（让 www-data 可读，用于升级时备份）
+        $compose_cmd exec -T php chown www-data:www-data /var/www/html/backend/.env 2>/dev/null || true
+        $compose_cmd exec -T php chmod 600 /var/www/html/backend/.env 2>/dev/null || true
+        # frontend 目录（宿主机上设置，让 www-data 可读以支持备份）
+        chown -R 82:82 "$INSTALL_DIR/frontend" 2>/dev/null || true
+        chmod -R 755 "$INSTALL_DIR/frontend" 2>/dev/null || true
+    else
+        # 宝塔模式：设置整个安装目录的权限
+        chown -R www:www "$INSTALL_DIR" 2>/dev/null || true
+        # 确保关键目录可写
+        chmod -R 775 "$INSTALL_DIR/backend/storage" 2>/dev/null || true
+        chmod -R 775 "$INSTALL_DIR/backups" 2>/dev/null || true
+        [ -f "$INSTALL_DIR/version.json" ] && chmod 664 "$INSTALL_DIR/version.json"
+        # .env 文件（让 www 可读，用于升级时备份）
+        [ -f "$INSTALL_DIR/backend/.env" ] && chown www:www "$INSTALL_DIR/backend/.env" && chmod 600 "$INSTALL_DIR/backend/.env"
+    fi
 
-    # storage 目录需要可写
-    chmod -R u+w "$INSTALL_DIR/backend/storage" 2>/dev/null || true
+    # .env 文件敏感信息保护（root 和 web 用户可读）
+    [ -f "$INSTALL_DIR/.env" ] && chmod 640 "$INSTALL_DIR/.env"
 
-    # 确保关键 storage 子目录存在且可写
-    for subdir in logs upgrades backups framework/cache framework/sessions framework/views; do
-        mkdir -p "$INSTALL_DIR/backend/storage/$subdir" 2>/dev/null || true
-    done
-    chown -R "$web_user:$web_user" "$INSTALL_DIR/backend/storage" 2>/dev/null || true
-
-    # .env 文件 600（敏感）
-    [ -f "$INSTALL_DIR/.env" ] && chmod 600 "$INSTALL_DIR/.env"
-    [ -f "$INSTALL_DIR/backend/.env" ] && chmod 600 "$INSTALL_DIR/backend/.env"
+    # Docker 环境重启服务以加载新配置
+    if [ "$DEPLOY_MODE" = "docker" ]; then
+        log_step "重启服务..."
+        cd "$INSTALL_DIR"
+        $compose_cmd restart nginx php queue scheduler 2>/dev/null || true
+        log_info "服务已重启"
+    fi
 
     log_success "升级完成！版本: $target_version"
     log_info "备份位置: $backup_path"
@@ -729,8 +849,9 @@ PYEOF
 rollback() {
     log_step "执行回滚"
 
-    local backup_dir="$INSTALL_DIR/storage/backups"
-    local latest_backup=$(ls -td "$backup_dir"/*/ 2>/dev/null | head -1)
+    local backup_dir="$INSTALL_DIR/backups"
+    # 排除 upgrades 目录，只查找实际的备份目录（包含 backup.json 的目录）
+    local latest_backup=$(find "$backup_dir" -maxdepth 1 -type d -name "20*" -exec ls -td {} + 2>/dev/null | head -1)
 
     if [ -z "$latest_backup" ]; then
         log_error "未找到可用备份"
@@ -755,7 +876,7 @@ rollback() {
     if [ "$DEPLOY_MODE" = "docker" ]; then
         local compose_cmd=$(check_docker_compose)
         cd "$INSTALL_DIR"
-        $compose_cmd exec -T php php artisan down || true
+        $compose_cmd exec -T php sh -c "cd /var/www/html/backend && php artisan down" || true
     else
         cd "$INSTALL_DIR/backend"
         php artisan down || true
@@ -789,8 +910,10 @@ rollback() {
         # 恢复 .env（如果存在）
         [ -f "$restore_tmp/.env" ] && cp "$restore_tmp/.env" "$INSTALL_DIR/backend/"
 
-        # 恢复 version.json（在 ../version.json 路径）
-        [ -f "$restore_tmp/../version.json" ] && cp "$restore_tmp/../version.json" "$INSTALL_DIR/"
+        # 恢复 version.json（unzip 会将 ../version.json 解压到当前目录）
+        if [ -f "$restore_tmp/version.json" ]; then
+            cp "$restore_tmp/version.json" "$INSTALL_DIR/"
+        fi
 
         rm -rf "$restore_tmp"
     # 旧格式：code/backend 目录
@@ -816,7 +939,7 @@ rollback() {
 
     # 退出维护模式
     if [ "$DEPLOY_MODE" = "docker" ]; then
-        $compose_cmd exec -T php php artisan up
+        $compose_cmd exec -T php sh -c "cd /var/www/html/backend && php artisan up"
     else
         cd "$INSTALL_DIR/backend"
         php artisan up

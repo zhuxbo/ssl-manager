@@ -96,6 +96,22 @@ class ComposerRunner
         // 自动检测并配置镜像
         $this->configureComposerMirror();
 
+        // 执行安装
+        $success = $this->runComposerInstall();
+
+        // 安装完成后重置镜像配置
+        if ($this->mirrorConfigured) {
+            $this->resetComposerMirror();
+        }
+
+        return $success;
+    }
+
+    /**
+     * 执行 composer install 命令
+     */
+    private function runComposerInstall(): bool
+    {
         $composerCmd = $this->getComposerCommand();
         // 设置 HOME 和 COMPOSER_HOME 环境变量，避免缓存目录权限问题
         $homeDir = getenv('HOME') ?: '/tmp';
@@ -104,11 +120,6 @@ class ComposerRunner
 
         $this->output[] = "[Command] $command";
         exec($command, $this->output, $this->returnCode);
-
-        // 安装完成后重置镜像配置
-        if ($this->mirrorConfigured) {
-            $this->resetComposerMirror();
-        }
 
         return $this->returnCode === 0;
     }
@@ -224,24 +235,26 @@ class ComposerRunner
     }
 
     /**
-     * 设置中国镜像（腾讯云镜像，对 GitHub 包有更好的代理）
+     * 设置中国镜像
      */
     private function setChinaMirror(): void
     {
         $composerCmd = $this->getComposerCommand();
-        $configCmd = 'cd ' . escapeshellarg($this->projectRoot)
-            . " && $composerCmd config repo.packagist composer https://mirrors.aliyun.com/composer/ 2>&1";
+        $projectRoot = escapeshellarg($this->projectRoot);
 
+        // 1. 配置阿里云 Composer 镜像
+        $configCmd = "cd $projectRoot && $composerCmd config repo.packagist composer https://mirrors.aliyun.com/composer/ 2>&1";
         exec($configCmd, $output, $returnCode);
 
         if ($returnCode === 0) {
             $this->mirrorConfigured = true;
             $this->output[] = '[Mirror] 已配置阿里云 Composer 镜像';
-
-            // 设置更长的超时时间和协议配置
-            exec("cd " . escapeshellarg($this->projectRoot) . " && $composerCmd config process-timeout 600 2>&1");
-            exec("cd " . escapeshellarg($this->projectRoot) . " && $composerCmd config github-protocols https 2>&1");
         }
+
+        // 2. 设置超时时间（180 秒，超时后使用 Gitee zip 备用下载）
+        exec("cd $projectRoot && $composerCmd config process-timeout 180 2>&1");
+        exec("cd $projectRoot && $composerCmd config github-protocols https 2>&1");
+        $this->output[] = '[Mirror] 已设置超时时间 180 秒（超时将自动从 Gitee 下载）';
     }
 
     /**

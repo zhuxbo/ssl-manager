@@ -28,7 +28,8 @@ RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
         bcmath \
         pcntl \
         opcache \
-        exif
+        exif \
+        calendar
 
 # 安装 Redis 扩展
 RUN pecl install redis && docker-php-ext-enable redis

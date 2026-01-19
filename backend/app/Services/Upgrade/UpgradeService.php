@@ -85,7 +85,7 @@ class UpgradeService
             $steps[] = ['step' => 'check_version', 'status' => 'running'];
 
             if ($targetVersion === $currentVersion) {
-                throw new RuntimeException("当前已是最新版本 $currentVersion，无需升级");
+                throw new RuntimeException("当前已是最新版本 {$currentVersion}，无需升级");
             }
 
             if (! $this->versionManager->isUpgradeAllowed($targetVersion)) {
@@ -109,8 +109,8 @@ class UpgradeService
 
                     if ($nextVersion) {
                         throw new RuntimeException(
-                            "必须按版本顺序升级。当前版本: $currentVersion，下一个可升级版本: $nextVersion，" .
-                            "目标版本: $targetVersion。请先升级到 $nextVersion"
+                            "必须按版本顺序升级。当前版本: {$currentVersion}，下一个可升级版本: {$nextVersion}，" .
+                            "目标版本: {$targetVersion}。请先升级到 $nextVersion"
                         );
                     } else {
                         throw new RuntimeException("没有可用的升级版本");
@@ -330,7 +330,7 @@ class UpgradeService
             $statusManager->startStep('check_version');
 
             if ($targetVersion === $currentVersion) {
-                throw new RuntimeException("当前已是最新版本 $currentVersion，无需升级");
+                throw new RuntimeException("当前已是最新版本 {$currentVersion}，无需升级");
             }
 
             if (! $this->versionManager->isUpgradeAllowed($targetVersion)) {
@@ -607,24 +607,8 @@ class UpgradeService
      */
     protected function updateEnvVersion(string $version): void
     {
-        // 查找 version.json 路径
-        $versionPaths = [
-            base_path('../version.json'),  // 项目根目录（标准部署）
-            base_path('version.json'),     // backend 目录（Docker）
-        ];
-
-        $versionPath = null;
-        foreach ($versionPaths as $path) {
-            if (file_exists($path)) {
-                $versionPath = $path;
-                break;
-            }
-        }
-
-        // 如果没找到，使用项目根目录
-        if (! $versionPath) {
-            $versionPath = base_path('../version.json');
-        }
+        // 使用 VersionManager 获取正确的 version.json 路径
+        $versionPath = $this->versionManager->getVersionPath();
 
         // 读取现有配置
         $config = [];
@@ -642,7 +626,7 @@ class UpgradeService
         );
 
         if ($result === false) {
-            throw new RuntimeException("更新版本号失败: $versionPath。请检查文件权限。");
+            throw new RuntimeException("更新版本号失败: {$versionPath}。请检查文件权限。");
         }
 
         Log::info("已更新 version.json: $versionPath -> $version");

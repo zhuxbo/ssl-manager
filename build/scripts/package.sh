@@ -108,11 +108,38 @@ create_exclude_file() {
     > "$output_file"
 
     if [ -f "$BUILD_CONFIG" ] && command -v jq &> /dev/null; then
+        # 首先添加 backend 的通用排除规则（生产无关文件）
+        jq -r '.exclude_patterns.backend[]?' "$BUILD_CONFIG" 2>/dev/null >> "$output_file" || true
+
+        # 然后添加包类型特定的排除规则
         jq -r ".package.$pkg_type.exclude[]?" "$BUILD_CONFIG" 2>/dev/null >> "$output_file" || true
     fi
 
     # 如果配置读取失败，使用默认值
     if [ ! -s "$output_file" ]; then
+        # 默认的生产无关文件排除
+        cat >> "$output_file" <<EOF
+.git/
+.github/
+.gitignore
+.gitattributes
+.editorconfig
+.pint.json
+.cursor/
+.idea/
+.vscode/
+.DS_Store
+.env
+.env.*
+.phpunit.cache/
+tests/
+phpunit.xml
+phpstan.neon
+*.md
+README*
+LICENSE*
+EOF
+        # 包类型特定排除
         if [ "$pkg_type" = "full" ]; then
             cat >> "$output_file" <<EOF
 vendor/
@@ -124,8 +151,6 @@ storage/framework/cache/*
 EOF
         elif [ "$pkg_type" = "upgrade" ]; then
             cat >> "$output_file" <<EOF
-.env
-.env.*
 storage/*
 bootstrap/cache/*
 vendor/*
@@ -189,12 +214,45 @@ create_exclude_file "full" "$FULL_EXCLUDE_FILE"
 # 复制文件，使用配置的排除列表
 rsync -a --exclude-from="$FULL_EXCLUDE_FILE" "$PRODUCTION_DIR/" "$FULL_DIR/"
 
+# 计算源目录路径（BUILD_DIR 的父目录是项目根目录）
+PROJECT_ROOT="$(cd "$BUILD_DIR/.." && pwd)"
+
+# 确保 easy 目录存在（easy 是纯静态文件，直接从源目录复制）
+EASY_SOURCE="$PROJECT_ROOT/frontend/easy"
+if [ ! -d "$FULL_DIR/frontend/easy" ] && [ -d "$EASY_SOURCE" ]; then
+    log_info "从源目录复制 easy 前端..."
+    mkdir -p "$FULL_DIR/frontend/easy"
+    rsync -a --exclude='.git*' --exclude='*.md' --exclude='LICENSE*' \
+        "$EASY_SOURCE/" "$FULL_DIR/frontend/easy/"
+fi
+
+# 复制 web 目录（自定义静态页面）
+WEB_SOURCE="$BUILD_DIR/web"
+if [ -d "$WEB_SOURCE" ]; then
+    log_info "复制 web 静态页面..."
+    mkdir -p "$FULL_DIR/frontend/web"
+    rsync -a --exclude='.git*' "$WEB_SOURCE/" "$FULL_DIR/frontend/web/"
+fi
+
+# 复制 nginx 目录（宝塔部署需要）
+NGINX_SOURCE="$BUILD_DIR/nginx"
+if [ -d "$NGINX_SOURCE" ]; then
+    log_info "复制 nginx 配置..."
+    mkdir -p "$FULL_DIR/nginx"
+    rsync -a --exclude='.git*' "$NGINX_SOURCE/" "$FULL_DIR/nginx/"
+fi
+
 # 确保前端目录完整
 for app in admin user easy web; do
     if [ -d "$FULL_DIR/frontend/$app" ]; then
         log_info "已包含前端: $app"
     fi
 done
+
+# 检查 nginx 目录
+if [ -d "$FULL_DIR/nginx" ]; then
+    log_info "已包含 nginx 配置"
+fi
 
 # 创建必要的空目录结构
 mkdir -p "$FULL_DIR/backend/storage/"{app/public,framework/{cache,sessions,views},logs}
@@ -258,13 +316,30 @@ touch "$UPGRADE_DIR/backend/vendor/.gitkeep"
 # 前端：保持 frontend/ 目录结构
 if [ -d "$PRODUCTION_DIR/frontend" ]; then
     mkdir -p "$UPGRADE_DIR/frontend"
-    for app in admin user easy; do
+    for app in admin user; do
         if [ -d "$PRODUCTION_DIR/frontend/$app" ]; then
             cp -r "$PRODUCTION_DIR/frontend/$app" "$UPGRADE_DIR/frontend/"
             log_info "升级包已包含前端: $app"
         fi
     done
 fi
+
+# 确保 easy 目录存在（从源目录复制）
+if [ ! -d "$UPGRADE_DIR/frontend/easy" ] && [ -d "$EASY_SOURCE" ]; then
+    log_info "升级包：从源目录复制 easy 前端..."
+    mkdir -p "$UPGRADE_DIR/frontend/easy"
+    rsync -a --exclude='.git*' --exclude='*.md' --exclude='LICENSE*' \
+        "$EASY_SOURCE/" "$UPGRADE_DIR/frontend/easy/"
+    log_info "升级包已包含前端: easy"
+fi
+
+# 复制 nginx 目录（路由配置，升级时需要更新）
+if [ -d "$PRODUCTION_DIR/nginx" ]; then
+    cp -r "$PRODUCTION_DIR/nginx" "$UPGRADE_DIR/"
+    log_info "升级包已包含 nginx 配置"
+fi
+
+# 注意：升级包不包含 web 目录，避免覆盖用户自定义页面
 
 # 创建 version.json（运行时版本信息）
 cat > "$UPGRADE_DIR/version.json" <<EOF
@@ -283,11 +358,6 @@ cat > "$UPGRADE_DIR/manifest.json" <<EOF
   "build_time": "$(date -u "+%Y-%m-%dT%H:%M:%SZ")"
 }
 EOF
-
-# 复制 nginx 配置
-if [ -d "$PRODUCTION_DIR/nginx" ]; then
-    cp -r "$PRODUCTION_DIR/nginx" "$UPGRADE_DIR/"
-fi
 
 # 创建升级说明
 cat > "$UPGRADE_DIR/UPGRADE.md" <<EOF
@@ -343,7 +413,11 @@ if [ -d "$SCRIPT_DIR_SRC" ]; then
     cp "$SCRIPT_DIR_SRC/install.sh" "$SCRIPT_PKG_DIR/" 2>/dev/null || true
     cp "$SCRIPT_DIR_SRC/upgrade.sh" "$SCRIPT_PKG_DIR/" 2>/dev/null || true
 
-    # nginx 配置已统一打包在完整包中（build/nginx），脚本包不再单独包含
+    # 复制 docker 部署配置（docker-install.sh 需要）
+    if [ -d "$SCRIPT_DIR_SRC/docker" ]; then
+        cp -r "$SCRIPT_DIR_SRC/docker" "$SCRIPT_PKG_DIR/"
+        log_info "已包含 docker 部署配置"
+    fi
 
     # 创建使用说明
     cat > "$SCRIPT_PKG_DIR/README.md" <<EOF

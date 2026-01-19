@@ -222,6 +222,7 @@ show_help() {
                          latest   最新稳定版（默认）
                          dev      最新开发版
                          x.x.x    指定版本号
+  -y                     非交互模式，跳过确认提示
   -h, --help             显示此帮助信息
 
 示例:
@@ -229,10 +230,12 @@ show_help() {
   $0 --url http://release.example.com --version 0.0.10-beta     # 安装指定版本
   $0 --url http://release.example.com docker                    # Docker 安装
   $0 --url http://release.example.com bt                        # 宝塔安装
+  $0 --url http://release.example.com docker -y                 # 非交互式 Docker 安装
 
 环境变量:
   FORCE_CHINA_MIRROR=1   强制使用国内镜像
   FORCE_CHINA_MIRROR=0   强制使用国际源
+  AUTO_YES=true          非交互模式
 EOF
     exit 0
 }
@@ -243,6 +246,7 @@ EOF
 main() {
     local mode="auto"
     local version="latest"
+    local auto_yes="${AUTO_YES:-false}"
 
     # 解析参数
     while [[ $# -gt 0 ]]; do
@@ -254,6 +258,10 @@ main() {
             --url)
                 CUSTOM_RELEASE_URL="$2"
                 shift 2
+                ;;
+            -y)
+                auto_yes=true
+                shift
                 ;;
             -h|--help)
                 show_help
@@ -268,6 +276,9 @@ main() {
                 ;;
         esac
     done
+
+    # 导出 AUTO_YES 供子脚本使用
+    export AUTO_YES="$auto_yes"
 
     # 显示自定义 release URL
     if [ -n "$CUSTOM_RELEASE_URL" ]; then
@@ -307,6 +318,11 @@ main() {
             log_info "FORCE_CHINA_MIRROR=0，使用国际源"
             export NETWORK_ENV="global"
         fi
+    elif [ "$auto_yes" = true ]; then
+        # 非交互模式，默认使用国内镜像
+        log_info "非交互模式，默认使用国内镜像源"
+        export FORCE_CHINA_MIRROR=1
+        export NETWORK_ENV="china"
     else
         echo ""
         echo "请选择网络环境:"
@@ -366,13 +382,19 @@ main() {
     # 设置脚本可执行权限
     chmod +x "$script_dir"/*.sh 2>/dev/null || true
 
+    # 构建子脚本参数
+    local sub_args=""
+    if [ "$auto_yes" = true ]; then
+        sub_args="-y"
+    fi
+
     # 根据模式或环境选择安装方式
     case "$mode" in
         bt)
             # 强制使用宝塔安装
             if check_bt_panel; then
                 log_info "使用宝塔面板安装..."
-                bash "$script_dir/bt-install.sh"
+                bash "$script_dir/bt-install.sh" $sub_args
             else
                 log_error "未检测到宝塔面板环境"
                 log_info "请先安装宝塔面板: https://www.bt.cn/new/download.html"
@@ -382,7 +404,7 @@ main() {
         docker)
             # 强制使用 Docker 安装
             log_info "使用 Docker 安装..."
-            bash "$script_dir/docker-install.sh"
+            bash "$script_dir/docker-install.sh" $sub_args
             ;;
         auto)
             # 自动检测环境
@@ -390,53 +412,65 @@ main() {
 
             if check_bt_panel; then
                 log_success "检测到宝塔面板环境"
-                echo ""
-                echo "请选择安装方式:"
-                echo "  1. 宝塔面板安装（推荐，适合已有宝塔环境）"
-                echo "  2. Docker 安装（独立容器化部署）"
-                echo ""
-                read -p "请选择 (1/2) [1]: " choice < /dev/tty
-                choice="${choice:-1}"
+                if [ "$auto_yes" = true ]; then
+                    # 非交互模式，默认使用宝塔安装
+                    log_info "非交互模式，使用宝塔面板安装..."
+                    bash "$script_dir/bt-install.sh" $sub_args
+                else
+                    echo ""
+                    echo "请选择安装方式:"
+                    echo "  1. 宝塔面板安装（推荐，适合已有宝塔环境）"
+                    echo "  2. Docker 安装（独立容器化部署）"
+                    echo ""
+                    read -p "请选择 (1/2) [1]: " choice < /dev/tty
+                    choice="${choice:-1}"
 
-                case "$choice" in
-                    2)
-                        log_info "使用 Docker 安装..."
-                        bash "$script_dir/docker-install.sh"
-                        ;;
-                    *)
-                        log_info "使用宝塔面板安装..."
-                        bash "$script_dir/bt-install.sh"
-                        ;;
-                esac
+                    case "$choice" in
+                        2)
+                            log_info "使用 Docker 安装..."
+                            bash "$script_dir/docker-install.sh" $sub_args
+                            ;;
+                        *)
+                            log_info "使用宝塔面板安装..."
+                            bash "$script_dir/bt-install.sh" $sub_args
+                            ;;
+                    esac
+                fi
             elif check_docker; then
                 log_success "检测到 Docker 环境"
                 log_info "使用 Docker 安装..."
-                bash "$script_dir/docker-install.sh"
+                bash "$script_dir/docker-install.sh" $sub_args
             else
                 log_warning "未检测到宝塔面板或 Docker 环境"
-                echo ""
-                echo "可选安装方式:"
-                echo ""
-                echo "  1. Docker 安装（推荐）"
-                echo "     脚本将自动安装 Docker 并进行容器化部署"
-                echo ""
-                echo "  2. 宝塔面板安装"
-                echo "     请先安装宝塔面板: https://www.bt.cn/new/download.html"
-                echo "     然后重新运行此脚本"
-                echo ""
-                read -p "是否使用 Docker 安装？(y/n) [y]: " use_docker < /dev/tty
-                use_docker="${use_docker:-y}"
+                if [ "$auto_yes" = true ]; then
+                    # 非交互模式，默认使用 Docker 安装
+                    log_info "非交互模式，使用 Docker 安装..."
+                    bash "$script_dir/docker-install.sh" $sub_args
+                else
+                    echo ""
+                    echo "可选安装方式:"
+                    echo ""
+                    echo "  1. Docker 安装（推荐）"
+                    echo "     脚本将自动安装 Docker 并进行容器化部署"
+                    echo ""
+                    echo "  2. 宝塔面板安装"
+                    echo "     请先安装宝塔面板: https://www.bt.cn/new/download.html"
+                    echo "     然后重新运行此脚本"
+                    echo ""
+                    read -p "是否使用 Docker 安装？(y/n) [y]: " use_docker < /dev/tty
+                    use_docker="${use_docker:-y}"
 
-                case "$use_docker" in
-                    n|N)
-                        log_info "请安装宝塔面板后重新运行此脚本"
-                        exit 0
-                        ;;
-                    *)
-                        log_info "使用 Docker 安装..."
-                        bash "$script_dir/docker-install.sh"
-                        ;;
-                esac
+                    case "$use_docker" in
+                        n|N)
+                            log_info "请安装宝塔面板后重新运行此脚本"
+                            exit 0
+                            ;;
+                        *)
+                            log_info "使用 Docker 安装..."
+                            bash "$script_dir/docker-install.sh" $sub_args
+                            ;;
+                    esac
+                fi
             fi
             ;;
         *)
