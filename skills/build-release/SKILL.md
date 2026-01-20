@@ -249,3 +249,12 @@ GitHub Release 仅用于代码存档，实际部署使用自建 release 服务�
 - `build.env` - 覆盖默认构建变量
 - `config.json` - 覆盖默认配置
 - `logo.png` - 自定义 Logo
+
+---
+
+## 注意事项
+
+- **不要并行执行多个构建任务**：同时运行多个 `build.sh` 会导致资源竞争和卡死
+- **构建需要 sudo**：Docker 命令需要 sudo 权限，使用 `sudo ./build.sh`
+- **内存限制**：容器限制 2GB 内存，前端构建可能因 OOM 被 kill
+- **构建顺序**：后端 → 管理端 → 用户端（串行，不可并行）

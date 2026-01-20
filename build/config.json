@@ -21,7 +21,6 @@
       ".github/",
       ".gitignore",
       ".gitattributes",
-      ".dockerignore",
       ".editorconfig",
       ".pint.json",
       ".cursor/",
@@ -39,7 +38,6 @@
       "_ide_helper.php",
       "_ide_helper_models.php",
       "storage/debugbar/",
-      "node_modules/",
       "tests/",
       "phpunit.xml",
       "phpstan.neon",
@@ -48,25 +46,17 @@
       "LICENSE",
       "INSTALL.md",
       "DATABASE_SYNC.md",
-      "DOCKER_INSTALL.MD",
-      "JDK_INSTALL.md",
-      "JRE_INSTALL.md",
-      "Dockerfile",
-      "Dockerfile.nginx",
-      "docker-compose.yml",
-      "docker/"
+      "JRE_INSTALL.md"
     ]
   },
   "package": {
     "full": {
       "exclude": [
-        "vendor/",
-        "deploy/",
-        "storage/upgrades/",
-        "storage/backups/",
-        "storage/logs/*.log",
-        "storage/framework/cache/*",
-        "backend/.env.build",
+        "backend/vendor/",
+        "backend/storage/upgrades/",
+        "backend/storage/backups/",
+        "backend/storage/logs/*.log",
+        "backend/storage/framework/cache/*",
         "config.json"
       ]
     },

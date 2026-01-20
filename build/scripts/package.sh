@@ -254,17 +254,10 @@ if [ -d "$FULL_DIR/nginx" ]; then
     log_info "已包含 nginx 配置"
 fi
 
-# 创建必要的空目录结构
-mkdir -p "$FULL_DIR/backend/storage/"{app/public,framework/{cache,sessions,views},logs}
+# 创建 Laravel 运行时必需的空目录结构（zip -r 会保留空目录）
+mkdir -p "$FULL_DIR/backend/storage/"{app/{public,private},framework/{cache,sessions,views},logs,pay}
 mkdir -p "$FULL_DIR/backend/bootstrap/cache"
 mkdir -p "$FULL_DIR/backend/vendor"
-touch "$FULL_DIR/backend/vendor/.gitkeep"
-
-# 部署脚本已独立打包，完整包不再包含 deploy 目录
-
-# 创建 .gitkeep 文件
-find "$FULL_DIR/backend/storage" -type d -empty -exec touch {}/.gitkeep \;
-touch "$FULL_DIR/backend/bootstrap/cache/.gitkeep" 2>/dev/null || true
 
 # 创建 version.json（运行时版本信息）
 cat > "$FULL_DIR/version.json" <<EOF
@@ -286,7 +279,7 @@ EOF
 
 # 打包
 cd "$WORK_DIR"
-zip -rq "$OUTPUT_DIR/$FULL_PACKAGE" full -x "*.git*"
+zip -rq "$OUTPUT_DIR/$FULL_PACKAGE" full -x "*/.git/*" -x "*/.git*"
 FULL_SIZE=$(du -h "$OUTPUT_DIR/$FULL_PACKAGE" | cut -f1)
 FULL_SHA256=$(sha256sum "$OUTPUT_DIR/$FULL_PACKAGE" | cut -d' ' -f1)
 
@@ -388,7 +381,7 @@ EOF
 
 # 打包
 cd "$WORK_DIR"
-zip -rq "$OUTPUT_DIR/$UPGRADE_PACKAGE" upgrade -x "*.git*"
+zip -rq "$OUTPUT_DIR/$UPGRADE_PACKAGE" upgrade -x "*/.git/*" -x "*/.git*"
 UPGRADE_SIZE=$(du -h "$OUTPUT_DIR/$UPGRADE_PACKAGE" | cut -d'	' -f1)
 UPGRADE_SHA256=$(sha256sum "$OUTPUT_DIR/$UPGRADE_PACKAGE" | cut -d' ' -f1)
 

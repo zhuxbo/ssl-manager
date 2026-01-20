@@ -133,6 +133,9 @@ if [ "$BUILD_BACKEND" = "true" ]; then
         --exclude='.idea' \
         --exclude='.vscode' \
         --exclude='storage/debugbar' \
+        --exclude='storage/backups' \
+        --exclude='storage/upgrades' \
+        --exclude='storage/logs/*.log' \
         "$SOURCE_DIR/backend/" "$WORKSPACE_DIR/backend/"
     log_success "后端源码已复制"
 fi
