@@ -1,0 +1,5 @@
+{
+  "name": "cert-manager",
+  "description": "SSL 证书管理系统开发工具集",
+  "version": "1.0.0"
+}
