@@ -119,7 +119,7 @@ class AutoRenewCommand extends Command
             $estimatedAmount = $cert->amount ?? '0.00';
 
             if (bccomp($availableBalance, $estimatedAmount, 2) < 0) {
-                throw new \Exception("余额不足，可用余额: $availableBalance，预计需要: $estimatedAmount");
+                throw new \Exception("余额不足，可用余额: {$availableBalance}，预计需要: $estimatedAmount");
             }
         }
 

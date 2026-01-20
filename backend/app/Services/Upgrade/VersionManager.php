@@ -34,13 +34,13 @@ class VersionManager
      */
     public function isDockerEnvironment(): bool
     {
-        // 检查 /.dockerenv 文件
-        if (file_exists('/.dockerenv')) {
+        // 检查 /.dockerenv 文件（使用 @ 抑制 open_basedir 限制错误）
+        if (@file_exists('/.dockerenv')) {
             return true;
         }
 
         // 检查 cgroup（某些情况下 .dockerenv 可能不存在）
-        if (file_exists('/proc/1/cgroup')) {
+        if (@file_exists('/proc/1/cgroup')) {
             $cgroup = @file_get_contents('/proc/1/cgroup');
             if ($cgroup && (str_contains($cgroup, 'docker') || str_contains($cgroup, 'kubepods'))) {
                 return true;
