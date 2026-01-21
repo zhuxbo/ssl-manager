@@ -21,7 +21,6 @@
       ".github/",
       ".gitignore",
       ".gitattributes",
-      ".dockerignore",
       ".editorconfig",
       ".pint.json",
       ".cursor/",
@@ -39,7 +38,6 @@
       "_ide_helper.php",
       "_ide_helper_models.php",
       "storage/debugbar/",
-      "node_modules/",
       "tests/",
       "phpunit.xml",
       "phpstan.neon",
@@ -48,35 +46,35 @@
       "LICENSE",
       "INSTALL.md",
       "DATABASE_SYNC.md",
-      "DOCKER_INSTALL.MD",
-      "JDK_INSTALL.md",
-      "JRE_INSTALL.md",
-      "Dockerfile",
-      "Dockerfile.nginx",
-      "docker-compose.yml",
-      "docker/"
+      "JRE_INSTALL.md"
     ]
   },
   "package": {
     "full": {
       "exclude": [
-        "vendor/",
-        "deploy/",
-        "storage/upgrades/",
-        "storage/backups/",
-        "storage/logs/*.log",
-        "storage/framework/cache/*",
-        "backend/.env.build",
-        "config.json"
+        "backend/vendor/",
+        "backend/storage/upgrades/",
+        "backend/storage/backups/",
+        "backend/storage/logs/*.log",
+        "backend/storage/framework/cache/*",
+        "/config.json"
       ]
     },
     "upgrade": {
       "exclude": [
-        ".env",
-        ".env.*",
-        "storage/*",
-        "bootstrap/cache/*",
-        "vendor/*"
+        "backend/.env",
+        "backend/.env.*",
+        "backend/storage/*",
+        "backend/bootstrap/cache/*",
+        "backend/vendor/",
+        "backend/public/install.php",
+        "backend/public/install-assets/",
+        "frontend/admin/logo.svg",
+        "frontend/admin/platform-config.json",
+        "frontend/user/logo.svg",
+        "frontend/user/platform-config.json",
+        "frontend/user/qrcode.png",
+        "frontend/easy/config.json"
       ]
     }
   }

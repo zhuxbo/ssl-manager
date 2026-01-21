@@ -28,7 +28,6 @@
         "phpmailer/phpmailer": "^6.9",
         "phpoffice/phpspreadsheet": "^3.9",
         "symfony/psr-http-message-bridge": "^7.2",
-        "tencentcloud/tencentcloud-sdk-php": "^3.0",
         "tymon/jwt-auth": "*",
         "yansongda/pay": "~3.7.0"
     },

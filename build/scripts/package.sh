@@ -98,21 +98,63 @@ if [ ! -f "$PRODUCTION_DIR/config.json" ]; then
 fi
 
 # 从 build/config.json 读取排除列表到临时文件
-# 用法: create_exclude_file <package_type> <output_file>
+# 用法: create_exclude_file <package_type> <output_file> [prefix_filter]
 # package_type: full 或 upgrade
+# prefix_filter: 可选，过滤指定前缀的路径（如 "backend/" 或 "frontend/admin/"）
 create_exclude_file() {
     local pkg_type="$1"
     local output_file="$2"
+    local prefix_filter="${3:-}"
 
     # 清空文件
     > "$output_file"
 
     if [ -f "$BUILD_CONFIG" ] && command -v jq &> /dev/null; then
-        jq -r ".package.$pkg_type.exclude[]?" "$BUILD_CONFIG" 2>/dev/null >> "$output_file" || true
+        # 首先添加 backend 的通用排除规则（生产无关文件，仅当无前缀过滤或过滤 backend 时）
+        if [ -z "$prefix_filter" ] || [[ "$prefix_filter" == "backend/" ]]; then
+            jq -r '.exclude_patterns.backend[]?' "$BUILD_CONFIG" 2>/dev/null >> "$output_file" || true
+        fi
+
+        # 然后添加包类型特定的排除规则
+        if [ -z "$prefix_filter" ]; then
+            # 无过滤，直接添加所有规则
+            jq -r ".package.$pkg_type.exclude[]?" "$BUILD_CONFIG" 2>/dev/null >> "$output_file" || true
+        else
+            # 有前缀过滤，只提取匹配前缀的规则并去除前缀
+            jq -r ".package.$pkg_type.exclude[]?" "$BUILD_CONFIG" 2>/dev/null | while read -r line; do
+                if [[ "$line" == "$prefix_filter"* ]]; then
+                    # 去除前缀后添加
+                    echo "${line#$prefix_filter}"
+                fi
+            done >> "$output_file"
+        fi
     fi
 
     # 如果配置读取失败，使用默认值
     if [ ! -s "$output_file" ]; then
+        # 默认的生产无关文件排除
+        cat >> "$output_file" <<EOF
+.git/
+.github/
+.gitignore
+.gitattributes
+.editorconfig
+.pint.json
+.cursor/
+.idea/
+.vscode/
+.DS_Store
+.env
+.env.*
+.phpunit.cache/
+tests/
+phpunit.xml
+phpstan.neon
+*.md
+README*
+LICENSE*
+EOF
+        # 包类型特定排除
         if [ "$pkg_type" = "full" ]; then
             cat >> "$output_file" <<EOF
 vendor/
@@ -124,8 +166,6 @@ storage/framework/cache/*
 EOF
         elif [ "$pkg_type" = "upgrade" ]; then
             cat >> "$output_file" <<EOF
-.env
-.env.*
 storage/*
 bootstrap/cache/*
 vendor/*
@@ -189,6 +229,34 @@ create_exclude_file "full" "$FULL_EXCLUDE_FILE"
 # 复制文件，使用配置的排除列表
 rsync -a --exclude-from="$FULL_EXCLUDE_FILE" "$PRODUCTION_DIR/" "$FULL_DIR/"
 
+# 计算源目录路径（BUILD_DIR 的父目录是项目根目录）
+PROJECT_ROOT="$(cd "$BUILD_DIR/.." && pwd)"
+
+# 确保 easy 目录存在（easy 是纯静态文件，直接从源目录复制）
+EASY_SOURCE="$PROJECT_ROOT/frontend/easy"
+if [ ! -d "$FULL_DIR/frontend/easy" ] && [ -d "$EASY_SOURCE" ]; then
+    log_info "从源目录复制 easy 前端..."
+    mkdir -p "$FULL_DIR/frontend/easy"
+    rsync -a --exclude='.git*' --exclude='*.md' --exclude='LICENSE*' \
+        "$EASY_SOURCE/" "$FULL_DIR/frontend/easy/"
+fi
+
+# 复制 web 目录（自定义静态页面）
+WEB_SOURCE="$BUILD_DIR/web"
+if [ -d "$WEB_SOURCE" ]; then
+    log_info "复制 web 静态页面..."
+    mkdir -p "$FULL_DIR/frontend/web"
+    rsync -a --exclude='.git*' "$WEB_SOURCE/" "$FULL_DIR/frontend/web/"
+fi
+
+# 复制 nginx 目录（宝塔部署需要）
+NGINX_SOURCE="$BUILD_DIR/nginx"
+if [ -d "$NGINX_SOURCE" ]; then
+    log_info "复制 nginx 配置..."
+    mkdir -p "$FULL_DIR/nginx"
+    rsync -a --exclude='.git*' "$NGINX_SOURCE/" "$FULL_DIR/nginx/"
+fi
+
 # 确保前端目录完整
 for app in admin user easy web; do
     if [ -d "$FULL_DIR/frontend/$app" ]; then
@@ -196,17 +264,15 @@ for app in admin user easy web; do
     fi
 done
 
-# 创建必要的空目录结构
-mkdir -p "$FULL_DIR/backend/storage/"{app/public,framework/{cache,sessions,views},logs}
+# 检查 nginx 目录
+if [ -d "$FULL_DIR/nginx" ]; then
+    log_info "已包含 nginx 配置"
+fi
+
+# 创建 Laravel 运行时必需的空目录结构（zip -r 会保留空目录）
+mkdir -p "$FULL_DIR/backend/storage/"{app/{public,private},framework/{cache,sessions,views},logs,pay}
 mkdir -p "$FULL_DIR/backend/bootstrap/cache"
 mkdir -p "$FULL_DIR/backend/vendor"
-touch "$FULL_DIR/backend/vendor/.gitkeep"
-
-# 部署脚本已独立打包，完整包不再包含 deploy 目录
-
-# 创建 .gitkeep 文件
-find "$FULL_DIR/backend/storage" -type d -empty -exec touch {}/.gitkeep \;
-touch "$FULL_DIR/backend/bootstrap/cache/.gitkeep" 2>/dev/null || true
 
 # 创建 version.json（运行时版本信息）
 cat > "$FULL_DIR/version.json" <<EOF
@@ -228,7 +294,7 @@ EOF
 
 # 打包
 cd "$WORK_DIR"
-zip -rq "$OUTPUT_DIR/$FULL_PACKAGE" full -x "*.git*"
+zip -rq "$OUTPUT_DIR/$FULL_PACKAGE" full -x "*/.git/*" -x "*/.git*"
 FULL_SIZE=$(du -h "$OUTPUT_DIR/$FULL_PACKAGE" | cut -f1)
 FULL_SHA256=$(sha256sum "$OUTPUT_DIR/$FULL_PACKAGE" | cut -d' ' -f1)
 
@@ -243,28 +309,54 @@ UPGRADE_DIR="$WORK_DIR/upgrade"
 mkdir -p "$UPGRADE_DIR"
 
 # 升级包只包含代码，不包含 vendor、配置和用户数据
-# 创建排除列表文件
-UPGRADE_EXCLUDE_FILE="$WORK_DIR/upgrade-exclude.txt"
-create_exclude_file "upgrade" "$UPGRADE_EXCLUDE_FILE"
+# 创建后端排除列表文件（过滤 backend/ 前缀的规则）
+UPGRADE_BACKEND_EXCLUDE="$WORK_DIR/upgrade-backend-exclude.txt"
+create_exclude_file "upgrade" "$UPGRADE_BACKEND_EXCLUDE" "backend/"
 
 mkdir -p "$UPGRADE_DIR/backend"
-rsync -a --exclude-from="$UPGRADE_EXCLUDE_FILE" "$PRODUCTION_DIR/backend/" "$UPGRADE_DIR/backend/"
+rsync -a --exclude-from="$UPGRADE_BACKEND_EXCLUDE" "$PRODUCTION_DIR/backend/" "$UPGRADE_DIR/backend/"
 
-# 只保留 composer.json 和 composer.lock（升级时由 install.php 安装依赖）
-# vendor 目录创建空占位
-mkdir -p "$UPGRADE_DIR/backend/vendor"
-touch "$UPGRADE_DIR/backend/vendor/.gitkeep"
+# 升级包不需要 vendor 目录（升级时会保留现有的 vendor）
 
 # 前端：保持 frontend/ 目录结构
+# 使用统一的 upgrade.exclude 配置，过滤 frontend/ 前缀的规则
 if [ -d "$PRODUCTION_DIR/frontend" ]; then
     mkdir -p "$UPGRADE_DIR/frontend"
-    for app in admin user easy; do
+    for app in admin user; do
         if [ -d "$PRODUCTION_DIR/frontend/$app" ]; then
-            cp -r "$PRODUCTION_DIR/frontend/$app" "$UPGRADE_DIR/frontend/"
-            log_info "升级包已包含前端: $app"
+            # 创建该前端应用的排除列表（过滤 frontend/$app/ 前缀的规则）
+            FRONTEND_EXCLUDE_FILE="$WORK_DIR/upgrade-frontend-$app-exclude.txt"
+            create_exclude_file "upgrade" "$FRONTEND_EXCLUDE_FILE" "frontend/$app/"
+
+            rsync -a --exclude-from="$FRONTEND_EXCLUDE_FILE" "$PRODUCTION_DIR/frontend/$app/" "$UPGRADE_DIR/frontend/$app/"
+            log_info "升级包已包含前端: $app（已排除用户配置）"
         fi
     done
 fi
+
+# 确保 easy 目录存在（从源目录复制）
+if [ ! -d "$UPGRADE_DIR/frontend/easy" ] && [ -d "$EASY_SOURCE" ]; then
+    log_info "升级包：从源目录复制 easy 前端..."
+    mkdir -p "$UPGRADE_DIR/frontend/easy"
+    # 创建 easy 的排除列表（过滤 frontend/easy/ 前缀的规则）
+    EASY_EXCLUDE_FILE="$WORK_DIR/upgrade-frontend-easy-exclude.txt"
+    create_exclude_file "upgrade" "$EASY_EXCLUDE_FILE" "frontend/easy/"
+    # 添加通用排除（easy 从源目录复制，需要额外排除）
+    echo ".git*" >> "$EASY_EXCLUDE_FILE"
+    echo "*.md" >> "$EASY_EXCLUDE_FILE"
+    echo "LICENSE*" >> "$EASY_EXCLUDE_FILE"
+
+    rsync -a --exclude-from="$EASY_EXCLUDE_FILE" "$EASY_SOURCE/" "$UPGRADE_DIR/frontend/easy/"
+    log_info "升级包已包含前端: easy（已排除用户配置）"
+fi
+
+# 复制 nginx 目录（路由配置，升级时需要更新）
+if [ -d "$PRODUCTION_DIR/nginx" ]; then
+    cp -r "$PRODUCTION_DIR/nginx" "$UPGRADE_DIR/"
+    log_info "升级包已包含 nginx 配置"
+fi
+
+# 注意：升级包不包含 web 目录，避免覆盖用户自定义页面
 
 # 创建 version.json（运行时版本信息）
 cat > "$UPGRADE_DIR/version.json" <<EOF
@@ -283,11 +375,6 @@ cat > "$UPGRADE_DIR/manifest.json" <<EOF
   "build_time": "$(date -u "+%Y-%m-%dT%H:%M:%SZ")"
 }
 EOF
-
-# 复制 nginx 配置
-if [ -d "$PRODUCTION_DIR/nginx" ]; then
-    cp -r "$PRODUCTION_DIR/nginx" "$UPGRADE_DIR/"
-fi
 
 # 创建升级说明
 cat > "$UPGRADE_DIR/UPGRADE.md" <<EOF
@@ -318,7 +405,7 @@ EOF
 
 # 打包
 cd "$WORK_DIR"
-zip -rq "$OUTPUT_DIR/$UPGRADE_PACKAGE" upgrade -x "*.git*"
+zip -rq "$OUTPUT_DIR/$UPGRADE_PACKAGE" upgrade -x "*/.git/*" -x "*/.git*"
 UPGRADE_SIZE=$(du -h "$OUTPUT_DIR/$UPGRADE_PACKAGE" | cut -d'	' -f1)
 UPGRADE_SHA256=$(sha256sum "$OUTPUT_DIR/$UPGRADE_PACKAGE" | cut -d' ' -f1)
 
@@ -343,7 +430,11 @@ if [ -d "$SCRIPT_DIR_SRC" ]; then
     cp "$SCRIPT_DIR_SRC/install.sh" "$SCRIPT_PKG_DIR/" 2>/dev/null || true
     cp "$SCRIPT_DIR_SRC/upgrade.sh" "$SCRIPT_PKG_DIR/" 2>/dev/null || true
 
-    # nginx 配置已统一打包在完整包中（build/nginx），脚本包不再单独包含
+    # 复制 docker 部署配置（docker-install.sh 需要）
+    if [ -d "$SCRIPT_DIR_SRC/docker" ]; then
+        cp -r "$SCRIPT_DIR_SRC/docker" "$SCRIPT_PKG_DIR/"
+        log_info "已包含 docker 部署配置"
+    fi
 
     # 创建使用说明
     cat > "$SCRIPT_PKG_DIR/README.md" <<EOF

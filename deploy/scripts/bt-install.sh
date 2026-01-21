@@ -11,11 +11,23 @@ DEPLOY_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 source "$SCRIPT_DIR/common.sh"
 
 # 全局变量
-FORCE_REPO="${1:-}"
 INSTALL_DIR="${INSTALL_DIR:-}"  # 支持通过环境变量预设
 PHP_VERSION=""
 PHP_CMD=""
 AUTO_YES="${AUTO_YES:-false}"   # 非交互模式
+
+# 解析参数
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -y)
+            AUTO_YES=true
+            shift
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
 
 # 检测宝塔环境
 check_environment() {
@@ -283,6 +295,9 @@ check_composer() {
 set_permissions() {
     log_step "设置文件权限"
 
+    # 创建 backups 目录（备份和升级包存储）
+    mkdir -p "$INSTALL_DIR/backups/upgrades"
+
     # 使用 chown -R 一次性设置权限（比 find -exec 快得多）
     # 忽略 .user.ini 的错误（宝塔会锁定此文件）
     chown -R www:www "$INSTALL_DIR" 2>/dev/null || true
@@ -295,6 +310,9 @@ set_permissions() {
     if [ -d "$INSTALL_DIR/backend/bootstrap/cache" ]; then
         chmod -R 775 "$INSTALL_DIR/backend/bootstrap/cache" 2>/dev/null || true
     fi
+
+    # 确保 backups 目录可写
+    chmod -R 775 "$INSTALL_DIR/backups" 2>/dev/null || true
 
     # 验证权限设置
     local owner=$(stat -c '%U' "$INSTALL_DIR/backend" 2>/dev/null || echo "unknown")

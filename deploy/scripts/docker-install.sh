@@ -39,6 +39,9 @@ REDIS_HOST="redis"
 REDIS_PORT="6379"
 REDIS_PASSWORD=""
 
+# 非交互模式
+AUTO_YES=false
+
 # ========================================
 # 步骤 1: 显示欢迎信息
 # ========================================
@@ -77,21 +80,26 @@ step_docker_environment() {
         1)
             log_warning "未检测到 Docker"
             echo ""
-            echo "是否自动安装 Docker？"
-            echo "  1. 是，自动安装（推荐）"
-            echo "  2. 否，我将手动安装后重新运行此脚本"
-            echo ""
-            read -p "请选择 (1/2) [1]: " choice < /dev/tty
-            choice="${choice:-1}"
+            if [ "$AUTO_YES" = true ]; then
+                log_info "自动模式：安装 Docker"
+                install_docker "$MIRROR_REGION"
+            else
+                echo "是否自动安装 Docker？"
+                echo "  1. 是，自动安装（推荐）"
+                echo "  2. 否，我将手动安装后重新运行此脚本"
+                echo ""
+                read -p "请选择 (1/2) [1]: " choice < /dev/tty
+                choice="${choice:-1}"
 
-            if [ "$choice" = "2" ]; then
-                log_info "请手动安装 Docker 后重新运行此脚本"
-                echo "安装命令: curl -fsSL https://get.docker.com | bash"
-                exit 0
+                if [ "$choice" = "2" ]; then
+                    log_info "请手动安装 Docker 后重新运行此脚本"
+                    echo "安装命令: curl -fsSL https://get.docker.com | bash"
+                    exit 0
+                fi
+
+                # 安装 Docker
+                install_docker "$MIRROR_REGION"
             fi
-
-            # 安装 Docker
-            install_docker "$MIRROR_REGION"
             echo ""
             ;;
         2)
@@ -139,6 +147,12 @@ step_mirror_selection() {
             MIRROR_REGION="intl"
             log_info "使用国际镜像源（继承自安装配置）"
         fi
+    elif [ "$AUTO_YES" = true ]; then
+        # 自动模式：默认使用中国镜像
+        MIRROR_REGION="china"
+        NETWORK_ENV="china"
+        log_info "自动模式：使用中国大陆镜像源"
+        export NETWORK_ENV
     else
         # 没有预设，让用户选择
         echo "请选择镜像源（影响下载速度）："
@@ -177,25 +191,37 @@ step_mirror_selection() {
 step_mysql_config() {
     log_step "步骤 3/7: MySQL 数据库配置"
     echo ""
-    echo "请选择 MySQL 部署方式："
-    echo "  1. 容器化 MySQL（推荐，自动配置）"
-    echo "  2. 使用外部 MySQL 服务器"
-    echo ""
 
-    read -p "请选择 (1/2) [1]: " choice < /dev/tty
-    choice="${choice:-1}"
-
-    if [ "$choice" = "2" ]; then
-        USE_CONTAINER_DB=false
-        configure_external_mysql
-    else
+    if [ "$AUTO_YES" = true ]; then
+        # 自动模式：使用容器化 MySQL
         USE_CONTAINER_DB=true
         DB_HOST="mysql"
         DB_PASSWORD=$(openssl rand -base64 16 | tr -dc 'a-zA-Z0-9' | head -c 16)
-        log_success "将使用容器化 MySQL"
+        log_info "自动模式：使用容器化 MySQL"
         echo "  数据库: $DB_DATABASE"
         echo "  用户名: $DB_USERNAME"
         echo "  密码: (已自动生成)"
+    else
+        echo "请选择 MySQL 部署方式："
+        echo "  1. 容器化 MySQL（推荐，自动配置）"
+        echo "  2. 使用外部 MySQL 服务器"
+        echo ""
+
+        read -p "请选择 (1/2) [1]: " choice < /dev/tty
+        choice="${choice:-1}"
+
+        if [ "$choice" = "2" ]; then
+            USE_CONTAINER_DB=false
+            configure_external_mysql
+        else
+            USE_CONTAINER_DB=true
+            DB_HOST="mysql"
+            DB_PASSWORD=$(openssl rand -base64 16 | tr -dc 'a-zA-Z0-9' | head -c 16)
+            log_success "将使用容器化 MySQL"
+            echo "  数据库: $DB_DATABASE"
+            echo "  用户名: $DB_USERNAME"
+            echo "  密码: (已自动生成)"
+        fi
     fi
     echo ""
 }
@@ -249,22 +275,31 @@ configure_external_mysql() {
 step_redis_config() {
     log_step "步骤 4/7: Redis 缓存配置"
     echo ""
-    echo "请选择 Redis 部署方式："
-    echo "  1. 容器化 Redis（推荐，自动配置）"
-    echo "  2. 使用外部 Redis 服务器"
-    echo ""
 
-    read -p "请选择 (1/2) [1]: " choice < /dev/tty
-    choice="${choice:-1}"
-
-    if [ "$choice" = "2" ]; then
-        USE_CONTAINER_REDIS=false
-        configure_external_redis
-    else
+    if [ "$AUTO_YES" = true ]; then
+        # 自动模式：使用容器化 Redis
         USE_CONTAINER_REDIS=true
         REDIS_HOST="redis"
         REDIS_PASSWORD=""
-        log_success "将使用容器化 Redis"
+        log_info "自动模式：使用容器化 Redis"
+    else
+        echo "请选择 Redis 部署方式："
+        echo "  1. 容器化 Redis（推荐，自动配置）"
+        echo "  2. 使用外部 Redis 服务器"
+        echo ""
+
+        read -p "请选择 (1/2) [1]: " choice < /dev/tty
+        choice="${choice:-1}"
+
+        if [ "$choice" = "2" ]; then
+            USE_CONTAINER_REDIS=false
+            configure_external_redis
+        else
+            USE_CONTAINER_REDIS=true
+            REDIS_HOST="redis"
+            REDIS_PASSWORD=""
+            log_success "将使用容器化 Redis"
+        fi
     fi
     echo ""
 }
@@ -315,25 +350,39 @@ step_port_config() {
     log_step "步骤 5/7: 端口配置"
     echo ""
 
-    # 检测 80 端口
-    if check_port_with_details 80; then
-        # 端口被占用
-        echo ""
-        read -p "请输入 HTTP 端口 [18000]: " input < /dev/tty
-        WEB_PORT="${input:-18000}"
-
-        # 再次检查
-        while check_port_with_details "$WEB_PORT"; do
-            echo ""
-            read -p "请输入其他端口: " WEB_PORT < /dev/tty
-        done
+    if [ "$AUTO_YES" = true ]; then
+        # 自动模式：检测端口，如果 80 被占用则使用 18000
+        if check_port_with_details 80; then
+            WEB_PORT=18000
+            # 如果 18000 也被占用，递增查找
+            while check_port_with_details "$WEB_PORT"; do
+                WEB_PORT=$((WEB_PORT + 1))
+            done
+        else
+            WEB_PORT=80
+        fi
+        log_info "自动模式：HTTP 端口 $WEB_PORT"
     else
-        read -p "HTTP 端口 [80]: " input < /dev/tty
-        WEB_PORT="${input:-80}"
+        # 检测 80 端口
+        if check_port_with_details 80; then
+            # 端口被占用
+            echo ""
+            read -p "请输入 HTTP 端口 [18000]: " input < /dev/tty
+            WEB_PORT="${input:-18000}"
 
-        if [ "$WEB_PORT" != "80" ] && check_port_with_details "$WEB_PORT"; then
-            log_error "端口 $WEB_PORT 不可用"
-            read -p "请输入其他端口: " WEB_PORT < /dev/tty
+            # 再次检查
+            while check_port_with_details "$WEB_PORT"; do
+                echo ""
+                read -p "请输入其他端口: " WEB_PORT < /dev/tty
+            done
+        else
+            read -p "HTTP 端口 [80]: " input < /dev/tty
+            WEB_PORT="${input:-80}"
+
+            if [ "$WEB_PORT" != "80" ] && check_port_with_details "$WEB_PORT"; then
+                log_error "端口 $WEB_PORT 不可用"
+                read -p "请输入其他端口: " WEB_PORT < /dev/tty
+            fi
         fi
     fi
 
@@ -347,44 +396,51 @@ step_port_config() {
 step_ssl_config() {
     log_step "步骤 6/7: SSL 证书配置"
     echo ""
-    echo "是否配置 SSL 证书？"
-    echo "  1. 否，仅使用 HTTP（可通过外部反代配置 SSL）"
-    echo "  2. 是，配置 SSL 证书"
-    echo ""
 
-    read -p "请选择 (1/2) [1]: " choice < /dev/tty
-    choice="${choice:-1}"
-
-    if [ "$choice" = "2" ]; then
-        SSL_ENABLED=true
-        echo ""
-        read -p "SSL 证书文件路径 (.crt/.pem): " SSL_CERT_PATH < /dev/tty
-        read -p "SSL 私钥文件路径 (.key): " SSL_KEY_PATH < /dev/tty
-
-        # 验证文件存在
-        if [ ! -f "$SSL_CERT_PATH" ]; then
-            log_error "证书文件不存在: $SSL_CERT_PATH"
-            SSL_ENABLED=false
-        elif [ ! -f "$SSL_KEY_PATH" ]; then
-            log_error "私钥文件不存在: $SSL_KEY_PATH"
-            SSL_ENABLED=false
-        else
-            # 检测 443 端口
-            if check_port_with_details 443; then
-                echo ""
-                read -p "请输入 HTTPS 端口 [8443]: " input < /dev/tty
-                SSL_PORT="${input:-8443}"
-            else
-                read -p "HTTPS 端口 [443]: " input < /dev/tty
-                SSL_PORT="${input:-443}"
-            fi
-            log_success "SSL 已配置"
-            echo "  证书: $SSL_CERT_PATH"
-            echo "  私钥: $SSL_KEY_PATH"
-            echo "  HTTPS 端口: $SSL_PORT"
-        fi
+    if [ "$AUTO_YES" = true ]; then
+        # 自动模式：跳过 SSL 配置
+        SSL_ENABLED=false
+        log_info "自动模式：跳过 SSL 配置"
     else
-        log_info "跳过 SSL 配置"
+        echo "是否配置 SSL 证书？"
+        echo "  1. 否，仅使用 HTTP（可通过外部反代配置 SSL）"
+        echo "  2. 是，配置 SSL 证书"
+        echo ""
+
+        read -p "请选择 (1/2) [1]: " choice < /dev/tty
+        choice="${choice:-1}"
+
+        if [ "$choice" = "2" ]; then
+            SSL_ENABLED=true
+            echo ""
+            read -p "SSL 证书文件路径 (.crt/.pem): " SSL_CERT_PATH < /dev/tty
+            read -p "SSL 私钥文件路径 (.key): " SSL_KEY_PATH < /dev/tty
+
+            # 验证文件存在
+            if [ ! -f "$SSL_CERT_PATH" ]; then
+                log_error "证书文件不存在: $SSL_CERT_PATH"
+                SSL_ENABLED=false
+            elif [ ! -f "$SSL_KEY_PATH" ]; then
+                log_error "私钥文件不存在: $SSL_KEY_PATH"
+                SSL_ENABLED=false
+            else
+                # 检测 443 端口
+                if check_port_with_details 443; then
+                    echo ""
+                    read -p "请输入 HTTPS 端口 [8443]: " input < /dev/tty
+                    SSL_PORT="${input:-8443}"
+                else
+                    read -p "HTTPS 端口 [443]: " input < /dev/tty
+                    SSL_PORT="${input:-443}"
+                fi
+                log_success "SSL 已配置"
+                echo "  证书: $SSL_CERT_PATH"
+                echo "  私钥: $SSL_KEY_PATH"
+                echo "  HTTPS 端口: $SSL_PORT"
+            fi
+        else
+            log_info "跳过 SSL 配置"
+        fi
     fi
     echo ""
 }
@@ -392,17 +448,53 @@ step_ssl_config() {
 # ========================================
 # 步骤 8: 安装目录
 # ========================================
+# 清理旧的 Docker 安装（停止并删除容器）
+cleanup_old_installation() {
+    local install_dir="$1"
+
+    # 检查是否有旧的 docker-compose.yml
+    if [ -f "$install_dir/docker-compose.yml" ]; then
+        log_info "检测到旧安装，停止并清理容器..."
+
+        local compose_cmd=$(check_docker_compose)
+        if [ -n "$compose_cmd" ]; then
+            # 停止并删除容器
+            (cd "$install_dir" && $compose_cmd down --remove-orphans 2>/dev/null) || true
+        fi
+    fi
+
+    # 备用方法：直接停止和删除 ssl-manager 相关容器
+    local containers=$(docker ps -a --format '{{.Names}}' 2>/dev/null | grep -E '^ssl-manager-' || true)
+    if [ -n "$containers" ]; then
+        log_info "清理残留容器..."
+        echo "$containers" | xargs -r docker stop 2>/dev/null || true
+        echo "$containers" | xargs -r docker rm 2>/dev/null || true
+    fi
+}
+
 step_install_dir() {
     log_step "步骤 7/7: 安装目录"
     echo ""
 
-    read -p "安装目录 [/opt/ssl-manager]: " input < /dev/tty
-    INSTALL_DIR="${input:-/opt/ssl-manager}"
+    if [ "$AUTO_YES" = true ]; then
+        # 自动模式：使用默认目录或命令行指定的目录
+        log_info "自动模式：安装目录 $INSTALL_DIR"
+        if [ -d "$INSTALL_DIR" ]; then
+            log_warning "目录已存在，将覆盖安装: $INSTALL_DIR"
+            # 清理旧安装的 Docker 容器
+            cleanup_old_installation "$INSTALL_DIR"
+        fi
+    else
+        read -p "安装目录 [/opt/ssl-manager]: " input < /dev/tty
+        INSTALL_DIR="${input:-/opt/ssl-manager}"
 
-    if [ -d "$INSTALL_DIR" ]; then
-        log_warning "目录已存在: $INSTALL_DIR"
-        if ! confirm "是否覆盖安装？"; then
-            exit 0
+        if [ -d "$INSTALL_DIR" ]; then
+            log_warning "目录已存在: $INSTALL_DIR"
+            if ! confirm "是否覆盖安装？"; then
+                exit 0
+            fi
+            # 清理旧安装的 Docker 容器
+            cleanup_old_installation "$INSTALL_DIR"
         fi
     fi
 
@@ -448,14 +540,16 @@ show_summary() {
 create_directories() {
     log_info "创建目录结构..."
 
+    # 数据目录
     ensure_dir "$INSTALL_DIR/data/mysql"
     ensure_dir "$INSTALL_DIR/data/redis"
-    ensure_dir "$INSTALL_DIR/data/storage/app/public"
-    ensure_dir "$INSTALL_DIR/data/storage/logs"
-    ensure_dir "$INSTALL_DIR/data/storage/framework/cache"
-    ensure_dir "$INSTALL_DIR/data/storage/framework/sessions"
-    ensure_dir "$INSTALL_DIR/data/storage/framework/views"
     ensure_dir "$INSTALL_DIR/data/logs/nginx"
+
+    # 根目录 backups（备份、升级包）
+    ensure_dir "$INSTALL_DIR/backups"
+    ensure_dir "$INSTALL_DIR/backups/upgrades"
+
+    # 配置目录
     ensure_dir "$INSTALL_DIR/config"
     ensure_dir "$INSTALL_DIR/config/ssl"
 
@@ -484,7 +578,8 @@ download_application() {
     # 找到解压后的目录
     local extract_dir="$temp_dir/ssl-manager"
     if [ ! -d "$extract_dir" ]; then
-        extract_dir=$(find "$temp_dir" -maxdepth 1 -type d -name "ssl-manager*" | head -1)
+        # 使用 -mindepth 1 排除搜索目录本身（因为临时目录名包含 ssl-manager）
+        extract_dir=$(find "$temp_dir" -mindepth 1 -maxdepth 1 -type d -name "ssl-manager*" | head -1)
     fi
 
     # 有时候完整包直接解压在根目录（full 目录）
@@ -511,6 +606,13 @@ download_application() {
     if [ -d "$extract_dir/frontend" ]; then
         ensure_dir "$INSTALL_DIR/frontend"
         cp -r "$extract_dir/frontend"/* "$INSTALL_DIR/frontend/"
+    fi
+
+    # 复制 nginx 配置目录
+    if [ -d "$extract_dir/nginx" ]; then
+        ensure_dir "$INSTALL_DIR/nginx"
+        cp -r "$extract_dir/nginx"/* "$INSTALL_DIR/nginx/"
+        log_info "已复制 nginx 配置目录"
     fi
 
     # 复制版本配置并注入 release_url 和 network
@@ -550,9 +652,28 @@ with open('$version_file', 'w') as f:
     # 清理临时文件
     rm -rf "$temp_dir"
 
-    # 设置权限
+    # 确保 frontend/web 目录存在
+    mkdir -p "$INSTALL_DIR/frontend/web"
+
+    # 替换 nginx 配置中的占位符（Docker 环境项目根目录为 /var/www/html）
+    if [ -f "$INSTALL_DIR/nginx/manager.conf" ]; then
+        sed -i 's|__PROJECT_ROOT__|/var/www/html|g' "$INSTALL_DIR/nginx/manager.conf"
+    fi
+    if [ -f "$INSTALL_DIR/frontend/web/web.conf" ]; then
+        sed -i 's|__PROJECT_ROOT__|/var/www/html|g' "$INSTALL_DIR/frontend/web/web.conf"
+    fi
+
+    # 设置权限（使用 UID 82，这是 Alpine PHP-FPM 容器中 www-data 的 UID）
+    # backend 目录需要 www-data 可写以支持在线升级
+    chown -R 82:82 "$INSTALL_DIR/backend" 2>/dev/null || true
     chmod -R 755 "$INSTALL_DIR/backend"
-    chmod -R 777 "$INSTALL_DIR/data/storage"
+    chmod -R 775 "$INSTALL_DIR/backend/storage"
+    chmod -R 775 "$INSTALL_DIR/backups"
+    chown -R 82:82 "$INSTALL_DIR/backups" 2>/dev/null || true
+    [ -f "$INSTALL_DIR/version.json" ] && chown 82:82 "$INSTALL_DIR/version.json" && chmod 664 "$INSTALL_DIR/version.json"
+    # frontend 目录需要 www-data 可读以支持备份
+    chown -R 82:82 "$INSTALL_DIR/frontend" 2>/dev/null || true
+    chmod -R 755 "$INSTALL_DIR/frontend"
 
     log_success "应用程序下载完成"
 }
@@ -578,7 +699,8 @@ setup_docker_files() {
         sed -i '/# __COMPOSER_MIRROR__/d' "$INSTALL_DIR/Dockerfile"
     fi
 
-    # 2. 复制 Nginx 配置
+    # 2. 复制 Nginx 配置（先删除可能存在的旧文件/目录）
+    rm -rf "$INSTALL_DIR/config/nginx.conf" "$INSTALL_DIR/config/site.conf" "$INSTALL_DIR/config/php.ini"
     cp "$docker_template_dir/config/nginx.conf" "$INSTALL_DIR/config/nginx.conf"
     cp "$docker_template_dir/config/site.conf" "$INSTALL_DIR/config/site.conf"
     cp "$docker_template_dir/config/php.ini" "$INSTALL_DIR/config/php.ini"
@@ -708,9 +830,9 @@ start_services() {
     log_info "构建 Docker 镜像（首次可能需要几分钟）..."
     $compose_cmd build --no-cache
 
-    # 启动服务
+    # 启动服务（--no-build 避免重复构建警告）
     log_info "启动服务..."
-    $compose_cmd up -d
+    $compose_cmd up -d --no-build
 
     # 等待服务就绪
     log_info "等待服务就绪..."
@@ -731,6 +853,23 @@ init_application() {
     cd "$INSTALL_DIR"
     local compose_cmd=$(check_docker_compose)
 
+    # 在容器内修复权限（宿主机可能没有 www-data 用户）
+    log_info "修复文件权限..."
+    # backend/storage（Laravel storage）
+    $compose_cmd exec -T php mkdir -p /var/www/html/backend/storage/logs /var/www/html/backend/storage/framework/cache /var/www/html/backend/storage/framework/sessions /var/www/html/backend/storage/framework/views /var/www/html/backend/storage/app/public 2>/dev/null || true
+    $compose_cmd exec -T php chown -R www-data:www-data /var/www/html/backend/storage 2>/dev/null || true
+    $compose_cmd exec -T php chmod -R 775 /var/www/html/backend/storage 2>/dev/null || true
+    # 根目录 backups（备份、升级包）
+    $compose_cmd exec -T php mkdir -p /var/www/html/backups /var/www/html/backups/upgrades 2>/dev/null || true
+    $compose_cmd exec -T php chown -R www-data:www-data /var/www/html/backups 2>/dev/null || true
+    $compose_cmd exec -T php chmod -R 775 /var/www/html/backups 2>/dev/null || true
+    # version.json（版本配置，需要可写以支持切换通道）
+    $compose_cmd exec -T php chown www-data:www-data /var/www/html/version.json 2>/dev/null || true
+    $compose_cmd exec -T php chmod 664 /var/www/html/version.json 2>/dev/null || true
+    # .env 文件（让 www-data 可读，用于升级时备份）
+    $compose_cmd exec -T php chown www-data:www-data /var/www/html/backend/.env 2>/dev/null || true
+    $compose_cmd exec -T php chmod 600 /var/www/html/backend/.env 2>/dev/null || true
+
     # 等待数据库就绪
     if [ "$USE_CONTAINER_DB" = true ]; then
         log_info "等待数据库就绪..."
@@ -749,23 +888,86 @@ init_application() {
         fi
     fi
 
-    # 安装 Composer 依赖
+    # 安装 Composer 依赖（使用宿主机网络模式，避免容器网络问题）
     log_info "安装 Composer 依赖..."
-    # 根据 NETWORK_ENV 配置镜像
+
+    local composer_success=false
+
+    # 定义镜像源列表（按优先级）
+    local mirrors=()
     if [ "$NETWORK_ENV" = "china" ] || [ "$MIRROR_REGION" = "china" ]; then
-        log_info "配置 Composer 中国镜像..."
-        $compose_cmd exec -T -u root php composer config repo.packagist composer https://mirrors.aliyun.com/composer/ --working-dir=/var/www/html 2>&1 || true
+        mirrors=(
+            "https://mirrors.aliyun.com/composer/"
+            "https://mirrors.tencent.com/composer/"
+            "https://mirrors.huaweicloud.com/repository/php/"
+        )
+    else
+        mirrors=(
+            "https://packagist.org"
+            "https://mirrors.aliyun.com/composer/"
+        )
     fi
-    $compose_cmd exec -T -u root php composer install --no-dev --optimize-autoloader --working-dir=/var/www/html 2>&1 || true
 
-    # 运行数据库迁移
+    # 获取 PHP 镜像名称
+    local php_image
+    php_image=$($compose_cmd images php --format "{{.Repository}}:{{.Tag}}" 2>/dev/null | head -1)
+    if [ -z "$php_image" ]; then
+        php_image="ssl-manager-php:latest"
+    fi
+
+    log_info "使用宿主机网络模式安装依赖..."
+
+    local mirror_index=0
+    for mirror in "${mirrors[@]}"; do
+        mirror_index=$((mirror_index + 1))
+        log_info "[$mirror_index/${#mirrors[@]}] 使用镜像源: $mirror"
+
+        # 使用 docker run --network host 直接使用宿主机网络
+        # 实时输出日志，让用户能看到进度
+        # 注意：使用 || true 防止 set -e 导致脚本退出
+        docker run --rm --network host \
+            -v "$INSTALL_DIR/backend:/var/www/html" \
+            -w /var/www/html \
+            -e COMPOSER_PROCESS_TIMEOUT=300 \
+            -e COMPOSER_HTTP_TIMEOUT=60 \
+            -e COMPOSER_HOME=/tmp/composer \
+            "$php_image" \
+            sh -c "composer config repo.packagist composer '$mirror' && composer install --no-dev --optimize-autoloader --ignore-platform-req=ext-calendar --prefer-dist --no-interaction" 2>&1 || true
+
+        if [ -f "$INSTALL_DIR/backend/vendor/autoload.php" ]; then
+            composer_success=true
+            log_success "Composer 依赖安装完成"
+            break
+        fi
+
+        log_warning "使用 $mirror 安装失败，尝试下一个源..."
+    done
+
+    # 最终验证
+    if [ "$composer_success" = false ]; then
+        log_error "Composer 依赖安装失败"
+        log_info "请手动运行:"
+        log_info "  docker run --rm --network host -v $INSTALL_DIR/backend:/var/www/html -w /var/www/html $php_image composer install --no-dev"
+    fi
+
+    # 运行数据库迁移（超时 120 秒）
     log_info "运行数据库迁移..."
-    $compose_cmd exec -T php php artisan migrate --force || true
+    timeout 120 $compose_cmd exec -T php php artisan migrate --force 2>&1 || log_warning "数据库迁移失败或超时"
 
-    # 优化应用
+    # 初始化数据（超时 60 秒）
+    log_info "初始化数据..."
+    timeout 60 $compose_cmd exec -T php php artisan db:seed --force 2>&1 || log_warning "数据初始化失败或超时"
+
+    # 优化应用（超时 60 秒）
     log_info "优化应用..."
-    $compose_cmd exec -T php php artisan config:cache || true
-    $compose_cmd exec -T php php artisan route:cache || true
+    timeout 60 $compose_cmd exec -T php php artisan config:cache 2>&1 || log_warning "配置缓存失败"
+    timeout 60 $compose_cmd exec -T php php artisan route:cache 2>&1 || log_warning "路由缓存失败"
+
+    # 清理安装脚本（Docker 模式是全流程安装，不需要 Web 安装向导）
+    log_info "清理安装脚本..."
+    rm -f "$INSTALL_DIR/backend/public/install.php"
+    rm -rf "$INSTALL_DIR/backend/public/install-assets"
+    log_success "安装脚本已清理"
 
     log_success "应用初始化完成"
 }
@@ -806,7 +1008,7 @@ show_complete() {
     echo "数据目录:"
     echo "  数据库: $INSTALL_DIR/data/mysql"
     echo "  Redis:  $INSTALL_DIR/data/redis"
-    echo "  存储:   $INSTALL_DIR/data/storage"
+    echo "  备份:   $INSTALL_DIR/backups"
     echo "  日志:   $INSTALL_DIR/data/logs"
     echo ""
 }
@@ -815,6 +1017,27 @@ show_complete() {
 # 主函数
 # ========================================
 main() {
+    # 解析命令行参数
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -y|--yes)
+                AUTO_YES=true
+                shift
+                ;;
+            --port)
+                WEB_PORT="$2"
+                shift 2
+                ;;
+            --dir)
+                INSTALL_DIR="$2"
+                shift 2
+                ;;
+            *)
+                shift
+                ;;
+        esac
+    done
+
     # 检查 root 权限
     if [ "$EUID" -ne 0 ]; then
         log_error "请使用 root 权限运行此脚本"
@@ -836,9 +1059,11 @@ main() {
     show_summary
 
     # 确认部署
-    if ! confirm "确认开始部署？" "y"; then
-        log_info "取消部署"
-        exit 0
+    if [ "$AUTO_YES" != true ]; then
+        if ! confirm "确认开始部署？" "y"; then
+            log_info "取消部署"
+            exit 0
+        fi
     fi
 
     echo ""

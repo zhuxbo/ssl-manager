@@ -4,15 +4,15 @@ declare(strict_types=1);
 
 namespace App\Services\Delegation;
 
+use App\Services\Delegation\Sdk\TencentCloud\Common\Credential;
+use App\Services\Delegation\Sdk\TencentCloud\Dnspod\V20210323\DnspodClient;
+use App\Services\Delegation\Sdk\TencentCloud\Dnspod\V20210323\Models\CreateTXTRecordRequest;
+use App\Services\Delegation\Sdk\TencentCloud\Dnspod\V20210323\Models\DeleteRecordBatchRequest;
+use App\Services\Delegation\Sdk\TencentCloud\Dnspod\V20210323\Models\DeleteRecordRequest;
+use App\Services\Delegation\Sdk\TencentCloud\Dnspod\V20210323\Models\DescribeRecordListRequest;
 use App\Traits\ApiResponse;
 use Exception;
 use Log;
-use TencentCloud\Common\Credential;
-use TencentCloud\Dnspod\V20210323\DnspodClient;
-use TencentCloud\Dnspod\V20210323\Models\CreateTXTRecordRequest;
-use TencentCloud\Dnspod\V20210323\Models\DeleteRecordBatchRequest;
-use TencentCloud\Dnspod\V20210323\Models\DeleteRecordRequest;
-use TencentCloud\Dnspod\V20210323\Models\DescribeRecordListRequest;
 
 class ProxyDNS
 {

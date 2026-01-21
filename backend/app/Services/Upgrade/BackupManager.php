@@ -387,7 +387,7 @@ class BackupManager
         $basePath = base_path();
         $projectRoot = dirname($basePath);
 
-        // 逐个解压文件，处理特殊路径
+        // 逐个解压文件，处理特殊路径（权限受限文件使用 File::put）
         for ($i = 0; $i < $zip->numFiles; $i++) {
             $filename = $zip->getNameIndex($i);
 
@@ -395,6 +395,10 @@ class BackupManager
             if ($filename === '../version.json') {
                 $content = $zip->getFromIndex($i);
                 File::put("$projectRoot/version.json", $content);
+            } elseif ($filename === '.env') {
+                // .env 文件特殊处理（可能有权限限制）
+                $content = $zip->getFromIndex($i);
+                File::put("$basePath/.env", $content);
             } else {
                 // 其他文件解压到 base_path
                 $zip->extractTo($basePath, $filename);

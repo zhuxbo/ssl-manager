@@ -9,18 +9,18 @@ class VersionManager
     /**
      * 获取版本配置文件的路径
      */
-    protected function getVersionPath(): string
+    public function getVersionPath(): string
     {
         $rootDir = dirname(base_path());
+        $rootPath = "$rootDir/version.json";
+        $backendPath = base_path('version.json');
 
         // 优先检查项目根目录
-        $rootPath = "$rootDir/version.json";
         if (file_exists($rootPath)) {
             return $rootPath;
         }
 
-        // 回退到 backend 目录（Docker 环境）
-        $backendPath = base_path('version.json');
+        // 回退到 backend 目录
         if (file_exists($backendPath)) {
             return $backendPath;
         }
@@ -30,13 +30,34 @@ class VersionManager
     }
 
     /**
+     * 检测是否在 Docker 环境中运行
+     */
+    public function isDockerEnvironment(): bool
+    {
+        // 检查 /.dockerenv 文件（使用 @ 抑制 open_basedir 限制错误）
+        if (@file_exists('/.dockerenv')) {
+            return true;
+        }
+
+        // 检查 cgroup（某些情况下 .dockerenv 可能不存在）
+        if (@file_exists('/proc/1/cgroup')) {
+            $cgroup = @file_get_contents('/proc/1/cgroup');
+            if ($cgroup && (str_contains($cgroup, 'docker') || str_contains($cgroup, 'kubepods'))) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * 从 version.json 读取版本配置（实时读取，避免缓存问题）
      */
     protected function getVersionJson(): array
     {
         $paths = [
-            dirname(base_path()) . '/version.json',  // 项目根目录
-            base_path('version.json'),               // backend 目录（Docker）
+            dirname(base_path()).'/version.json',  // 项目根目录
+            base_path('version.json'),             // backend 目录
         ];
 
         foreach ($paths as $path) {

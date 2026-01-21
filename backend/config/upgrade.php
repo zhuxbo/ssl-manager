@@ -7,8 +7,8 @@
 return [
     // 备份配置
     'backup' => [
-        // 备份存储目录（项目根目录，与 upgrade.sh 一致）
-        'path' => dirname(base_path()) . '/storage/backups',
+        // 备份存储目录（项目根目录 backups）
+        'path' => dirname(base_path()).'/backups',
 
         // 最大保留备份数量
         'max_backups' => env('UPGRADE_MAX_BACKUPS', 5),
@@ -41,8 +41,8 @@ return [
 
     // 升级包配置
     'package' => [
-        // 下载目录
-        'download_path' => storage_path('upgrades'),
+        // 下载目录（项目根目录 backups/upgrades）
+        'download_path' => dirname(base_path()).'/backups/upgrades',
 
         // 下载超时（秒）
         'download_timeout' => 300,

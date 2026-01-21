@@ -8,7 +8,11 @@ SSL 证书管理系统，支持多级代理、自动签发、在线升级。
 ## 安装
 
 ```bash
-curl -fsSL http://release.example.com/install.sh | bash
+# 国内服务器
+curl -fsSL https://release-cn.cnssl.com/install.sh | sudo bash
+
+# 海外服务器
+curl -fsSL https://release-us.cnssl.com/install.sh | sudo bash
 ```
 
 <details>
@@ -16,17 +20,21 @@ curl -fsSL http://release.example.com/install.sh | bash
 
 ```bash
 # 指定部署方式
-curl ... | bash -s docker   # Docker 部署
-curl ... | bash -s bt       # 宝塔面板部署
+curl ... | sudo bash -s -- docker   # Docker 部署（推荐）
+curl ... | sudo bash -s -- bt       # 宝塔面板部署
+
+# 非交互式安装
+curl ... | sudo bash -s -- docker -y
 
 # 指定版本安装
-curl ... | bash -s -- --version 0.0.10-beta
+curl ... | sudo bash -s -- --version 0.0.9-beta
 ```
 
 | 参数 | 说明 |
 |------|------|
 | `docker` | Docker 部署（推荐） |
 | `bt` | 宝塔面板部署 |
+| `-y` | 非交互模式，自动确认 |
 | `--version latest` | 最新稳定版（默认） |
 | `--version dev` | 最新开发版 |
 | `--version x.x.x` | 指定版本号 |
@@ -42,7 +50,7 @@ curl ... | bash -s -- --version 0.0.10-beta
 ### 脚本升级
 
 ```bash
-curl -fsSL http://release.example.com/upgrade.sh | bash
+curl -fsSL https://release-cn.cnssl.com/upgrade.sh | sudo bash
 ```
 
 <details>

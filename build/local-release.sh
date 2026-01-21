@@ -149,6 +149,16 @@ main() {
     # 1. 构建
     local packages_dir="$BUILD_DIR/temp/packages"
     if [ "$upload_only" = false ]; then
+        # 1.1 容器化构建（生成 production-code）
+        log_step "运行容器化构建..."
+        if [ -f "$BUILD_DIR/build.sh" ]; then
+            # 使用 sudo 运行构建脚本以访问 Docker
+            sudo bash "$BUILD_DIR/build.sh"
+        else
+            log_error "构建脚本不存在: $BUILD_DIR/build.sh"
+            exit 1
+        fi
+        # 1.2 打包
         build_packages "$BUILD_DIR" "$version"
     else
         log_info "跳过构建，使用已有包"

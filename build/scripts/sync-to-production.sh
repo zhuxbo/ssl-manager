@@ -146,6 +146,10 @@ CONTRIBUTING*
 frontend/
 nginx/
 web/
+storage/backups/
+storage/upgrades/
+storage/logs/*.log
+storage/framework/testing/
 vendor/**/tests/
 vendor/**/Tests/
 vendor/**/test/
@@ -302,21 +306,6 @@ cat > "$PRODUCTION_DIR/version.json" <<EOF
 }
 EOF
 log_success "version.json 已生成"
-
-# 更新后端 version.php 配置（写入构建时信息）
-VERSION_PHP="$PRODUCTION_DIR/backend/config/version.php"
-if [ -f "$VERSION_PHP" ]; then
-    log_info "更新 version.php 配置..."
-    # 在容器中创建临时 .env 写入构建信息
-    BACKEND_ENV="$PRODUCTION_DIR/backend/.env.build"
-    cat > "$BACKEND_ENV" <<EOF
-APP_VERSION=$VERSION
-APP_BUILD_TIME=$BUILD_TIME
-APP_BUILD_COMMIT=$MONOREPO_COMMIT
-APP_RELEASE_CHANNEL=$RELEASE_CHANNEL
-EOF
-    log_info "已生成 .env.build 文件"
-fi
 
 log_success "config.json 已生成"
 log_info "版本: $VERSION"
