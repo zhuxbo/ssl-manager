@@ -57,18 +57,24 @@
         "backend/storage/backups/",
         "backend/storage/logs/*.log",
         "backend/storage/framework/cache/*",
-        "config.json"
+        "/config.json"
       ]
     },
     "upgrade": {
       "exclude": [
-        ".env",
-        ".env.*",
-        "storage/*",
-        "bootstrap/cache/*",
-        "vendor/*",
-        "public/install.php",
-        "public/install-assets/"
+        "backend/.env",
+        "backend/.env.*",
+        "backend/storage/*",
+        "backend/bootstrap/cache/*",
+        "backend/vendor/",
+        "backend/public/install.php",
+        "backend/public/install-assets/",
+        "frontend/admin/logo.svg",
+        "frontend/admin/platform-config.json",
+        "frontend/user/logo.svg",
+        "frontend/user/platform-config.json",
+        "frontend/user/qrcode.png",
+        "frontend/easy/config.json"
       ]
     }
   }

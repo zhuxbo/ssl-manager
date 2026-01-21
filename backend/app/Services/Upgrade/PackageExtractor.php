@@ -192,6 +192,16 @@ class PackageExtractor
     }
 
     /**
+     * 需要保护的前端用户配置文件
+     * 这些文件在升级时会被保留，不会被覆盖
+     */
+    protected array $protectedFrontendFiles = [
+        'admin' => ['logo.svg', 'platform-config.json'],
+        'user' => ['logo.svg', 'platform-config.json', 'qrcode.png'],
+        'easy' => ['config.json'],
+    ];
+
+    /**
      * 应用前端升级
      */
     protected function applyFrontendUpgrade(string $sourceDir, string $type): void
@@ -203,7 +213,45 @@ class PackageExtractor
             File::makeDirectory($targetDir, 0755, true);
         }
 
+        // 保护用户配置文件：先备份
+        $preserved = $this->preserveFrontendConfig($targetDir, $type);
+
+        // 同步目录
         $this->syncDirectory($sourceDir, $targetDir);
+
+        // 恢复用户配置文件
+        $this->restoreFrontendConfig($targetDir, $preserved, $type);
+    }
+
+    /**
+     * 保留前端用户配置文件
+     */
+    protected function preserveFrontendConfig(string $targetDir, string $type): array
+    {
+        $preserved = [];
+        $files = $this->protectedFrontendFiles[$type] ?? [];
+
+        foreach ($files as $file) {
+            $filePath = "$targetDir/$file";
+            if (File::exists($filePath)) {
+                $preserved[$file] = File::get($filePath);
+                Log::info("保留前端配置文件: $type/$file");
+            }
+        }
+
+        return $preserved;
+    }
+
+    /**
+     * 恢复前端用户配置文件
+     */
+    protected function restoreFrontendConfig(string $targetDir, array $preserved, string $type): void
+    {
+        foreach ($preserved as $file => $content) {
+            $filePath = "$targetDir/$file";
+            File::put($filePath, $content);
+            Log::info("恢复前端配置文件: $type/$file");
+        }
     }
 
     /**

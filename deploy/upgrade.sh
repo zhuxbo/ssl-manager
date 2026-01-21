@@ -466,9 +466,9 @@ perform_upgrade() {
 
     # 保留 .env（不保留 version.json，升级需要更新版本号）
     [ -f "$INSTALL_DIR/backend/.env" ] && cp "$INSTALL_DIR/backend/.env" "$preserve_dir/"
-    # 保留 storage
+    # 保留 storage（使用 mv 避免大目录复制失败导致数据丢失）
     if [ -d "$INSTALL_DIR/backend/storage" ]; then
-        cp -r "$INSTALL_DIR/backend/storage" "$preserve_dir/"
+        mv "$INSTALL_DIR/backend/storage" "$preserve_dir/"
     fi
     # 保留 vendor（加速升级）
     if [ -d "$INSTALL_DIR/backend/vendor" ]; then
@@ -481,6 +481,18 @@ perform_upgrade() {
         mkdir -p "$preserve_dir/frontend"
         mv "$INSTALL_DIR/frontend/web" "$preserve_dir/frontend/"
     fi
+    # 保留前端用户配置文件（logo、平台配置等）
+    mkdir -p "$preserve_dir/frontend_config"
+    # admin: logo.svg, platform-config.json
+    for file in logo.svg platform-config.json; do
+        [ -f "$INSTALL_DIR/frontend/admin/$file" ] && cp "$INSTALL_DIR/frontend/admin/$file" "$preserve_dir/frontend_config/admin_$file"
+    done
+    # user: logo.svg, platform-config.json, qrcode.png
+    for file in logo.svg platform-config.json qrcode.png; do
+        [ -f "$INSTALL_DIR/frontend/user/$file" ] && cp "$INSTALL_DIR/frontend/user/$file" "$preserve_dir/frontend_config/user_$file"
+    done
+    # easy: config.json
+    [ -f "$INSTALL_DIR/frontend/easy/config.json" ] && cp "$INSTALL_DIR/frontend/easy/config.json" "$preserve_dir/frontend_config/easy_config.json"
 
     # 5. 删除旧代码
     log_step "清理旧代码..."
@@ -613,9 +625,9 @@ PYEOF
     [ -f "$preserve_dir/.env" ] && cp "$preserve_dir/.env" "$INSTALL_DIR/backend/"
     # 注意：不恢复 version.json，使用升级包中的新版本
 
-    # 恢复 storage
+    # 恢复 storage（已使用 mv 保留，直接移回）
     if [ -d "$preserve_dir/storage" ]; then
-        rm -rf "$INSTALL_DIR/backend/storage"
+        rm -rf "$INSTALL_DIR/backend/storage" 2>/dev/null || true
         mv "$preserve_dir/storage" "$INSTALL_DIR/backend/"
     fi
 
@@ -629,6 +641,21 @@ PYEOF
         mkdir -p "$INSTALL_DIR/frontend"
         mv "$preserve_dir/frontend/web" "$INSTALL_DIR/frontend/"
         log_info "已恢复 frontend/web 目录"
+    fi
+
+    # 恢复前端用户配置文件
+    if [ -d "$preserve_dir/frontend_config" ]; then
+        log_info "恢复前端用户配置..."
+        # admin
+        for file in logo.svg platform-config.json; do
+            [ -f "$preserve_dir/frontend_config/admin_$file" ] && cp "$preserve_dir/frontend_config/admin_$file" "$INSTALL_DIR/frontend/admin/$file"
+        done
+        # user
+        for file in logo.svg platform-config.json qrcode.png; do
+            [ -f "$preserve_dir/frontend_config/user_$file" ] && cp "$preserve_dir/frontend_config/user_$file" "$INSTALL_DIR/frontend/user/$file"
+        done
+        # easy
+        [ -f "$preserve_dir/frontend_config/easy_config.json" ] && cp "$preserve_dir/frontend_config/easy_config.json" "$INSTALL_DIR/frontend/easy/config.json"
     fi
 
     # 8.1 预先修复权限（在执行 artisan 命令前）
