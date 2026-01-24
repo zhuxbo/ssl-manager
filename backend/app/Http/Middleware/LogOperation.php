@@ -8,6 +8,7 @@ use App\Models\CallbackLog;
 use App\Models\EasyLog;
 use App\Models\Order;
 use App\Models\UserLog;
+use App\Services\LogBuffer;
 use App\Traits\LogSanitizer;
 use Closure;
 use Illuminate\Http\Request;
@@ -153,7 +154,7 @@ class LogOperation
      */
     protected function logApiRequest(Request $request, array $logData): void
     {
-        ApiLog::create(array_merge($logData, [
+        LogBuffer::add(ApiLog::class, array_merge($logData, [
             'user_id' => Auth::guard('api')->user()?->user_id,
             'version' => $this->getApiVersion($request),
         ]));
@@ -176,7 +177,7 @@ class LogOperation
                 })->first();
         }
 
-        ApiLog::create(array_merge($logData, [
+        LogBuffer::add(ApiLog::class, array_merge($logData, [
             'user_id' => $order?->user_id,
             'version' => 'auto',
         ]));
@@ -187,7 +188,7 @@ class LogOperation
      */
     protected function logAdminRequest(Request $request, array $logData): void
     {
-        AdminLog::create(array_merge($logData, [
+        LogBuffer::add(AdminLog::class, array_merge($logData, [
             'admin_id' => Auth::guard('admin')->id(),
             'module' => $this->getModule($request),
             'action' => $this->getAction($request),
@@ -199,7 +200,7 @@ class LogOperation
      */
     protected function logUserRequest(Request $request, array $logData): void
     {
-        UserLog::create(array_merge($logData, [
+        LogBuffer::add(UserLog::class, array_merge($logData, [
             'user_id' => Auth::guard('user')->id(),
             'module' => $this->getModule($request),
             'action' => $this->getAction($request),
@@ -211,7 +212,7 @@ class LogOperation
      */
     protected function logCallbackRequest(array $logData): void
     {
-        CallbackLog::create($logData);
+        LogBuffer::add(CallbackLog::class, $logData);
     }
 
     /**
@@ -219,7 +220,7 @@ class LogOperation
      */
     protected function logEasyRequest(array $logData): void
     {
-        EasyLog::create($logData);
+        LogBuffer::add(EasyLog::class, $logData);
     }
 
     /**

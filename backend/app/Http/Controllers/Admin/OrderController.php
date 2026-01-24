@@ -97,8 +97,10 @@ class OrderController extends BaseController
         }
         if (! empty($validated['domain'])) {
             $query->whereHas('latestCert', function ($latestCertQuery) use ($validated) {
-                $latestCertQuery->where('common_name', 'like', "%{$validated['domain']}%")
-                    ->orWhere('alternative_names', 'like', "%{$validated['domain']}%");
+                $latestCertQuery->where(function ($q) use ($validated) {
+                    $q->where('common_name', 'like', "%{$validated['domain']}%")
+                        ->orWhere('alternative_names', 'like', "%{$validated['domain']}%");
+                });
             });
         }
         if (! empty($validated['channel'])) {

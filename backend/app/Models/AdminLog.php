@@ -6,8 +6,6 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class AdminLog extends BaseModel
 {
-    protected $connection = 'log';
-
     const null UPDATED_AT = null;
 
     protected $fillable = [

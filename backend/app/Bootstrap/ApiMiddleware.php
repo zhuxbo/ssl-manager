@@ -7,6 +7,7 @@ use App\Http\Middleware\AdminRefreshTokenAuthenticate;
 use App\Http\Middleware\ApiAuthenticate;
 use App\Http\Middleware\DynamicCors;
 use App\Http\Middleware\FilterUserIdParameter;
+use App\Http\Middleware\FlushLogs;
 use App\Http\Middleware\ForceJsonResponse;
 use App\Http\Middleware\LoginRateLimiter;
 use App\Http\Middleware\LogOperation;
@@ -41,6 +42,7 @@ class ApiMiddleware
             TimezoneMiddleware::class,
             ForceJsonResponse::class,
             LogOperation::class,
+            FlushLogs::class,
         ]);
 
         // 全局路由中间件组 在 RouteServiceProvider 中全局加载

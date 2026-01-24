@@ -6,6 +6,7 @@ namespace App\Services\Order\Api\default;
 
 use App\Bootstrap\ApiExceptions;
 use App\Models\CaLog;
+use App\Services\LogBuffer;
 use App\Traits\LogSanitizer;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\GuzzleException;
@@ -121,7 +122,7 @@ class Sdk
 
         $httpStatusCode = $response->getStatusCode();
 
-        CaLog::create([
+        LogBuffer::add(CaLog::class, [
             'url' => $apiUrl,
             'api' => $uri,
             'params' => $data,

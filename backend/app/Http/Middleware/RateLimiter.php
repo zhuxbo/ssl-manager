@@ -7,7 +7,7 @@ use App\Traits\ApiResponse;
 use App\Traits\ExtractsToken;
 use Closure;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Redis;
+use Illuminate\Support\Facades\Cache;
 
 class RateLimiter
 {
@@ -87,12 +87,11 @@ class RateLimiter
      */
     private function checkLimit(string $key, int $limit, string $errorMessage): void
     {
-        // @phpstan-ignore arguments.count
-        $current = Redis::client()->incr($key);
-        if ($current === 1) {
-            // @phpstan-ignore arguments.count
-            Redis::client()->expire($key, 60);
+        // 使用原子递增操作
+        if (! Cache::has($key)) {
+            Cache::put($key, 0, 60);
         }
+        $current = Cache::increment($key);
 
         if ($current > $limit) {
             $this->error($errorMessage);

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Acme;
 
 use App\Models\CaLog;
+use App\Services\LogBuffer;
 use Illuminate\Support\Facades\Http;
 
 class UpstreamClient
@@ -144,7 +145,7 @@ class UpstreamClient
      */
     private function logRequest(string $method, string $url, array $params, array $response, int $statusCode, bool $success): void
     {
-        CaLog::create([
+        LogBuffer::add(CaLog::class, [
             'url' => $url,
             'api' => $method,
             'params' => $params,

@@ -4,7 +4,6 @@ namespace Install;
 
 use Install\Checker\RequirementChecker;
 use Install\Connector\DatabaseConnector;
-use Install\Connector\RedisConnector;
 use Install\DTO\InstallConfig;
 use Install\Installer\Cleaner;
 use Install\Installer\InstallExecutor;
@@ -22,8 +21,6 @@ class InstallController
     private RequirementChecker $requirementChecker;
 
     private DatabaseConnector $databaseConnector;
-
-    private RedisConnector $redisConnector;
 
     private InstallConfig $config;
 
@@ -43,7 +40,6 @@ class InstallController
         $this->renderer = new Renderer();
         $this->requirementChecker = new RequirementChecker($this->projectRoot);
         $this->databaseConnector = new DatabaseConnector();
-        $this->redisConnector = new RedisConnector();
         $this->config = InstallConfig::fromSession();
     }
 
@@ -199,15 +195,6 @@ class InstallController
         }
 
         $_SESSION['install_db_empty'] = true;
-
-        // 测试 Redis 连接
-        if (! $this->redisConnector->test($this->config)) {
-            $this->errors[] = $this->redisConnector->getError();
-            $this->canProceed = false;
-            $this->stage = 'env';
-
-            return;
-        }
 
         // 所有检查通过，进入安装阶段
         $this->stage = 'install';
@@ -385,10 +372,6 @@ class InstallController
             'DB_DATABASE' => htmlspecialchars($this->config->dbDatabase),
             'DB_USERNAME' => htmlspecialchars($this->config->dbUsername),
             'DB_PASSWORD' => htmlspecialchars($this->config->dbPassword),
-            'REDIS_HOST' => htmlspecialchars($this->config->redisHost),
-            'REDIS_PORT' => htmlspecialchars((string) $this->config->redisPort),
-            'REDIS_USERNAME' => htmlspecialchars($this->config->redisUsername),
-            'REDIS_PASSWORD' => htmlspecialchars($this->config->redisPassword),
         ];
 
         echo $this->renderer->render('config-form', $configVars);

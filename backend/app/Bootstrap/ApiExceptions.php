@@ -4,6 +4,7 @@ namespace App\Bootstrap;
 
 use App\Exceptions\ApiResponseException;
 use App\Models\ErrorLog;
+use App\Services\LogBuffer;
 use App\Traits\LogSanitizer;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -61,62 +62,21 @@ class ApiExceptions
             $request = Request::instance();
             $url = substr($request->url(), 0, 500);
 
-            // 尝试正常记录错误日志
-            try {
-                // 截断过长的错误信息，防止数据库字段溢出
-                $message = $e->getMessage();
-                if (strlen($message) > 1000) {
-                    $message = substr($message, 0, 997).'...';
-                }
-
-                ErrorLog::create([
-                    'method' => $request->method(),
-                    'url' => $url,
-                    'exception' => class_basename($e),
-                    'message' => $message,
-                    'trace' => $this->sanitizeResponse($e->getTrace()),
-                    'status_code' => $this->getExceptionStatusCode($e),
-                    'ip' => $request->ip(),
-                ]);
-            } catch (Throwable $logException) {
-                // 如果记录日志失败，创建一个简化的错误记录
-                // 将完整的异常信息存储到 trace 字段中
-                try {
-                    $trace = [
-                        'original_exception' => [
-                            'class' => get_class($e),
-                            'message' => $e->getMessage(),
-                            'file' => $e->getFile(),
-                            'line' => $e->getLine(),
-                            'trace' => $e->getTrace(),
-                        ],
-                        'log_exception' => [
-                            'class' => get_class($logException),
-                            'message' => $logException->getMessage(),
-                            'file' => $logException->getFile(),
-                            'line' => $logException->getLine(),
-                        ],
-                    ];
-
-                    ErrorLog::create([
-                        'method' => $request->method(),
-                        'url' => $url,
-                        'exception' => 'LogException',
-                        'message' => '日志记录失败，请查看详情',
-                        'trace' => $trace,
-                        'status_code' => $this->getExceptionStatusCode($e),
-                        'ip' => $request->ip(),
-                    ]);
-                } catch (Throwable $finalException) {
-                    // 如果连这个也失败了，至少记录到 Laravel 日志文件
-                    Log::emergency('ErrorLog 记录完全失败', [
-                        'original_exception' => $e->getMessage(),
-                        'log_exception' => $logException->getMessage(),
-                        'final_exception' => $finalException->getMessage(),
-                        'url' => $url,
-                    ]);
-                }
+            // 截断过长的错误信息，防止数据库字段溢出
+            $message = $e->getMessage();
+            if (strlen($message) > 1000) {
+                $message = substr($message, 0, 997).'...';
             }
+
+            LogBuffer::add(ErrorLog::class, [
+                'method' => $request->method(),
+                'url' => $url,
+                'exception' => class_basename($e),
+                'message' => $message,
+                'trace' => $this->sanitizeResponse($e->getTrace()),
+                'status_code' => $this->getExceptionStatusCode($e),
+                'ip' => $request->ip(),
+            ]);
         }
     }
 

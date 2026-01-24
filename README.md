@@ -101,7 +101,7 @@ develop/            # 开发环境（见 develop/README.md）
 
 | 组件 | 技术栈 |
 |------|--------|
-| 后端 | Laravel 11, PHP 8.3+, MySQL, Redis |
+| 后端 | Laravel 11, PHP 8.3+, MySQL, Redis (可选) |
 | 前端 | Vue 3, TypeScript, Element Plus, Vite |
 
 ## 自动化部署
