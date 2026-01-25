@@ -3,6 +3,7 @@
 use App\Http\Controllers\Admin\AdminController;
 use App\Http\Controllers\Admin\AgisoController;
 use App\Http\Controllers\Admin\ApiTokenController;
+use App\Http\Controllers\Admin\DeployTokenController;
 use App\Http\Controllers\Admin\AuthController;
 use App\Http\Controllers\Admin\CallbackController;
 use App\Http\Controllers\Admin\CertController;
@@ -78,6 +79,7 @@ Route::prefix('admin')->middleware('api.admin')->group(function () {
     RouteHelper::registerResourceRoutes('organization', OrganizationController::class);
     RouteHelper::registerResourceRoutes('callback', CallbackController::class);
     RouteHelper::registerResourceRoutes('api-token', ApiTokenController::class);
+    RouteHelper::registerResourceRoutes('deploy-token', DeployTokenController::class);
     RouteHelper::registerResourceRoutes('product', ProductController::class);
     Route::prefix('product')->group(function () {
         Route::post('import', [ProductController::class, 'import']);

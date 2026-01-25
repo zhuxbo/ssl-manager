@@ -132,6 +132,9 @@ Route::middleware('api.user')->group(function () {
         Route::put('callback', [SettingController::class, 'updateCallback']);
         Route::get('notification-preferences', [SettingController::class, 'getNotificationPreferences']);
         Route::put('notification-preferences', [SettingController::class, 'updateNotificationPreferences']);
+        Route::get('deploy-token', [SettingController::class, 'getDeployToken']);
+        Route::put('deploy-token', [SettingController::class, 'updateDeployToken']);
+        Route::delete('deploy-token', [SettingController::class, 'deleteDeployToken']);
     });
 
     // 支付宝支付

@@ -50,12 +50,6 @@ return [
             'lock_connection' => 'default',
         ],
 
-        'jwt_blacklist' => [
-            'driver' => 'redis',
-            'connection' => 'jwt_blacklist',
-            'lock_connection' => 'default',
-        ],
-
     ],
 
     /*

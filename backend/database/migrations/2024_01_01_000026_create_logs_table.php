@@ -10,8 +10,8 @@ return new class extends Migration
     public function up(): void
     {
         // 使用 hasTable 检查避免并行测试冲突
-        if (!Schema::connection('log')->hasTable('ca_logs')) {
-            Schema::connection('log')->create('ca_logs', function (Blueprint $table) {
+        if (!Schema::hasTable('ca_logs')) {
+            Schema::create('ca_logs', function (Blueprint $table) {
                 $table->id();
                 $table->string('url', 2000)->comment('请求URL');
                 $table->string('api', 100)->nullable()->comment('API');
@@ -24,8 +24,8 @@ return new class extends Migration
             });
         }
 
-        if (!Schema::connection('log')->hasTable('callback_logs')) {
-            Schema::connection('log')->create('callback_logs', function (Blueprint $table) {
+        if (!Schema::hasTable('callback_logs')) {
+            Schema::create('callback_logs', function (Blueprint $table) {
                 $table->id();
                 $table->string('method', 10)->index()->comment('请求方法');
                 $table->string('url', 2000)->comment('请求地址');
@@ -37,8 +37,8 @@ return new class extends Migration
             });
         }
 
-        if (!Schema::connection('log')->hasTable('api_logs')) {
-            Schema::connection('log')->create('api_logs', function (Blueprint $table) {
+        if (!Schema::hasTable('api_logs')) {
+            Schema::create('api_logs', function (Blueprint $table) {
                 $table->id();
                 $table->unsignedBigInteger('user_id')->nullable()->index()->comment('用户ID');
                 $table->string('version', 10)->default('v2')->index()->comment('API版本');
@@ -55,8 +55,8 @@ return new class extends Migration
             });
         }
 
-        if (!Schema::connection('log')->hasTable('user_logs')) {
-            Schema::connection('log')->create('user_logs', function (Blueprint $table) {
+        if (!Schema::hasTable('user_logs')) {
+            Schema::create('user_logs', function (Blueprint $table) {
                 $table->id();
                 $table->unsignedBigInteger('user_id')->nullable()->index()->comment('用户ID');
                 $table->string('module', 100)->index()->comment('模块');
@@ -74,8 +74,8 @@ return new class extends Migration
             });
         }
 
-        if (!Schema::connection('log')->hasTable('admin_logs')) {
-            Schema::connection('log')->create('admin_logs', function (Blueprint $table) {
+        if (!Schema::hasTable('admin_logs')) {
+            Schema::create('admin_logs', function (Blueprint $table) {
                 $table->id();
                 $table->integer('admin_id')->nullable()->index()->comment('管理员ID');
                 $table->string('module', 100)->index()->comment('模块');
@@ -93,8 +93,8 @@ return new class extends Migration
             });
         }
 
-        if (!Schema::connection('log')->hasTable('error_logs')) {
-            Schema::connection('log')->create('error_logs', function (Blueprint $table) {
+        if (!Schema::hasTable('error_logs')) {
+            Schema::create('error_logs', function (Blueprint $table) {
                 $table->id();
                 $table->string('method', 10)->index()->comment('请求方法');
                 $table->string('url', 2000)->comment('请求URL');
@@ -107,8 +107,8 @@ return new class extends Migration
             });
         }
 
-        if (!Schema::connection('log')->hasTable('easy_logs')) {
-            Schema::connection('log')->create('easy_logs', function (Blueprint $table) {
+        if (!Schema::hasTable('easy_logs')) {
+            Schema::create('easy_logs', function (Blueprint $table) {
                 $table->id();
                 $table->string('method', 10)->index()->comment('请求方法');
                 $table->string('url', 2000)->comment('请求URL');
@@ -123,12 +123,12 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::connection('log')->dropIfExists('ca_logs');
-        Schema::connection('log')->dropIfExists('callback_logs');
-        Schema::connection('log')->dropIfExists('api_logs');
-        Schema::connection('log')->dropIfExists('user_logs');
-        Schema::connection('log')->dropIfExists('admin_logs');
-        Schema::connection('log')->dropIfExists('error_logs');
-        Schema::connection('log')->dropIfExists('easy_logs');
+        Schema::dropIfExists('ca_logs');
+        Schema::dropIfExists('callback_logs');
+        Schema::dropIfExists('api_logs');
+        Schema::dropIfExists('user_logs');
+        Schema::dropIfExists('admin_logs');
+        Schema::dropIfExists('error_logs');
+        Schema::dropIfExists('easy_logs');
     }
 };

@@ -5,6 +5,7 @@ namespace App\Bootstrap;
 use App\Http\Middleware\AdminAuthenticate;
 use App\Http\Middleware\AdminRefreshTokenAuthenticate;
 use App\Http\Middleware\ApiAuthenticate;
+use App\Http\Middleware\DeployAuthenticate;
 use App\Http\Middleware\DynamicCors;
 use App\Http\Middleware\FilterUserIdParameter;
 use App\Http\Middleware\FlushLogs;
@@ -64,9 +65,10 @@ class ApiMiddleware
             ApiAuthenticate::class,
         ]);
 
-        // API Auto 中间件组
-        $middleware->group('api.auto', [
-            RateLimiter::class.':auto',
+        // API Deploy 中间件组
+        $middleware->group('api.deploy', [
+            RateLimiter::class.':deploy',
+            DeployAuthenticate::class,
         ]);
 
         // ACME 中间件组

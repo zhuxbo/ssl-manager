@@ -4,9 +4,11 @@ namespace App\Http\Controllers\User;
 
 use App\Http\Requests\ApiToken\UpdateRequest as ApiTokenUpdateRequest;
 use App\Http\Requests\Callback\StoreRequest as CallbackUpdateRequest;
+use App\Http\Requests\DeployToken\UpdateRequest as DeployTokenUpdateRequest;
 use App\Http\Requests\Setting\UpdateNotificationPreferenceRequest;
 use App\Models\ApiToken;
 use App\Models\Callback;
+use App\Models\DeployToken;
 use App\Models\User;
 
 /**
@@ -89,5 +91,39 @@ class SettingController extends BaseController
         $user->save();
 
         $this->success($user->notification_settings);
+    }
+
+    // 获取 Deploy Token
+    public function getDeployToken(): void
+    {
+        $deployToken = DeployToken::where('user_id', $this->guard->id())->first();
+        $this->success($deployToken?->toArray());
+    }
+
+    // 更新 Deploy Token
+    public function updateDeployToken(DeployTokenUpdateRequest $request): void
+    {
+        $validated = $request->validated();
+        $deployToken = DeployToken::where('user_id', $this->guard->id())->first();
+
+        // 如果不存在则创建
+        if (! $deployToken) {
+            if (empty($validated['token'])) {
+                $this->error('token 不能为空');
+            }
+            $validated['user_id'] = $this->guard->id();
+            DeployToken::create($validated);
+        } else {
+            $deployToken->update($validated);
+        }
+
+        $this->success();
+    }
+
+    // 删除 Deploy Token
+    public function deleteDeployToken(): void
+    {
+        DeployToken::where('user_id', $this->guard->id())->delete();
+        $this->success();
     }
 }

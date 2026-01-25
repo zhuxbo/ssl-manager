@@ -182,3 +182,44 @@ php artisan upgrade:run       # 执行升级
 php artisan upgrade:rollback  # 回滚
 php artisan queue:work --queue Task  # 队列
 ```
+
+---
+
+## 缓存与日志架构
+
+### 缓存驱动
+- 默认使用 `file` 驱动，不强制依赖 Redis
+- 生产环境推荐使用 Redis 提升性能
+- SnowFlake、RateLimiter 通过 `Cache` facade 操作
+
+### 日志批量写入
+- `LogBuffer` 服务：收集请求期间的日志，请求结束后批量写入
+- `FlushLogs` 中间件：响应发送后触发日志刷入
+- 所有日志模型使用默认数据库连接
+
+---
+
+## Token 认证体系
+
+| Token 类型 | 中间件 | 路由前缀 | 用途 |
+|-----------|--------|---------|------|
+| ApiToken | `api.v1` / `api.v2` | `/api/v1/`, `/api/v2/` | 第三方 API 调用 |
+| DeployToken | `api.deploy` | `/api/deploy/` | 部署工具证书管理 |
+
+### 共同特性
+- Token 使用 SHA-256 hash 存储
+- 支持 IP 白名单（最多 100 个，`allowed_ips` 字段 2000 字符）
+- 支持速率限制（`rate_limit` 字段，每分钟请求数）
+- 请求结束后异步更新 `last_used_at` 和 `last_ip`
+
+### DeployToken 特性
+- 每个用户仅一个 DeployToken（唯一约束）
+- 通过 `UserScope` 限制只能访问用户自己的 Order
+- 支持查询证书、续费/重签、部署回调
+
+---
+
+## MySQL 兼容性
+
+- 兼容 MySQL 5.7，不使用 `json` 字段类型
+- 数组类型字段使用 `string` 存储，由 Laravel 模型 `'array'` cast 自动 JSON 序列化

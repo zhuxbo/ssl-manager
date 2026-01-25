@@ -17,7 +17,8 @@
 - **框架**: Laravel 11.x
 - **PHP 版本**: 8.3+
 - **数据库**: MySQL 8.0
-- **缓存/队列**: Redis
+- **缓存**: 文件缓存（默认）/ Redis（可选）
+- **队列**: 同步（默认）/ Redis（可选）
 - **认证**: JWT (tymon/jwt-auth)
 - **测试**: PHPUnit + Pest
 - **代码质量**: PHPStan + PHP Pint
@@ -32,9 +33,9 @@
 
 - PHP 8.3+
 - MySQL 8.0+
-- Redis
 - Composer
-- JRE 17+ (可选，用于 keytool 生成 JKS 证书)
+- Redis（可选，用于缓存和队列）
+- JRE 17+（可选，用于 keytool 生成 JKS 证书）
 
 ### 安装步骤
 
@@ -79,6 +80,30 @@
     ```
 
 详细安装说明请参考 [INSTALL.md](INSTALL.md)
+
+### Redis 配置（可选）
+
+系统默认使用文件缓存和同步队列，无需 Redis 即可运行。如需启用 Redis 以提升性能，在 `.env` 中添加：
+
+```bash
+# Redis 连接配置
+REDIS_HOST=127.0.0.1
+REDIS_PORT=6379
+REDIS_PASSWORD=
+
+# 启用 Redis 缓存
+CACHE_DRIVER=redis
+REDIS_CACHE_DB=1
+
+# 启用 Redis 队列（需要运行 queue:work）
+QUEUE_CONNECTION=redis
+```
+
+**注意**：启用 Redis 队列后，需要运行队列处理进程：
+
+```bash
+php artisan queue:work --tries=3
+```
 
 IDE 代码提示辅助工具：
 Phpstorm Laravel Idea 插件优先
@@ -229,9 +254,9 @@ php artisan test
 
 ## 性能优化
 
-- Redis 缓存策略
+- 缓存策略（文件/Redis）
 - 数据库查询优化
-- 异步队列处理
+- 队列处理（同步/异步）
 - 防重复提交机制
 - 分页查询支持
 

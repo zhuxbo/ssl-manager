@@ -221,7 +221,7 @@ class UpgradeService
             if ($clearCache) {
                 $steps[] = ['step' => 'clear_cache', 'status' => 'running'];
                 Log::info('[Upgrade] Step: clear_cache - starting optimize:clear');
-                Artisan::call('optimize:clear');
+                Artisan::call('optimize:clear', ['--except' => 'view']);
                 Log::info('[Upgrade] optimize:clear done, output: ' . Artisan::output());
 
                 // 重建缓存
@@ -421,7 +421,7 @@ class UpgradeService
             // 步骤 8: 清理缓存
             if (Config::get('upgrade.behavior.clear_cache', true)) {
                 $statusManager->startStep('clear_cache');
-                Artisan::call('optimize:clear');
+                Artisan::call('optimize:clear', ['--except' => 'view']);
                 Artisan::call('config:cache');
                 Artisan::call('route:cache');
                 $statusManager->completeStep('clear_cache');
@@ -507,7 +507,7 @@ class UpgradeService
             }
 
             // 清理并重建缓存
-            Artisan::call('optimize:clear');
+            Artisan::call('optimize:clear', ['--except' => 'view']);
             Artisan::call('config:cache');
             Artisan::call('route:cache');
 

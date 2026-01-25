@@ -24,9 +24,9 @@ return new class extends Migration
 
         foreach ($tables as $tableName => $columnName) {
             // 检查表和字段是否存在
-            if (Schema::connection('log')->hasTable($tableName) &&
-                Schema::connection('log')->hasColumn($tableName, $columnName)) {
-                Schema::connection('log')->table($tableName, function (Blueprint $table) use ($columnName) {
+            if (Schema::hasTable($tableName) &&
+                Schema::hasColumn($tableName, $columnName)) {
+                Schema::table($tableName, function (Blueprint $table) use ($columnName) {
                     // 将 url 字段长度从 500 增加到 2000
                     $table->string($columnName, 2000)
                         ->change()
@@ -54,9 +54,9 @@ return new class extends Migration
 
         foreach ($tables as $tableName => $columnName) {
             // 检查表和字段是否存在
-            if (Schema::connection('log')->hasTable($tableName) &&
-                Schema::connection('log')->hasColumn($tableName, $columnName)) {
-                Schema::connection('log')->table($tableName, function (Blueprint $table) use ($columnName) {
+            if (Schema::hasTable($tableName) &&
+                Schema::hasColumn($tableName, $columnName)) {
+                Schema::table($tableName, function (Blueprint $table) use ($columnName) {
                     // 将 url 字段长度还原为 500
                     $table->string($columnName, 500)
                         ->change()

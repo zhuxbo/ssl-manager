@@ -2,6 +2,7 @@
 import { usePassword } from "./password";
 import { PlusForm } from "plus-pro-components";
 import { useApi } from "./api";
+import { useDeploy } from "./deploy";
 import { useCallback } from "./callback";
 import { useProfile, VerifyDialog } from "./profile";
 import { useNotificationPreference } from "./notification";
@@ -30,6 +31,13 @@ const {
 } = usePassword();
 const { apiColumns, apiRules, apiValues, handleApiUpdate, resetApiToken } =
   useApi();
+const {
+  deployColumns,
+  deployRules,
+  deployValues,
+  handleDeployUpdate,
+  resetDeployToken
+} = useDeploy();
 const {
   callbackColumns,
   callbackRules,
@@ -86,6 +94,21 @@ const {
         reset-text="重置"
         :onSubmit="handleApiUpdate"
         :onReset="resetApiToken"
+      />
+    </el-card>
+    <el-card shadow="never" :style="{ border: 'none', paddingTop: '20px' }">
+      <PlusForm
+        v-model="deployValues"
+        :columns="deployColumns"
+        :rules="deployRules"
+        label-width="100"
+        label-position="right"
+        label-suffix=""
+        footer-align="right"
+        submit-text="保存"
+        reset-text="重置"
+        :onSubmit="handleDeployUpdate"
+        :onReset="resetDeployToken"
       />
     </el-card>
     <el-card shadow="never" :style="{ border: 'none', paddingTop: '20px' }">

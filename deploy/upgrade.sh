@@ -781,12 +781,10 @@ PYEOF
         cd "$INSTALL_DIR"
         $compose_cmd exec -T php sh -c "cd /var/www/html/backend && php artisan config:cache" || true
         $compose_cmd exec -T php sh -c "cd /var/www/html/backend && php artisan route:cache" || true
-        $compose_cmd exec -T php sh -c "cd /var/www/html/backend && php artisan view:cache" || true
     else
         cd "$INSTALL_DIR/backend"
         php artisan config:cache || true
         php artisan route:cache || true
-        php artisan view:cache || true
     fi
 
     # 12. 完整性校验

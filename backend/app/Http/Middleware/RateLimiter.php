@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Models\ApiToken;
+use App\Models\DeployToken;
 use App\Traits\ApiResponse;
 use App\Traits\ExtractsToken;
 use Closure;
@@ -19,12 +20,20 @@ class RateLimiter
      */
     public function handle(Request $request, Closure $next, string $limiter = 'v2')
     {
-        // 1. 优先检查 token 级别的限流， auto 和 acme 没有有效的 token
-        $hasValidToken = ! ($limiter === 'auto' || $limiter === 'acme') && $this->checkTokenRateLimit($request, $limiter);
-
-        // 2. 如果没有有效的 token，则使用 IP 限流
-        if (! $hasValidToken) {
+        // 1. 优先检查 token 级别的限流
+        // acme 没有有效的 token，deploy 使用 DeployToken
+        if ($limiter === 'acme') {
             $this->checkIpRateLimit($request, $limiter);
+        } elseif ($limiter === 'deploy') {
+            $hasValidToken = $this->checkDeployTokenRateLimit($request);
+            if (! $hasValidToken) {
+                $this->checkIpRateLimit($request, $limiter);
+            }
+        } else {
+            $hasValidToken = $this->checkTokenRateLimit($request, $limiter);
+            if (! $hasValidToken) {
+                $this->checkIpRateLimit($request, $limiter);
+            }
         }
 
         return $next($request);
@@ -40,7 +49,7 @@ class RateLimiter
 
         // IP 限流相对宽松，主要防止暴力攻击
         $limit = match ($limiter) {
-            'v1', 'v2', 'auto', 'acme' => 200,
+            'v1', 'v2', 'deploy', 'acme' => 200,
             default => 100,
         };
 
@@ -79,6 +88,33 @@ class RateLimiter
         $this->checkLimit($key, $limit, 'Token rate limit exceeded');
 
         // 返回 true 表示找到了有效的 token
+        return true;
+    }
+
+    /**
+     * 基于 DeployToken 的限流
+     *
+     * @return bool 是否找到有效的 token
+     */
+    private function checkDeployTokenRateLimit(Request $request): bool
+    {
+        $token = $this->extractToken($request);
+        if (! $token) {
+            return false;
+        }
+
+        $deployToken = DeployToken::findByToken($token);
+        if (! $deployToken) {
+            return false;
+        }
+
+        // 使用 token 配置的限流值
+        $limit = $deployToken->getEffectiveRateLimit(60);
+        $identifier = 'deploy_token_' . $deployToken->id;
+
+        $key = sprintf('rate_limit_deploy:%s', $identifier);
+        $this->checkLimit($key, $limit, 'Deploy token rate limit exceeded');
+
         return true;
     }
 

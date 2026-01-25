@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\Auto;
+namespace App\Http\Controllers\Deploy;
 
 use App\Exceptions\ApiResponseException;
 use App\Http\Controllers\Controller;
@@ -13,28 +13,52 @@ use Throwable;
 class ApiController extends Controller
 {
     /**
-     * 通过 refer_id 获取证书信息
-     * 不需要用户认证，使用 refer_id 作为凭据
-     * refer_id 从 Authorization: Bearer <refer_id> 中获取
+     * 按域名查询证书列表
+     * 支持精确匹配和通配符匹配
+     */
+    public function cert(Request $request): void
+    {
+        $request->validate([
+            'domain' => ['required', 'string'],
+        ]);
+
+        $domain = strtolower(trim($request->input('domain')));
+
+        // 查询匹配的证书
+        $certs = $this->findCertsByDomain($domain);
+
+        if ($certs->isEmpty()) {
+            $this->error('未找到匹配的证书');
+        }
+
+        $data = $certs->map(fn ($cert) => $this->getCertData($cert))->values();
+
+        $this->success($data);
+    }
+
+    /**
+     * 更新/续费证书
      *
      * @throws Throwable
      */
     public function update(Request $request): void
     {
-        // 从 Authorization Header 中获取 refer_id
-        $referId = $request->bearerToken();
-
-        if (empty($referId) || strlen($referId) !== 32) {
-            $this->error('refer_id 无效');
-        }
-
         $params = $request->validate([
+            'cert_id' => ['nullable', 'integer'],
+            'domain' => ['nullable', 'string'],
             'csr' => ['nullable', 'string'],
             'domains' => ['nullable', 'string'], // 多域名支持，逗号分割
             'validation_method' => ['nullable', 'in:txt,file,http,https,cname,admin,administrator,postmaster,webmaster,hostmaster'],
         ]);
 
-        $order = $this->findOrder($referId);
+        // 通过 cert_id 或 domain 查找证书
+        $cert = $this->findCert($params);
+        $order = Order::with('latestCert')->whereHas('latestCert')->where('id', $cert->order_id)->first();
+
+        if (! $order) {
+            $this->error('订单不存在');
+        }
+
         $cert = $order->latestCert;
         $orderId = $order->id;
         $reQuery = false;
@@ -60,9 +84,7 @@ class ApiController extends Controller
             $reQuery = true;
         }
 
-        // 证书状态如果是 active
-        // 而且证书签发时间已超过 15 天 或者 订单到期时间小于 15 天 则发起重签或续费
-        // if ($cert->status === 'active' && ($cert->issued_at?->lt(now()->subDays(15)) || $order->period_till?->lt(now()->addDays(15)))) {
+        // 证书状态如果是 active 则发起重签或续费
         if ($cert->status === 'active') {
             $updateParams = [
                 'order_id' => $orderId,
@@ -77,8 +99,6 @@ class ApiController extends Controller
 
             $updateParams['channel'] = 'api';
             // 优先使用客户端传入的 domains，否则使用当前证书的域名
-            // 注意：domains 必须保持字符串格式（逗号分割），ActionTrait::getCert 会调用
-            // DomainUtil::convertToUnicodeDomains(string) 处理，传数组会导致类型错误
             $updateParams['domains'] = ! empty($params['domains'])
                 ? trim($params['domains'])
                 : $cert->alternative_names;
@@ -123,110 +143,13 @@ class ApiController extends Controller
     }
 
     /**
-     * 通过 refer_id 获取 common_name
-     * 不需要用户认证，使用 refer_id 作为凭据
-     * refer_id 从 Authorization: Bearer <refer_id> 中获取
-     */
-    public function get(Request $request): void
-    {
-        // 从 Authorization Header 中获取 refer_id
-        $referId = $request->bearerToken();
-
-        if (empty($referId) || strlen($referId) !== 32) {
-            $this->error('refer_id 无效');
-        }
-
-        $order = $this->findOrder($referId);
-        $cert = $order->latestCert;
-
-        $data = $this->getCertData($cert);
-
-        $this->success($data);
-    }
-
-    /**
-     * 通过 refer_id 查找订单
-     */
-    private function findOrder(string $referId): Order
-    {
-        // 先尝试通过 latestCert.refer_id 查询
-        $order = Order::with('latestCert')
-            ->whereHas('latestCert', function ($query) use ($referId) {
-                $query->where('refer_id', $referId);
-            })->first();
-
-        // 如果没找到，则通过 Cert 表回落查询
-        if (! $order) {
-            $cert = Cert::where('refer_id', $referId)->first();
-
-            if (! $cert) {
-                $this->error('证书不存在');
-            }
-
-            $order = Order::with('latestCert')->whereHas('latestCert')->where('id', $cert->order_id)->first();
-
-            if (! $order) {
-                $this->error('订单不存在');
-            }
-        }
-
-        // 续费/重签会生成新证书：当 refer_id 指向已标记为 renewed/reissued 的证书时，跟随链路找到最新订单
-        if (in_array($order->latestCert->status, ['renewed', 'reissued'])) {
-            $order = $this->findNewOrder($order->latestCert);
-        }
-
-        // 缓存查询结果到 request 中供中间件复用，避免重复查询
-        request()->attributes->set('auto_order', $order);
-
-        return $order;
-    }
-
-    /**
-     * 通过证书ID循环查找最新的证书
-     * 限制查询12次防止无限循环
-     */
-    private function findNewOrder(Cert $cert): Order
-    {
-        $maxIterations = 12;
-        $iteration = 0;
-
-        // 循环查找以当前证书为 last_cert_id 的新证书
-        while ($iteration < $maxIterations) {
-            $newCert = Cert::where('last_cert_id', $cert->id)->first();
-
-            if (! $newCert) {
-                // 如果找不到新证书，说明当前证书就是最新的
-                break;
-            }
-
-            $cert = $newCert;
-            $iteration++;
-        }
-
-        // 通过最新证书获取订单
-        $order = Order::with('latestCert')->whereHas('latestCert')->where('id', $cert->order_id)->first();
-
-        if (! $order) {
-            $this->error('订单不存在');
-        }
-
-        return $order;
-    }
-
-    /**
      * 部署回调接口
      * 部署工具完成部署后调用此接口通知 Manager
      */
     public function callback(Request $request): void
     {
-        // 从 Authorization Header 中获取 refer_id
-        $referId = $request->bearerToken();
-
-        if (empty($referId) || strlen($referId) !== 32) {
-            $this->error('refer_id 无效');
-        }
-
         $params = $request->validate([
+            'cert_id' => ['required', 'integer'],
             'domain' => ['required', 'string'],
             'status' => ['required', 'in:success,failure'],
             'deployed_at' => ['nullable', 'string'],
@@ -236,12 +159,16 @@ class ApiController extends Controller
             'message' => ['nullable', 'string'],
         ]);
 
-        // 查找证书
-        $cert = Cert::where('refer_id', $referId)->first();
+        // 通过 Order 查询（Order 已被 UserScope 限制）
+        $order = Order::with('latestCert')
+            ->whereHas('latestCert', fn ($q) => $q->where('id', $params['cert_id']))
+            ->first();
 
-        if (! $cert) {
+        if (! $order || ! $order->latestCert) {
             $this->error('证书不存在');
         }
+
+        $cert = $order->latestCert;
 
         // 只有部署成功才记录时间
         if ($params['status'] === 'success') {
@@ -261,10 +188,82 @@ class ApiController extends Controller
         }
 
         $this->success([
+            'cert_id' => $params['cert_id'],
             'domain' => $params['domain'],
             'status' => $params['status'],
             'recorded' => $params['status'] === 'success',
         ]);
+    }
+
+    /**
+     * 通过 cert_id 或 domain 查找证书
+     */
+    private function findCert(array $params): Cert
+    {
+        // 优先使用 cert_id
+        if (! empty($params['cert_id'])) {
+            // 通过 Order 查询（Order 已被 UserScope 限制）
+            $order = Order::with('latestCert')
+                ->whereHas('latestCert', fn ($q) => $q->where('id', $params['cert_id']))
+                ->first();
+
+            if (! $order || ! $order->latestCert) {
+                $this->error('证书不存在');
+            }
+
+            return $order->latestCert;
+        }
+
+        // 使用 domain 查找
+        if (! empty($params['domain'])) {
+            $domain = strtolower(trim($params['domain']));
+            $certs = $this->findCertsByDomain($domain);
+
+            if ($certs->isEmpty()) {
+                $this->error('未找到匹配的证书');
+            }
+
+            // 返回第一个匹配的证书
+            return $certs->first();
+        }
+
+        $this->error('请提供 cert_id 或 domain 参数');
+    }
+
+    /**
+     * 按域名查找证书
+     * 支持精确匹配和通配符匹配（如 api.example.com 匹配 *.example.com）
+     * 通过 Order->latestCert 查询，Order 已被 UserScope 限制
+     */
+    private function findCertsByDomain(string $domain): \Illuminate\Database\Eloquent\Collection
+    {
+        // 提取基础域名（去掉第一级子域名用于通配符匹配）
+        $parts = explode('.', $domain);
+        $wildcardDomain = count($parts) > 2 ? '*.' . implode('.', array_slice($parts, 1)) : null;
+
+        // 通过 Order 查询（Order 已被 UserScope 限制）
+        $orders = Order::with('latestCert')
+            ->whereHas('latestCert', function ($query) use ($domain, $wildcardDomain) {
+                $query->where(function ($q) use ($domain, $wildcardDomain) {
+                    // 精确匹配 common_name
+                    $q->where('common_name', $domain);
+
+                    // 精确匹配 alternative_names（JSON 包含）
+                    $q->orWhereJsonContains('alternative_names', $domain);
+
+                    // 通配符匹配
+                    if ($wildcardDomain) {
+                        $q->orWhere('common_name', $wildcardDomain);
+                        $q->orWhereJsonContains('alternative_names', $wildcardDomain);
+                    }
+                })
+                    ->whereIn('status', ['active', 'processing', 'pending', 'unpaid']);
+            })
+            ->orderByDesc('created_at')
+            ->get();
+
+        // 提取 latestCert
+        return $orders->pluck('latestCert')->filter();
     }
 
     /**
@@ -273,16 +272,18 @@ class ApiController extends Controller
     private function getCertData(Cert $cert): array
     {
         $data = [
-            'refer_id' => $cert->refer_id,
-            'common_name' => $cert->common_name,
-            'cert' => $cert->cert,
-            'intermediate_cert' => $cert->intermediate_cert,
-            'private_key' => $cert->private_key,
+            'id' => $cert->id,
+            'domain' => $cert->common_name,
+            'domains' => $cert->alternative_names,
             'status' => $cert->status,
-            'expires_at' => $cert->expires_at?->toDateTimeString(),
+            'certificate' => $cert->cert,
+            'private_key' => $cert->private_key,
+            'ca_certificate' => $cert->intermediate_cert,
+            'expires_at' => $cert->expires_at?->toDateString(),
+            'created_at' => $cert->created_at?->toDateString(),
         ];
 
-        // 空值守卫：dcv 可能为 null（如 CodeSign/DocSign 产品）
+        // 空值守卫：dcv 可能为 null
         $dcvMethod = $cert->dcv['method'] ?? null;
         if (in_array($dcvMethod, ['file', 'http', 'https']) && $cert->status === 'processing') {
             $data['file'] = [

@@ -51,3 +51,24 @@ export function updateNotificationPreferences(data: NotificationPreferences) {
     { data }
   );
 }
+
+export function getDeployToken() {
+  return http.get<
+    BaseResponse<{ allowed_ips: string[] }>,
+    { allowed_ips: string[] }
+  >("/setting/deploy-token");
+}
+
+export function updateDeployToken(data: {
+  token?: string;
+  allowed_ips?: string[];
+}) {
+  return http.put<
+    BaseResponse<null>,
+    { token?: string; allowed_ips?: string[] }
+  >("/setting/deploy-token", { data });
+}
+
+export function deleteDeployToken() {
+  return http.delete<BaseResponse<null>, null>("/setting/deploy-token");
+}
