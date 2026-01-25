@@ -494,6 +494,26 @@ perform_upgrade() {
     # easy: config.json
     [ -f "$INSTALL_DIR/frontend/easy/config.json" ] && cp "$INSTALL_DIR/frontend/easy/config.json" "$preserve_dir/frontend_config/easy_config.json"
 
+    # 保留自定义 API 适配器（排除核心文件 Api.php 和 default/）
+    local api_adapter_dir="$INSTALL_DIR/backend/app/Services/Order/Api"
+    if [ -d "$api_adapter_dir" ]; then
+        local has_custom=false
+        mkdir -p "$preserve_dir/api_adapters"
+        for item in "$api_adapter_dir"/*; do
+            [ ! -e "$item" ] && continue
+            local name=$(basename "$item")
+            # 跳过核心文件
+            if [ "$name" = "Api.php" ] || [ "$name" = "default" ]; then
+                continue
+            fi
+            # 复制自定义适配器
+            cp -r "$item" "$preserve_dir/api_adapters/"
+            has_custom=true
+            log_info "保留自定义 API 适配器: $name"
+        done
+        [ "$has_custom" = true ] && log_info "已保留自定义 API 适配器"
+    fi
+
     # 5. 删除旧代码
     log_step "清理旧代码..."
     # 只删除后端代码目录（保留 storage 已移走）
@@ -656,6 +676,14 @@ PYEOF
         done
         # easy
         [ -f "$preserve_dir/frontend_config/easy_config.json" ] && cp "$preserve_dir/frontend_config/easy_config.json" "$INSTALL_DIR/frontend/easy/config.json"
+    fi
+
+    # 恢复自定义 API 适配器
+    if [ -d "$preserve_dir/api_adapters" ] && [ "$(ls -A "$preserve_dir/api_adapters" 2>/dev/null)" ]; then
+        local api_adapter_dir="$INSTALL_DIR/backend/app/Services/Order/Api"
+        mkdir -p "$api_adapter_dir"
+        cp -r "$preserve_dir/api_adapters"/* "$api_adapter_dir/"
+        log_info "已恢复自定义 API 适配器"
     fi
 
     # 8.1 预先修复权限（在执行 artisan 命令前）

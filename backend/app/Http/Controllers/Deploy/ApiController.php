@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Deploy;
 
 use App\Exceptions\ApiResponseException;
 use App\Http\Controllers\Controller;
-use App\Models\Cert;
 use App\Models\Order;
 use App\Services\Order\Action;
 use Illuminate\Http\Request;
@@ -13,10 +12,10 @@ use Throwable;
 class ApiController extends Controller
 {
     /**
-     * 按域名查询证书列表
+     * 按域名查询订单列表
      * 支持精确匹配和通配符匹配
      */
-    public function cert(Request $request): void
+    public function query(Request $request): void
     {
         $request->validate([
             'domain' => ['required', 'string'],
@@ -24,14 +23,14 @@ class ApiController extends Controller
 
         $domain = strtolower(trim($request->input('domain')));
 
-        // 查询匹配的证书
-        $certs = $this->findCertsByDomain($domain);
+        // 查询匹配的订单
+        $orders = $this->findOrdersByDomain($domain);
 
-        if ($certs->isEmpty()) {
-            $this->error('未找到匹配的证书');
+        if ($orders->isEmpty()) {
+            $this->error('未找到匹配的订单');
         }
 
-        $data = $certs->map(fn ($cert) => $this->getCertData($cert))->values();
+        $data = $orders->map(fn ($order) => $this->getOrderData($order))->values()->toArray();
 
         $this->success($data);
     }
@@ -44,18 +43,17 @@ class ApiController extends Controller
     public function update(Request $request): void
     {
         $params = $request->validate([
-            'cert_id' => ['nullable', 'integer'],
+            'order_id' => ['nullable', 'integer'],
             'domain' => ['nullable', 'string'],
             'csr' => ['nullable', 'string'],
             'domains' => ['nullable', 'string'], // 多域名支持，逗号分割
             'validation_method' => ['nullable', 'in:txt,file,http,https,cname,admin,administrator,postmaster,webmaster,hostmaster'],
         ]);
 
-        // 通过 cert_id 或 domain 查找证书
-        $cert = $this->findCert($params);
-        $order = Order::with('latestCert')->whereHas('latestCert')->where('id', $cert->order_id)->first();
+        // 通过 order_id 或 domain 查找订单
+        $order = $this->findOrder($params);
 
-        if (! $order) {
+        if (! $order || ! $order->latestCert) {
             $this->error('订单不存在');
         }
 
@@ -133,11 +131,9 @@ class ApiController extends Controller
             if (! $order) {
                 $this->error('订单不存在');
             }
-
-            $cert = $order->latestCert;
         }
 
-        $data = $this->getCertData($cert);
+        $data = $this->getOrderData($order);
 
         $this->success($data);
     }
@@ -149,7 +145,7 @@ class ApiController extends Controller
     public function callback(Request $request): void
     {
         $params = $request->validate([
-            'cert_id' => ['required', 'integer'],
+            'order_id' => ['required', 'integer'],
             'domain' => ['required', 'string'],
             'status' => ['required', 'in:success,failure'],
             'deployed_at' => ['nullable', 'string'],
@@ -161,11 +157,11 @@ class ApiController extends Controller
 
         // 通过 Order 查询（Order 已被 UserScope 限制）
         $order = Order::with('latestCert')
-            ->whereHas('latestCert', fn ($q) => $q->where('id', $params['cert_id']))
+            ->where('id', $params['order_id'])
             ->first();
 
         if (! $order || ! $order->latestCert) {
-            $this->error('证书不存在');
+            $this->error('订单不存在');
         }
 
         $cert = $order->latestCert;
@@ -188,7 +184,7 @@ class ApiController extends Controller
         }
 
         $this->success([
-            'cert_id' => $params['cert_id'],
+            'order_id' => $params['order_id'],
             'domain' => $params['domain'],
             'status' => $params['status'],
             'recorded' => $params['status'] === 'success',
@@ -196,53 +192,54 @@ class ApiController extends Controller
     }
 
     /**
-     * 通过 cert_id 或 domain 查找证书
+     * 通过 order_id 或 domain 查找订单
      */
-    private function findCert(array $params): Cert
+    private function findOrder(array $params): Order
     {
-        // 优先使用 cert_id
-        if (! empty($params['cert_id'])) {
+        // 优先使用 order_id
+        if (! empty($params['order_id'])) {
             // 通过 Order 查询（Order 已被 UserScope 限制）
             $order = Order::with('latestCert')
-                ->whereHas('latestCert', fn ($q) => $q->where('id', $params['cert_id']))
+                ->whereHas('latestCert')
+                ->where('id', $params['order_id'])
                 ->first();
 
             if (! $order || ! $order->latestCert) {
-                $this->error('证书不存在');
+                $this->error('订单不存在');
             }
 
-            return $order->latestCert;
+            return $order;
         }
 
         // 使用 domain 查找
         if (! empty($params['domain'])) {
             $domain = strtolower(trim($params['domain']));
-            $certs = $this->findCertsByDomain($domain);
+            $orders = $this->findOrdersByDomain($domain);
 
-            if ($certs->isEmpty()) {
-                $this->error('未找到匹配的证书');
+            if ($orders->isEmpty()) {
+                $this->error('未找到匹配的订单');
             }
 
-            // 返回第一个匹配的证书
-            return $certs->first();
+            // 返回第一个匹配的订单
+            return $orders->first();
         }
 
-        $this->error('请提供 cert_id 或 domain 参数');
+        $this->error('请提供 order_id 或 domain 参数');
     }
 
     /**
-     * 按域名查找证书
+     * 按域名查找订单
      * 支持精确匹配和通配符匹配（如 api.example.com 匹配 *.example.com）
-     * 通过 Order->latestCert 查询，Order 已被 UserScope 限制
+     * Order 已被 UserScope 限制
      */
-    private function findCertsByDomain(string $domain): \Illuminate\Database\Eloquent\Collection
+    private function findOrdersByDomain(string $domain): \Illuminate\Database\Eloquent\Collection
     {
         // 提取基础域名（去掉第一级子域名用于通配符匹配）
         $parts = explode('.', $domain);
         $wildcardDomain = count($parts) > 2 ? '*.' . implode('.', array_slice($parts, 1)) : null;
 
         // 通过 Order 查询（Order 已被 UserScope 限制）
-        $orders = Order::with('latestCert')
+        return Order::with('latestCert')
             ->whereHas('latestCert', function ($query) use ($domain, $wildcardDomain) {
                 $query->where(function ($q) use ($domain, $wildcardDomain) {
                     // 精确匹配 common_name
@@ -261,18 +258,17 @@ class ApiController extends Controller
             })
             ->orderByDesc('created_at')
             ->get();
-
-        // 提取 latestCert
-        return $orders->pluck('latestCert')->filter();
     }
 
     /**
      * 统一返回数据
      */
-    private function getCertData(Cert $cert): array
+    private function getOrderData(Order $order): array
     {
+        $cert = $order->latestCert;
+
         $data = [
-            'id' => $cert->id,
+            'order_id' => $order->id,
             'domain' => $cert->common_name,
             'domains' => $cert->alternative_names,
             'status' => $cert->status,

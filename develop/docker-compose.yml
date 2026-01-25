@@ -25,8 +25,11 @@ services:
     networks:
       - manager-network
 
-  # Redis 缓存
+  # Redis 缓存（可选，默认不启动）
+  # 启用方式: docker compose --profile redis up -d
   redis:
+    profiles:
+      - redis
     image: redis:7-alpine
     container_name: manager-redis
     restart: unless-stopped
@@ -70,8 +73,6 @@ services:
       - ../backend:/var/www/html
     depends_on:
       mysql:
-        condition: service_healthy
-      redis:
         condition: service_healthy
     networks:
       - manager-network

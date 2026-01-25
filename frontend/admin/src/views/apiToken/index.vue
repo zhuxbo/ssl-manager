@@ -78,10 +78,10 @@ onMounted(() => {
         @change="debouncedSearch"
       />
     </div>
-    <PureTableBar title="Token管理" :columns="tableColumns" @refresh="onSearch">
+    <PureTableBar title="接口令牌管理" :columns="tableColumns" @refresh="onSearch">
       <template #buttons>
         <el-button type="primary" @click="openStoreForm()">
-          新增Token
+          新增接口令牌
         </el-button>
       </template>
       <template v-slot="{ size, dynamicColumns }">
@@ -181,7 +181,7 @@ onMounted(() => {
       }"
       :size="drawerSize"
       :closeOnClickModal="true"
-      :title="storeId > 0 ? '编辑Token' : '新增Token'"
+      :title="storeId > 0 ? '编辑接口令牌' : '新增接口令牌'"
       confirmText="提交"
       cancelText="取消"
       @confirm="confirmStoreForm"

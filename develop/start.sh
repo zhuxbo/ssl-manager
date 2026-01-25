@@ -71,8 +71,8 @@ case "$1" in
         ;;
     init)
         echo "初始化项目..."
-        # 启动基础服务
-        docker compose up -d mysql redis
+        # 启动基础服务（Redis 可选，默认不启动）
+        docker compose up -d mysql
         echo "等待数据库就绪..."
         sleep 10
 
