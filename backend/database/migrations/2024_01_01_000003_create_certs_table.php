@@ -19,7 +19,7 @@ return new class extends Migration
             $table->string('unique_value', 32)->nullable()->comment('唯一值');
             $table->string('issuer', 200)->nullable()->index()->comment('颁发者');
             $table->enum('action', ['new', 'renew', 'reissue'])->default('new')->comment('操作');
-            $table->enum('channel', ['admin', 'web', 'api', 'acme'])->comment('渠道');
+            $table->enum('channel', ['admin', 'web', 'api', 'acme', 'deploy'])->comment('渠道');
             $table->mediumText('params')->nullable()->comment('参数');
             $table->decimal('amount', 10)->default(0)->comment('金额');
             $table->string('common_name', 256)->index()->comment('通用名称');

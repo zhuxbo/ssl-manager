@@ -12,22 +12,33 @@ use Throwable;
 class ApiController extends Controller
 {
     /**
-     * 按域名查询订单列表
-     * 支持精确匹配和通配符匹配
+     * 查询订单列表
+     * 支持按域名查询（精确匹配和通配符匹配）
+     * 不传 domain 时返回最新 100 条 active 订单
      */
     public function query(Request $request): void
     {
         $request->validate([
-            'domain' => ['required', 'string'],
+            'domain' => ['nullable', 'string'],
         ]);
 
-        $domain = strtolower(trim($request->input('domain')));
+        $domain = $request->input('domain');
 
-        // 查询匹配的订单
-        $orders = $this->findOrdersByDomain($domain);
+        if ($domain) {
+            // 按域名查询
+            $domain = strtolower(trim($domain));
+            $orders = $this->findOrdersByDomain($domain);
 
-        if ($orders->isEmpty()) {
-            $this->error('未找到匹配的订单');
+            if ($orders->isEmpty()) {
+                $this->error('未找到匹配的订单');
+            }
+        } else {
+            // 无 domain 参数：返回最新 100 条 active 订单
+            $orders = Order::with('latestCert')
+                ->whereHas('latestCert', fn ($q) => $q->where('status', 'active'))
+                ->orderByDesc('created_at')
+                ->limit(100)
+                ->get();
         }
 
         $data = $orders->map(fn ($order) => $this->getOrderData($order))->values()->toArray();
@@ -43,15 +54,17 @@ class ApiController extends Controller
     public function update(Request $request): void
     {
         $params = $request->validate([
-            'order_id' => ['nullable', 'integer'],
-            'domain' => ['nullable', 'string'],
+            'order_id' => ['required', 'integer'],
             'csr' => ['nullable', 'string'],
             'domains' => ['nullable', 'string'], // 多域名支持，逗号分割
             'validation_method' => ['nullable', 'in:txt,file,http,https,cname,admin,administrator,postmaster,webmaster,hostmaster'],
         ]);
 
-        // 通过 order_id 或 domain 查找订单
-        $order = $this->findOrder($params);
+        // 通过 order_id 查找订单
+        $order = Order::with('latestCert')
+            ->whereHas('latestCert')
+            ->where('id', $params['order_id'])
+            ->first();
 
         if (! $order || ! $order->latestCert) {
             $this->error('订单不存在');
@@ -61,24 +74,19 @@ class ApiController extends Controller
         $orderId = $order->id;
         $reQuery = false;
 
-        // 证书状态如果是 unpaid 则支付并提交
-        // 如果参数有 csr 则替换 csr 并删除 private_key
-        if ($cert->status === 'unpaid') {
-            if (! empty($params['csr'])) {
-                $cert->csr = $params['csr'];
-                $cert->private_key = null;
-                $cert->save();
-            }
+        $action = new Action;
 
-            $action = new Action;
-            $action->pay($orderId);
-            $reQuery = true;
+        // 证书状态如果是 unpaid 则支付
+        if ($cert->status === 'unpaid') {
+            $this->getData($action, 'pay', [$orderId]);
+
+            // 重新查询状态
+            $cert->refresh();
         }
 
-        // 证书状态如果是 pending 则提交
+        // 证书状态如果是 pending 则提交，直接进入验证状态
         if ($cert->status === 'pending') {
-            $action = new Action;
-            $action->commit($orderId);
+            $this->getData($action, 'commit', [$orderId]);
             $reQuery = true;
         }
 
@@ -95,7 +103,7 @@ class ApiController extends Controller
                 $updateParams['csr'] = $params['csr'];
             }
 
-            $updateParams['channel'] = 'api';
+            $updateParams['channel'] = 'deploy';
             // 优先使用客户端传入的 domains，否则使用当前证书的域名
             $updateParams['domains'] = ! empty($params['domains'])
                 ? trim($params['domains'])
@@ -103,24 +111,16 @@ class ApiController extends Controller
             $updateParams['validation_method'] = $params['validation_method'] ?? 'txt';
 
             // 如果订单到期时间小于 15 天则续费，否则重签
-            $action = new Action;
             if ($order->period_till?->lt(now()->addDays(15))) {
-                try {
-                    $updateParams['action'] = 'renew';
-                    $action->renew($updateParams);
-                } catch (ApiResponseException $e) {
-                    $result = $e->getApiResponse();
-
-                    if ($result['code'] === 0) {
-                        $this->error($result['msg'], $result['errors'] ?? null);
-                    }
-
-                    $orderId = $result['data']['order_id'];
-                }
+                $updateParams['action'] = 'renew';
+                $result = $this->getData($action, 'renew', [$updateParams]);
+                $orderId = $result['data']['order_id'] ?? $orderId;
             } else {
                 $updateParams['action'] = 'reissue';
-                $action->reissue($updateParams);
+                $this->getData($action, 'reissue', [$updateParams]);
             }
+
+            $this->getData($action, 'pay', [$orderId]);
 
             $reQuery = true;
         }
@@ -192,42 +192,6 @@ class ApiController extends Controller
     }
 
     /**
-     * 通过 order_id 或 domain 查找订单
-     */
-    private function findOrder(array $params): Order
-    {
-        // 优先使用 order_id
-        if (! empty($params['order_id'])) {
-            // 通过 Order 查询（Order 已被 UserScope 限制）
-            $order = Order::with('latestCert')
-                ->whereHas('latestCert')
-                ->where('id', $params['order_id'])
-                ->first();
-
-            if (! $order || ! $order->latestCert) {
-                $this->error('订单不存在');
-            }
-
-            return $order;
-        }
-
-        // 使用 domain 查找
-        if (! empty($params['domain'])) {
-            $domain = strtolower(trim($params['domain']));
-            $orders = $this->findOrdersByDomain($domain);
-
-            if ($orders->isEmpty()) {
-                $this->error('未找到匹配的订单');
-            }
-
-            // 返回第一个匹配的订单
-            return $orders->first();
-        }
-
-        $this->error('请提供 order_id 或 domain 参数');
-    }
-
-    /**
      * 按域名查找订单
      * 支持精确匹配和通配符匹配（如 api.example.com 匹配 *.example.com）
      * Order 已被 UserScope 限制
@@ -242,22 +206,35 @@ class ApiController extends Controller
         return Order::with('latestCert')
             ->whereHas('latestCert', function ($query) use ($domain, $wildcardDomain) {
                 $query->where(function ($q) use ($domain, $wildcardDomain) {
-                    // 精确匹配 common_name
-                    $q->where('common_name', $domain);
-
-                    // 精确匹配 alternative_names（JSON 包含）
-                    $q->orWhereJsonContains('alternative_names', $domain);
+                    // alternative_names 包含匹配（已含 common_name）
+                    $q->where('alternative_names', 'like', "%$domain%");
 
                     // 通配符匹配
                     if ($wildcardDomain) {
-                        $q->orWhere('common_name', $wildcardDomain);
-                        $q->orWhereJsonContains('alternative_names', $wildcardDomain);
+                        $q->orWhere('alternative_names', 'like', "%$wildcardDomain%");
                     }
                 })
                     ->whereIn('status', ['active', 'processing', 'pending', 'unpaid']);
             })
             ->orderByDesc('created_at')
             ->get();
+    }
+
+    /**
+     * 执行 Action 并获取返回数据
+     */
+    private function getData(Action $action, string $method, array $params = []): array
+    {
+        try {
+            $action->$method(...$params);
+        } catch (ApiResponseException $e) {
+            $result = $e->getApiResponse();
+            if ($result['code'] === 0) {
+                $this->error($result['msg'], $result['errors'] ?? null);
+            }
+        }
+
+        return $result ?? [];
     }
 
     /**

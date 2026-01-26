@@ -145,10 +145,13 @@ class Action
             $order = Order::create($orderData);
             $latestCert['order_id'] = $order->id;
 
+            if ($latestCert['action'] == 'renew') {
+                Cert::where(['status' => 'active', 'order_id' => $params['order_id']])->update(['status' => 'renewed']);
+                $latestCert['last_cert_id'] = $order->latest_cert_id;
+            }
+
             $cert = Cert::create($latestCert);
             $order->update(['latest_cert_id' => $cert->id]);
-
-            ($latestCert['action'] == 'renew') && Cert::where(['status' => 'active', 'order_id' => $params['order_id']])->update(['status' => 'renewed']);
 
             DB::commit();
         } catch (Throwable $e) {
@@ -246,6 +249,7 @@ class Action
             Cert::where('id', $order->latest_cert_id)->update(['status' => 'reissued']);
 
             $latestCert['order_id'] = $order->id;
+            $latestCert['last_cert_id'] = $order->latest_cert_id;
             $latestCert['amount'] = $amount;
             $latestCert['status'] = 'unpaid';
 
@@ -342,6 +346,10 @@ class Action
             if ($order->latestCert->last_cert_id) {
                 $lastCert = Cert::where('id', $order->latestCert->last_cert_id)->first();
                 $data['last_api_id'] = $lastCert->api_id;
+
+                // 上个证书的域名列表 用于重签时去除已有域名 部分 CA 重签仅接收新域名
+                $data['last_cert'] = $lastCert->cert;
+                $data['last_alternative_names'] = $lastCert->alternative_names;
             }
 
             $result = $this->api->$action($data);

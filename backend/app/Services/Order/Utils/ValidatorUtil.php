@@ -52,7 +52,7 @@ class ValidatorUtil
             'basic' => [
                 'rules' => [
                     'action' => ['required', 'in:new,renew,reissue'],
-                    'channel' => ['required', 'in:web,admin,api,acme,auto'],
+                    'channel' => ['required', 'in:web,admin,api,acme,deploy'],
                     'plus' => ['in:0,1'],
                     'issue_verify' => ['in:0,1'],
                     'refer_id' => ['alpha_num', 'size:32', 'unique:certs,refer_id'],

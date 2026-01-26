@@ -23,7 +23,7 @@ class IndexRequest extends BaseRequest
             'username' => 'nullable|string|max:20',
             'product_name' => 'nullable|string|max:50',
             'domain' => 'nullable|string|max:255',
-            'channel' => 'nullable|string|in:admin,api,web,acme,auto',
+            'channel' => 'nullable|string|in:admin,api,web,acme,deploy',
             'action' => 'nullable|string|in:new,renew,reissue',
             'expires_at' => 'nullable|array|size:2',
             'expires_at.*' => 'string|date_format:Y-m-d\TH:i:s.v\Z',

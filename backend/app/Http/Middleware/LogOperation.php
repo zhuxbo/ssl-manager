@@ -6,7 +6,6 @@ use App\Models\AdminLog;
 use App\Models\ApiLog;
 use App\Models\CallbackLog;
 use App\Models\EasyLog;
-use App\Models\Order;
 use App\Models\UserLog;
 use App\Services\LogBuffer;
 use App\Traits\LogSanitizer;
@@ -102,8 +101,8 @@ class LogOperation
             // 根据路由前缀记录不同类型的日志
             if ($request->is(['api/V1/*', 'api/v2/*'])) {
                 $this->logApiRequest($request, $logData);
-            } elseif ($request->is(['api/auto/*'])) {
-                $this->logApiAutoRequest($request, $logData);
+            } elseif ($request->is(['api/deploy', 'api/deploy/*'])) {
+                $this->logApiDeployRequest($request, $logData);
             } elseif ($request->is('api/admin/*')) {
                 $this->logAdminRequest($request, $logData);
             } elseif ($request->is('api/easy/*')) {
@@ -161,25 +160,13 @@ class LogOperation
     }
 
     /**
-     * 记录 API Auto 请求日志
+     * 记录 API Deploy 请求日志
      */
-    protected function logApiAutoRequest(Request $request, array $logData): void
+    protected function logApiDeployRequest(Request $request, array $logData): void
     {
-        // 优先从 request 中获取控制器缓存的查询结果，避免重复查询
-        $order = $request->attributes->get('auto_order');
-
-        // 如果控制器没有缓存，则进行查询（理论上不应该发生）
-        if ($order === null) {
-            $referId = $request->bearerToken();
-            $order = Order::with('latestCert')
-                ->whereHas('latestCert', function ($query) use ($referId) {
-                    $query->where('refer_id', $referId);
-                })->first();
-        }
-
         LogBuffer::add(ApiLog::class, array_merge($logData, [
-            'user_id' => $order?->user_id,
-            'version' => 'auto',
+            'user_id' => $request->attributes->get('authenticated_user_id'),
+            'version' => 'deploy',
         ]));
     }
 
