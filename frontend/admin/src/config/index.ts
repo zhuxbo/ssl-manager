@@ -7,4 +7,8 @@ export {
   storageNameSpace
 } from "@shared/config";
 
-export type { PlatformConfigs, StorageConfigs, ResponsiveStorage } from "@shared/config";
+export type {
+  PlatformConfigs,
+  StorageConfigs,
+  ResponsiveStorage
+} from "@shared/config";

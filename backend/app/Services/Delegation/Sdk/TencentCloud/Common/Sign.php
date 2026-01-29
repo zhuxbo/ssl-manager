@@ -1,4 +1,5 @@
 <?php
+
 /*
  * Copyright (c) 2017 Tencent. All Rights Reserved.
  *
@@ -19,9 +20,10 @@
 namespace App\Services\Delegation\Sdk\TencentCloud\Common;
 
 use App\Services\Delegation\Sdk\TencentCloud\Common\Exception\TencentCloudSDKException;
+
 /**
  * 签名类，禁止client引用
- * @package App\Services\Delegation\Sdk\TencentCloud\Common
+ *
  * @throws TencentCloudSDKException
  */
 class Sign
@@ -31,19 +33,21 @@ class Sign
      */
     public static function sign($secretKey, $signStr, $signMethod)
     {
-        $signMethodMap = ["HmacSHA1" => "SHA1", "HmacSHA256" => "SHA256"];
-        if (!array_key_exists($signMethod, $signMethodMap)) {
-            throw new TencentCloudSDKException("signMethod invalid", "signMethod only support (HmacSHA1, HmacSHA256)");
+        $signMethodMap = ['HmacSHA1' => 'SHA1', 'HmacSHA256' => 'SHA256'];
+        if (! array_key_exists($signMethod, $signMethodMap)) {
+            throw new TencentCloudSDKException('signMethod invalid', 'signMethod only support (HmacSHA1, HmacSHA256)');
         }
         $signature = base64_encode(hash_hmac($signMethodMap[$signMethod], $signStr, $secretKey, true));
+
         return $signature;
     }
 
     public static function signTC3($skey, $date, $service, $str2sign)
     {
-        $dateKey = hash_hmac("SHA256", $date, "TC3".$skey, true);
-        $serviceKey = hash_hmac("SHA256", $service, $dateKey, true);
-        $reqKey = hash_hmac("SHA256", "tc3_request", $serviceKey, true);
-        return hash_hmac("SHA256", $str2sign, $reqKey);
+        $dateKey = hash_hmac('SHA256', $date, 'TC3'.$skey, true);
+        $serviceKey = hash_hmac('SHA256', $service, $dateKey, true);
+        $reqKey = hash_hmac('SHA256', 'tc3_request', $serviceKey, true);
+
+        return hash_hmac('SHA256', $str2sign, $reqKey);
     }
 }

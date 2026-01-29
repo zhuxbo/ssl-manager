@@ -99,8 +99,8 @@ class UpgradeRollbackCommand extends Command
 
         if (! $force) {
             $this->warn("即将删除备份: $backupId");
-            $this->line("版本: " . ($backup['version'] ?? 'unknown'));
-            $this->line("创建时间: " . ($backup['created_at'] ?? ''));
+            $this->line('版本: '.($backup['version'] ?? 'unknown'));
+            $this->line('创建时间: '.($backup['created_at'] ?? ''));
 
             if (! $this->confirm('确定要删除此备份吗？')) {
                 $this->info('操作已取消');
@@ -130,10 +130,10 @@ class UpgradeRollbackCommand extends Command
             return CommandAlias::FAILURE;
         }
 
-        $this->info("备份信息:");
+        $this->info('备份信息:');
         $this->line("  ID: $backupId");
-        $this->line("  版本: " . ($backup['version'] ?? 'unknown'));
-        $this->line("  创建时间: " . ($backup['created_at'] ?? ''));
+        $this->line('  版本: '.($backup['version'] ?? 'unknown'));
+        $this->line('  创建时间: '.($backup['created_at'] ?? ''));
         $this->newLine();
 
         if (! $force) {
@@ -155,12 +155,12 @@ class UpgradeRollbackCommand extends Command
         if ($result['success']) {
             $this->newLine();
             $this->info('回滚成功！');
-            $this->line("已恢复到版本: " . ($result['restored_version'] ?? 'unknown'));
+            $this->line('已恢复到版本: '.($result['restored_version'] ?? 'unknown'));
 
             return CommandAlias::SUCCESS;
         } else {
             $this->newLine();
-            $this->error('回滚失败: ' . ($result['error'] ?? '未知错误'));
+            $this->error('回滚失败: '.($result['error'] ?? '未知错误'));
 
             return CommandAlias::FAILURE;
         }
@@ -176,6 +176,6 @@ class UpgradeRollbackCommand extends Command
             $index++;
         }
 
-        return round($bytes, 2) . ' ' . $units[$index];
+        return round($bytes, 2).' '.$units[$index];
     }
 }

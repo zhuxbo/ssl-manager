@@ -72,3 +72,21 @@ export function updateDeployToken(data: {
 export function deleteDeployToken() {
   return http.delete<BaseResponse<null>, null>("/setting/deploy-token");
 }
+
+export type AutoPreferences = {
+  auto_renew: boolean;
+  auto_reissue: boolean;
+};
+
+export function getAutoPreferences() {
+  return http.get<BaseResponse<AutoPreferences>, AutoPreferences>(
+    "/setting/auto-preferences"
+  );
+}
+
+export function updateAutoPreferences(data: Partial<AutoPreferences>) {
+  return http.put<BaseResponse<AutoPreferences>, Partial<AutoPreferences>>(
+    "/setting/auto-preferences",
+    { data }
+  );
+}

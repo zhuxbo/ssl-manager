@@ -7,6 +7,7 @@ use App\Http\Requests\Order\IndexRequest;
 use App\Models\Order;
 use App\Services\Order\Action;
 use Throwable;
+
 class OrderController extends BaseController
 {
     protected Action $action;

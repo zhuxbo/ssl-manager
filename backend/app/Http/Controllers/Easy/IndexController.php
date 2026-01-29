@@ -487,6 +487,9 @@ class IndexController extends Controller
                     case 'file':
                         $result['file'] = '文件验证 FILE';
                         break;
+                    case 'delegation':
+                        $result['delegation'] = '委托验证（自动TXT）';
+                        break;
                 }
             }
         }
@@ -557,7 +560,7 @@ class IndexController extends Controller
         $rules = [
             'domain' => 'required',
             'email' => 'required|email',
-            'validation_method' => 'required|in:file,http,https,cname,txt',
+            'validation_method' => 'required|in:file,http,https,cname,txt,delegation',
         ];
 
         $messages = [

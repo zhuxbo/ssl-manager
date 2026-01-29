@@ -7,7 +7,6 @@ use App\Services\Upgrade\PackageExtractor;
 use App\Services\Upgrade\ReleaseClient;
 use App\Services\Upgrade\UpgradeService;
 use App\Services\Upgrade\VersionManager;
-use Illuminate\Support\Facades\Config;
 use Mockery;
 use Tests\TestCase;
 

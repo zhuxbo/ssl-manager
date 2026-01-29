@@ -33,7 +33,7 @@ class PackageExtractor
             throw new RuntimeException("升级包不存在: $packagePath");
         }
 
-        $extractDir = $this->downloadPath . '/extract_' . uniqid();
+        $extractDir = $this->downloadPath.'/extract_'.uniqid();
         File::makeDirectory($extractDir, 0755, true);
 
         $zip = new ZipArchive;
@@ -473,7 +473,7 @@ class PackageExtractor
 
             if ($returnCode !== 0) {
                 $errorOutput = implode("\n", $output);
-                Log::error("rsync 同步失败", [
+                Log::error('rsync 同步失败', [
                     'source' => $source,
                     'target' => $target,
                     'return_code' => $returnCode,
@@ -481,7 +481,7 @@ class PackageExtractor
                 ]);
 
                 // rsync 失败时降级到 PHP 方式
-                Log::info("rsync 失败，降级到 PHP 文件复制");
+                Log::info('rsync 失败，降级到 PHP 文件复制');
                 $this->syncDirectoryPhp($source, $target);
             }
         } else {
@@ -675,7 +675,7 @@ class PackageExtractor
         }
 
         // 写入合并后的配置
-        File::put($targetFile, json_encode($newConfig, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . "\n");
+        File::put($targetFile, json_encode($newConfig, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)."\n");
         Log::info('已更新项目根目录 version.json', ['preserved' => array_keys($preserved)]);
     }
 
@@ -791,8 +791,8 @@ class PackageExtractor
             $dirsStr = implode(', ', $notWritable);
 
             throw new RuntimeException(
-                "以下目录不可写: {$dirsStr}。" .
-                "请检查文件权限，确保 Web 服务用户 ($webUser) 有写权限。" .
+                "以下目录不可写: {$dirsStr}。".
+                "请检查文件权限，确保 Web 服务用户 ($webUser) 有写权限。".
                 "可以尝试运行: chown -R $webUser:$webUser $targetDir"
             );
         }
@@ -801,7 +801,7 @@ class PackageExtractor
         $storagePath = "$targetDir/storage";
         if (is_dir($storagePath) && ! is_writable($storagePath)) {
             throw new RuntimeException(
-                "storage 目录不可写: {$storagePath}。" .
+                "storage 目录不可写: {$storagePath}。".
                 '请确保 storage 目录及其子目录有写权限。'
             );
         }

@@ -126,4 +126,29 @@ class SettingController extends BaseController
         DeployToken::where('user_id', $this->guard->id())->delete();
         $this->success();
     }
+
+    // 获取自动续签设置
+    public function getAutoPreferences(): void
+    {
+        /** @var User $user */
+        $user = $this->guard->user();
+        $this->success($user->auto_settings);
+    }
+
+    // 更新自动续签设置
+    public function updateAutoPreferences(): void
+    {
+        /** @var User $user */
+        $user = $this->guard->user();
+
+        $validated = request()->validate([
+            'auto_renew' => 'boolean',
+            'auto_reissue' => 'boolean',
+        ]);
+
+        $user->auto_settings = array_merge($user->auto_settings, $validated);
+        $user->save();
+
+        $this->success($user->auto_settings);
+    }
 }

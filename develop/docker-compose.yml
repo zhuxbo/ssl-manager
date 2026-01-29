@@ -53,9 +53,9 @@ services:
       dockerfile: Dockerfile.php
     container_name: manager-backend
     restart: unless-stopped
-    user: "${DOCKER_UID:-1000}:${DOCKER_GID:-1000}"
+    # user: "${DOCKER_UID:-1000}:${DOCKER_GID:-1000}"
     working_dir: /var/www/html
-    command: php artisan serve --host=0.0.0.0 --port=8000
+    command: sh -c "php artisan migrate --force && php artisan db:seed --force && php artisan serve --host=0.0.0.0 --port=8000"
     environment:
       APP_ENV: local
       APP_DEBUG: "true"
@@ -88,6 +88,7 @@ services:
       - 114.114.114.114
     environment:
       HOME: /tmp
+      VITE_API_TARGET: http://backend:8000
     ports:
       - "${ADMIN_PORT:-5201}:5201"
     volumes:
@@ -118,6 +119,7 @@ services:
       - 114.114.114.114
     environment:
       HOME: /tmp
+      VITE_API_TARGET: http://backend:8000
     ports:
       - "${USER_PORT:-5202}:5202"
     volumes:

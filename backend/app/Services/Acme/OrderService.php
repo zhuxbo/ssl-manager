@@ -25,7 +25,7 @@ class OrderService
         // 检查计费
         $billingCheck = $this->billingService->canIssueCertificate($account);
 
-        if (!$billingCheck['allowed']) {
+        if (! $billingCheck['allowed']) {
             return [
                 'error' => $billingCheck['error'],
                 'detail' => $billingCheck['detail'],
@@ -37,7 +37,7 @@ class OrderService
         // 调用上游创建订单（如果配置了上游）
         $upstreamOrder = null;
         if (config('acme.api.base_url')) {
-            $domains = array_map(fn($i) => $i['value'], $identifiers);
+            $domains = array_map(fn ($i) => $i['value'], $identifiers);
             $result = $this->upstreamClient->createOrder(
                 $account->id,
                 $domains,
@@ -55,7 +55,7 @@ class OrderService
         }
 
         // 创建本地订单
-        return DB::transaction(function () use ($account, $identifiers, $billingOrder, $upstreamOrder) {
+        return DB::transaction(function () use ($account, $identifiers, $billingOrder) {
             $order = AcmeOrder::create([
                 'acme_account_id' => $account->id,
                 'order_id' => $billingOrder->id,
@@ -161,6 +161,7 @@ class OrderService
 
             if ($result['code'] !== 1) {
                 $order->update(['status' => 'invalid']);
+
                 return [
                     'error' => 'serverInternal',
                     'detail' => $result['msg'] ?? 'Upstream finalization failed',
@@ -182,6 +183,7 @@ class OrderService
         } else {
             // 必须配置上游 Gateway
             $order->update(['status' => 'invalid']);
+
             return [
                 'error' => 'serverInternal',
                 'detail' => 'Upstream gateway not configured (ACME_GATEWAY_URL)',
@@ -197,6 +199,7 @@ class OrderService
     public function getOrderUrl(AcmeOrder $order): string
     {
         $baseUrl = rtrim(config('app.url'), '/');
+
         return "$baseUrl/acme/order/$order->finalize_token";
     }
 
@@ -206,6 +209,7 @@ class OrderService
     public function getFinalizeUrl(AcmeOrder $order): string
     {
         $baseUrl = rtrim(config('app.url'), '/');
+
         return "$baseUrl/acme/order/$order->finalize_token/finalize";
     }
 
@@ -215,6 +219,7 @@ class OrderService
     public function getCertificateUrl(AcmeOrder $order): string
     {
         $baseUrl = rtrim(config('app.url'), '/');
+
         return "$baseUrl/acme/cert/$order->certificate_token";
     }
 
@@ -224,6 +229,7 @@ class OrderService
     public function getAuthorizationUrl(AcmeAuthorization $authorization): string
     {
         $baseUrl = rtrim(config('app.url'), '/');
+
         return "$baseUrl/acme/authz/$authorization->token";
     }
 
@@ -233,6 +239,7 @@ class OrderService
     public function getChallengeUrl(AcmeAuthorization $authorization): string
     {
         $baseUrl = rtrim(config('app.url'), '/');
+
         return "$baseUrl/acme/chall/$authorization->token";
     }
 
@@ -246,7 +253,7 @@ class OrderService
             'expires' => $order->expires?->toIso8601String(),
             'identifiers' => $order->identifiers,
             'authorizations' => $order->authorizations->map(
-                fn($a) => $this->getAuthorizationUrl($a)
+                fn ($a) => $this->getAuthorizationUrl($a)
             )->toArray(),
             'finalize' => $this->getFinalizeUrl($order),
         ];

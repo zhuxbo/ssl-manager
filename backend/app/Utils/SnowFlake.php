@@ -60,6 +60,7 @@ class SnowFlake
             $lock = Cache::lock(self::$lockKey, $timeoutSeconds);
             if ($lock->get()) {
                 self::$currentLock = $lock;
+
                 return true;
             }
             usleep($retryDelayUs);

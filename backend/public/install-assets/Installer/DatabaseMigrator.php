@@ -26,7 +26,7 @@ class DatabaseMigrator
         $this->output = [];
         $this->returnCode = -1;
 
-        exec("cd " . escapeshellarg($this->projectRoot) . " && php artisan migrate --force 2>&1", $this->output, $this->returnCode);
+        exec('cd '.escapeshellarg($this->projectRoot).' && php artisan migrate --force 2>&1', $this->output, $this->returnCode);
 
         return $this->returnCode === 0;
     }
@@ -38,7 +38,7 @@ class DatabaseMigrator
     {
         $this->output = [];
 
-        exec("cd " . escapeshellarg($this->projectRoot) . " && php artisan db:seed --force 2>&1", $this->output, $returnVar);
+        exec('cd '.escapeshellarg($this->projectRoot).' && php artisan db:seed --force 2>&1', $this->output, $returnVar);
 
         return $returnVar === 0;
     }
@@ -50,7 +50,7 @@ class DatabaseMigrator
     {
         $this->output = [];
 
-        exec("cd " . escapeshellarg($this->projectRoot) . " && php artisan config:cache && php artisan route:cache 2>&1", $this->output, $returnVar);
+        exec('cd '.escapeshellarg($this->projectRoot).' && php artisan config:cache && php artisan route:cache 2>&1', $this->output, $returnVar);
 
         return $returnVar === 0;
     }

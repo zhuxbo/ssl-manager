@@ -63,7 +63,16 @@ const {
   storeValues,
   openStoreForm,
   confirmStoreForm,
-  closeStoreForm
+  closeStoreForm,
+  // 批量创建
+  batchStoreRef,
+  showBatchStore,
+  batchStoreValues,
+  batchStoreColumns,
+  batchStoreRules,
+  openBatchStoreForm,
+  confirmBatchStoreForm,
+  closeBatchStoreForm
 } = useDelegationStore(() => onSearch(), handleShowCnameGuide);
 
 onMounted(() => {
@@ -103,6 +112,7 @@ onMounted(() => {
         <el-button type="primary" @click="openStoreForm()">
           新建委托
         </el-button>
+        <el-button @click="openBatchStoreForm()"> 批量委托 </el-button>
       </template>
       <template v-slot="{ size, dynamicColumns }">
         <div
@@ -214,6 +224,25 @@ onMounted(() => {
       cancelText="取消"
       @confirm="confirmStoreForm"
       @cancel="closeStoreForm"
+    />
+    <!-- 批量创建表单 -->
+    <PlusDrawerForm
+      ref="batchStoreRef"
+      v-model="batchStoreValues"
+      :visible="showBatchStore"
+      :form="{
+        columns: batchStoreColumns,
+        rules: batchStoreRules,
+        labelPosition: 'right',
+        labelSuffix: ''
+      }"
+      :size="drawerSize"
+      :closeOnClickModal="true"
+      title="批量委托"
+      confirmText="提交"
+      cancelText="取消"
+      @confirm="confirmBatchStoreForm"
+      @cancel="closeBatchStoreForm"
     />
     <!-- CNAME 配置指引对话框 -->
     <CnameGuide v-model="showCnameGuideDialog" :options="cnameGuideOptions" />

@@ -26,8 +26,8 @@ session_start();
 @ob_implicit_flush();
 
 // 加载自动加载器
-require_once __DIR__ . '/install-assets/autoload.php';
+require_once __DIR__.'/install-assets/autoload.php';
 
 // 创建控制器并处理请求
-$controller = new Install\InstallController();
+$controller = new Install\InstallController;
 $controller->handleRequest();

@@ -28,6 +28,7 @@ class FunctionChecker
 
     /**
      * 检查所有必需的函数
+     *
      * @return CheckResult[]
      */
     public function checkRequired(): array
@@ -56,6 +57,7 @@ class FunctionChecker
 
     /**
      * 检查所有可选的函数
+     *
      * @return CheckResult[]
      */
     public function checkOptional(): array

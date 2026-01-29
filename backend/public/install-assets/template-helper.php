@@ -7,6 +7,7 @@ class TemplateHelper
 {
     /**
      * 加载模板文件
+     *
      * @throws Exception
      */
     public static function load($templateName): false|string
@@ -21,6 +22,7 @@ class TemplateHelper
 
     /**
      * 渲染模板
+     *
      * @throws Exception
      */
     public static function render($templateName, $variables = []): array|false|string

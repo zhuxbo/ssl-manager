@@ -1,4 +1,5 @@
 <?php
+
 /*
  * Copyright (c) 2017-2025 Tencent. All Rights Reserved.
  *
@@ -14,40 +15,39 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 namespace App\Services\Delegation\Sdk\TencentCloud\Dnspod\V20210323\Models;
+
 use App\Services\Delegation\Sdk\TencentCloud\Common\AbstractModel;
 
 /**
  * 查询记录列表的数量统计信息
  *
- * @method integer getSubdomainCount() 获取子域名数量
+ * @method int getSubdomainCount() 获取子域名数量
  * @method void setSubdomainCount(integer $SubdomainCount) 设置子域名数量
- * @method integer getListCount() 获取列表返回的记录数
+ * @method int getListCount() 获取列表返回的记录数
  * @method void setListCount(integer $ListCount) 设置列表返回的记录数
- * @method integer getTotalCount() 获取总的记录数
+ * @method int getTotalCount() 获取总的记录数
  * @method void setTotalCount(integer $TotalCount) 设置总的记录数
  */
 class RecordCountInfo extends AbstractModel
 {
     /**
-     * @var integer 子域名数量
+     * @var int 子域名数量
      */
     public $SubdomainCount;
 
     /**
-     * @var integer 列表返回的记录数
+     * @var int 列表返回的记录数
      */
     public $ListCount;
 
     /**
-     * @var integer 总的记录数
+     * @var int 总的记录数
      */
     public $TotalCount;
 
-    function __construct()
-    {
-
-    }
+    public function __construct() {}
 
     /**
      * For internal only. DO NOT USE IT.
@@ -57,16 +57,16 @@ class RecordCountInfo extends AbstractModel
         if ($param === null) {
             return;
         }
-        if (array_key_exists("SubdomainCount",$param) and $param["SubdomainCount"] !== null) {
-            $this->SubdomainCount = $param["SubdomainCount"];
+        if (array_key_exists('SubdomainCount', $param) and $param['SubdomainCount'] !== null) {
+            $this->SubdomainCount = $param['SubdomainCount'];
         }
 
-        if (array_key_exists("ListCount",$param) and $param["ListCount"] !== null) {
-            $this->ListCount = $param["ListCount"];
+        if (array_key_exists('ListCount', $param) and $param['ListCount'] !== null) {
+            $this->ListCount = $param['ListCount'];
         }
 
-        if (array_key_exists("TotalCount",$param) and $param["TotalCount"] !== null) {
-            $this->TotalCount = $param["TotalCount"];
+        if (array_key_exists('TotalCount', $param) and $param['TotalCount'] !== null) {
+            $this->TotalCount = $param['TotalCount'];
         }
     }
 }

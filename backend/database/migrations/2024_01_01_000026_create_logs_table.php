@@ -10,7 +10,7 @@ return new class extends Migration
     public function up(): void
     {
         // 使用 hasTable 检查避免并行测试冲突
-        if (!Schema::hasTable('ca_logs')) {
+        if (! Schema::hasTable('ca_logs')) {
             Schema::create('ca_logs', function (Blueprint $table) {
                 $table->id();
                 $table->string('url', 2000)->comment('请求URL');
@@ -24,7 +24,7 @@ return new class extends Migration
             });
         }
 
-        if (!Schema::hasTable('callback_logs')) {
+        if (! Schema::hasTable('callback_logs')) {
             Schema::create('callback_logs', function (Blueprint $table) {
                 $table->id();
                 $table->string('method', 10)->index()->comment('请求方法');
@@ -37,7 +37,7 @@ return new class extends Migration
             });
         }
 
-        if (!Schema::hasTable('api_logs')) {
+        if (! Schema::hasTable('api_logs')) {
             Schema::create('api_logs', function (Blueprint $table) {
                 $table->id();
                 $table->unsignedBigInteger('user_id')->nullable()->index()->comment('用户ID');
@@ -55,7 +55,7 @@ return new class extends Migration
             });
         }
 
-        if (!Schema::hasTable('user_logs')) {
+        if (! Schema::hasTable('user_logs')) {
             Schema::create('user_logs', function (Blueprint $table) {
                 $table->id();
                 $table->unsignedBigInteger('user_id')->nullable()->index()->comment('用户ID');
@@ -74,7 +74,7 @@ return new class extends Migration
             });
         }
 
-        if (!Schema::hasTable('admin_logs')) {
+        if (! Schema::hasTable('admin_logs')) {
             Schema::create('admin_logs', function (Blueprint $table) {
                 $table->id();
                 $table->integer('admin_id')->nullable()->index()->comment('管理员ID');
@@ -93,7 +93,7 @@ return new class extends Migration
             });
         }
 
-        if (!Schema::hasTable('error_logs')) {
+        if (! Schema::hasTable('error_logs')) {
             Schema::create('error_logs', function (Blueprint $table) {
                 $table->id();
                 $table->string('method', 10)->index()->comment('请求方法');
@@ -107,7 +107,7 @@ return new class extends Migration
             });
         }
 
-        if (!Schema::hasTable('easy_logs')) {
+        if (! Schema::hasTable('easy_logs')) {
             Schema::create('easy_logs', function (Blueprint $table) {
                 $table->id();
                 $table->string('method', 10)->index()->comment('请求方法');

@@ -161,6 +161,7 @@ class DatabaseStructureCommand extends Command
 
     /**
      * 处理检测功能
+     *
      * @throws Exception
      */
     private function handleCheck(): int
@@ -194,6 +195,7 @@ class DatabaseStructureCommand extends Command
 
     /**
      * 处理修复功能
+     *
      * @throws Exception
      */
     private function handleFix(): int
@@ -254,6 +256,7 @@ class DatabaseStructureCommand extends Command
 
     /**
      * 启动 MySQL Docker 容器
+     *
      * @throws Exception
      */
     private function startMysqlContainer(): void
@@ -295,6 +298,7 @@ class DatabaseStructureCommand extends Command
 
     /**
      * 查找可用端口
+     *
      * @throws Exception
      */
     private function findAvailablePort(): int
@@ -315,6 +319,7 @@ class DatabaseStructureCommand extends Command
 
     /**
      * 等待 MySQL 服务就绪
+     *
      * @throws Exception
      */
     private function waitForMysql(): void
@@ -871,6 +876,7 @@ class DatabaseStructureCommand extends Command
 
     /**
      * 生成 CREATE TABLE 语句
+     *
      * @noinspection DuplicatedCode
      */
     private function generateCreateTableStatement(string $tableName, array $tableSchema): string
@@ -962,6 +968,7 @@ class DatabaseStructureCommand extends Command
 
     /**
      * 生成 ADD COLUMN 语句
+     *
      * @noinspection DuplicatedCode
      */
     private function generateAddColumnStatement(string $tableName, string $columnName, array $columnDef): string
@@ -991,6 +998,7 @@ class DatabaseStructureCommand extends Command
 
     /**
      * 生成 ADD INDEX 语句
+     *
      * @noinspection DuplicatedCode
      */
     private function generateAddIndexStatement(string $tableName, string $indexName, array $indexDef): string

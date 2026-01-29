@@ -28,7 +28,33 @@ export const useDelegationTable = () => {
     {
       label: "委托域",
       prop: "zone",
-      minWidth: 150
+      minWidth: 150,
+      cellRenderer: ({ row }) => {
+        const zone = row.zone;
+        const subdomain =
+          row.cname_to?.host?.replace(`.${row.zone}`, "") || row.prefix;
+        const copyText = `域名: ${zone}\n主机记录: ${subdomain}\n记录类型: CNAME\n记录值: ${row.target_fqdn || row.cname_to?.value || ""}`;
+        return (
+          <div className="flex items-center gap-1">
+            <span>{zone || "-"}</span>
+            <el-button
+              link
+              size="small"
+              onClick={(e: { stopPropagation: () => void }) => {
+                e.stopPropagation();
+                navigator.clipboard.writeText(copyText).then(() => {
+                  message("委托信息已复制到剪贴板", { type: "success" });
+                });
+              }}
+              className="!p-0 !m-0 !mt-1 !bg-transparent !border-none !shadow-none align-middle text-gray-500 hover:text-blue-500"
+            >
+              <el-icon size="14">
+                <DocumentCopy />
+              </el-icon>
+            </el-button>
+          </div>
+        );
+      }
     },
     {
       label: "委托前缀",

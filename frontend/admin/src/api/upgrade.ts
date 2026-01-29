@@ -138,7 +138,11 @@ export function getBackups(): Promise<BaseResponse<{ backups: BackupInfo[] }>> {
 export function executeRollback(
   backupId: string
 ): Promise<
-  BaseResponse<{ success: boolean; backup_id: string; restored_version: string }>
+  BaseResponse<{
+    success: boolean;
+    backup_id: string;
+    restored_version: string;
+  }>
 > {
   return http.request<
     BaseResponse<{

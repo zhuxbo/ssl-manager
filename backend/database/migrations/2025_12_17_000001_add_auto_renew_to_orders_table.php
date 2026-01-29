@@ -10,7 +10,7 @@ return new class extends Migration
     {
         if (! Schema::hasColumn('orders', 'auto_renew')) {
             Schema::table('orders', function (Blueprint $table) {
-                $table->boolean('auto_renew')->default(false)->after('remark');
+                $table->boolean('auto_renew')->nullable()->after('remark')->comment('自动续费');
             });
         }
     }

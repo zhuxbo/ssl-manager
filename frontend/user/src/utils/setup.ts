@@ -18,10 +18,12 @@ export function setupSharedModules() {
   createAuth({
     getIsRemembered: () => useUserStoreHook().isRemembered,
     getLoginDay: () => useUserStoreHook().loginDay,
-    setUsername: (username: string) => useUserStoreHook().SET_USERNAME(username),
+    setUsername: (username: string) =>
+      useUserStoreHook().SET_USERNAME(username),
     setBalance: (balance: string) => useUserStoreHook().SET_BALANCE(balance),
     setRoles: (roles: string[]) => useUserStoreHook().SET_ROLES(roles),
-    setPerms: (permissions: string[]) => useUserStoreHook().SET_PERMS(permissions),
+    setPerms: (permissions: string[]) =>
+      useUserStoreHook().SET_PERMS(permissions),
     getPermissions: () => useUserStoreHook().permissions
   });
 

@@ -22,7 +22,7 @@ class NonceService
      */
     public function generate(): string
     {
-        $nonce = Str::random(32) . bin2hex(random_bytes(16));
+        $nonce = Str::random(32).bin2hex(random_bytes(16));
         $expiresAt = now()->addSeconds($this->ttl);
 
         // 使用 Redis 缓存

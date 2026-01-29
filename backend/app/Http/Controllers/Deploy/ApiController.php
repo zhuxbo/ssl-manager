@@ -13,18 +13,32 @@ class ApiController extends Controller
 {
     /**
      * 查询订单列表
-     * 支持按域名查询（精确匹配和通配符匹配）
-     * 不传 domain 时返回最新 100 条 active 订单
+     * 支持按 order_id 或域名查询（精确匹配和通配符匹配）
+     * 都不传时返回最新 100 条 active 订单
      */
     public function query(Request $request): void
     {
         $request->validate([
+            'order_id' => ['nullable', 'integer'],
             'domain' => ['nullable', 'string'],
         ]);
 
+        $orderId = $request->input('order_id');
         $domain = $request->input('domain');
 
-        if ($domain) {
+        if ($orderId) {
+            // 按 order_id 查询
+            $order = Order::with('latestCert')
+                ->whereHas('latestCert')
+                ->where('id', $orderId)
+                ->first();
+
+            if (! $order) {
+                $this->error('未找到匹配的订单');
+            }
+
+            $orders = collect([$order]);
+        } elseif ($domain) {
             // 按域名查询
             $domain = strtolower(trim($domain));
             $orders = $this->findOrdersByDomain($domain);
@@ -33,7 +47,7 @@ class ApiController extends Controller
                 $this->error('未找到匹配的订单');
             }
         } else {
-            // 无 domain 参数：返回最新 100 条 active 订单
+            // 无参数：返回最新 100 条 active 订单
             $orders = Order::with('latestCert')
                 ->whereHas('latestCert', fn ($q) => $q->where('status', 'active'))
                 ->orderByDesc('created_at')
@@ -200,7 +214,7 @@ class ApiController extends Controller
     {
         // 提取基础域名（去掉第一级子域名用于通配符匹配）
         $parts = explode('.', $domain);
-        $wildcardDomain = count($parts) > 2 ? '*.' . implode('.', array_slice($parts, 1)) : null;
+        $wildcardDomain = count($parts) > 2 ? '*.'.implode('.', array_slice($parts, 1)) : null;
 
         // 通过 Order 查询（Order 已被 UserScope 限制）
         return Order::with('latestCert')
@@ -214,7 +228,7 @@ class ApiController extends Controller
                         $q->orWhere('alternative_names', 'like', "%$wildcardDomain%");
                     }
                 })
-                    ->whereIn('status', ['active', 'processing', 'pending', 'unpaid']);
+                    ->where('status', 'active');
             })
             ->orderByDesc('created_at')
             ->get();

@@ -23,7 +23,7 @@ class AuthorizationController extends Controller
     {
         $authorization = $this->orderService->getAuthorization($token);
 
-        if (!$authorization) {
+        if (! $authorization) {
             return $this->acmeError('malformed', 'Authorization not found', 404);
         }
 

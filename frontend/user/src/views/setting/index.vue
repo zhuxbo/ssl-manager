@@ -6,6 +6,7 @@ import { useDeploy } from "./deploy";
 import { useCallback } from "./callback";
 import { useProfile, VerifyDialog } from "./profile";
 import { useNotificationPreference } from "./notification";
+import { useAutoPreference } from "./auto";
 
 defineOptions({
   name: "Setting"
@@ -51,6 +52,7 @@ const {
   notificationLoading,
   handleToggle
 } = useNotificationPreference();
+const { autoSettings, autoLoading, handleAutoToggle } = useAutoPreference();
 </script>
 
 <template>
@@ -125,6 +127,40 @@ const {
         :onSubmit="handleCallbackUpdate"
         :onReset="resetCallback"
       />
+    </el-card>
+    <el-card shadow="never" :style="{ border: 'none', paddingTop: '20px' }">
+      <div class="notification-card__header">
+        <div>
+          <div class="notification-card__title">自动续签设置</div>
+          <div class="notification-card__desc">
+            设置订单的默认自动续费和重签行为
+          </div>
+        </div>
+      </div>
+      <div class="notification-channel__items">
+        <div class="notification-item">
+          <div class="notification-item__label">
+            <span>自动续费</span>
+            <small>订单到期时自动购买新订单（需扣费）</small>
+          </div>
+          <el-switch
+            v-model="autoSettings.auto_renew"
+            :loading="autoLoading"
+            @change="handleAutoToggle('auto_renew')"
+          />
+        </div>
+        <div class="notification-item">
+          <div class="notification-item__label">
+            <span>自动重签</span>
+            <small>证书到期时自动重签（订单周期内免费）</small>
+          </div>
+          <el-switch
+            v-model="autoSettings.auto_reissue"
+            :loading="autoLoading"
+            @change="handleAutoToggle('auto_reissue')"
+          />
+        </div>
+      </div>
     </el-card>
     <el-card shadow="never" :style="{ border: 'none', paddingTop: '20px' }">
       <div class="notification-card__header">

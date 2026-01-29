@@ -29,6 +29,7 @@ class ProductController extends BaseController
 
     /**
      * 获取产品列表
+     *
      * @throws Exception
      */
     public function index(IndexRequest $request): void

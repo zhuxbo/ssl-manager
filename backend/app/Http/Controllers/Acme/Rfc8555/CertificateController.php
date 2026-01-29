@@ -24,11 +24,11 @@ class CertificateController extends Controller
     {
         $order = $this->orderService->get($token);
 
-        if (!$order) {
+        if (! $order) {
             return $this->acmeError('malformed', 'Certificate not found', 404);
         }
 
-        if ($order->status !== 'valid' || !$order->certificate) {
+        if ($order->status !== 'valid' || ! $order->certificate) {
             return $this->acmeError('orderNotReady', 'Certificate not ready', 403);
         }
 
@@ -37,7 +37,7 @@ class CertificateController extends Controller
         // 返回证书链（证书 + 中间证书）
         $fullChain = $order->certificate;
         if ($order->chain) {
-            $fullChain .= "\n" . $order->chain;
+            $fullChain .= "\n".$order->chain;
         }
 
         return response($fullChain, 200, [

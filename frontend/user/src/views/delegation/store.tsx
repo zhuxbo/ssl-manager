@@ -1,6 +1,12 @@
 import { ref, h } from "vue";
 import type { PlusColumn } from "plus-pro-components";
-import { store, FORM_PARAMS_DEFAULT, type FormParams } from "@/api/delegation";
+import {
+  store,
+  batchStore,
+  FORM_PARAMS_DEFAULT,
+  type FormParams,
+  type BatchStoreParams
+} from "@/api/delegation";
 import type { FormRules } from "element-plus";
 import { message } from "@shared/utils";
 import type { CnameGuideOptions } from "@/views/delegation/CnameGuide";
@@ -36,10 +42,10 @@ export const useDelegationStore = (
       prop: "prefix",
       valueType: "select",
       options: [
-        { label: "_certum", value: "_certum" },
-        { label: "_pki-validation", value: "_pki-validation" },
-        { label: "_dnsauth", value: "_dnsauth" },
-        { label: "_acme-challenge", value: "_acme-challenge" }
+        { label: "_certum (Certum)", value: "_certum" },
+        { label: "_pki-validation (Sectigo)", value: "_pki-validation" },
+        { label: "_dnsauth (DigiCert/TrustAsia)", value: "_dnsauth" },
+        { label: "_acme-challenge (ACME)", value: "_acme-challenge" }
       ],
       fieldProps: {
         placeholder: "请选择委托前缀"
@@ -102,6 +108,84 @@ export const useDelegationStore = (
     });
   };
 
+  // 批量创建相关
+  const showBatchStore = ref(false);
+  const batchStoreValues = ref<BatchStoreParams>({ zones: "", prefix: "" });
+
+  const batchStoreColumns: PlusColumn[] = [
+    {
+      label: "域名列表",
+      prop: "zones",
+      valueType: "textarea",
+      fieldProps: {
+        placeholder: "每行一个域名，例如:\nexample.com\ntest.com",
+        rows: 6
+      },
+      renderExtra: () =>
+        h(
+          "div",
+          {
+            style: {
+              fontSize: "12px",
+              color: "#909399",
+              marginTop: "5px"
+            }
+          },
+          "支持逗号、换行符分隔多个域名"
+        )
+    },
+    {
+      label: "委托前缀",
+      prop: "prefix",
+      valueType: "select",
+      options: [
+        { label: "_certum (Certum)", value: "_certum" },
+        { label: "_pki-validation (Sectigo)", value: "_pki-validation" },
+        { label: "_dnsauth (DigiCert/TrustAsia)", value: "_dnsauth" },
+        { label: "_acme-challenge (ACME)", value: "_acme-challenge" }
+      ],
+      fieldProps: {
+        placeholder: "请选择委托前缀"
+      }
+    }
+  ];
+
+  const batchStoreRules: FormRules = {
+    zones: [{ required: true, message: "请输入域名列表", trigger: "blur" }],
+    prefix: [{ required: true, message: "请选择委托前缀", trigger: "change" }]
+  };
+
+  function openBatchStoreForm() {
+    showBatchStore.value = true;
+    batchStoreValues.value = { zones: "", prefix: "_acme-challenge" };
+  }
+
+  function confirmBatchStoreForm() {
+    handleBatchStore();
+  }
+
+  function closeBatchStoreForm() {
+    showBatchStore.value = false;
+  }
+
+  const handleBatchStore = () => {
+    batchStore(batchStoreValues.value).then(res => {
+      onSearch();
+      showBatchStore.value = false;
+
+      if (res.data) {
+        const { success_count, fail_count } = res.data;
+        if (fail_count > 0) {
+          message(`创建完成：成功 ${success_count} 个，失败 ${fail_count} 个`, {
+            type: "warning"
+          });
+        } else {
+          message(`成功创建 ${success_count} 个委托记录`, { type: "success" });
+        }
+      }
+    });
+  };
+
   return {
     storeRef,
     showStore,
@@ -111,6 +195,13 @@ export const useDelegationStore = (
     rules,
     openStoreForm,
     confirmStoreForm,
-    closeStoreForm
+    closeStoreForm,
+    showBatchStore,
+    batchStoreValues,
+    batchStoreColumns,
+    batchStoreRules,
+    openBatchStoreForm,
+    confirmBatchStoreForm,
+    closeBatchStoreForm
   };
 };

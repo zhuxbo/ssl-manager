@@ -9,6 +9,7 @@ use Tests\TestCase;
 class AcmeSecurityTest extends TestCase
 {
     private JwsService $jwsService;
+
     private NonceService $nonceService;
 
     protected function setUp(): void
@@ -18,8 +19,8 @@ class AcmeSecurityTest extends TestCase
         // 使用数组缓存避免 Redis 依赖
         config(['cache.default' => 'array']);
 
-        $this->jwsService = new JwsService();
-        $this->nonceService = new NonceService();
+        $this->jwsService = new JwsService;
+        $this->nonceService = new NonceService;
     }
 
     /**

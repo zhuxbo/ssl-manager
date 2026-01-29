@@ -205,11 +205,11 @@ class UpgradeStatusManager
             $error = "无法写入升级状态文件: {$this->statusFile}";
 
             if (! is_dir($dir)) {
-                $error .= " (目录不存在)";
+                $error .= ' (目录不存在)';
             } elseif (! is_writable($dir)) {
-                $error .= " (目录不可写)";
+                $error .= ' (目录不可写)';
             } elseif (file_exists($this->statusFile) && ! is_writable($this->statusFile)) {
-                $error .= " (文件不可写)";
+                $error .= ' (文件不可写)';
             }
 
             Log::error($error);

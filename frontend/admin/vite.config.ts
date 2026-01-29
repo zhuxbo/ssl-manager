@@ -11,8 +11,10 @@ import {
 } from "./build";
 
 export default ({ mode }: ConfigEnv): UserConfigExport => {
+  const env = loadEnv(mode, root);
   const { VITE_CDN, VITE_PORT, VITE_COMPRESSION, VITE_PUBLIC_PATH } =
-    wrapperEnv(loadEnv(mode, root));
+    wrapperEnv(env);
+  const apiTarget = env.VITE_API_TARGET || "http://localhost:5300";
   return {
     base: VITE_PUBLIC_PATH,
     root,
@@ -27,7 +29,7 @@ export default ({ mode }: ConfigEnv): UserConfigExport => {
       // 本地跨域代理 https://cn.vitejs.dev/config/server-options.html#server-proxy
       proxy: {
         "/api/admin": {
-          target: "http://localhost:5300/api/admin",
+          target: `${apiTarget}/api/admin`,
           changeOrigin: true,
           rewrite: path => path.replace(/^\/api\/admin/, "")
         }

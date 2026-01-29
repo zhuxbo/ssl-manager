@@ -19,7 +19,7 @@ class PackageExtractorTest extends TestCase
         parent::setUp();
 
         $this->extractor = new PackageExtractor;
-        $this->testDir = storage_path('upgrades/test_' . uniqid());
+        $this->testDir = storage_path('upgrades/test_'.uniqid());
         File::makeDirectory($this->testDir, 0755, true);
     }
 

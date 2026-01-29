@@ -40,7 +40,9 @@ const {
 } = useDeployToken(tableRef);
 
 // 创建搜索列配置
-const { searchColumns, debouncedSearch } = useDeployTokenSearch(() => onSearch());
+const { searchColumns, debouncedSearch } = useDeployTokenSearch(() =>
+  onSearch()
+);
 
 // 创建表单列配置
 const {
@@ -78,7 +80,11 @@ onMounted(() => {
         @change="debouncedSearch"
       />
     </div>
-    <PureTableBar title="部署令牌管理" :columns="tableColumns" @refresh="onSearch">
+    <PureTableBar
+      title="部署令牌管理"
+      :columns="tableColumns"
+      @refresh="onSearch"
+    >
       <template #buttons>
         <el-button type="primary" @click="openStoreForm()">
           新增部署令牌

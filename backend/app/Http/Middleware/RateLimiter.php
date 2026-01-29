@@ -110,7 +110,7 @@ class RateLimiter
 
         // 使用 token 配置的限流值
         $limit = $deployToken->getEffectiveRateLimit(60);
-        $identifier = 'deploy_token_' . $deployToken->id;
+        $identifier = 'deploy_token_'.$deployToken->id;
 
         $key = sprintf('rate_limit_deploy:%s', $identifier);
         $this->checkLimit($key, $limit, 'Deploy token rate limit exceeded');

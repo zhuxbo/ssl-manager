@@ -37,7 +37,7 @@ class DatabaseConnector
 
             return true;
         } catch (PDOException $e) {
-            $this->error = '无法连接到数据库: ' . $e->getMessage();
+            $this->error = '无法连接到数据库: '.$e->getMessage();
 
             // 尝试测试服务器是否可访问
             $this->testNetworkConnectivity($config);
@@ -60,7 +60,7 @@ class DatabaseConnector
                 $this->error .= ' (网络通，但认证失败，请检查用户名/密码或数据库名)';
             }
         } catch (\Exception $e) {
-            $this->error .= ' (网络测试失败: ' . $e->getMessage() . ')';
+            $this->error .= ' (网络测试失败: '.$e->getMessage().')';
         }
     }
 

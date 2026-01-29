@@ -47,6 +47,7 @@ class LogBuffer
                 $now = now();
                 $itemsWithTimestamp = array_map(function ($item) use ($now) {
                     $item['created_at'] = $now;
+
                     return $item;
                 }, $items);
 
@@ -58,7 +59,7 @@ class LogBuffer
                         $model::create($item);
                     } catch (\Throwable) {
                         // 单条插入也失败时，记录到文件日志
-                        \Log::error("LogBuffer: Failed to insert log", [
+                        \Log::error('LogBuffer: Failed to insert log', [
                             'model' => $model,
                             'data' => $item,
                             'error' => $e->getMessage(),
@@ -88,6 +89,7 @@ class LogBuffer
         foreach (self::$logs as $items) {
             $count += count($items);
         }
+
         return $count;
     }
 }

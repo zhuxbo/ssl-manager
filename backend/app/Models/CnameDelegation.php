@@ -59,6 +59,7 @@ class CnameDelegation extends BaseModel
 
     /**
      * 动态获取代理域名（从系统设置）
+     *
      * @noinspection PhpUnused
      */
     protected function proxyZone(): Attribute
@@ -74,6 +75,7 @@ class CnameDelegation extends BaseModel
 
     /**
      * 动态获取 CNAME 目标（label.代理域名）
+     *
      * @noinspection PhpUnused
      */
     protected function targetFqdn(): Attribute

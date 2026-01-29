@@ -388,7 +388,12 @@ onUnmounted(() => {
             <div class="text-gray-500 text-sm">版本号</div>
             <div class="text-lg font-bold">
               {{ currentVersion.version }}
-              <el-tag v-if="currentVersion.channel === 'dev'" type="warning" size="small" class="ml-2">
+              <el-tag
+                v-if="currentVersion.channel === 'dev'"
+                type="warning"
+                size="small"
+                class="ml-2"
+              >
                 开发版
               </el-tag>
             </div>
@@ -399,7 +404,9 @@ onUnmounted(() => {
           </div>
           <div v-if="currentVersion.build_time">
             <div class="text-gray-500 text-sm">构建时间</div>
-            <div class="text-lg">{{ formatDate(currentVersion.build_time) }}</div>
+            <div class="text-lg">
+              {{ formatDate(currentVersion.build_time) }}
+            </div>
           </div>
           <div>
             <div class="text-gray-500 text-sm mb-1">发布通道</div>
@@ -415,9 +422,7 @@ onUnmounted(() => {
           </div>
         </div>
       </div>
-      <div v-else class="text-gray-400">
-        加载中...
-      </div>
+      <div v-else class="text-gray-400">加载中...</div>
     </el-card>
 
     <!-- 更新信息 -->
@@ -438,7 +443,9 @@ onUnmounted(() => {
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
           <div>
             <div class="text-gray-500 text-sm">最新版本</div>
-            <div class="text-lg font-bold text-green-600">{{ updateInfo.latest_version }}</div>
+            <div class="text-lg font-bold text-green-600">
+              {{ updateInfo.latest_version }}
+            </div>
           </div>
           <div v-if="updateInfo.release_date">
             <div class="text-gray-500 text-sm">发布时间</div>
@@ -451,7 +458,9 @@ onUnmounted(() => {
         </div>
         <div v-if="updateInfo.changelog">
           <div class="text-gray-500 text-sm mb-2">更新日志</div>
-          <div class="changelog bg-gray-50 p-4 rounded whitespace-pre-wrap text-sm">
+          <div
+            class="changelog bg-gray-50 p-4 rounded whitespace-pre-wrap text-sm"
+          >
             {{ updateInfo.changelog }}
           </div>
         </div>
@@ -475,14 +484,18 @@ onUnmounted(() => {
       <div class="upgrade-progress">
         <el-progress
           :percentage="upgradeProgress"
-          :status="upgrading ? '' : upgradeProgress === 100 ? 'success' : 'exception'"
+          :status="
+            upgrading ? '' : upgradeProgress === 100 ? 'success' : 'exception'
+          "
           class="mb-4"
         />
         <div
           v-if="upgradeStatus?.current_step && upgrading"
           class="text-blue-500 text-sm mb-4"
         >
-          正在执行：{{ stepNames[upgradeStatus.current_step] || upgradeStatus.current_step }}
+          正在执行：{{
+            stepNames[upgradeStatus.current_step] || upgradeStatus.current_step
+          }}
         </div>
         <div class="steps">
           <div
@@ -490,9 +503,15 @@ onUnmounted(() => {
             :key="step.step"
             class="step flex items-center gap-2 py-2"
           >
-            <span v-if="step.status === 'completed'" class="text-green-500">✓</span>
-            <span v-else-if="step.status === 'failed'" class="text-red-500">✗</span>
-            <span v-else-if="step.status === 'running'" class="text-blue-500">○</span>
+            <span v-if="step.status === 'completed'" class="text-green-500"
+              >✓</span
+            >
+            <span v-else-if="step.status === 'failed'" class="text-red-500"
+              >✗</span
+            >
+            <span v-else-if="step.status === 'running'" class="text-blue-500"
+              >○</span
+            >
             <span v-else class="text-gray-400">○</span>
             <span :class="{ 'text-red-500': step.status === 'failed' }">
               {{ stepNames[step.step] || step.step }}
@@ -555,7 +574,10 @@ onUnmounted(() => {
               </el-button>
             </el-tooltip>
           </div>
-          <div v-if="release.body" class="text-sm text-gray-600 mt-2 whitespace-pre-wrap">
+          <div
+            v-if="release.body"
+            class="text-sm text-gray-600 mt-2 whitespace-pre-wrap"
+          >
             {{ release.body }}
           </div>
         </div>
@@ -583,9 +605,9 @@ onUnmounted(() => {
             <div>
               <div class="font-bold">{{ backup.id }}</div>
               <div class="text-gray-500 text-sm mt-1">
-                版本: {{ backup.version }} |
-                创建时间: {{ formatDate(backup.created_at) }} |
-                大小: {{ formatBytes(backup.size) }}
+                版本: {{ backup.version }} | 创建时间:
+                {{ formatDate(backup.created_at) }} | 大小:
+                {{ formatBytes(backup.size) }}
               </div>
               <div class="text-gray-400 text-xs mt-1">
                 包含:
@@ -602,11 +624,7 @@ onUnmounted(() => {
                 @confirm="handleRollback(backup.id)"
               >
                 <template #reference>
-                  <el-button
-                    type="warning"
-                    size="small"
-                    :loading="rollingBack"
-                  >
+                  <el-button type="warning" size="small" :loading="rollingBack">
                     回滚
                   </el-button>
                 </template>
@@ -618,9 +636,7 @@ onUnmounted(() => {
                 @confirm="handleDeleteBackup(backup.id)"
               >
                 <template #reference>
-                  <el-button type="danger" size="small">
-                    删除
-                  </el-button>
+                  <el-button type="danger" size="small"> 删除 </el-button>
                 </template>
               </el-popconfirm>
             </div>

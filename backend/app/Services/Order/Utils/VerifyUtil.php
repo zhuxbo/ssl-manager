@@ -202,6 +202,7 @@ class VerifyUtil
 
                 if ($result === null) {
                     Log::error('DNS Tools API 返回无效 JSON', ['url' => $url]);
+
                     continue;
                 }
 

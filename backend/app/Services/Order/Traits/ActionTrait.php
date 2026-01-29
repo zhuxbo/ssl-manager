@@ -8,9 +8,12 @@ use App\Bootstrap\ApiExceptions;
 use App\Exceptions\ApiResponseException;
 use App\Jobs\TaskJob;
 use App\Models\Cert;
+use App\Models\CnameDelegation;
 use App\Models\Order;
 use App\Models\Task;
 use App\Models\Transaction;
+use App\Services\Delegation\CnameDelegationService;
+use App\Services\Delegation\DelegationDnsService;
 use App\Services\Order\Utils\CsrUtil;
 use App\Services\Order\Utils\DomainUtil;
 use App\Services\Order\Utils\FilterUtil;
@@ -119,9 +122,14 @@ trait ActionTrait
             $params['last_cert_id'] = $order->latestCert->id;
             $params['last_cert'] = $order->latestCert->toArray();
 
-            // 续费默认继承旧订单的自动续费设置（除非显式传入）
-            if ($params['action'] === 'renew' && ! array_key_exists('auto_renew', $params)) {
-                $params['auto_renew'] = (bool) $order->auto_renew;
+            // 续费默认继承旧订单的自动续费/重签设置（除非显式传入）
+            if ($params['action'] === 'renew') {
+                if (! array_key_exists('auto_renew', $params)) {
+                    $params['auto_renew'] = $order->auto_renew;
+                }
+                if (! array_key_exists('auto_reissue', $params)) {
+                    $params['auto_reissue'] = $order->auto_reissue;
+                }
             }
 
             CsrUtil::matchKey($params['csr'] ?? '', $order->latestCert->private_key ?? '')
@@ -163,8 +171,9 @@ trait ActionTrait
         $order['period'] = (int) ($params['period'] ?? 0);
         $order['contact'] = $params['contact'] ?? null;
         isset($params['organization']) && $order['organization'] = $params['organization'];
-        // 如果请求包含自动续费标记，则持久化到新订单
-        array_key_exists('auto_renew', $params) && $order['auto_renew'] = (bool) $params['auto_renew'];
+        // 如果请求包含自动续费/重签标记，则持久化到新订单
+        array_key_exists('auto_renew', $params) && $order['auto_renew'] = $params['auto_renew'];
+        array_key_exists('auto_reissue', $params) && $order['auto_reissue'] = $params['auto_reissue'];
 
         return $order;
     }
@@ -318,7 +327,16 @@ trait ActionTrait
                 $cert['unique_value'] ?? ''
             );
 
-            $cert['validation'] = $this->generateValidation($cert['dcv'], $cert['alternative_names']);
+            $cert['validation'] = $this->generateValidation(
+                $cert['dcv'],
+                $cert['alternative_names'],
+                $params['user_id'] ?? null
+            );
+
+            // 如果是委托验证，尝试写入 TXT 记录
+            if ($cert['dcv']['is_delegate'] ?? false) {
+                $cert['validation'] = $this->writeDelegationTxtRecords($cert['validation']);
+            }
         }
 
         return $cert;
@@ -369,13 +387,48 @@ trait ActionTrait
     {
         $method = strtolower($method);
 
+        // delegate 方法转换为 txt，并标记为委托验证
+        $isDelegate = $method === 'delegation';
+        if ($isDelegate) {
+            $method = 'txt';
+        }
+
         if (strtolower($ca) === 'sectigo' && in_array($method, ['cname', 'http', 'https'])) {
             $dcv = $this->generateSectigoDcv($method, $csr, $unique_value);
         } else {
             $dcv = ['method' => $method];
         }
 
+        // 标记委托验证和 CA 信息
+        if ($isDelegate) {
+            $dcv['is_delegate'] = true;
+            $dcv['ca'] = strtolower($ca); // 保存 CA 用于确定委托前缀
+        }
+
         return $dcv;
+    }
+
+    /**
+     * 合并 DCV 数据，保留委托验证标记
+     *
+     * @param  array|null  $newDcv  从 API 返回的新 DCV 数据
+     * @param  array|null  $originalDcv  原始的 DCV 数据（可能包含 is_delegate 和 ca）
+     */
+    protected function mergeDcv(?array $newDcv, ?array $originalDcv): ?array
+    {
+        if ($newDcv === null) {
+            return $originalDcv;
+        }
+
+        // 保留原始的委托验证标记
+        if (! empty($originalDcv['is_delegate'])) {
+            $newDcv['is_delegate'] = true;
+            if (! empty($originalDcv['ca'])) {
+                $newDcv['ca'] = $originalDcv['ca'];
+            }
+        }
+
+        return $newDcv;
     }
 
     /**
@@ -431,11 +484,19 @@ trait ActionTrait
 
     /**
      * 生成验证信息
+     *
+     * @param  array  $dcv  DCV 信息
+     * @param  string  $domains  域名列表（逗号分隔）
+     * @param  int|null  $userId  用户ID（委托验证时需要）
      */
-    protected function generateValidation(array $dcv, string $domains): ?array
+    protected function generateValidation(array $dcv, string $domains, ?int $userId = null): ?array
     {
         $method = strtolower($dcv['method']);
+        $isDelegate = $dcv['is_delegate'] ?? false;
         $domains = explode(',', trim($domains, ','));
+
+        // 委托验证时需要查找委托记录
+        $delegationService = $isDelegate && $userId ? app(CnameDelegationService::class) : null;
 
         foreach ($domains as $k => $domain) {
             if (! $domain) {
@@ -443,6 +504,39 @@ trait ActionTrait
             }
 
             $validation[$k] = ['domain' => $domain, 'method' => $method];
+
+            // 标记委托验证
+            if ($isDelegate) {
+                $validation[$k]['is_delegate'] = true;
+
+                // 查找或创建委托记录
+                if ($delegationService) {
+                    // 根据 CA 确定委托前缀（不同 CA 使用不同的验证前缀）
+                    $prefix = $this->getDelegationPrefixForCa($dcv['ca'] ?? '');
+
+                    // 判断是否精确匹配前缀（ACME/DigiCert 需要每个子域单独委托）
+                    $isExactMatch = in_array($prefix, ['_acme-challenge', '_dnsauth']);
+
+                    // 精确匹配：使用完整域名；模糊匹配：使用根域
+                    $zone = $isExactMatch
+                        ? ltrim($domain, '*.')
+                        : DomainUtil::getRootDomain($domain);
+
+                    // 先查找有效的委托记录
+                    $delegation = $delegationService->findValidDelegation($userId, $domain, $prefix);
+
+                    // 找不到则自动创建
+                    if (! $delegation) {
+                        $delegation = $delegationService->createOrGet($userId, $zone, $prefix);
+                    }
+
+                    // 始终保存委托信息（即使 valid=false）
+                    $validation[$k]['delegation_id'] = $delegation->id;
+                    $validation[$k]['delegation_target'] = $delegation->target_fqdn;
+                    $validation[$k]['delegation_valid'] = $delegation->valid;
+                    $validation[$k]['delegation_zone'] = $delegation->zone;
+                }
+            }
 
             if (($method == 'cname' || $method == 'txt') && isset($dcv['dns']['value'])) {
                 $validation[$k]['host'] = $dcv['dns']['host'];
@@ -462,6 +556,91 @@ trait ActionTrait
         }
 
         return $validation ?? null;
+    }
+
+    /**
+     * 写入委托验证的 TXT 记录
+     *
+     * @param  array  $validation  验证信息数组
+     * @return array 更新后的验证信息数组
+     */
+    protected function writeDelegationTxtRecords(array $validation): array
+    {
+        $dnsService = app(DelegationDnsService::class);
+
+        // 按 delegation_id 分组收集 tokens
+        $tokensByDelegation = [];
+        foreach ($validation as $item) {
+            $delegationId = $item['delegation_id'] ?? null;
+            $delegationValid = $item['delegation_valid'] ?? false;
+
+            // 跳过无效委托或已写入的
+            if (! $delegationId || ! $delegationValid || ($item['auto_txt_written'] ?? false)) {
+                continue;
+            }
+
+            if (! isset($tokensByDelegation[$delegationId])) {
+                $tokensByDelegation[$delegationId] = [
+                    'tokens' => [],
+                    'delegation' => CnameDelegation::find($delegationId),
+                ];
+            }
+
+            if (! empty($item['value'])) {
+                $tokensByDelegation[$delegationId]['tokens'][] = $item['value'];
+            }
+        }
+
+        // 批量写入 TXT 记录
+        $writtenDelegations = [];
+        foreach ($tokensByDelegation as $delegationId => $data) {
+            $delegation = $data['delegation'];
+            $tokens = array_unique($data['tokens']);
+
+            if (! $delegation || empty($tokens)) {
+                continue;
+            }
+
+            $isSuccess = $dnsService->setTxtByLabel(
+                $delegation->proxy_zone,
+                $delegation->label,
+                $tokens
+            );
+
+            if ($isSuccess) {
+                $writtenDelegations[$delegationId] = true;
+            }
+        }
+
+        // 更新 validation 中的写入标记
+        foreach ($validation as &$item) {
+            $delegationId = $item['delegation_id'] ?? null;
+            if ($delegationId && isset($writtenDelegations[$delegationId])) {
+                $item['auto_txt_written'] = true;
+                $item['auto_txt_written_at'] = now()->toDateTimeString();
+            }
+        }
+
+        return $validation;
+    }
+
+    /**
+     * 根据 CA 获取委托验证前缀
+     *
+     * 不同 CA 使用不同的 DNS TXT 记录前缀：
+     * - Sectigo: _pki-validation
+     * - Certum: _certum
+     * - DigiCert/GeoTrust/Thawte/RapidSSL/TrustAsia: _dnsauth
+     * - ACME (Let's Encrypt 等): _acme-challenge
+     */
+    protected function getDelegationPrefixForCa(string $ca): string
+    {
+        return match (strtolower($ca)) {
+            'sectigo', 'comodo' => '_pki-validation',
+            'certum' => '_certum',
+            'digicert', 'geotrust', 'thawte', 'rapidssl', 'symantec', 'trustasia' => '_dnsauth',
+            default => '_acme-challenge',
+        };
     }
 
     /**

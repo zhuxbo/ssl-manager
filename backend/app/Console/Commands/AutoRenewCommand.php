@@ -34,7 +34,7 @@ class AutoRenewCommand extends Command
     /**
      * 获取需要续费的订单
      * 条件：
-     * - auto_renew = true
+     * - auto_renew = true（订单级或用户级）
      * - period_till - latestCert.expires_at < 7天（订单与证书到期时间接近）
      * - latestCert.expires_at > now()->subDays(15)（证书未过期超过15天）
      * - latestCert.expires_at < now()->addDays(15)（证书即将到期）
@@ -52,7 +52,14 @@ class AutoRenewCommand extends Command
                     ->where('expires_at', '>', now()->subDays(15))
                     ->where('expires_at', '<', now()->addDays(15));
             })
-            ->where('auto_renew', true)
+            // 订单级 auto_renew=true，或订单未设置时回落到用户设置
+            ->where(function ($query) {
+                $query->where('auto_renew', true)
+                    ->orWhere(function ($q) {
+                        $q->whereNull('auto_renew')
+                            ->whereHas('user', fn ($u) => $u->where('auto_settings->auto_renew', true));
+                    });
+            })
             // 订单到期时间与证书到期时间相差小于7天
             ->whereRaw('DATEDIFF(period_till, (SELECT expires_at FROM certs WHERE certs.id = orders.latest_cert_id)) < 7')
             ->get();
@@ -61,7 +68,7 @@ class AutoRenewCommand extends Command
     /**
      * 获取需要重签的订单
      * 条件：
-     * - auto_renew = true
+     * - auto_reissue = true（订单级或用户级）
      * - period_till - latestCert.expires_at > 7天（订单周期还有余量）
      * - latestCert.expires_at > now()->subDays(15)（证书未过期超过15天）
      * - latestCert.expires_at < now()->addDays(15)（证书即将到期）
@@ -79,7 +86,14 @@ class AutoRenewCommand extends Command
                     ->where('expires_at', '>', now()->subDays(15))
                     ->where('expires_at', '<', now()->addDays(15));
             })
-            ->where('auto_renew', true)
+            // 订单级 auto_reissue=true，或订单未设置时回落到用户设置
+            ->where(function ($query) {
+                $query->where('auto_reissue', true)
+                    ->orWhere(function ($q) {
+                        $q->whereNull('auto_reissue')
+                            ->whereHas('user', fn ($u) => $u->where('auto_settings->auto_reissue', true));
+                    });
+            })
             // 订单到期时间与证书到期时间相差大于7天
             ->whereRaw('DATEDIFF(period_till, (SELECT expires_at FROM certs WHERE certs.id = orders.latest_cert_id)) > 7')
             ->get();
@@ -124,13 +138,19 @@ class AutoRenewCommand extends Command
         }
 
         // 构建参数
+        // 如果原订单使用委托验证，保留 delegation 方法
+        $validationMethod = $cert->dcv['method'] ?? 'txt';
+        if ($cert->dcv['is_delegate'] ?? false) {
+            $validationMethod = 'delegation';
+        }
+
         $params = [
             'order_id' => $order->id,
             'action' => $action,
             'channel' => 'auto',
             'csr_generate' => 1,
             'domains' => $cert->alternative_names,
-            'validation_method' => $cert->dcv['method'] ?? 'txt',
+            'validation_method' => $validationMethod,
         ];
 
         // 执行续费或重签
@@ -174,7 +194,7 @@ class AutoRenewCommand extends Command
             $this->info("订单 #{$orderId} 支付并提交成功");
         } catch (ApiResponseException $e) {
             $result = $e->getApiResponse();
-            $this->warn("订单 #{$orderId} 支付提交: " . ($result['msg'] ?? '未知状态'));
+            $this->warn("订单 #{$orderId} 支付提交: ".($result['msg'] ?? '未知状态'));
         } catch (Throwable $e) {
             $this->warn("订单 #{$orderId} 支付提交异常: {$e->getMessage()}");
         }

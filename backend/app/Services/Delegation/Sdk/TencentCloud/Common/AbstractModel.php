@@ -1,4 +1,5 @@
 <?php
+
 /*
  * Copyright (c) 2017 Tencent. All Rights Reserved.
  *
@@ -17,11 +18,11 @@
  */
 
 namespace App\Services\Delegation\Sdk\TencentCloud\Common;
-use \ReflectionClass;
+
+use ReflectionClass;
 
 /**
  * 抽象model类，禁止client引用
- * @package App\Services\Delegation\Sdk\TencentCloud\Common
  */
 abstract class AbstractModel
 {
@@ -31,15 +32,16 @@ abstract class AbstractModel
     public function serialize()
     {
         $ret = $this->objSerialize($this);
+
         return $ret;
     }
 
-    private function objSerialize($obj) {
+    private function objSerialize($obj)
+    {
         $memberRet = [];
         $ref = new ReflectionClass(get_class($obj));
         $memberList = $ref->getProperties();
-        foreach ($memberList as $x => $member)
-        {
+        foreach ($memberList as $x => $member) {
             $name = ucfirst($member->getName());
             $member->setAccessible(true);
             $value = $member->getValue($obj);
@@ -48,19 +50,20 @@ abstract class AbstractModel
             }
             if ($value instanceof AbstractModel) {
                 $memberRet[$name] = $this->objSerialize($value);
-            } else if (is_array($value)) {
+            } elseif (is_array($value)) {
                 $memberRet[$name] = $this->arraySerialize($value);
             } else {
                 $memberRet[$name] = $value;
             }
         }
+
         return $memberRet;
     }
 
-    private function arraySerialize($memberList) {
+    private function arraySerialize($memberList)
+    {
         $memberRet = [];
-        foreach ($memberList as $name => $value)
-        {
+        foreach ($memberList as $name => $value) {
             if ($value === null) {
                 continue;
             }
@@ -68,21 +71,21 @@ abstract class AbstractModel
                 $memberRet[$name] = $this->objSerialize($value);
             } elseif (is_array($value)) {
                 $memberRet[$name] = $this->arraySerialize($value);
-            }else {
+            } else {
                 $memberRet[$name] = $value;
             }
         }
+
         return $memberRet;
     }
 
     private function arrayMerge($array, $prepend = null)
     {
-        $results = array();
+        $results = [];
         foreach ($array as $key => $value) {
             if (is_array($value)) {
                 $results = array_merge($results, static::arrayMerge($value, $prepend.$key.'.'));
-            }
-            else {
+            } else {
                 if (is_bool($value)) {
                     $results[$prepend.$key] = json_encode($value);
                 } else {
@@ -91,13 +94,14 @@ abstract class AbstractModel
 
             }
         }
+
         return $results;
     }
 
     abstract public function deserialize($param);
 
     /**
-     * @param string $jsonString json格式的字符串
+     * @param  string  $jsonString  json格式的字符串
      */
     public function fromJsonString($jsonString)
     {
@@ -110,18 +114,19 @@ abstract class AbstractModel
         $r = $this->serialize();
         // it is an object rather than an array
         if (empty($r)) {
-            return "{}";
+            return '{}';
         }
+
         return json_encode($r, JSON_UNESCAPED_UNICODE);
     }
 
     public function __call($member, $param)
     {
-        $act = substr($member,0,3);
-        $attr = substr($member,3);
-        if ($act === "get") {
+        $act = substr($member, 0, 3);
+        $attr = substr($member, 3);
+        if ($act === 'get') {
             return $this->$attr;
-        } else if ($act === "set") {
+        } elseif ($act === 'set') {
             $this->$attr = $param[0];
         }
     }

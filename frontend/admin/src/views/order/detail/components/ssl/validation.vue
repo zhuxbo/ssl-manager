@@ -1,6 +1,85 @@
 <template>
+  <!-- 委托验证：单条记录时与普通 DCV 格式统一 -->
   <div
-    v-if="['cname', 'txt'].includes(cert.dcv?.method) && cert.dcv?.dns?.value"
+    v-if="cert.dcv?.is_delegate && uniqueDelegations.length === 1"
+    class="descriptions"
+  >
+    <div style="margin-top: 18px">
+      <el-form-item label="主机记录：" label-width="82px">
+        <el-input :model-value="delegationPrefix" spellcheck="false">
+          <template #suffix>
+            <Copy :copied="delegationPrefix" />
+          </template>
+        </el-input>
+      </el-form-item>
+      <el-form-item label="解析类型：" label-width="82px">
+        <el-input model-value="CNAME" :disabled="true" style="width: 73px" />
+      </el-form-item>
+      <el-form-item label="记录值：" label-width="82px">
+        <el-input
+          :model-value="uniqueDelegations[0].delegation_target"
+          spellcheck="false"
+        >
+          <template #suffix>
+            <Copy :copied="uniqueDelegations[0].delegation_target" />
+          </template>
+        </el-input>
+      </el-form-item>
+    </div>
+  </div>
+  <!-- 委托验证：多条记录时表格显示 -->
+  <div
+    v-else-if="cert.dcv?.is_delegate && uniqueDelegations.length > 1"
+    class="descriptions"
+  >
+    <div style="margin-bottom: 10px">
+      <table>
+        <thead>
+          <tr>
+            <th style="text-align: left; padding: 8px 8px 8px 0">主机记录</th>
+            <th style="text-align: center; padding: 8px">解析类型</th>
+            <th style="text-align: left; padding: 8px 0 8px 8px; width: 400px">
+              记录值
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="(item, index) in uniqueDelegations" :key="index">
+            <td style="padding: 4px 8px 4px 0">
+              <el-input :model-value="delegationPrefix" spellcheck="false">
+                <template #suffix>
+                  <Copy :copied="getDelegationHost(item)" />
+                </template>
+                <template #append>.{{ getDelegationZone(item) }}</template>
+              </el-input>
+            </td>
+            <td style="padding: 4px 8px; text-align: center">
+              <el-input
+                model-value="CNAME"
+                :disabled="true"
+                style="width: 70px"
+              />
+            </td>
+            <td style="padding: 4px 0 4px 8px">
+              <el-input
+                :model-value="item.delegation_target"
+                spellcheck="false"
+              >
+                <template #suffix>
+                  <Copy :copied="item.delegation_target" />
+                </template>
+              </el-input>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <!-- 普通 DNS 验证：显示 dns 记录信息 -->
+  <div
+    v-else-if="
+      ['cname', 'txt'].includes(cert.dcv?.method) && cert.dcv?.dns?.value
+    "
     class="descriptions"
   >
     <div style="margin-top: 18px">
@@ -136,6 +215,7 @@
         v-if="
           ['cname', 'txt'].includes(cert.dcv?.method) &&
           cert.dcv?.dns?.value &&
+          !cert.dcv?.is_delegate &&
           ['unpaid', 'pending', 'processing'].includes(cert.status) &&
           !allVerified
         "
@@ -397,14 +477,69 @@ const allVerified = computed(() => {
   return verified;
 });
 
-const validationMethod = ref(cert.value.dcv?.method);
+// 获取委托验证前缀
+const getDelegationPrefix = (ca?: string) => {
+  const caLower = (ca || "").toLowerCase();
+  switch (caLower) {
+    case "sectigo":
+    case "comodo":
+      return "_pki-validation";
+    case "certum":
+      return "_certum";
+    case "digicert":
+    case "geotrust":
+    case "thawte":
+    case "rapidssl":
+    case "symantec":
+    case "trustasia":
+      return "_dnsauth";
+    default:
+      return "_acme-challenge";
+  }
+};
+
+// 委托验证前缀
+const delegationPrefix = computed(() =>
+  getDelegationPrefix(cert.value.dcv?.ca || order.product?.ca)
+);
+
+// 获取委托验证的域名部分
+const getDelegationZone = (item: any) => {
+  return item.delegation_zone || (item.domain || "").replace(/^\*\./, "");
+};
+
+// 获取委托验证的完整主机记录
+const getDelegationHost = (item: any) => {
+  return `${delegationPrefix.value}.${getDelegationZone(item)}`;
+};
+
+// 去重后的委托列表（按 delegation_id 去重）
+const uniqueDelegations = computed(() => {
+  if (!cert.value?.validation) return [];
+
+  const seen = new Map();
+  return cert.value.validation.filter((item: any) => {
+    if (!item.delegation_id) return false;
+    if (seen.has(item.delegation_id)) return false;
+    seen.set(item.delegation_id, true);
+    return true;
+  });
+});
+
+// 获取显示用的验证方法（考虑委托验证标记）
+const getDisplayMethod = (dcv: any) => {
+  if (dcv?.is_delegate) return "delegation";
+  return dcv?.method;
+};
+
+const validationMethod = ref(getDisplayMethod(cert.value.dcv));
 
 // 添加监听器监听cert.value的变化
 watch(
   () => cert.value,
   newVal => {
     if (newVal) {
-      validationMethod.value = newVal.dcv?.method;
+      validationMethod.value = getDisplayMethod(newVal.dcv);
     }
   }
 );

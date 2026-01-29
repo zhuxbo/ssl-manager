@@ -78,7 +78,11 @@ onMounted(() => {
         @change="debouncedSearch"
       />
     </div>
-    <PureTableBar title="接口令牌管理" :columns="tableColumns" @refresh="onSearch">
+    <PureTableBar
+      title="接口令牌管理"
+      :columns="tableColumns"
+      @refresh="onSearch"
+    >
       <template #buttons>
         <el-button type="primary" @click="openStoreForm()">
           新增接口令牌

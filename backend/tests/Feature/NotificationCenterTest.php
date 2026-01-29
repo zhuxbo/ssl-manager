@@ -141,6 +141,7 @@ class NotificationCenterTest extends TestCase
 
         Queue::assertPushed(NotificationJob::class, function ($job) {
             $channel = $this->getPrivateProperty($job, 'channel');
+
             return in_array($channel, ['mail', 'sms']);
         });
     }

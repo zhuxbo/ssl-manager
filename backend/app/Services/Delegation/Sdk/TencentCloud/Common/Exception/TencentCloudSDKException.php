@@ -1,4 +1,5 @@
 <?php
+
 /*
  * Copyright (c) 2017 Tencent. All Rights Reserved.
  *
@@ -20,7 +21,6 @@ namespace App\Services\Delegation\Sdk\TencentCloud\Common\Exception;
 
 /**
  * sdk异常类
- * @package App\Services\Delegation\Sdk\TencentCloud\Common\Exception
  */
 class TencentCloudSDKException extends \Exception
 {
@@ -31,14 +31,14 @@ class TencentCloudSDKException extends \Exception
 
     private $errorCode;
 
-
     /**
      * TencentCloudSDKException constructor.
-     * @param string $code 异常错误码
-     * @param string $message 异常信息
-     * @param string $requestId 请求ID
+     *
+     * @param  string  $code  异常错误码
+     * @param  string  $message  异常信息
+     * @param  string  $requestId  请求ID
      */
-    public function __construct($code = "", $message = "",  $requestId = "")
+    public function __construct($code = '', $message = '', $requestId = '')
     {
         parent::__construct($message, 0);
         $this->errorCode = $code;
@@ -47,6 +47,7 @@ class TencentCloudSDKException extends \Exception
 
     /**
      * 返回请求id
+     *
      * @return string
      */
     public function getRequestId()
@@ -56,6 +57,7 @@ class TencentCloudSDKException extends \Exception
 
     /**
      * 返回错误码
+     *
      * @return string
      */
     public function getErrorCode()
@@ -65,12 +67,13 @@ class TencentCloudSDKException extends \Exception
 
     /**
      * 格式化输出异常码，异常信息，请求id
+     *
      * @return string
      */
     public function __toString()
     {
-        return "[".__CLASS__."]"." code:".$this->errorCode.
-            " message:".$this->getMessage().
-            " requestId:".$this->requestId;
+        return '['.__CLASS__.']'.' code:'.$this->errorCode.
+            ' message:'.$this->getMessage().
+            ' requestId:'.$this->requestId;
     }
 }

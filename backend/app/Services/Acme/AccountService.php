@@ -39,7 +39,7 @@ class AccountService
             }
         }
 
-        if (!$user) {
+        if (! $user) {
             return [
                 'error' => 'externalAccountRequired',
                 'detail' => 'External account binding required',
@@ -82,6 +82,7 @@ class AccountService
     public function updateContact(AcmeAccount $account, array $contact): AcmeAccount
     {
         $account->update(['contact' => $contact]);
+
         return $account->fresh();
     }
 
@@ -91,6 +92,7 @@ class AccountService
     public function deactivate(AcmeAccount $account): AcmeAccount
     {
         $account->update(['status' => 'deactivated']);
+
         return $account->fresh();
     }
 
@@ -100,6 +102,7 @@ class AccountService
     public function getAccountUrl(AcmeAccount $account): string
     {
         $baseUrl = rtrim(config('app.url'), '/');
+
         return "$baseUrl/acme/acct/$account->key_id";
     }
 
@@ -121,6 +124,7 @@ class AccountService
     private function getOrdersUrl(AcmeAccount $account): string
     {
         $baseUrl = rtrim(config('app.url'), '/');
+
         return "$baseUrl/acme/acct/$account->key_id/orders";
     }
 }

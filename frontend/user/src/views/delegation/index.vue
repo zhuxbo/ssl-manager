@@ -50,8 +50,9 @@ const {
   onCollapse,
   handleDestroy,
   handleBatchDestroy,
-  handleCheck
-} = useDelegation(tableRef);
+  handleCheck,
+  handleBatchCopy
+} = useDelegation(tableRef, selectedIds);
 
 // 创建搜索列配置
 const { searchColumns } = useDelegationSearch(() => onSearch());
@@ -66,7 +67,14 @@ const {
   storeValues,
   openStoreForm,
   confirmStoreForm,
-  closeStoreForm
+  closeStoreForm,
+  showBatchStore,
+  batchStoreValues,
+  batchStoreColumns,
+  batchStoreRules,
+  openBatchStoreForm,
+  confirmBatchStoreForm,
+  closeBatchStoreForm
 } = useDelegationStore(() => onSearch(), handleShowCnameGuide);
 
 onMounted(() => {
@@ -106,6 +114,7 @@ onMounted(() => {
         <el-button type="primary" @click="openStoreForm()">
           新建委托
         </el-button>
+        <el-button @click="openBatchStoreForm()"> 批量委托 </el-button>
       </template>
       <template v-slot="{ size, dynamicColumns }">
         <div
@@ -130,6 +139,9 @@ onMounted(() => {
               已选 {{ selectedIds.length }} 项
             </span>
           </div>
+          <el-button type="primary" size="small" @click="handleBatchCopy">
+            批量复制
+          </el-button>
           <el-popconfirm
             title="确定要删除吗？删除后将不再自动写入 TXT 记录"
             width="220px"
@@ -217,6 +229,23 @@ onMounted(() => {
       cancelText="取消"
       @confirm="confirmStoreForm"
       @cancel="closeStoreForm"
+    />
+    <PlusDrawerForm
+      v-model="batchStoreValues"
+      :visible="showBatchStore"
+      :form="{
+        columns: batchStoreColumns,
+        rules: batchStoreRules,
+        labelPosition: 'right',
+        labelSuffix: ''
+      }"
+      :size="drawerSize"
+      :closeOnClickModal="true"
+      title="批量委托"
+      confirmText="提交"
+      cancelText="取消"
+      @confirm="confirmBatchStoreForm"
+      @cancel="closeBatchStoreForm"
     />
     <!-- CNAME 配置指引对话框 -->
     <CnameGuide v-model="showCnameGuideDialog" :options="cnameGuideOptions" />

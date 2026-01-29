@@ -40,6 +40,7 @@ class Order extends BaseModel
         'eab_hmac',
         'eab_used_at',
         'auto_renew',
+        'auto_reissue',
     ];
 
     protected $casts = [
@@ -54,12 +55,27 @@ class Order extends BaseModel
         // ACME 相关字段
         'eab_hmac' => 'encrypted',
         'eab_used_at' => 'datetime',
-        'auto_renew' => 'boolean',
     ];
 
     protected $hidden = [
         'eab_hmac', // 敏感数据不序列化
     ];
+
+    /**
+     * 获取 auto_renew 属性（保留 null）
+     */
+    public function getAutoRenewAttribute($value): ?bool
+    {
+        return $value === null ? null : (bool) $value;
+    }
+
+    /**
+     * 获取 auto_reissue 属性（保留 null）
+     */
+    public function getAutoReissueAttribute($value): ?bool
+    {
+        return $value === null ? null : (bool) $value;
+    }
 
     /**
      * 获取用户

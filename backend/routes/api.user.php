@@ -89,6 +89,7 @@ Route::middleware('api.user')->group(function () {
         Route::post('batch-sync', [OrderController::class, 'batchSync']);
         Route::post('batch-commit-cancel', [OrderController::class, 'batchCommitCancel']);
         Route::post('batch-revoke-cancel', [OrderController::class, 'batchRevokeCancel']);
+        Route::patch('auto-settings/{id}', [OrderController::class, 'updateAutoSettings'])->where('id', '[0-9]+');
     });
 
     // 证书路由
@@ -135,6 +136,8 @@ Route::middleware('api.user')->group(function () {
         Route::get('deploy-token', [SettingController::class, 'getDeployToken']);
         Route::put('deploy-token', [SettingController::class, 'updateDeployToken']);
         Route::delete('deploy-token', [SettingController::class, 'deleteDeployToken']);
+        Route::get('auto-preferences', [SettingController::class, 'getAutoPreferences']);
+        Route::put('auto-preferences', [SettingController::class, 'updateAutoPreferences']);
     });
 
     // 支付宝支付
@@ -151,5 +154,6 @@ Route::middleware('api.user')->group(function () {
     RouteHelper::registerResourceRoutes('delegation', DelegationController::class);
     Route::prefix('delegation')->group(function () {
         Route::post('check/{id}', [DelegationController::class, 'check'])->where('id', '[0-9]+');
+        Route::post('batch-store', [DelegationController::class, 'batchStore']);
     });
 });

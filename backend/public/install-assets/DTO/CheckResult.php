@@ -8,7 +8,9 @@ namespace Install\DTO;
 class CheckResult
 {
     public const STATUS_SUCCESS = 'success';
+
     public const STATUS_WARNING = 'warning';
+
     public const STATUS_ERROR = 'error';
 
     public function __construct(

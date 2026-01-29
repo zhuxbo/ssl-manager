@@ -70,7 +70,7 @@ class InstallExecutor
                 if (! $this->composerRunner->install()) {
                     // 失败时输出详细错误信息
                     $this->reporter->showOutput($this->composerRunner->getOutputString());
-                    throw new \Exception('Composer 依赖安装失败 (返回码 ' . $this->composerRunner->getReturnCode() . ')');
+                    throw new \Exception('Composer 依赖安装失败 (返回码 '.$this->composerRunner->getReturnCode().')');
                 }
                 $this->reporter->showOutput($this->composerRunner->getOutputString());
                 $this->reporter->completeStep('Composer 依赖安装完成');
@@ -96,7 +96,7 @@ class InstallExecutor
             // 步骤: 数据库迁移
             $this->reporter->startStep(++$step, '执行数据库迁移');
             if (! $this->databaseMigrator->migrate()) {
-                throw new \Exception('数据库迁移失败 (返回码 ' . $this->databaseMigrator->getReturnCode() . ')');
+                throw new \Exception('数据库迁移失败 (返回码 '.$this->databaseMigrator->getReturnCode().')');
             }
             $this->reporter->showOutput($this->databaseMigrator->getOutputString());
             $this->reporter->completeStep('数据库迁移命令执行成功');
@@ -149,7 +149,7 @@ class InstallExecutor
      */
     private function isComposerInstalled(): bool
     {
-        $autoloadPath = $this->projectRoot . '/vendor/autoload.php';
+        $autoloadPath = $this->projectRoot.'/vendor/autoload.php';
 
         return file_exists($autoloadPath);
     }

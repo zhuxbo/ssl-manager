@@ -223,3 +223,92 @@ php artisan queue:work --queue Task  # 队列
 
 - 兼容 MySQL 5.7，不使用 `json` 字段类型
 - 数组类型字段使用 `string` 存储，由 Laravel 模型 `'array'` cast 自动 JSON 序列化
+
+---
+
+## 自动续费/重签
+
+### 数据结构
+
+| 字段 | 位置 | 说明 |
+|------|------|------|
+| `auto_renew` | orders 表 | 订单级自动续费开关 |
+| `auto_reissue` | orders 表 | 订单级自动重签开关 |
+| `auto_settings` | users 表 | 用户级默认设置 JSON |
+
+### 回落逻辑
+
+订单设置为 `null` 时回落到用户设置：
+```php
+->where(function ($query) {
+    $query->where('auto_renew', true)
+        ->orWhere(function ($q) {
+            $q->whereNull('auto_renew')
+              ->whereHas('user', fn ($u) => $u->where('auto_settings->auto_renew', true));
+        });
+})
+```
+
+### 续费 vs 重签判断
+
+- `period_till - expires_at < 7天`：续费（订单周期与证书到期接近）
+- `period_till - expires_at > 7天`：重签（订单周期内还有余量）
+
+### 相关命令
+
+`php artisan schedule:auto-renew` - 同时处理续费和重签
+
+---
+
+## 委托验证
+
+### 验证方法转换
+
+用户选择 `delegate` 验证方法时：
+1. `ActionTrait::generateDcv()` 将 method 转换为 `txt`
+2. 设置 `dcv['is_delegate'] = true` 标记
+3. `generateValidation()` 查找用户的 CnameDelegation 记录
+4. validation 数组包含 `delegation_id`、`delegation_target`、`delegation_valid`
+
+### 委托前缀
+
+| 前缀 | CA | 匹配规则 |
+|------|-----|---------|
+| `_acme-challenge` | ACME | 严格子域匹配 |
+| `_dnsauth` | DigiCert、TrustAsia | 严格子域匹配 |
+| `_pki-validation` | Sectigo | 优先子域，回落根域 |
+| `_certum` | Certum | 优先子域，回落根域 |
+
+### 即时检测
+
+`ValidateCommand::checkDelegationValidity()` 在验证前即时检测委托记录状态。
+
+### DCV 数据合并
+
+从上游 API 更新 dcv 时必须保留委托标记，使用 `ActionTrait::mergeDcv()` 方法：
+
+```php
+// 保留 is_delegate 和 ca 标记
+$cert->dcv = $this->mergeDcv($result['data']['dcv'] ?? null, $cert->dcv);
+```
+
+涉及位置（`Action.php`）：
+- 提交订单后更新 dcv
+- 同步订单时更新 dcv
+- 修改验证方法时（processing 状态）
+
+### 前端判断逻辑
+
+`validation.vue` 的 `getDisplayMethod()` 根据 `dcv.is_delegate` 返回验证方法：
+```javascript
+const getDisplayMethod = (dcv) => {
+  if (dcv?.is_delegate) return "delegation";
+  return dcv?.method;
+};
+```
+
+### 相关服务
+
+- `CnameDelegationService::findValidDelegation()` - 智能匹配委托记录
+- `CnameDelegationService::checkAndUpdateValidity()` - 检测并更新有效性
+- `AutoDcvTxtService` - 自动写入 TXT 记录

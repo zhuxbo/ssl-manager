@@ -1,4 +1,5 @@
 <?php
+
 /*
  * Copyright (c) 2017 Tencent. All Rights Reserved.
  *
@@ -21,35 +22,33 @@ namespace App\Services\Delegation\Sdk\TencentCloud\Common\Profile;
 /**
  * client可选参数类
  * Class ClientProfile
- * @package App\Services\Delegation\Sdk\TencentCloud\Common\Profile
  */
 class ClientProfile
 {
-
     /**
-     * @var string  hmacsha1算法
+     * @var string hmacsha1算法
      */
-    public static $SIGN_HMAC_SHA1 = "HmacSHA1";
+    public static $SIGN_HMAC_SHA1 = 'HmacSHA1';
 
     /**
      * @var string hmacsha256算法
      */
-    public static $SIGN_HMAC_SHA256 = "HmacSHA256";
+    public static $SIGN_HMAC_SHA256 = 'HmacSHA256';
 
     /**
      * @var string 签名V3
      */
-    public static $SIGN_TC3_SHA256 = "TC3-HMAC-SHA256";
+    public static $SIGN_TC3_SHA256 = 'TC3-HMAC-SHA256';
 
     /**
      * @var string Chinese simplified
      */
-    public static $ZH_CN = "zh-CN";
+    public static $ZH_CN = 'zh-CN';
 
     /**
      * @var string English
      */
-    public static $EN_US = "en-US";
+    public static $EN_US = 'en-US';
 
     /**
      * @var HttpProfile http相关参数
@@ -67,7 +66,7 @@ class ClientProfile
     private $unsignedPayload;
 
     /**
-     * @var boolean
+     * @var bool
      */
     private $checkPHPVersion;
 
@@ -78,20 +77,22 @@ class ClientProfile
 
     /**
      * ClientProfile constructor.
-     * @param string $signMethod  签名算法，目前支持SHA256，SHA1
-     * @param HttpProfile $httpProfile http参数类
+     *
+     * @param  string  $signMethod  签名算法，目前支持SHA256，SHA1
+     * @param  HttpProfile  $httpProfile  http参数类
      */
     public function __construct($signMethod = null, $httpProfile = null)
     {
         $this->signMethod = $signMethod ? $signMethod : ClientProfile::$SIGN_TC3_SHA256;
-        $this->httpProfile = $httpProfile ? $httpProfile : new HttpProfile();
+        $this->httpProfile = $httpProfile ? $httpProfile : new HttpProfile;
         $this->unsignedPayload = false;
         $this->checkPHPVersion = true;
     }
 
     /**
      * 设置签名算法
-     * @param string $signMethod 签名方法，目前支持SHA256，SHA1, TC3
+     *
+     * @param  string  $signMethod  签名方法，目前支持SHA256，SHA1, TC3
      */
     public function setSignMethod($signMethod)
     {
@@ -100,7 +101,8 @@ class ClientProfile
 
     /**
      * 设置http相关参数
-     * @param HttpProfile $httpProfile http相关参数
+     *
+     * @param  HttpProfile  $httpProfile  http相关参数
      */
     public function setHttpProfile($httpProfile)
     {
@@ -109,6 +111,7 @@ class ClientProfile
 
     /**
      * 获取签名方法
+     *
      * @return null|string 签名方法
      */
     public function getSignMethod()
@@ -118,7 +121,8 @@ class ClientProfile
 
     /**
      * 设置是否忽略内容签名
-     * @param bool $flag true表示忽略签名
+     *
+     * @param  bool  $flag  true表示忽略签名
      */
     public function setUnsignedPayload($flag)
     {
@@ -127,6 +131,7 @@ class ClientProfile
 
     /**
      * 获取是否忽略内容签名标志位
+     *
      * @return bool
      */
     public function getUnsignedPayload()
@@ -150,7 +155,7 @@ class ClientProfile
     }
 
     /**
-     * @param string $language Valid values: zh-CN, en-US
+     * @param  string  $language  Valid values: zh-CN, en-US
      */
     public function setLanguage($language)
     {
@@ -159,6 +164,7 @@ class ClientProfile
 
     /**
      * 获取http选项实例
+     *
      * @return null|HttpProfile http选项实例
      */
     public function getHttpProfile()

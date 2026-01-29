@@ -15,9 +15,12 @@ const deployUrl = () => {
   return url.replace("/user/setting", "/api/deploy");
 };
 
-
 export const useDeploy = () => {
-  const deployValues = ref<{ deploy_url: string; token: string; allowed_ips: string[] }>({
+  const deployValues = ref<{
+    deploy_url: string;
+    token: string;
+    allowed_ips: string[];
+  }>({
     deploy_url: deployUrl(),
     token: "",
     allowed_ips: []
@@ -42,7 +45,8 @@ export const useDeploy = () => {
               plain: true,
               link: true,
               onClick: () => {
-                navigator.clipboard.writeText(deployValues.value.deploy_url)
+                navigator.clipboard
+                  .writeText(deployValues.value.deploy_url)
                   .then(() => {
                     message("部署地址已复制到剪贴板", {
                       type: "success"
@@ -90,7 +94,8 @@ export const useDeploy = () => {
               link: true,
               onClick: () => {
                 if (deployValues.value.token) {
-                  navigator.clipboard.writeText(deployValues.value.token)
+                  navigator.clipboard
+                    .writeText(deployValues.value.token)
                     .then(() => {
                       message("Token已复制到剪贴板", {
                         type: "success"

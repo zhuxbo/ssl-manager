@@ -99,7 +99,6 @@ class AutoDcvTxtService
     /**
      * 判断是否需要处理委托
      *
-     * @param  Order  $order
      *
      * @return bool 是否需要处理委托
      */
@@ -115,7 +114,6 @@ class AutoDcvTxtService
      * 收集需要写入的TXT记录（按delegation分组）
      *
      * @param  Order  $order  订单实例
-     *
      * @return array{0: array, 1: array, 2: bool} [txtRecordsByDelegation, updatedValidation, hasChanges]
      */
     protected function collectTxtRecords(Order $order): array

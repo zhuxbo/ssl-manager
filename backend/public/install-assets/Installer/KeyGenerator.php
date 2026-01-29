@@ -23,7 +23,7 @@ class KeyGenerator
     {
         $this->output = [];
 
-        exec("cd " . escapeshellarg($this->projectRoot) . " && php artisan key:generate --force 2>&1", $this->output, $returnVar);
+        exec('cd '.escapeshellarg($this->projectRoot).' && php artisan key:generate --force 2>&1', $this->output, $returnVar);
 
         return $returnVar === 0;
     }
@@ -35,7 +35,7 @@ class KeyGenerator
     {
         $this->output = [];
 
-        exec("cd " . escapeshellarg($this->projectRoot) . " && php artisan jwt:secret --force 2>&1", $this->output, $returnVar);
+        exec('cd '.escapeshellarg($this->projectRoot).' && php artisan jwt:secret --force 2>&1', $this->output, $returnVar);
 
         return $returnVar === 0;
     }

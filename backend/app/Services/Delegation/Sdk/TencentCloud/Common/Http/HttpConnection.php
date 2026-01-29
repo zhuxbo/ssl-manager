@@ -1,4 +1,5 @@
 <?php
+
 /*
  * Copyright (c) 2017 Tencent. All Rights Reserved.
  *
@@ -22,24 +23,26 @@ use GuzzleHttp\Client;
 
 /**
  * http连接类
- * @package App\Services\Delegation\Sdk\TencentCloud\Common\Http
  */
 class HttpConnection
 {
     private $client;
+
     private $profile;
-    function __construct($url, $profile)
+
+    public function __construct($url, $profile)
     {
-        $this->client = new Client(["base_uri" => $url]);
+        $this->client = new Client(['base_uri' => $url]);
         $this->profile = $profile;
     }
 
-    private  function getOptions()
+    private function getOptions()
     {
-        $options = ["allow_redirects" => false];
-        $options["timeout"] = $this->profile->getHttpProfile()->getReqTimeout();
-        $options["proxy"] = $this->profile->getHttpProfile()->getProxy();
-        $options["stream"] = true;
+        $options = ['allow_redirects' => false];
+        $options['timeout'] = $this->profile->getHttpProfile()->getReqTimeout();
+        $options['proxy'] = $this->profile->getHttpProfile()->getProxy();
+        $options['stream'] = true;
+
         return $options;
     }
 
@@ -48,38 +51,41 @@ class HttpConnection
         $options = $this->getOptions();
 
         if ($query) {
-            $options["query"] = $query;
+            $options['query'] = $query;
         }
 
         if ($headers) {
-            $options["headers"] = $headers;
+            $options['headers'] = $headers;
         }
+
         return $this->client->get($uri, $options);
     }
 
     public function postRequest($uri = '', $headers = [], $body = '')
     {
-        $options  = $this->getOptions();
+        $options = $this->getOptions();
         if ($headers) {
-            $options["headers"] = $headers;
+            $options['headers'] = $headers;
         }
 
         if ($body) {
-            $options["form_params"] = $body;
+            $options['form_params'] = $body;
         }
+
         return $this->client->post($uri, $options);
     }
 
     public function postRequestRaw($uri = '', $headers = [], $body = '')
     {
-        $options  = $this->getOptions();
+        $options = $this->getOptions();
         if ($headers) {
-            $options["headers"] = $headers;
+            $options['headers'] = $headers;
         }
 
         if ($body) {
-            $options["body"] = $body;
+            $options['body'] = $body;
         }
+
         return $this->client->post($uri, $options);
     }
 }

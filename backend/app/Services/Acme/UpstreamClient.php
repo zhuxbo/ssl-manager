@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Http;
 class UpstreamClient
 {
     private string $baseUrl;
+
     private string $apiKey;
 
     public function __construct()
@@ -107,11 +108,11 @@ class UpstreamClient
      */
     private function request(string $method, string $endpoint, array $data = []): array
     {
-        if (!$this->baseUrl || !$this->apiKey) {
+        if (! $this->baseUrl || ! $this->apiKey) {
             return ['code' => 0, 'msg' => 'Upstream API not configured'];
         }
 
-        $url = $this->baseUrl . $endpoint;
+        $url = $this->baseUrl.$endpoint;
 
         try {
             $http = Http::withToken($this->apiKey)
@@ -130,12 +131,14 @@ class UpstreamClient
 
             if ($response->successful()) {
                 $json = $response->json();
+
                 return $json['code'] === 1 ? $json : ['code' => 0, 'msg' => $json['msg'] ?? 'Request failed'];
             }
 
-            return ['code' => 0, 'msg' => 'Upstream request failed: ' . $response->status()];
+            return ['code' => 0, 'msg' => 'Upstream request failed: '.$response->status()];
         } catch (\Exception $e) {
             $this->logRequest($method, $url, $data, ['error' => $e->getMessage()], 0, false);
+
             return ['code' => 0, 'msg' => $e->getMessage()];
         }
     }

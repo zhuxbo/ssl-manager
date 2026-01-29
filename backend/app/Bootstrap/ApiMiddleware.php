@@ -2,6 +2,7 @@
 
 namespace App\Bootstrap;
 
+use App\Http\Middleware\AcmeJwsMiddleware;
 use App\Http\Middleware\AdminAuthenticate;
 use App\Http\Middleware\AdminRefreshTokenAuthenticate;
 use App\Http\Middleware\ApiAuthenticate;
@@ -19,7 +20,6 @@ use App\Http\Middleware\TrimStrings;
 use App\Http\Middleware\TrustProxies;
 use App\Http\Middleware\UserAuthenticate;
 use App\Http\Middleware\UserRefreshTokenAuthenticate;
-use App\Http\Middleware\AcmeJwsMiddleware;
 use Illuminate\Foundation\Configuration\Middleware as Config;
 use Illuminate\Foundation\Http\Middleware\ConvertEmptyStringsToNull;
 use Illuminate\Foundation\Http\Middleware\ValidatePostSize;

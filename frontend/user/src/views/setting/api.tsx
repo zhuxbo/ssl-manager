@@ -16,7 +16,11 @@ const apiUrl = () => {
 };
 
 export const useApi = () => {
-  const apiValues = ref<{ api_url: string; token: string; allowed_ips: string[] }>({
+  const apiValues = ref<{
+    api_url: string;
+    token: string;
+    allowed_ips: string[];
+  }>({
     api_url: apiUrl(),
     token: "",
     allowed_ips: []
@@ -41,7 +45,8 @@ export const useApi = () => {
               plain: true,
               link: true,
               onClick: () => {
-                navigator.clipboard.writeText(apiValues.value.api_url)
+                navigator.clipboard
+                  .writeText(apiValues.value.api_url)
                   .then(() => {
                     message("API地址已复制到剪贴板", {
                       type: "success"
@@ -89,7 +94,8 @@ export const useApi = () => {
               link: true,
               onClick: () => {
                 if (apiValues.value.token) {
-                  navigator.clipboard.writeText(apiValues.value.token)
+                  navigator.clipboard
+                    .writeText(apiValues.value.token)
                     .then(() => {
                       message("Token已复制到剪贴板", {
                         type: "success"

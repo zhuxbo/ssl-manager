@@ -50,9 +50,12 @@ export function show(id: number): Promise<BaseResponse> {
 
 /** 批量获取部署令牌 */
 export function batchShow(ids: number[]): Promise<BaseResponse> {
-  return http.get<BaseResponse<null>, { ids: number[] }>(`/deploy-token/batch`, {
-    params: { ids }
-  });
+  return http.get<BaseResponse<null>, { ids: number[] }>(
+    `/deploy-token/batch`,
+    {
+      params: { ids }
+    }
+  );
 }
 
 /** 删除部署令牌 */

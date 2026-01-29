@@ -253,3 +253,14 @@ export function batchRevokeCancel(
     { data: { ids } }
   );
 }
+
+/** 更新订单自动设置 */
+export function updateAutoSettings(
+  id: number,
+  data: { auto_renew?: boolean | null; auto_reissue?: boolean | null }
+): Promise<BaseResponse> {
+  return http.patch<
+    BaseResponse<null>,
+    { auto_renew?: boolean | null; auto_reissue?: boolean | null }
+  >(`/order/auto-settings/${id}`, { data });
+}

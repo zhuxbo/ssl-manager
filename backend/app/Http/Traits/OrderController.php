@@ -236,4 +236,41 @@ trait OrderController
         $validated = $request->validated();
         $this->action->batchRevokeCancel($validated['ids']);
     }
+
+    /**
+     * 更新订单自动续费/重签设置
+     */
+    public function updateAutoSettings(int $id): void
+    {
+        $validated = request()->validate([
+            'auto_renew' => 'boolean|nullable',
+            'auto_reissue' => 'boolean|nullable',
+        ]);
+
+        $order = Order::where('id', $id);
+
+        // 用户端只能更新自己的订单
+        if ($this->action->getUserId()) {
+            $order->where('user_id', $this->action->getUserId());
+        }
+
+        $order = $order->first();
+        if (! $order) {
+            $this->error('订单不存在');
+        }
+
+        if (array_key_exists('auto_renew', $validated)) {
+            $order->auto_renew = $validated['auto_renew'];
+        }
+        if (array_key_exists('auto_reissue', $validated)) {
+            $order->auto_reissue = $validated['auto_reissue'];
+        }
+
+        $order->save();
+
+        $this->success([
+            'auto_renew' => $order->auto_renew,
+            'auto_reissue' => $order->auto_reissue,
+        ]);
+    }
 }

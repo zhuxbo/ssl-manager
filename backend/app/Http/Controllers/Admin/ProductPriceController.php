@@ -158,6 +158,7 @@ class ProductPriceController extends BaseController
 
     /**
      * 获取会员级别的产品价格
+     *
      * @throws Throwable
      */
     public function get(GetRequest $request): void
@@ -171,6 +172,7 @@ class ProductPriceController extends BaseController
 
     /**
      * 设置产品价格
+     *
      * @throws Throwable
      */
     public function set(SetRequest $request): void

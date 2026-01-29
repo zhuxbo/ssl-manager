@@ -1,4 +1,5 @@
 <?php
+
 /*
  * Copyright (c) 2017-2025 Tencent. All Rights Reserved.
  *
@@ -14,7 +15,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 namespace App\Services\Delegation\Sdk\TencentCloud\Dnspod\V20210323\Models;
+
 use App\Services\Delegation\Sdk\TencentCloud\Common\AbstractModel;
 
 /**
@@ -22,7 +25,7 @@ use App\Services\Delegation\Sdk\TencentCloud\Common\AbstractModel;
  *
  * @method string getDomain() 获取域名
  * @method void setDomain(string $Domain) 设置域名
- * @method integer getDomainId() 获取域名 ID
+ * @method int getDomainId() 获取域名 ID
  * @method void setDomainId(integer $DomainId) 设置域名 ID
  * @method string getSubdomain() 获取解析记录的主机头
  * @method void setSubdomain(string $Subdomain) 设置解析记录的主机头
@@ -32,7 +35,7 @@ use App\Services\Delegation\Sdk\TencentCloud\Common\AbstractModel;
  * @method void setRecordLine(string $RecordLine) 设置获取某条线路名称的解析记录
  * @method string getRecordLineId() 获取获取某个线路Id对应的解析记录
  * @method void setRecordLineId(string $RecordLineId) 设置获取某个线路Id对应的解析记录
- * @method integer getGroupId() 获取获取某个分组下的解析记录时
+ * @method int getGroupId() 获取获取某个分组下的解析记录时
  * @method void setGroupId(integer $GroupId) 设置获取某个分组下的解析记录时
  * @method string getKeyword() 获取通过关键字搜索解析记录
  * @method void setKeyword(string $Keyword) 设置通过关键字搜索解析记录
@@ -40,9 +43,9 @@ use App\Services\Delegation\Sdk\TencentCloud\Common\AbstractModel;
  * @method void setSortField(string $SortField) 设置排序字段
  * @method string getSortType() 获取排序方式
  * @method void setSortType(string $SortType) 设置排序方式
- * @method integer getOffset() 获取偏移量
+ * @method int getOffset() 获取偏移量
  * @method void setOffset(integer $Offset) 设置偏移量
- * @method integer getLimit() 获取限制数量
+ * @method int getLimit() 获取限制数量
  * @method void setLimit(integer $Limit) 设置限制数量
  */
 class DescribeRecordListRequest extends AbstractModel
@@ -53,7 +56,7 @@ class DescribeRecordListRequest extends AbstractModel
     public $Domain;
 
     /**
-     * @var integer 域名 ID
+     * @var int 域名 ID
      */
     public $DomainId;
 
@@ -78,7 +81,7 @@ class DescribeRecordListRequest extends AbstractModel
     public $RecordLineId;
 
     /**
-     * @var integer 获取某个分组下的解析记录时
+     * @var int 获取某个分组下的解析记录时
      */
     public $GroupId;
 
@@ -98,19 +101,16 @@ class DescribeRecordListRequest extends AbstractModel
     public $SortType;
 
     /**
-     * @var integer 偏移量
+     * @var int 偏移量
      */
     public $Offset;
 
     /**
-     * @var integer 限制数量
+     * @var int 限制数量
      */
     public $Limit;
 
-    function __construct()
-    {
-
-    }
+    public function __construct() {}
 
     /**
      * For internal only. DO NOT USE IT.
@@ -120,52 +120,52 @@ class DescribeRecordListRequest extends AbstractModel
         if ($param === null) {
             return;
         }
-        if (array_key_exists("Domain",$param) and $param["Domain"] !== null) {
-            $this->Domain = $param["Domain"];
+        if (array_key_exists('Domain', $param) and $param['Domain'] !== null) {
+            $this->Domain = $param['Domain'];
         }
 
-        if (array_key_exists("DomainId",$param) and $param["DomainId"] !== null) {
-            $this->DomainId = $param["DomainId"];
+        if (array_key_exists('DomainId', $param) and $param['DomainId'] !== null) {
+            $this->DomainId = $param['DomainId'];
         }
 
-        if (array_key_exists("Subdomain",$param) and $param["Subdomain"] !== null) {
-            $this->Subdomain = $param["Subdomain"];
+        if (array_key_exists('Subdomain', $param) and $param['Subdomain'] !== null) {
+            $this->Subdomain = $param['Subdomain'];
         }
 
-        if (array_key_exists("RecordType",$param) and $param["RecordType"] !== null) {
-            $this->RecordType = $param["RecordType"];
+        if (array_key_exists('RecordType', $param) and $param['RecordType'] !== null) {
+            $this->RecordType = $param['RecordType'];
         }
 
-        if (array_key_exists("RecordLine",$param) and $param["RecordLine"] !== null) {
-            $this->RecordLine = $param["RecordLine"];
+        if (array_key_exists('RecordLine', $param) and $param['RecordLine'] !== null) {
+            $this->RecordLine = $param['RecordLine'];
         }
 
-        if (array_key_exists("RecordLineId",$param) and $param["RecordLineId"] !== null) {
-            $this->RecordLineId = $param["RecordLineId"];
+        if (array_key_exists('RecordLineId', $param) and $param['RecordLineId'] !== null) {
+            $this->RecordLineId = $param['RecordLineId'];
         }
 
-        if (array_key_exists("GroupId",$param) and $param["GroupId"] !== null) {
-            $this->GroupId = $param["GroupId"];
+        if (array_key_exists('GroupId', $param) and $param['GroupId'] !== null) {
+            $this->GroupId = $param['GroupId'];
         }
 
-        if (array_key_exists("Keyword",$param) and $param["Keyword"] !== null) {
-            $this->Keyword = $param["Keyword"];
+        if (array_key_exists('Keyword', $param) and $param['Keyword'] !== null) {
+            $this->Keyword = $param['Keyword'];
         }
 
-        if (array_key_exists("SortField",$param) and $param["SortField"] !== null) {
-            $this->SortField = $param["SortField"];
+        if (array_key_exists('SortField', $param) and $param['SortField'] !== null) {
+            $this->SortField = $param['SortField'];
         }
 
-        if (array_key_exists("SortType",$param) and $param["SortType"] !== null) {
-            $this->SortType = $param["SortType"];
+        if (array_key_exists('SortType', $param) and $param['SortType'] !== null) {
+            $this->SortType = $param['SortType'];
         }
 
-        if (array_key_exists("Offset",$param) and $param["Offset"] !== null) {
-            $this->Offset = $param["Offset"];
+        if (array_key_exists('Offset', $param) and $param['Offset'] !== null) {
+            $this->Offset = $param['Offset'];
         }
 
-        if (array_key_exists("Limit",$param) and $param["Limit"] !== null) {
-            $this->Limit = $param["Limit"];
+        if (array_key_exists('Limit', $param) and $param['Limit'] !== null) {
+            $this->Limit = $param['Limit'];
         }
     }
 }

@@ -99,20 +99,91 @@
             </el-button>
           </td>
         </tr>
+        <tr>
+          <td class="label">自动续费</td>
+          <td class="content">
+            <el-switch
+              :model-value="order.auto_renew"
+              :loading="autoLoading"
+              @update:model-value="
+                (val: boolean) => updateAutoSetting('auto_renew', val)
+              "
+            />
+            <el-tooltip
+              v-if="order.auto_renew === null || order.auto_renew === undefined"
+              content="未设置，将使用您的全局设置"
+              placement="top"
+            >
+              <el-icon style="margin-left: 5px; color: #909399"
+                ><InfoFilled
+              /></el-icon>
+            </el-tooltip>
+          </td>
+        </tr>
+        <tr>
+          <td class="label">自动重签</td>
+          <td class="content">
+            <el-switch
+              :model-value="order.auto_reissue"
+              :loading="autoLoading"
+              @update:model-value="
+                (val: boolean) => updateAutoSetting('auto_reissue', val)
+              "
+            />
+            <el-tooltip
+              v-if="
+                order.auto_reissue === null || order.auto_reissue === undefined
+              "
+              content="未设置，将使用您的全局设置"
+              placement="top"
+            >
+              <el-icon style="margin-left: 5px; color: #909399"
+                ><InfoFilled
+              /></el-icon>
+            </el-tooltip>
+          </td>
+        </tr>
       </tbody>
     </table>
   </el-card>
 </template>
 <script setup lang="ts">
-import { inject, reactive } from "vue";
+import { inject, reactive, ref } from "vue";
 import { buildUUID } from "@pureadmin/utils";
 import { ElMessageBox } from "element-plus";
+import { InfoFilled } from "@element-plus/icons-vue";
 import * as OrderApi from "@/api/order";
 import { message } from "@shared/utils";
 import { periodLabels } from "@/views/system/dictionary";
 import dayjs from "dayjs";
 
 const order = inject("order") as any;
+
+const autoLoading = ref(false);
+
+const updateAutoSetting = async (
+  key: "auto_renew" | "auto_reissue",
+  value: boolean
+) => {
+  // 防止 el-switch 挂载时自动触发（null/undefined → false）
+  // 只有用户明确操作才应该发送请求
+  if (order[key] === value || (order[key] == null && value === false)) {
+    return;
+  }
+
+  autoLoading.value = true;
+  try {
+    await OrderApi.updateAutoSettings(order.id, { [key]: value });
+    // 请求成功后才更新 UI
+    order[key] = value;
+    message("设置已更新", { type: "success" });
+  } catch (e) {
+    // 请求失败，不更新值（保持原状态）
+    message("更新失败", { type: "error" });
+  } finally {
+    autoLoading.value = false;
+  }
+};
 
 const remark = () => {
   ElMessageBox.prompt("请填写备注，删除备注留空即可", "备注", {

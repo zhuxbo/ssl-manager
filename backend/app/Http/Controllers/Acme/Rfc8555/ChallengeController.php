@@ -23,7 +23,7 @@ class ChallengeController extends Controller
     {
         $authorization = $this->orderService->getAuthorization($token);
 
-        if (!$authorization) {
+        if (! $authorization) {
             return $this->acmeError('malformed', 'Challenge not found', 404);
         }
 
@@ -37,7 +37,7 @@ class ChallengeController extends Controller
             200,
             [
                 'Replay-Nonce' => $nonce,
-                'Link' => '<' . $this->orderService->getAuthorizationUrl($authorization) . '>;rel="up"',
+                'Link' => '<'.$this->orderService->getAuthorizationUrl($authorization).'>;rel="up"',
                 'Content-Type' => 'application/json',
             ]
         );

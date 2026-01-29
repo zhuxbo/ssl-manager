@@ -109,11 +109,11 @@ class UpgradeService
 
                     if ($nextVersion) {
                         throw new RuntimeException(
-                            "必须按版本顺序升级。当前版本: {$currentVersion}，下一个可升级版本: {$nextVersion}，" .
+                            "必须按版本顺序升级。当前版本: {$currentVersion}，下一个可升级版本: {$nextVersion}，".
                             "目标版本: {$targetVersion}。请先升级到 $nextVersion"
                         );
                     } else {
-                        throw new RuntimeException("没有可用的升级版本");
+                        throw new RuntimeException('没有可用的升级版本');
                     }
                 }
 
@@ -147,7 +147,7 @@ class UpgradeService
 
             // 步骤 4: 下载升级包（优先 Gitee，回退 GitHub）
             $steps[] = ['step' => 'download', 'status' => 'running'];
-            $packagePath = $this->packageExtractor->getDownloadPath() . "/upgrade-$targetVersion.zip";
+            $packagePath = $this->packageExtractor->getDownloadPath()."/upgrade-$targetVersion.zip";
 
             if (! $this->releaseClient->downloadUpgradePackage($release, $packagePath)) {
                 throw new RuntimeException('下载升级包失败（所有下载源都不可用）');
@@ -222,20 +222,20 @@ class UpgradeService
                 $steps[] = ['step' => 'clear_cache', 'status' => 'running'];
                 Log::info('[Upgrade] Step: clear_cache - starting optimize:clear');
                 Artisan::call('optimize:clear', ['--except' => 'view']);
-                Log::info('[Upgrade] optimize:clear done, output: ' . Artisan::output());
+                Log::info('[Upgrade] optimize:clear done, output: '.Artisan::output());
 
                 // 重建缓存
                 Log::info('[Upgrade] Starting config:cache');
                 Artisan::call('config:cache');
-                Log::info('[Upgrade] config:cache done, output: ' . Artisan::output());
+                Log::info('[Upgrade] config:cache done, output: '.Artisan::output());
 
                 Log::info('[Upgrade] Starting route:cache');
                 Artisan::call('route:cache');
-                Log::info('[Upgrade] route:cache done, output: ' . Artisan::output());
+                Log::info('[Upgrade] route:cache done, output: '.Artisan::output());
 
                 // 验证路由缓存文件
                 $routeCacheFile = base_path('bootstrap/cache/routes-v7.php');
-                Log::info('[Upgrade] Route cache file exists: ' . (file_exists($routeCacheFile) ? 'YES' : 'NO'));
+                Log::info('[Upgrade] Route cache file exists: '.(file_exists($routeCacheFile) ? 'YES' : 'NO'));
 
                 $steps[count($steps) - 1]['status'] = 'completed';
             }
@@ -367,7 +367,7 @@ class UpgradeService
 
             // 步骤 4: 下载升级包
             $statusManager->startStep('download');
-            $packagePath = $this->packageExtractor->getDownloadPath() . "/upgrade-$targetVersion.zip";
+            $packagePath = $this->packageExtractor->getDownloadPath()."/upgrade-$targetVersion.zip";
 
             if (! $this->releaseClient->downloadUpgradePackage($release, $packagePath)) {
                 throw new RuntimeException('下载升级包失败');
@@ -645,7 +645,7 @@ class UpgradeService
             $index++;
         }
 
-        return round($bytes, 2) . ' ' . $units[$index];
+        return round($bytes, 2).' '.$units[$index];
     }
 
     /**

@@ -118,3 +118,27 @@ export function batchDestroy(ids: number[]): Promise<BaseResponse> {
     }
   );
 }
+
+export interface BatchStoreParams {
+  user_id: number;
+  zones: string;
+  prefix: string;
+}
+
+export interface BatchStoreResult {
+  created: DelegationItem[];
+  failed: { zone: string; error: string }[];
+  total: number;
+  success_count: number;
+  fail_count: number;
+}
+
+/** 批量创建委托 */
+export function batchStore(
+  data: BatchStoreParams
+): Promise<BaseResponse<BatchStoreResult>> {
+  return http.post<BaseResponse<BatchStoreResult>, BatchStoreParams>(
+    "/delegation/batch-store",
+    { data }
+  );
+}

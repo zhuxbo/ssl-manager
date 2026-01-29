@@ -12,7 +12,7 @@ return new class extends Migration
         Schema::table('orders', function (Blueprint $table) {
             $table->string('eab_kid', 200)->nullable()->index()->after('contact')->comment('EAB Key ID');
             $table->text('eab_hmac')->nullable()->after('eab_kid')->comment('EAB HMAC Key (加密存储)');
-            $table->boolean('auto_renew')->default(false)->after('eab_hmac')->comment('自动续费');
+            $table->boolean('auto_renew')->nullable()->after('eab_hmac')->comment('自动续费');
         });
 
         // ACME 账户表 - 绑定到用户，永久有效
