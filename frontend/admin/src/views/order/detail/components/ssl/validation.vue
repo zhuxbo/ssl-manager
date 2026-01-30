@@ -213,15 +213,15 @@
       >
       <el-button
         v-if="
-          ['cname', 'txt'].includes(cert.dcv?.method) &&
-          cert.dcv?.dns?.value &&
-          !cert.dcv?.is_delegate &&
+          ((['cname', 'txt'].includes(cert.dcv?.method) &&
+            cert.dcv?.dns?.value) ||
+            cert.dcv?.is_delegate) &&
           ['unpaid', 'pending', 'processing'].includes(cert.status) &&
           !allVerified
         "
         type="primary"
         style="margin-left: 16px"
-        @click="copyDnsRecords()"
+        @click="copyAllRecords()"
         >复制解析</el-button
       >
       <el-button
@@ -598,9 +598,21 @@ const updateValidationMethod = (method: string) => {
     });
 };
 
-const copyDnsRecords = () => {
-  const records = [];
-  if (hostIncludeSubDomain.value) {
+// 复制所有解析记录（支持委托验证和普通 DNS 验证）
+const copyAllRecords = () => {
+  const records: string[] = [];
+
+  // 委托验证
+  if (cert.value.dcv?.is_delegate) {
+    uniqueDelegations.value.forEach((item: any) => {
+      const zone = getDelegationZone(item);
+      records.push(
+        `域名：${zone}\n主机记录：${delegationPrefix.value}\n解析类型：CNAME\n记录值：${item.delegation_target}`
+      );
+    });
+  }
+  // 普通 DNS 验证
+  else if (hostIncludeSubDomain.value) {
     cert.value.validation.forEach(
       (item: { method: string; host: string; domain: string }) => {
         if (item.method === "cname" || item.method === "txt") {
