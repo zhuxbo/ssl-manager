@@ -243,8 +243,8 @@ trait OrderController
     public function updateAutoSettings(int $id): void
     {
         $validated = request()->validate([
-            'auto_renew' => 'boolean|nullable',
-            'auto_reissue' => 'boolean|nullable',
+            'auto_renew' => 'nullable',
+            'auto_reissue' => 'nullable',
         ]);
 
         $order = Order::where('id', $id);
@@ -259,11 +259,12 @@ trait OrderController
             $this->error('订单不存在');
         }
 
+        // "global" 字符串表示使用全局设置，转换为 null
         if (array_key_exists('auto_renew', $validated)) {
-            $order->auto_renew = $validated['auto_renew'];
+            $order->auto_renew = $validated['auto_renew'] === 'global' ? null : $validated['auto_renew'];
         }
         if (array_key_exists('auto_reissue', $validated)) {
-            $order->auto_reissue = $validated['auto_reissue'];
+            $order->auto_reissue = $validated['auto_reissue'] === 'global' ? null : $validated['auto_reissue'];
         }
 
         $order->save();

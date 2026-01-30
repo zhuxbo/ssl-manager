@@ -169,8 +169,8 @@ class AutoDcvTxtService
                 continue;
             }
 
-            // 匹配委托记录
-            $delegation = $this->delegationService->findValidDelegation(
+            // 匹配委托记录（不检查 valid 状态，后续即时验证）
+            $delegation = $this->delegationService->findDelegation(
                 $order->user_id,
                 $zone,
                 $prefix

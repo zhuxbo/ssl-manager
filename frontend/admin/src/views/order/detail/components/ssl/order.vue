@@ -112,45 +112,33 @@
         <tr>
           <td class="label">自动续费</td>
           <td class="content">
-            <el-switch
-              :model-value="order.auto_renew"
+            <el-select
+              :model-value="toSelectValue(order.auto_renew)"
               :loading="autoLoading"
-              @update:model-value="
-                (val: boolean) => updateAutoSetting('auto_renew', val)
-              "
-            />
-            <el-tooltip
-              v-if="order.auto_renew === null || order.auto_renew === undefined"
-              content="未设置，将使用用户的全局设置"
-              placement="top"
+              size="small"
+              style="width: 115px"
+              @change="(val: string) => updateAutoSetting('auto_renew', val)"
             >
-              <el-icon style="margin-left: 5px; color: #909399"
-                ><InfoFilled
-              /></el-icon>
-            </el-tooltip>
+              <el-option value="global" label="使用全局设置" />
+              <el-option value="1" label="开启" />
+              <el-option value="0" label="关闭" />
+            </el-select>
           </td>
         </tr>
         <tr>
           <td class="label">自动重签</td>
           <td class="content">
-            <el-switch
-              :model-value="order.auto_reissue"
+            <el-select
+              :model-value="toSelectValue(order.auto_reissue)"
               :loading="autoLoading"
-              @update:model-value="
-                (val: boolean) => updateAutoSetting('auto_reissue', val)
-              "
-            />
-            <el-tooltip
-              v-if="
-                order.auto_reissue === null || order.auto_reissue === undefined
-              "
-              content="未设置，将使用用户的全局设置"
-              placement="top"
+              size="small"
+              style="width: 115px"
+              @change="(val: string) => updateAutoSetting('auto_reissue', val)"
             >
-              <el-icon style="margin-left: 5px; color: #909399"
-                ><InfoFilled
-              /></el-icon>
-            </el-tooltip>
+              <el-option value="global" label="使用全局设置" />
+              <el-option value="1" label="开启" />
+              <el-option value="0" label="关闭" />
+            </el-select>
           </td>
         </tr>
       </tbody>
@@ -161,7 +149,6 @@
 import { inject, reactive, ref } from "vue";
 import { buildUUID } from "@pureadmin/utils";
 import { ElMessageBox } from "element-plus";
-import { InfoFilled } from "@element-plus/icons-vue";
 import * as OrderApi from "@/api/order";
 import { message } from "@shared/utils";
 import { periodLabels } from "@/views/system/dictionary";
@@ -171,24 +158,40 @@ const order = inject("order") as any;
 
 const autoLoading = ref(false);
 
+// 将 boolean | null 转换为 select 的字符串值
+const toSelectValue = (val: boolean | null | undefined): string => {
+  if (val === true) return "1";
+  if (val === false) return "0";
+  return "global";
+};
+
+// 将 select 的字符串值转换为 API 发送值
+// 注意：前端全局过滤 null，所以用 "global" 字符串代替
+const fromSelectValue = (val: string): boolean | string => {
+  if (val === "1") return true;
+  if (val === "0") return false;
+  return "global";
+};
+
 const updateAutoSetting = async (
   key: "auto_renew" | "auto_reissue",
-  value: boolean
+  selectValue: string
 ) => {
-  // 防止 el-switch 挂载时自动触发（null/undefined → false）
-  // 只有用户明确操作才应该发送请求
-  if (order[key] === value || (order[key] == null && value === false)) {
+  // 比较时统一转换为 select 值进行比较
+  if (toSelectValue(order[key]) === selectValue) {
     return;
   }
 
+  const apiValue = fromSelectValue(selectValue);
+  // 存储值："global" -> null, true/false 保持原样
+  const storeValue = apiValue === "global" ? null : apiValue;
+
   autoLoading.value = true;
   try {
-    await OrderApi.updateAutoSettings(order.id, { [key]: value });
-    // 请求成功后才更新 UI
-    order[key] = value;
+    await OrderApi.updateAutoSettings(order.id, { [key]: apiValue });
+    order[key] = storeValue;
     message("设置已更新", { type: "success" });
   } catch (e) {
-    // 请求失败，不更新值（保持原状态）
     message("更新失败", { type: "error" });
   } finally {
     autoLoading.value = false;

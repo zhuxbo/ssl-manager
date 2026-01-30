@@ -409,26 +409,30 @@ trait ActionTrait
     }
 
     /**
-     * 合并 DCV 数据，保留委托验证标记
+     * 合并 DCV 数据，根据用户当前选择决定委托验证标记
      *
-     * @param  array|null  $newDcv  从 API 返回的新 DCV 数据
-     * @param  array|null  $originalDcv  原始的 DCV 数据（可能包含 is_delegate 和 ca）
+     * @param  array|null  $apiDcv  从 API 返回的新 DCV 数据
+     * @param  array|null  $newDcv  根据用户选择生成的 DCV 数据（包含 is_delegate 和 ca）
      */
-    protected function mergeDcv(?array $newDcv, ?array $originalDcv): ?array
+    protected function mergeDcv(?array $apiDcv, ?array $newDcv): ?array
     {
-        if ($newDcv === null) {
-            return $originalDcv;
+        if ($apiDcv === null) {
+            return $newDcv;
         }
 
-        // 保留原始的委托验证标记
-        if (! empty($originalDcv['is_delegate'])) {
-            $newDcv['is_delegate'] = true;
-            if (! empty($originalDcv['ca'])) {
-                $newDcv['ca'] = $originalDcv['ca'];
+        if ($newDcv === null) {
+            return $apiDcv;
+        }
+
+        // 从新 DCV 保留委托验证标记（根据用户当前选择生成）
+        if (! empty($newDcv['is_delegate'])) {
+            $apiDcv['is_delegate'] = true;
+            if (! empty($newDcv['ca'])) {
+                $apiDcv['ca'] = $newDcv['ca'];
             }
         }
 
-        return $newDcv;
+        return $apiDcv;
     }
 
     /**
@@ -522,8 +526,8 @@ trait ActionTrait
                         ? ltrim($domain, '*.')
                         : DomainUtil::getRootDomain($domain);
 
-                    // 先查找有效的委托记录
-                    $delegation = $delegationService->findValidDelegation($userId, $domain, $prefix);
+                    // 查找委托记录（不检查 valid 状态，后续即时验证）
+                    $delegation = $delegationService->findDelegation($userId, $domain, $prefix);
 
                     // 找不到则自动创建
                     if (! $delegation) {

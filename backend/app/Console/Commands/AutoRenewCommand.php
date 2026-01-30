@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Exceptions\ApiResponseException;
 use App\Models\Order;
+use App\Services\Delegation\CnameDelegationService;
 use App\Services\Notification\DTOs\NotificationIntent;
 use App\Services\Notification\NotificationCenter;
 use App\Services\Order\Action;
@@ -50,7 +51,10 @@ class AutoRenewCommand extends Command
             ->whereHas('latestCert', function ($query) {
                 $query->where('status', 'active')
                     ->where('expires_at', '>', now()->subDays(15))
-                    ->where('expires_at', '<', now()->addDays(15));
+                    ->where('expires_at', '<', now()->addDays(15))
+                    ->where(function ($q) {
+                        $q->whereNull('channel')->orWhere('channel', '!=', 'acme');
+                    });
             })
             // 订单级 auto_renew=true，或订单未设置时回落到用户设置
             ->where(function ($query) {
@@ -84,7 +88,10 @@ class AutoRenewCommand extends Command
             ->whereHas('latestCert', function ($query) {
                 $query->where('status', 'active')
                     ->where('expires_at', '>', now()->subDays(15))
-                    ->where('expires_at', '<', now()->addDays(15));
+                    ->where('expires_at', '<', now()->addDays(15))
+                    ->where(function ($q) {
+                        $q->whereNull('channel')->orWhere('channel', '!=', 'acme');
+                    });
             })
             // 订单级 auto_reissue=true，或订单未设置时回落到用户设置
             ->where(function ($query) {
@@ -121,8 +128,17 @@ class AutoRenewCommand extends Command
     {
         $user = $order->user;
         $cert = $order->latestCert;
+        $product = $order->product;
 
-        $this->info("处理订单 #{$order->id} ({$action}): {$cert->common_name}");
+        $this->info("处理订单 #{$order->id} ($action): $cert->common_name");
+
+        // 检查委托有效性，无有效委托则跳过
+        $ca = strtolower($product->ca ?? '');
+        if (! $this->checkDelegationValidity($user->id, $cert->alternative_names, $ca)) {
+            $this->warn("订单 #{$order->id} 跳过：无有效委托记录");
+
+            return;
+        }
 
         // 续费需要检查余额
         if ($action === 'renew') {
@@ -133,24 +149,18 @@ class AutoRenewCommand extends Command
             $estimatedAmount = $cert->amount ?? '0.00';
 
             if (bccomp($availableBalance, $estimatedAmount, 2) < 0) {
-                throw new \Exception("余额不足，可用余额: {$availableBalance}，预计需要: $estimatedAmount");
+                throw new \Exception("余额不足，可用余额: $availableBalance，预计需要: $estimatedAmount");
             }
         }
 
-        // 构建参数
-        // 如果原订单使用委托验证，保留 delegation 方法
-        $validationMethod = $cert->dcv['method'] ?? 'txt';
-        if ($cert->dcv['is_delegate'] ?? false) {
-            $validationMethod = 'delegation';
-        }
-
+        // 使用委托验证方法
         $params = [
             'order_id' => $order->id,
             'action' => $action,
             'channel' => 'auto',
             'csr_generate' => 1,
             'domains' => $cert->alternative_names,
-            'validation_method' => $validationMethod,
+            'validation_method' => 'delegation',
         ];
 
         // 执行续费或重签
@@ -228,5 +238,54 @@ class AutoRenewCommand extends Command
         } catch (Throwable $e) {
             $this->error("发送通知失败: {$e->getMessage()}");
         }
+    }
+
+    /**
+     * 检查所有域名是否都有有效委托记录（即时验证）
+     *
+     * @param  int  $userId  用户ID
+     * @param  string  $domains  域名列表（逗号分隔）
+     * @param  string  $ca  CA名称
+     * @return bool 是否所有域名都有有效委托
+     */
+    private function checkDelegationValidity(int $userId, string $domains, string $ca): bool
+    {
+        $delegationService = app(CnameDelegationService::class);
+        $prefix = $this->getDelegationPrefixForCa($ca);
+        $domainList = explode(',', trim($domains, ','));
+
+        foreach ($domainList as $domain) {
+            $domain = trim($domain);
+            if (empty($domain)) {
+                continue;
+            }
+
+            // 查找委托记录（不检查 valid 状态）
+            $delegation = $delegationService->findDelegation($userId, $domain, $prefix);
+
+            if (! $delegation) {
+                return false;
+            }
+
+            // 即时验证 CNAME 记录
+            if (! $delegationService->checkAndUpdateValidity($delegation)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * 根据 CA 获取委托验证前缀
+     */
+    private function getDelegationPrefixForCa(string $ca): string
+    {
+        return match (strtolower($ca)) {
+            'sectigo', 'comodo' => '_pki-validation',
+            'certum' => '_certum',
+            'digicert', 'geotrust', 'thawte', 'rapidssl', 'symantec', 'trustasia' => '_dnsauth',
+            default => '_acme-challenge',
+        };
     }
 }

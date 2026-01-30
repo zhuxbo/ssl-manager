@@ -188,11 +188,13 @@ php artisan queue:work --queue Task  # 队列
 ## 缓存与日志架构
 
 ### 缓存驱动
+
 - 默认使用 `file` 驱动，不强制依赖 Redis
 - 生产环境推荐使用 Redis 提升性能
 - SnowFlake、RateLimiter 通过 `Cache` facade 操作
 
 ### 日志批量写入
+
 - `LogBuffer` 服务：收集请求期间的日志，请求结束后批量写入
 - `FlushLogs` 中间件：响应发送后触发日志刷入
 - 所有日志模型使用默认数据库连接
@@ -207,12 +209,14 @@ php artisan queue:work --queue Task  # 队列
 | DeployToken | `api.deploy` | `/api/deploy/` | 部署工具证书管理 |
 
 ### 共同特性
+
 - Token 使用 SHA-256 hash 存储
 - 支持 IP 白名单（最多 100 个，`allowed_ips` 字段 2000 字符）
 - 支持速率限制（`rate_limit` 字段，每分钟请求数）
 - 请求结束后异步更新 `last_used_at` 和 `last_ip`
 
 ### DeployToken 特性
+
 - 每个用户仅一个 DeployToken（唯一约束）
 - 通过 `UserScope` 限制只能访问用户自己的 Order
 - 支持查询证书、续费/重签、部署回调
@@ -239,6 +243,7 @@ php artisan queue:work --queue Task  # 队列
 ### 回落逻辑
 
 订单设置为 `null` 时回落到用户设置：
+
 ```php
 ->where(function ($query) {
     $query->where('auto_renew', true)
@@ -254,6 +259,35 @@ php artisan queue:work --queue Task  # 队列
 - `period_till - expires_at < 7天`：续费（订单周期与证书到期接近）
 - `period_till - expires_at > 7天`：重签（订单周期内还有余量）
 
+### AutoRenewCommand 执行流程
+
+**调度配置**：每小时执行（`routes/console.php`）
+
+**执行步骤**：
+
+1. `getRenewOrders()` 查询续费订单：
+   - `auto_renew = true`（订单级或用户级回落）
+   - 证书即将到期（15天内）且未过期超过15天
+   - 订单周期与证书到期时间差 < 7 天
+   - 产品支持续费（`renew = 1`）
+   - **排除 acme 通道**（由 ACME 客户端自行续签）
+
+2. `getReissueOrders()` 查询重签订单：
+   - `auto_reissue = true`（订单级或用户级回落）
+   - 证书即将到期（15天内）且未过期超过15天
+   - 订单周期与证书到期时间差 > 7 天
+   - **排除 acme 通道**
+
+3. `processOrder()` 处理单个订单：
+   - **委托有效性检查**：`checkDelegationValidity()` 即时验证所有域名是否有有效委托
+   - 无有效委托 → 跳过订单，不发起续费/重签
+   - 续费时检查用户余额（`balance + |credit_limit|`）
+   - 强制使用 `delegation` 验证方法
+   - 调用 `Action::renew()` 或 `Action::reissue()`
+
+4. `autoPayAndCommit()` 自动支付提交：
+   - 调用 `Action::pay($orderId, true)` 完成支付并提交到 CA
+
 ### 相关命令
 
 `php artisan schedule:auto-renew` - 同时处理续费和重签
@@ -264,11 +298,12 @@ php artisan queue:work --queue Task  # 队列
 
 ### 验证方法转换
 
-用户选择 `delegate` 验证方法时：
+用户选择 `delegation` 验证方法时：
+
 1. `ActionTrait::generateDcv()` 将 method 转换为 `txt`
-2. 设置 `dcv['is_delegate'] = true` 标记
+2. 设置 `dcv['is_delegate'] = true` 和 `dcv['ca']` 标记
 3. `generateValidation()` 查找用户的 CnameDelegation 记录
-4. validation 数组包含 `delegation_id`、`delegation_target`、`delegation_valid`
+4. validation 数组包含 `delegation_id`、`delegation_target`、`delegation_valid`、`delegation_zone`
 
 ### 委托前缀
 
@@ -278,6 +313,29 @@ php artisan queue:work --queue Task  # 队列
 | `_dnsauth` | DigiCert、TrustAsia | 严格子域匹配 |
 | `_pki-validation` | Sectigo | 优先子域，回落根域 |
 | `_certum` | Certum | 优先子域，回落根域 |
+
+### TXT 记录自动写入
+
+**触发时机**：订单创建时，`ActionTrait::generateCsr()` 调用 `writeDelegationTxtRecords()`
+
+**处理流程**：
+
+1. 检查 `dcv['is_delegate'] = true`
+2. 按 `delegation_id` 分组收集验证 tokens
+3. 跳过无效委托（`delegation_valid = false`）或已写入的记录
+4. 调用 `DelegationDnsService::setTxtByLabel()` 批量写入 TXT 记录
+5. 更新 validation 中的 `auto_txt_written` 和 `auto_txt_written_at` 标记
+
+**validation 字段说明**：
+
+| 字段 | 说明 |
+|------|------|
+| `delegation_id` | 委托记录 ID |
+| `delegation_target` | CNAME 目标 FQDN |
+| `delegation_valid` | 委托是否有效 |
+| `delegation_zone` | 委托的根域名 |
+| `auto_txt_written` | TXT 是否已写入 |
+| `auto_txt_written_at` | 写入时间 |
 
 ### 即时检测
 
@@ -293,6 +351,7 @@ $cert->dcv = $this->mergeDcv($result['data']['dcv'] ?? null, $cert->dcv);
 ```
 
 涉及位置（`Action.php`）：
+
 - 提交订单后更新 dcv
 - 同步订单时更新 dcv
 - 修改验证方法时（processing 状态）
@@ -300,6 +359,7 @@ $cert->dcv = $this->mergeDcv($result['data']['dcv'] ?? null, $cert->dcv);
 ### 前端判断逻辑
 
 `validation.vue` 的 `getDisplayMethod()` 根据 `dcv.is_delegate` 返回验证方法：
+
 ```javascript
 const getDisplayMethod = (dcv) => {
   if (dcv?.is_delegate) return "delegation";
@@ -307,8 +367,85 @@ const getDisplayMethod = (dcv) => {
 };
 ```
 
+### 委托验证自动签发数据流
+
+```
+用户创建订单（validation_method=delegation）
+    ↓
+ActionTrait::generateDcv()
+    → method 转换为 txt
+    → 设置 is_delegate=true, ca=xxx
+    ↓
+ActionTrait::generateValidation()
+    → CnameDelegationService::findValidDelegation() 查找委托
+    → 找不到则 createOrGet() 创建
+    → 填充 delegation_id, delegation_target, delegation_valid
+    ↓
+ActionTrait::writeDelegationTxtRecords()
+    → 按 delegation_id 分组
+    → DelegationDnsService::setTxtByLabel() 批量写入
+    → 标记 auto_txt_written=true
+    ↓
+订单提交到 CA（dcv.method=txt）
+    ↓
+ValidateCommand 定时验证
+    → checkDelegationValidity() 即时检测
+    → 触发 CA 验证
+    ↓
+证书签发完成
+    ↓
+[到期前 15 天] AutoRenewCommand（排除 acme 通道）
+    → checkDelegationValidity() 即时检查委托有效性
+    → 无有效委托 → 跳过，不发起续费/重签
+    → 有有效委托 → 强制使用 delegation 验证方法
+    → 重新走上述流程
+```
+
+### 委托 DNS 清理
+
+`DelegationCleanupCommand` 每天 06:00 清理无效的委托 TXT 记录：
+
+- **保留**：`processing` 状态订单使用的委托记录
+- **删除**：代理域名下所有其他 TXT 记录
+- **清理数据库标记**：移除已删除记录对应的 `auto_txt_written` 标记
+
 ### 相关服务
 
-- `CnameDelegationService::findValidDelegation()` - 智能匹配委托记录
-- `CnameDelegationService::checkAndUpdateValidity()` - 检测并更新有效性
-- `AutoDcvTxtService` - 自动写入 TXT 记录
+| 服务 | 文件位置 | 职责 |
+|------|---------|------|
+| `CnameDelegationService` | `Services/Delegation/` | 委托记录管理、有效性检测 |
+| `DelegationDnsService` | `Services/Delegation/` | DNS TXT 记录操作 |
+| `AutoDcvTxtService` | `Services/Delegation/` | 订单维度的自动 TXT 写入 |
+
+---
+
+## 关键文件索引
+
+### 委托验证与自动签发
+
+| 文件 | 关键方法/位置 | 说明 |
+|------|--------------|------|
+| `Services/Order/Traits/ActionTrait.php` | `generateDcv()` | delegation→txt 转换，设置 is_delegate |
+| `Services/Order/Traits/ActionTrait.php` | `generateValidation()` | 委托记录查找/创建 |
+| `Services/Order/Traits/ActionTrait.php` | `writeDelegationTxtRecords()` | 订单创建时写入 TXT |
+| `Services/Order/Traits/ActionTrait.php` | `getDelegationPrefixForCa()` | CA 前缀映射 |
+| `Services/Order/Traits/ActionTrait.php` | `mergeDcv()` | API 响应合并保留委托标记 |
+| `Services/Delegation/CnameDelegationService.php` | `findDelegation()` | 智能匹配委托记录（用于即时验证场景） |
+| `Services/Delegation/CnameDelegationService.php` | `findValidDelegation()` | 智能匹配有效委托记录（已弃用） |
+| `Services/Delegation/CnameDelegationService.php` | `checkAndUpdateValidity()` | 即时检测 CNAME 并更新有效性 |
+| `Services/Delegation/DelegationDnsService.php` | `setTxtByLabel()` | 批量写入 TXT 记录 |
+| `Services/Delegation/AutoDcvTxtService.php` | `handleOrder()` | 订单级 TXT 处理 |
+| `Console/Commands/AutoRenewCommand.php` | `checkDelegationValidity()` | 发起前即时检查委托有效性 |
+| `Console/Commands/AutoRenewCommand.php` | `processOrder()` | 自动续费/重签处理 |
+| `Console/Commands/AutoRenewCommand.php` | `autoPayAndCommit()` | 自动支付提交 |
+| `Console/Commands/ValidateCommand.php` | `checkDelegationValidity()` | 验证前即时检测 |
+| `Console/Commands/DelegationCleanupCommand.php` | `handle()` | 清理非 processing 状态的 DNS 记录 |
+
+### 调度配置
+
+| 命令 | 调度 | 说明 |
+|------|------|------|
+| `schedule:validate` | 每分钟 | 证书验证任务 |
+| `schedule:auto-renew` | 每小时 | 自动续费/重签 |
+| `delegation:check` | 每天 05:30 | CNAME 委托健康检查 |
+| `delegation:cleanup` | 每天 06:00 | 委托 DNS 清理 |
