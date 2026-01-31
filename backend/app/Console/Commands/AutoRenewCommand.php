@@ -4,10 +4,10 @@ namespace App\Console\Commands;
 
 use App\Exceptions\ApiResponseException;
 use App\Models\Order;
-use App\Services\Delegation\CnameDelegationService;
 use App\Services\Notification\DTOs\NotificationIntent;
 use App\Services\Notification\NotificationCenter;
 use App\Services\Order\Action;
+use App\Services\Order\AutoRenewService;
 use Illuminate\Console\Command;
 use Throwable;
 
@@ -17,6 +17,13 @@ class AutoRenewCommand extends Command
 
     protected $description = '自动续费/重签即将到期的证书';
 
+    /**
+     * 自动续签窗口：到期前 14 天开始检测
+     *
+     * 客户端部署说明：
+     * - 主动发起：应在证书到期前 15 天以上发起，避免与本命令重复提交
+     * - 被动拉取：可在到期前 14 天之后拉取，确保已完成续签
+     */
     public function handle(): void
     {
         $this->info('开始自动续费/重签任务...');
@@ -38,7 +45,7 @@ class AutoRenewCommand extends Command
      * - auto_renew = true（订单级或用户级）
      * - period_till - latestCert.expires_at < 7天（订单与证书到期时间接近）
      * - latestCert.expires_at > now()->subDays(15)（证书未过期超过15天）
-     * - latestCert.expires_at < now()->addDays(15)（证书即将到期）
+     * - latestCert.expires_at < now()->addDays(14)（证书即将到期）
      * - latestCert.status = 'active'
      */
     private function getRenewOrders()
@@ -51,7 +58,7 @@ class AutoRenewCommand extends Command
             ->whereHas('latestCert', function ($query) {
                 $query->where('status', 'active')
                     ->where('expires_at', '>', now()->subDays(15))
-                    ->where('expires_at', '<', now()->addDays(15))
+                    ->where('expires_at', '<', now()->addDays(14))
                     ->where(function ($q) {
                         $q->whereNull('channel')->orWhere('channel', '!=', 'acme');
                     });
@@ -75,7 +82,7 @@ class AutoRenewCommand extends Command
      * - auto_reissue = true（订单级或用户级）
      * - period_till - latestCert.expires_at > 7天（订单周期还有余量）
      * - latestCert.expires_at > now()->subDays(15)（证书未过期超过15天）
-     * - latestCert.expires_at < now()->addDays(15)（证书即将到期）
+     * - latestCert.expires_at < now()->addDays(14)（证书即将到期）
      * - latestCert.status = 'active'
      */
     private function getReissueOrders()
@@ -88,7 +95,7 @@ class AutoRenewCommand extends Command
             ->whereHas('latestCert', function ($query) {
                 $query->where('status', 'active')
                     ->where('expires_at', '>', now()->subDays(15))
-                    ->where('expires_at', '<', now()->addDays(15))
+                    ->where('expires_at', '<', now()->addDays(14))
                     ->where(function ($q) {
                         $q->whereNull('channel')->orWhere('channel', '!=', 'acme');
                     });
@@ -242,50 +249,9 @@ class AutoRenewCommand extends Command
 
     /**
      * 检查所有域名是否都有有效委托记录（即时验证）
-     *
-     * @param  int  $userId  用户ID
-     * @param  string  $domains  域名列表（逗号分隔）
-     * @param  string  $ca  CA名称
-     * @return bool 是否所有域名都有有效委托
      */
     private function checkDelegationValidity(int $userId, string $domains, string $ca): bool
     {
-        $delegationService = app(CnameDelegationService::class);
-        $prefix = $this->getDelegationPrefixForCa($ca);
-        $domainList = explode(',', trim($domains, ','));
-
-        foreach ($domainList as $domain) {
-            $domain = trim($domain);
-            if (empty($domain)) {
-                continue;
-            }
-
-            // 查找委托记录（不检查 valid 状态）
-            $delegation = $delegationService->findDelegation($userId, $domain, $prefix);
-
-            if (! $delegation) {
-                return false;
-            }
-
-            // 即时验证 CNAME 记录
-            if (! $delegationService->checkAndUpdateValidity($delegation)) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    /**
-     * 根据 CA 获取委托验证前缀
-     */
-    private function getDelegationPrefixForCa(string $ca): string
-    {
-        return match (strtolower($ca)) {
-            'sectigo', 'comodo' => '_pki-validation',
-            'certum' => '_certum',
-            'digicert', 'geotrust', 'thawte', 'rapidssl', 'symantec', 'trustasia' => '_dnsauth',
-            default => '_acme-challenge',
-        };
+        return app(AutoRenewService::class)->checkDelegationValidity($userId, $domains, $ca);
     }
 }

@@ -6,6 +6,7 @@ use App\Exceptions\ApiResponseException;
 use App\Http\Controllers\Controller;
 use App\Models\Order;
 use App\Services\Order\Action;
+use App\Services\Order\AutoRenewService;
 use Illuminate\Http\Request;
 use Throwable;
 
@@ -126,6 +127,12 @@ class ApiController extends Controller
 
             // 如果订单到期时间小于 15 天则续费，否则重签
             if ($order->period_till?->lt(now()->addDays(15))) {
+                // 续费需要检查 auto_renew 设置
+                $autoRenewEnabled = app(AutoRenewService::class)->isAutoRenewEnabled($order, $order->user);
+                if (! $autoRenewEnabled) {
+                    $this->error('该订单未开启自动续费');
+                }
+
                 $updateParams['action'] = 'renew';
                 $result = $this->getData($action, 'renew', [$updateParams]);
                 $orderId = $result['data']['order_id'] ?? $orderId;

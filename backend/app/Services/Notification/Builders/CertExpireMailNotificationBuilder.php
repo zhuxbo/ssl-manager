@@ -7,6 +7,7 @@ use App\Models\Order;
 use App\Models\User;
 use App\Services\Notification\DTOs\NotificationIntent;
 use App\Services\Notification\DTOs\NotificationPayload;
+use App\Services\Order\AutoRenewService;
 use DateMalformedStringException;
 use DateTime;
 use Illuminate\Database\Eloquent\Model;
@@ -14,6 +15,10 @@ use RuntimeException;
 
 class CertExpireMailNotificationBuilder implements NotificationBuilderInterface
 {
+    public function __construct(
+        private readonly AutoRenewService $autoRenewService
+    ) {}
+
     public function build(NotificationIntent $intent, Model $notifiable): NotificationPayload
     {
         if (! $notifiable instanceof User) {
@@ -28,17 +33,19 @@ class CertExpireMailNotificationBuilder implements NotificationBuilderInterface
         $siteUrl = get_system_setting('site', 'url', '/');
         $siteName = get_system_setting('site', 'name', 'SSL证书管理系统');
 
-        $orders = Order::with(['product', 'latestCert'])
+        $orders = Order::with(['product', 'latestCert', 'user'])
             ->whereHas('product')
             ->whereHas('latestCert', function ($query) {
                 $query->where('status', 'active')
-                    ->whereBetween('expires_at', [now(), now()->addDays(30)])
+                    ->whereBetween('expires_at', [now(), now()->addDays(14)])
                     ->orderBy('expires_at');
             })
             ->where('user_id', $notifiable->id)
             ->get();
 
         $certificates = [];
+        $hasDelegationIssue = false;
+
         foreach ($orders as $order) {
             try {
                 $daysLeft = (int) (new DateTime)->diff(new DateTime((string) $order->latestCert->expires_at))->format('%a');
@@ -47,15 +54,42 @@ class CertExpireMailNotificationBuilder implements NotificationBuilderInterface
                 $daysLeft = 0;
             }
 
-            $certificates[] = [
-                'domain' => $order->latestCert->common_name,
-                'expire_at' => $order->latestCert->expires_at->format('Y-m-d'),
-                'days_left' => $daysLeft,
-            ];
+            // 检查自动任务是否会实际执行
+            $willAutoRenew = $this->autoRenewService->willAutoRenewExecute($order, $notifiable);
+            $willAutoReissue = $this->autoRenewService->willAutoReissueExecute($order, $notifiable);
+
+            // 如果自动任务会实际执行，检查委托有效性
+            if ($willAutoRenew || $willAutoReissue) {
+                $ca = strtolower($order->product->ca ?? '');
+                $domains = $order->latestCert->alternative_names;
+                $delegationValid = $this->autoRenewService->checkDelegationValidity($notifiable->id, $domains, $ca);
+
+                if ($delegationValid) {
+                    // 委托有效，完全跳过该证书（不发通知）
+                    continue;
+                }
+
+                // 委托无效，加入通知列表并标记
+                $hasDelegationIssue = true;
+                $certificates[] = [
+                    'domain' => $order->latestCert->common_name,
+                    'expire_at' => $order->latestCert->expires_at->format('Y-m-d'),
+                    'days_left' => $daysLeft,
+                    'delegation_status' => 'invalid',
+                ];
+            } else {
+                // 自动任务不会执行，加入通知列表
+                $certificates[] = [
+                    'domain' => $order->latestCert->common_name,
+                    'expire_at' => $order->latestCert->expires_at->format('Y-m-d'),
+                    'days_left' => $daysLeft,
+                    'delegation_status' => 'need_renew',
+                ];
+            }
         }
 
         if (empty($certificates)) {
-            throw new RuntimeException('30天内没有到期的证书');
+            throw new RuntimeException('14天内没有需要通知的到期证书');
         }
 
         $subject = 'SSL证书到期提醒 ['.$siteName.']';
@@ -66,6 +100,7 @@ class CertExpireMailNotificationBuilder implements NotificationBuilderInterface
             'site_url' => $siteUrl,
             'certificates' => $certificates,
             'subject' => $subject,
+            'has_delegation_issue' => $hasDelegationIssue,
         ];
 
         return new NotificationPayload($data, ['mail']);

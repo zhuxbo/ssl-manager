@@ -252,6 +252,19 @@ class CnameDelegationService
     }
 
     /**
+     * 根据 CA 获取委托验证前缀
+     */
+    public static function getDelegationPrefixForCa(string $ca): string
+    {
+        return match (strtolower($ca)) {
+            'sectigo', 'comodo' => '_pki-validation',
+            'certum' => '_certum',
+            'digicert', 'geotrust', 'thawte', 'rapidssl', 'symantec', 'trustasia' => '_dnsauth',
+            default => '_acme-challenge',
+        };
+    }
+
+    /**
      * 更新委托记录（可选功能：重新生成 label）
      *
      * @param  int  $userId  用户ID

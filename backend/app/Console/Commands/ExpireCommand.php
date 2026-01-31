@@ -27,6 +27,12 @@ class ExpireCommand extends Command
 
     /**
      * Execute the console command.
+     *
+     * 通知时间点：第 14/7/3/1 天当天
+     *
+     * 客户端部署说明：
+     * - 主动发起：应在证书到期前 15 天以上发起重签或续费
+     * - 被动拉取：可在到期前 14 天之后拉取新证书
      */
     public function handle(): void
     {
@@ -35,16 +41,15 @@ class ExpireCommand extends Command
             ->where('expires_at', '<', now())
             ->update(['status' => 'expired']);
 
-        // 分区段查询，避免每天都发通知
+        // 分区段查询，避免每天都发通知（第 14/7/3/1 天当天）
         $user_ids = Order::with(['latestCert'])
             ->whereHas('latestCert', function ($query) {
                 $query->where('status', 'active')
                     ->where(function ($query) {
-                        $query->whereBetween('expires_at', [now()->addDays(29), now()->addDays(30)])
-                            ->orWhereBetween('expires_at', [now()->addDays(15), now()->addDays(16)])
-                            ->orWhereBetween('expires_at', [now()->addDays(7), now()->addDays(8)])
-                            ->orWhereBetween('expires_at', [now()->addDays(3), now()->addDays(4)])
-                            ->orWhereBetween('expires_at', [now(), now()->addDays()]);
+                        $query->whereBetween('expires_at', [now()->addDays(13), now()->addDays(14)])
+                            ->orWhereBetween('expires_at', [now()->addDays(6), now()->addDays(7)])
+                            ->orWhereBetween('expires_at', [now()->addDays(2), now()->addDays(3)])
+                            ->orWhereBetween('expires_at', [now(), now()->addDays(1)]);
                     })
                     ->orderBy('expires_at');
             })

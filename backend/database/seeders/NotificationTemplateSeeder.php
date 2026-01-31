@@ -292,6 +292,8 @@ HTML;
             .data-table td { border-bottom: 1px solid #333 !important; color: #e1e1e1 !important; }
             .warning-box { background-color: #332b00 !important; border-left-color: #f59e0b !important; }
             .warning-text { color: #fbbf24 !important; }
+            .error-box { background-color: #3b1818 !important; border-left-color: #dc2626 !important; }
+            .error-text { color: #f87171 !important; }
         }
     </style>
 </head>
@@ -327,6 +329,15 @@ HTML;
                                     为了不影响网站的正常访问和数据安全，请注意下列证书即将到期，建议您尽快完成续费。
                                 </p>
 
+                                @if($has_delegation_issue ?? false)
+                                <div class="error-box" style="background-color: #fef2f2; border-left: 4px solid #dc2626; padding: 15px; border-radius: 0 4px 4px 0; margin-bottom: 24px;">
+                                    <p class="error-text" style="margin: 0; font-size: 14px; line-height: 22px; color: #991b1b;">
+                                        <strong>委托验证异常：</strong><br>
+                                        您已开启自动续签/重签，但部分域名的委托验证配置无效。请登录控制台检查 CNAME 委托记录是否正确配置，否则自动续签将无法执行。
+                                    </p>
+                                </div>
+                                @endif
+
                                 <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" class="data-table" style="margin-bottom: 24px; border-collapse: collapse; width: 100%;">
                                     <thead>
                                         <tr style="background-color: #fffbeb;">
@@ -334,6 +345,7 @@ HTML;
                                             <th align="left" style="padding: 12px 10px; border-bottom: 2px solid #fcd34d; font-size: 13px; font-weight: 600; color: #92400e; text-transform: uppercase;">域名</th>
                                             <th align="left" style="padding: 12px 10px; border-bottom: 2px solid #fcd34d; font-size: 13px; font-weight: 600; color: #92400e; text-transform: uppercase;">到期时间</th>
                                             <th align="center" style="padding: 12px 10px; border-bottom: 2px solid #fcd34d; font-size: 13px; font-weight: 600; color: #92400e; text-transform: uppercase;">剩余</th>
+                                            <th align="center" style="padding: 12px 10px; border-bottom: 2px solid #fcd34d; font-size: 13px; font-weight: 600; color: #92400e; text-transform: uppercase;">状态</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -356,6 +368,13 @@ HTML;
                                                     <span style="background-color: #fffbeb; color: #d97706; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 12px;">{{ $cert['days_left'] }}天</span>
                                                 @endif
                                             </td>
+                                            <td align="center" style="padding: 12px 10px; border-bottom: 1px solid #eeeeee; font-size: 14px;">
+                                                @if(($cert['delegation_status'] ?? '') === 'invalid')
+                                                    <span style="background-color: #fee2e2; color: #dc2626; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 12px;">委托无效</span>
+                                                @else
+                                                    <span style="background-color: #f3f4f6; color: #6b7280; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 12px;">需续费</span>
+                                                @endif
+                                            </td>
                                         </tr>
                                         @endforeach
                                         {{-- 循环结束 --}}
@@ -365,7 +384,7 @@ HTML;
                                 <div class="warning-box" style="background-color: #fffbeb; border-left: 4px solid #f59e0b; padding: 15px; border-radius: 0 4px 4px 0; margin-bottom: 30px;">
                                     <p class="warning-text" style="margin: 0; font-size: 14px; line-height: 22px; color: #92400e;">
                                         <strong>重要提示：</strong><br>
-                                        证书过期后，浏览器将拦截访问并显示“不安全”警告，严重影响用户信任。
+                                        证书过期后，浏览器将拦截访问并显示"不安全"警告，严重影响用户信任。
                                     </p>
                                 </div>
 
