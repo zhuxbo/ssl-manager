@@ -26,9 +26,9 @@ import {
   ElProgress,
   ElEmpty,
   ElTooltip,
-  ElDivider,
   ElSelect,
-  ElOption
+  ElOption,
+  ElAlert
 } from "element-plus";
 
 defineOptions({
@@ -58,6 +58,21 @@ const showUpgradeProgress = ref(false);
 const upgradeStatus = ref<UpgradeStatus | null>(null);
 const pollingInterval = ref<ReturnType<typeof setInterval> | null>(null);
 
+// 数据库结构检查警告
+const structureWarning = ref<{
+  show: boolean;
+  canAutoFix: boolean;
+  autoFixed: boolean;
+  message: string;
+  manualActions: string[];
+}>({
+  show: false,
+  canAutoFix: true,
+  autoFixed: false,
+  message: "",
+  manualActions: []
+});
+
 // 步骤名称映射
 const stepNames: Record<string, string> = {
   fetch_release: "获取版本信息",
@@ -71,6 +86,7 @@ const stepNames: Record<string, string> = {
   composer_install: "安装依赖",
   migrate: "运行数据库迁移",
   seed: "初始化数据",
+  structure_check: "数据库结构校验",
   clear_cache: "清理缓存",
   update_version: "更新版本号",
   cleanup: "清理临时文件",
@@ -223,6 +239,41 @@ const pollUpgradeStatus = async () => {
       message(`升级成功！${data.from_version} -> ${data.to_version}`, {
         type: "success"
       });
+      // 检查数据库结构警告
+      if (data.structure_check?.has_diff && !data.structure_check?.auto_fixed) {
+        const sc = data.structure_check;
+        const summary = sc.summary;
+        const items: string[] = [];
+
+        if (summary.missing_tables?.length)
+          items.push(`缺失表: ${summary.missing_tables.join(", ")}`);
+        if (summary.extra_tables?.length)
+          items.push(`多余表: ${summary.extra_tables.join(", ")}`);
+        if (summary.missing_columns?.length)
+          items.push(`缺失列: ${summary.missing_columns.join(", ")}`);
+        if (summary.extra_columns?.length)
+          items.push(`多余列: ${summary.extra_columns.join(", ")}`);
+        if (summary.modified_columns?.length)
+          items.push(`类型不匹配: ${summary.modified_columns.join(", ")}`);
+        if (summary.missing_indexes?.length)
+          items.push(`缺失索引: ${summary.missing_indexes.join(", ")}`);
+        if (summary.extra_indexes?.length)
+          items.push(`多余索引: ${summary.extra_indexes.join(", ")}`);
+        if (summary.missing_foreign_keys?.length)
+          items.push(`缺失外键: ${summary.missing_foreign_keys.join(", ")}`);
+        if (summary.extra_foreign_keys?.length)
+          items.push(`多余外键: ${summary.extra_foreign_keys.join(", ")}`);
+
+        structureWarning.value = {
+          show: true,
+          canAutoFix: sc.summary?.can_auto_fix ?? false,
+          autoFixed: sc.auto_fixed,
+          message: items.join("\n"),
+          manualActions: summary.manual_actions || []
+        };
+      } else {
+        structureWarning.value.show = false;
+      }
       // 刷新版本信息
       await loadVersion();
       await loadBackups();
@@ -524,6 +575,54 @@ onUnmounted(() => {
       </div>
     </el-card>
 
+    <!-- 数据库结构警告 -->
+    <el-alert
+      v-if="structureWarning.show"
+      :title="
+        structureWarning.canAutoFix
+          ? '数据库结构存在差异（可自动修复）'
+          : '数据库结构存在差异（需手动处理）'
+      "
+      :type="structureWarning.canAutoFix ? 'warning' : 'error'"
+      show-icon
+      :closable="true"
+      class="mb-4"
+      @close="structureWarning.show = false"
+    >
+      <template #default>
+        <div class="structure-warning-content">
+          <pre class="text-sm whitespace-pre-wrap mb-2">{{
+            structureWarning.message
+          }}</pre>
+          <div
+            v-if="structureWarning.manualActions.length"
+            class="manual-actions mt-2"
+          >
+            <div class="font-bold text-sm mb-1">需手动执行的操作：</div>
+            <ul class="list-disc pl-4 text-sm">
+              <li
+                v-for="(action, idx) in structureWarning.manualActions"
+                :key="idx"
+              >
+                {{ action }}
+              </li>
+            </ul>
+          </div>
+          <div class="mt-3 text-sm text-gray-600">
+            <code class="bg-gray-100 px-2 py-1 rounded"
+              >php artisan db:structure</code
+            >
+            查看详细差异
+            <span class="mx-2">|</span>
+            <code class="bg-gray-100 px-2 py-1 rounded"
+              >php artisan db:structure --fix</code
+            >
+            自动修复
+          </div>
+        </div>
+      </template>
+    </el-alert>
+
     <!-- 历史版本 -->
     <el-card class="mb-4">
       <template #header>
@@ -652,5 +751,16 @@ onUnmounted(() => {
 .changelog {
   max-height: 200px;
   overflow-y: auto;
+}
+
+.structure-warning-content pre {
+  background: rgba(0, 0, 0, 0.03);
+  padding: 8px 12px;
+  border-radius: 4px;
+  margin: 0;
+}
+
+.structure-warning-content code {
+  font-family: "SF Mono", Monaco, "Courier New", monospace;
 }
 </style>

@@ -8,15 +8,19 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('users', function (Blueprint $table) {
-            $table->json('auto_settings')->nullable()->after('notification_settings')->comment('自动续签设置');
-        });
+        if (! Schema::hasColumn('users', 'auto_settings')) {
+            Schema::table('users', function (Blueprint $table) {
+                $table->json('auto_settings')->nullable()->after('notification_settings')->comment('自动续签设置');
+            });
+        }
     }
 
     public function down(): void
     {
-        Schema::table('users', function (Blueprint $table) {
-            $table->dropColumn('auto_settings');
-        });
+        if (Schema::hasColumn('users', 'auto_settings')) {
+            Schema::table('users', function (Blueprint $table) {
+                $table->dropColumn('auto_settings');
+            });
+        }
     }
 };

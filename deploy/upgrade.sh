@@ -803,6 +803,56 @@ PYEOF
         php artisan db:seed --force || true
     fi
 
+    # 10.2 数据库结构校验
+    log_step "数据库结构校验..."
+    local structure_check_result=0
+    local structure_output=""
+    if [ "$DEPLOY_MODE" = "docker" ]; then
+        cd "$INSTALL_DIR"
+        # 检查结构差异
+        structure_output=$($compose_cmd exec -T php sh -c "cd /var/www/html/backend && php artisan db:structure --check" 2>&1) || true
+        if echo "$structure_output" | grep -q "数据库结构完全一致"; then
+            log_success "数据库结构校验通过"
+        else
+            log_warning "检测到数据库结构差异："
+            echo "$structure_output" | head -50
+            echo ""
+            log_warning "尝试自动修复（仅 ADD 操作）..."
+            if $compose_cmd exec -T php sh -c "cd /var/www/html/backend && php artisan db:structure --fix --skip-foreign-keys" 2>&1; then
+                log_success "数据库结构自动修复完成"
+            else
+                log_warning "部分结构差异需要手动处理"
+                structure_check_result=1
+            fi
+            echo ""
+            echo -e "${YELLOW}提示: 使用以下命令查看和修复结构差异：${NC}"
+            echo "  php artisan db:structure        # 查看差异"
+            echo "  php artisan db:structure --fix  # 自动修复"
+        fi
+    else
+        cd "$INSTALL_DIR/backend"
+        # 检查结构差异
+        structure_output=$(php artisan db:structure --check 2>&1) || true
+        if echo "$structure_output" | grep -q "数据库结构完全一致"; then
+            log_success "数据库结构校验通过"
+        else
+            log_warning "检测到数据库结构差异："
+            echo "$structure_output" | head -50
+            echo ""
+            log_warning "尝试自动修复（仅 ADD 操作）..."
+            if php artisan db:structure --fix --skip-foreign-keys 2>&1; then
+                log_success "数据库结构自动修复完成"
+            else
+                log_warning "部分结构差异需要手动处理"
+                structure_check_result=1
+            fi
+            echo ""
+            echo -e "${YELLOW}提示: 使用以下命令查看和修复结构差异：${NC}"
+            echo "  php artisan db:structure        # 查看差异"
+            echo "  php artisan db:structure --fix  # 自动修复"
+        fi
+    fi
+
     # 11. 清理缓存
     log_step "清理缓存..."
     if [ "$DEPLOY_MODE" = "docker" ]; then

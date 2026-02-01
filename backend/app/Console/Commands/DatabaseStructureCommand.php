@@ -1169,6 +1169,34 @@ class DatabaseStructureCommand extends Command
                     $this->line("$tableName.$indexName");
                 }
             }
+
+            if (! empty($tableDiff['missing_foreign_keys'])) {
+                if (! $hasManual) {
+                    $this->newLine();
+                    $this->warn('以下项目需要手动处理:');
+                    $this->newLine();
+                    $hasManual = true;
+                }
+
+                $this->warn('缺失的外键（ADD FOREIGN KEY）:');
+                foreach ($tableDiff['missing_foreign_keys'] as $fkName => $fkDef) {
+                    $this->line("$tableName.$fkName");
+                }
+            }
+
+            if (! empty($tableDiff['extra_foreign_keys'])) {
+                if (! $hasManual) {
+                    $this->newLine();
+                    $this->warn('以下项目需要手动处理:');
+                    $this->newLine();
+                    $hasManual = true;
+                }
+
+                $this->warn('多余的外键（DROP FOREIGN KEY）:');
+                foreach ($tableDiff['extra_foreign_keys'] as $fkName => $fkDef) {
+                    $this->line("$tableName.$fkName");
+                }
+            }
         }
     }
 }

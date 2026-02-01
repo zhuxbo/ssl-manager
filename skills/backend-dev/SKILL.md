@@ -153,6 +153,35 @@ ACME_DEFAULT_PRODUCT_ID=xxx
 | Docker | www-data | `/var/www/html/data/version.json` |
 | 宝塔 | www | 项目根目录 |
 
+### 数据库结构校验
+
+升级后自动校验数据库结构与标准 `structure.json` 是否一致。
+
+**配置项** (`config/upgrade.php`):
+
+| 配置 | 说明 |
+|------|------|
+| `auto_structure_check` | 是否自动校验（默认 true） |
+| `auto_structure_fix` | 是否自动修复 ADD 类型差异（默认 true） |
+
+**校验流程**:
+
+1. 迁移完成后调用 `DatabaseStructureService::check()`
+2. 无差异 → 记录日志
+3. 有差异且可自动修复 → 执行 `fix()`（仅 ADD 操作）
+4. 有差异但无法自动修复 → 记录警告（不阻断升级）
+
+**手动命令**:
+
+```bash
+php artisan db:structure --check        # 检测差异
+php artisan db:structure --fix          # 自动修复（仅 ADD）
+php artisan db:structure --export       # 导出标准结构（需 Docker）
+php artisan db:structure --export --use-local  # 使用本地 MySQL 导出
+```
+
+**注意**: 每次迁移变更后需重新导出 `structure.json`。
+
 ---
 
 ## 代码规范
@@ -180,6 +209,8 @@ php artisan test          # 测试
 php artisan upgrade:check     # 检查更新
 php artisan upgrade:run       # 执行升级
 php artisan upgrade:rollback  # 回滚
+php artisan db:structure --check   # 数据库结构校验
+php artisan db:structure --fix     # 自动修复结构
 php artisan queue:work --queue Task  # 队列
 ```
 

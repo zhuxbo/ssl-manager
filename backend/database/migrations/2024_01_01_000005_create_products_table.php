@@ -26,7 +26,7 @@ return new class extends Migration
             $table->enum('validation_type', ['dv', 'ov', 'ev'])->default('dv')->index()->comment('验证类型');
             $table->string('common_name_types', 50)->index()->comment('通用名称类型');
             $table->string('alternative_name_types', 50)->nullable()->index()->comment('备用名称类型');
-            $table->string('validation_methods', 200)->comment('验证方法');
+            $table->string('validation_methods', 300)->comment('验证方法');
             $table->string('periods', 100)->comment('购买时长');
             $table->unsignedInteger('standard_min')->default(0)->comment('标准域名起始个数');
             $table->unsignedInteger('standard_max')->default(0)->comment('标准域名最大个数');

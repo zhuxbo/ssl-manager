@@ -1,13 +1,538 @@
 {
     "version": "1.0",
-    "mysql_version": "8.0.43",
-    "generated_at": "2025-11-24 12:45:21",
+    "mysql_version": "8.0.44",
+    "generated_at": "2026-02-01 18:13:48",
     "database": {
-        "name": "tempdb",
+        "name": "manager",
         "charset": "utf8mb4",
-        "collation": "utf8mb4_0900_ai_ci"
+        "collation": null
     },
     "tables": {
+        "acme_accounts": {
+            "engine": "InnoDB",
+            "collation": "utf8mb4_0900_ai_ci",
+            "comment": "",
+            "auto_increment": 1,
+            "columns": {
+                "id": {
+                    "position": 1,
+                    "type": "bigint unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "auto_increment",
+                    "comment": ""
+                },
+                "user_id": {
+                    "position": 2,
+                    "type": "bigint unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "用户ID"
+                },
+                "key_id": {
+                    "position": 3,
+                    "type": "varchar(200)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "公钥指纹(kid)"
+                },
+                "public_key": {
+                    "position": 4,
+                    "type": "json",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "JWK 公钥"
+                },
+                "contact": {
+                    "position": 5,
+                    "type": "json",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "联系方式"
+                },
+                "status": {
+                    "position": 6,
+                    "type": "enum('valid','deactivated','revoked')",
+                    "nullable": false,
+                    "default": "valid",
+                    "extra": "",
+                    "comment": "状态"
+                },
+                "created_at": {
+                    "position": 7,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                },
+                "updated_at": {
+                    "position": 8,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                }
+            },
+            "indexes": {
+                "acme_accounts_key_id_unique": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "key_id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "acme_accounts_user_id_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "user_id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "PRIMARY": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                }
+            },
+            "foreign_keys": {
+                "acme_accounts_user_id_foreign": {
+                    "columns": [
+                        "user_id"
+                    ],
+                    "references": {
+                        "table": "users",
+                        "columns": [
+                            "id"
+                        ]
+                    },
+                    "on_delete": "CASCADE",
+                    "on_update": "NO ACTION"
+                }
+            }
+        },
+        "acme_authorizations": {
+            "engine": "InnoDB",
+            "collation": "utf8mb4_0900_ai_ci",
+            "comment": "",
+            "auto_increment": 1,
+            "columns": {
+                "id": {
+                    "position": 1,
+                    "type": "bigint unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "auto_increment",
+                    "comment": ""
+                },
+                "acme_order_id": {
+                    "position": 2,
+                    "type": "bigint unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "ACME 订单ID"
+                },
+                "token": {
+                    "position": 3,
+                    "type": "varchar(100)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "授权 URL token"
+                },
+                "identifier_type": {
+                    "position": 4,
+                    "type": "varchar(20)",
+                    "nullable": false,
+                    "default": "dns",
+                    "extra": "",
+                    "comment": "标识符类型"
+                },
+                "identifier_value": {
+                    "position": 5,
+                    "type": "varchar(255)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "标识符值"
+                },
+                "wildcard": {
+                    "position": 6,
+                    "type": "tinyint(1)",
+                    "nullable": false,
+                    "default": "0",
+                    "extra": "",
+                    "comment": "是否通配符"
+                },
+                "status": {
+                    "position": 7,
+                    "type": "enum('pending','valid','invalid','deactivated','expired','revoked')",
+                    "nullable": false,
+                    "default": "pending",
+                    "extra": "",
+                    "comment": "状态"
+                },
+                "expires": {
+                    "position": 8,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "过期时间"
+                },
+                "challenge_type": {
+                    "position": 9,
+                    "type": "varchar(30)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "验证类型: http-01, dns-01"
+                },
+                "challenge_token": {
+                    "position": 10,
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "验证令牌"
+                },
+                "challenge_status": {
+                    "position": 11,
+                    "type": "varchar(20)",
+                    "nullable": false,
+                    "default": "pending",
+                    "extra": "",
+                    "comment": "验证状态"
+                },
+                "challenge_validated": {
+                    "position": 12,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "验证时间"
+                },
+                "created_at": {
+                    "position": 13,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                },
+                "updated_at": {
+                    "position": 14,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                }
+            },
+            "indexes": {
+                "acme_authorizations_acme_order_id_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "acme_order_id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "acme_authorizations_token_unique": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "token"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "PRIMARY": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                }
+            },
+            "foreign_keys": {
+                "acme_authorizations_acme_order_id_foreign": {
+                    "columns": [
+                        "acme_order_id"
+                    ],
+                    "references": {
+                        "table": "acme_orders",
+                        "columns": [
+                            "id"
+                        ]
+                    },
+                    "on_delete": "CASCADE",
+                    "on_update": "NO ACTION"
+                }
+            }
+        },
+        "acme_nonces": {
+            "engine": "InnoDB",
+            "collation": "utf8mb4_0900_ai_ci",
+            "comment": "",
+            "auto_increment": null,
+            "columns": {
+                "nonce": {
+                    "position": 1,
+                    "type": "varchar(64)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "Nonce 值"
+                },
+                "expires_at": {
+                    "position": 2,
+                    "type": "timestamp",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "过期时间"
+                }
+            },
+            "indexes": {
+                "acme_nonces_expires_at_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "expires_at"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "PRIMARY": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "nonce"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                }
+            },
+            "foreign_keys": []
+        },
+        "acme_orders": {
+            "engine": "InnoDB",
+            "collation": "utf8mb4_0900_ai_ci",
+            "comment": "",
+            "auto_increment": 1,
+            "columns": {
+                "id": {
+                    "position": 1,
+                    "type": "bigint unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "auto_increment",
+                    "comment": ""
+                },
+                "acme_account_id": {
+                    "position": 2,
+                    "type": "bigint unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "ACME 账户ID"
+                },
+                "order_id": {
+                    "position": 3,
+                    "type": "bigint unsigned",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "关联的订单ID"
+                },
+                "identifiers": {
+                    "position": 4,
+                    "type": "json",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "域名标识符"
+                },
+                "expires": {
+                    "position": 5,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "过期时间"
+                },
+                "status": {
+                    "position": 6,
+                    "type": "enum('pending','ready','processing','valid','invalid')",
+                    "nullable": false,
+                    "default": "pending",
+                    "extra": "",
+                    "comment": "状态"
+                },
+                "finalize_token": {
+                    "position": 7,
+                    "type": "varchar(100)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "Finalize URL token"
+                },
+                "certificate_token": {
+                    "position": 8,
+                    "type": "varchar(100)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "证书 URL token"
+                },
+                "csr": {
+                    "position": 9,
+                    "type": "text",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "CSR"
+                },
+                "certificate": {
+                    "position": 10,
+                    "type": "text",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "证书"
+                },
+                "chain": {
+                    "position": 11,
+                    "type": "text",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "证书链"
+                },
+                "created_at": {
+                    "position": 12,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                },
+                "updated_at": {
+                    "position": 13,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                }
+            },
+            "indexes": {
+                "acme_orders_acme_account_id_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "acme_account_id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "acme_orders_certificate_token_unique": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "certificate_token"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "acme_orders_finalize_token_unique": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "finalize_token"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "acme_orders_order_id_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "order_id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "PRIMARY": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                }
+            },
+            "foreign_keys": {
+                "acme_orders_acme_account_id_foreign": {
+                    "columns": [
+                        "acme_account_id"
+                    ],
+                    "references": {
+                        "table": "acme_accounts",
+                        "columns": [
+                            "id"
+                        ]
+                    },
+                    "on_delete": "CASCADE",
+                    "on_update": "NO ACTION"
+                },
+                "acme_orders_order_id_foreign": {
+                    "columns": [
+                        "order_id"
+                    ],
+                    "references": {
+                        "table": "orders",
+                        "columns": [
+                            "id"
+                        ]
+                    },
+                    "on_delete": "SET NULL",
+                    "on_update": "NO ACTION"
+                }
+            }
+        },
         "admin_logs": {
             "engine": "InnoDB",
             "collation": "utf8mb4_0900_ai_ci",
@@ -1204,7 +1729,7 @@
                     "nullable": false,
                     "default": null,
                     "extra": "",
-                    "comment": "请求URL"
+                    "comment": "请求地址"
                 },
                 "params": {
                     "position": 4,
@@ -1480,7 +2005,7 @@
                 },
                 "channel": {
                     "position": 11,
-                    "type": "enum('admin','web','api','acme')",
+                    "type": "enum('admin','web','api','acme','deploy')",
                     "nullable": false,
                     "default": null,
                     "extra": "",
@@ -1518,8 +2043,16 @@
                     "extra": "",
                     "comment": "备用名称"
                 },
-                "standard_count": {
+                "email": {
                     "position": 16,
+                    "type": "varchar(500)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "邮箱地址"
+                },
+                "standard_count": {
+                    "position": 17,
                     "type": "int",
                     "nullable": false,
                     "default": "0",
@@ -1527,7 +2060,7 @@
                     "comment": "标准域名数"
                 },
                 "wildcard_count": {
-                    "position": 17,
+                    "position": 18,
                     "type": "int",
                     "nullable": false,
                     "default": "0",
@@ -1535,7 +2068,7 @@
                     "comment": "通配符数"
                 },
                 "dcv": {
-                    "position": 18,
+                    "position": 19,
                     "type": "mediumtext",
                     "nullable": true,
                     "default": null,
@@ -1543,15 +2076,23 @@
                     "comment": "验证信息"
                 },
                 "validation": {
-                    "position": 19,
+                    "position": 20,
                     "type": "mediumtext",
                     "nullable": true,
                     "default": null,
                     "extra": "",
                     "comment": "验证"
                 },
+                "documents": {
+                    "position": 21,
+                    "type": "varchar(2000)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "验证文档列表"
+                },
                 "issued_at": {
-                    "position": 20,
+                    "position": 22,
                     "type": "timestamp",
                     "nullable": true,
                     "default": null,
@@ -1559,15 +2100,23 @@
                     "comment": "颁发时间"
                 },
                 "expires_at": {
-                    "position": 21,
+                    "position": 23,
                     "type": "timestamp",
                     "nullable": true,
                     "default": null,
                     "extra": "",
                     "comment": "过期时间"
                 },
+                "auto_deploy_at": {
+                    "position": 24,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "自动部署时间"
+                },
                 "csr_md5": {
-                    "position": 22,
+                    "position": 25,
                     "type": "char(32)",
                     "nullable": true,
                     "default": null,
@@ -1575,7 +2124,7 @@
                     "comment": "CSR的MD5"
                 },
                 "csr": {
-                    "position": 23,
+                    "position": 26,
                     "type": "mediumtext",
                     "nullable": true,
                     "default": null,
@@ -1583,7 +2132,7 @@
                     "comment": "CSR"
                 },
                 "private_key": {
-                    "position": 24,
+                    "position": 27,
                     "type": "mediumtext",
                     "nullable": true,
                     "default": null,
@@ -1591,7 +2140,7 @@
                     "comment": "私钥"
                 },
                 "cert": {
-                    "position": 25,
+                    "position": 28,
                     "type": "mediumtext",
                     "nullable": true,
                     "default": null,
@@ -1599,7 +2148,7 @@
                     "comment": "证书"
                 },
                 "serial_number": {
-                    "position": 26,
+                    "position": 29,
                     "type": "varchar(128)",
                     "nullable": true,
                     "default": null,
@@ -1607,7 +2156,7 @@
                     "comment": "序列号"
                 },
                 "fingerprint": {
-                    "position": 27,
+                    "position": 30,
                     "type": "varchar(128)",
                     "nullable": true,
                     "default": null,
@@ -1615,7 +2164,7 @@
                     "comment": "指纹"
                 },
                 "encryption_alg": {
-                    "position": 28,
+                    "position": 31,
                     "type": "varchar(20)",
                     "nullable": true,
                     "default": null,
@@ -1623,7 +2172,7 @@
                     "comment": "加密算法"
                 },
                 "encryption_bits": {
-                    "position": 29,
+                    "position": 32,
                     "type": "smallint unsigned",
                     "nullable": false,
                     "default": "0",
@@ -1631,7 +2180,7 @@
                     "comment": "加密位数"
                 },
                 "signature_digest_alg": {
-                    "position": 30,
+                    "position": 33,
                     "type": "varchar(20)",
                     "nullable": true,
                     "default": null,
@@ -1639,7 +2188,7 @@
                     "comment": "签名摘要算法"
                 },
                 "cert_apply_status": {
-                    "position": 31,
+                    "position": 34,
                     "type": "tinyint",
                     "nullable": false,
                     "default": "0",
@@ -1647,7 +2196,7 @@
                     "comment": "证书申请状态: 0=未提交CA, 2=已提交CA"
                 },
                 "domain_verify_status": {
-                    "position": 32,
+                    "position": 35,
                     "type": "tinyint",
                     "nullable": false,
                     "default": "0",
@@ -1655,7 +2204,7 @@
                     "comment": "域名验证状态: 0=未开始, 1=进行中, 2=已完成"
                 },
                 "org_verify_status": {
-                    "position": 33,
+                    "position": 36,
                     "type": "tinyint",
                     "nullable": false,
                     "default": "0",
@@ -1663,7 +2212,7 @@
                     "comment": "组织验证状态: 0=未开始, 1=进行中, 2=已完成"
                 },
                 "status": {
-                    "position": 34,
+                    "position": 37,
                     "type": "enum('unpaid','pending','processing','approving','active','failed','cancelling','cancelled','revoked','renewed','reissued','expired')",
                     "nullable": false,
                     "default": "unpaid",
@@ -1671,7 +2220,7 @@
                     "comment": "状态"
                 },
                 "created_at": {
-                    "position": 35,
+                    "position": 38,
                     "type": "timestamp",
                     "nullable": true,
                     "default": null,
@@ -1679,7 +2228,7 @@
                     "comment": ""
                 },
                 "updated_at": {
-                    "position": 36,
+                    "position": 39,
                     "type": "timestamp",
                     "nullable": true,
                     "default": null,
@@ -1723,6 +2272,16 @@
                     "type": "BTREE",
                     "columns": [
                         "csr_md5"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "certs_email_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "email"
                     ],
                     "sub_parts": [
                         null
@@ -2176,6 +2735,151 @@
             },
             "foreign_keys": {
                 "contacts_user_id_foreign": {
+                    "columns": [
+                        "user_id"
+                    ],
+                    "references": {
+                        "table": "users",
+                        "columns": [
+                            "id"
+                        ]
+                    },
+                    "on_delete": "CASCADE",
+                    "on_update": "NO ACTION"
+                }
+            }
+        },
+        "deploy_tokens": {
+            "engine": "InnoDB",
+            "collation": "utf8mb4_0900_ai_ci",
+            "comment": "",
+            "auto_increment": 1,
+            "columns": {
+                "id": {
+                    "position": 1,
+                    "type": "int unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "auto_increment",
+                    "comment": "ID"
+                },
+                "user_id": {
+                    "position": 2,
+                    "type": "bigint unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "用户ID"
+                },
+                "token": {
+                    "position": 3,
+                    "type": "varchar(128)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "令牌"
+                },
+                "allowed_ips": {
+                    "position": 4,
+                    "type": "varchar(2000)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "允许的IP"
+                },
+                "rate_limit": {
+                    "position": 5,
+                    "type": "int",
+                    "nullable": false,
+                    "default": "60",
+                    "extra": "",
+                    "comment": "速率限制"
+                },
+                "last_used_at": {
+                    "position": 6,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "最后使用时间"
+                },
+                "last_used_ip": {
+                    "position": 7,
+                    "type": "varchar(100)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "最后使用IP"
+                },
+                "status": {
+                    "position": 8,
+                    "type": "tinyint unsigned",
+                    "nullable": false,
+                    "default": "1",
+                    "extra": "",
+                    "comment": "状态: 0=禁用, 1=启用"
+                },
+                "created_at": {
+                    "position": 9,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                },
+                "updated_at": {
+                    "position": 10,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                }
+            },
+            "indexes": {
+                "deploy_tokens_status_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "status"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "deploy_tokens_token_unique": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "token"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "deploy_tokens_user_id_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "user_id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "PRIMARY": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                }
+            },
+            "foreign_keys": {
+                "deploy_tokens_user_id_foreign": {
                     "columns": [
                         "user_id"
                     ],
@@ -3259,7 +3963,7 @@
                 },
                 "data": {
                     "position": 5,
-                    "type": "text",
+                    "type": "mediumtext",
                     "nullable": true,
                     "default": null,
                     "extra": "",
@@ -3494,8 +4198,48 @@
                     "extra": "",
                     "comment": "会员备注"
                 },
-                "created_at": {
+                "eab_kid": {
                     "position": 18,
+                    "type": "varchar(200)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "EAB Key ID"
+                },
+                "eab_hmac": {
+                    "position": 19,
+                    "type": "text",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "EAB HMAC Key (加密存储)"
+                },
+                "eab_used_at": {
+                    "position": 20,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "EAB 使用时间（防重放）"
+                },
+                "auto_renew": {
+                    "position": 21,
+                    "type": "tinyint(1)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "自动续费"
+                },
+                "auto_reissue": {
+                    "position": 22,
+                    "type": "tinyint(1)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "自动重签"
+                },
+                "created_at": {
+                    "position": 23,
                     "type": "timestamp",
                     "nullable": true,
                     "default": null,
@@ -3503,7 +4247,7 @@
                     "comment": ""
                 },
                 "updated_at": {
-                    "position": 19,
+                    "position": 24,
                     "type": "timestamp",
                     "nullable": true,
                     "default": null,
@@ -3517,6 +4261,16 @@
                     "type": "BTREE",
                     "columns": [
                         "brand"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "orders_eab_kid_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "eab_kid"
                     ],
                     "sub_parts": [
                         null
@@ -3913,8 +4667,16 @@
                     "extra": "",
                     "comment": "来源"
                 },
-                "brand": {
+                "product_type": {
                     "position": 6,
+                    "type": "enum('ssl','codesign','smime','docsign')",
+                    "nullable": false,
+                    "default": "ssl",
+                    "extra": "",
+                    "comment": "产品类型"
+                },
+                "brand": {
+                    "position": 7,
                     "type": "varchar(50)",
                     "nullable": false,
                     "default": null,
@@ -3922,7 +4684,7 @@
                     "comment": "品牌"
                 },
                 "ca": {
-                    "position": 7,
+                    "position": 8,
                     "type": "varchar(200)",
                     "nullable": false,
                     "default": null,
@@ -3930,7 +4692,7 @@
                     "comment": "签发机构"
                 },
                 "warranty_currency": {
-                    "position": 8,
+                    "position": 9,
                     "type": "varchar(20)",
                     "nullable": false,
                     "default": "$",
@@ -3938,7 +4700,7 @@
                     "comment": "保障金货币"
                 },
                 "warranty": {
-                    "position": 9,
+                    "position": 10,
                     "type": "int unsigned",
                     "nullable": false,
                     "default": "0",
@@ -3946,7 +4708,7 @@
                     "comment": "保障金额"
                 },
                 "server": {
-                    "position": 10,
+                    "position": 11,
                     "type": "int unsigned",
                     "nullable": false,
                     "default": "0",
@@ -3954,7 +4716,7 @@
                     "comment": "服务器授权"
                 },
                 "encryption_standard": {
-                    "position": 11,
+                    "position": 12,
                     "type": "enum('international','chinese')",
                     "nullable": false,
                     "default": "international",
@@ -3962,7 +4724,7 @@
                     "comment": "加密标准"
                 },
                 "encryption_alg": {
-                    "position": 12,
+                    "position": 13,
                     "type": "varchar(50)",
                     "nullable": false,
                     "default": null,
@@ -3970,7 +4732,7 @@
                     "comment": "加密算法"
                 },
                 "signature_digest_alg": {
-                    "position": 13,
+                    "position": 14,
                     "type": "varchar(50)",
                     "nullable": false,
                     "default": null,
@@ -3978,7 +4740,7 @@
                     "comment": "签名摘要算法"
                 },
                 "validation_type": {
-                    "position": 14,
+                    "position": 15,
                     "type": "enum('dv','ov','ev')",
                     "nullable": false,
                     "default": "dv",
@@ -3986,7 +4748,7 @@
                     "comment": "验证类型"
                 },
                 "common_name_types": {
-                    "position": 15,
+                    "position": 16,
                     "type": "varchar(50)",
                     "nullable": false,
                     "default": null,
@@ -3994,7 +4756,7 @@
                     "comment": "通用名称类型"
                 },
                 "alternative_name_types": {
-                    "position": 16,
+                    "position": 17,
                     "type": "varchar(50)",
                     "nullable": true,
                     "default": null,
@@ -4002,15 +4764,15 @@
                     "comment": "备用名称类型"
                 },
                 "validation_methods": {
-                    "position": 17,
-                    "type": "varchar(200)",
+                    "position": 18,
+                    "type": "varchar(300)",
                     "nullable": false,
                     "default": null,
                     "extra": "",
                     "comment": "验证方法"
                 },
                 "periods": {
-                    "position": 18,
+                    "position": 19,
                     "type": "varchar(100)",
                     "nullable": false,
                     "default": null,
@@ -4018,7 +4780,7 @@
                     "comment": "购买时长"
                 },
                 "standard_min": {
-                    "position": 19,
+                    "position": 20,
                     "type": "int unsigned",
                     "nullable": false,
                     "default": "0",
@@ -4026,7 +4788,7 @@
                     "comment": "标准域名起始个数"
                 },
                 "standard_max": {
-                    "position": 20,
+                    "position": 21,
                     "type": "int unsigned",
                     "nullable": false,
                     "default": "0",
@@ -4034,7 +4796,7 @@
                     "comment": "标准域名最大个数"
                 },
                 "wildcard_min": {
-                    "position": 21,
+                    "position": 22,
                     "type": "int unsigned",
                     "nullable": false,
                     "default": "0",
@@ -4042,7 +4804,7 @@
                     "comment": "通配符起始个数"
                 },
                 "wildcard_max": {
-                    "position": 22,
+                    "position": 23,
                     "type": "int unsigned",
                     "nullable": false,
                     "default": "0",
@@ -4050,7 +4812,7 @@
                     "comment": "通配符最大个数"
                 },
                 "total_min": {
-                    "position": 23,
+                    "position": 24,
                     "type": "int unsigned",
                     "nullable": false,
                     "default": "0",
@@ -4058,7 +4820,7 @@
                     "comment": "总最少个数"
                 },
                 "total_max": {
-                    "position": 24,
+                    "position": 25,
                     "type": "int unsigned",
                     "nullable": false,
                     "default": "0",
@@ -4066,7 +4828,7 @@
                     "comment": "总最大个数"
                 },
                 "add_san": {
-                    "position": 25,
+                    "position": 26,
                     "type": "tinyint unsigned",
                     "nullable": false,
                     "default": "0",
@@ -4074,7 +4836,7 @@
                     "comment": "增加SAN: 0=否, 1=是"
                 },
                 "replace_san": {
-                    "position": 26,
+                    "position": 27,
                     "type": "tinyint unsigned",
                     "nullable": false,
                     "default": "0",
@@ -4082,7 +4844,7 @@
                     "comment": "替换SAN: 0=否, 1=是"
                 },
                 "reissue": {
-                    "position": 27,
+                    "position": 28,
                     "type": "tinyint unsigned",
                     "nullable": false,
                     "default": "0",
@@ -4090,7 +4852,7 @@
                     "comment": "重签证书: 0=否, 1=是"
                 },
                 "renew": {
-                    "position": 28,
+                    "position": 29,
                     "type": "tinyint unsigned",
                     "nullable": false,
                     "default": "0",
@@ -4098,7 +4860,7 @@
                     "comment": "续费证书: 0=否, 1=是"
                 },
                 "reuse_csr": {
-                    "position": 29,
+                    "position": 30,
                     "type": "tinyint unsigned",
                     "nullable": false,
                     "default": "0",
@@ -4106,7 +4868,7 @@
                     "comment": "重用CSR: 0=否, 1=是"
                 },
                 "gift_root_domain": {
-                    "position": 30,
+                    "position": 31,
                     "type": "tinyint unsigned",
                     "nullable": false,
                     "default": "0",
@@ -4114,7 +4876,7 @@
                     "comment": "赠送根域名: 0=否, 1=是"
                 },
                 "refund_period": {
-                    "position": 31,
+                    "position": 32,
                     "type": "tinyint unsigned",
                     "nullable": false,
                     "default": "30",
@@ -4122,7 +4884,7 @@
                     "comment": "退款期限"
                 },
                 "remark": {
-                    "position": 32,
+                    "position": 33,
                     "type": "varchar(500)",
                     "nullable": true,
                     "default": null,
@@ -4130,7 +4892,7 @@
                     "comment": "备注"
                 },
                 "weight": {
-                    "position": 33,
+                    "position": 34,
                     "type": "int",
                     "nullable": false,
                     "default": "0",
@@ -4138,7 +4900,7 @@
                     "comment": "权重"
                 },
                 "cost": {
-                    "position": 34,
+                    "position": 35,
                     "type": "varchar(2000)",
                     "nullable": true,
                     "default": null,
@@ -4146,7 +4908,7 @@
                     "comment": "成本"
                 },
                 "status": {
-                    "position": 35,
+                    "position": 36,
                     "type": "tinyint unsigned",
                     "nullable": false,
                     "default": "1",
@@ -4154,7 +4916,7 @@
                     "comment": "状态: 0=禁用, 1=启用"
                 },
                 "created_at": {
-                    "position": 36,
+                    "position": 37,
                     "type": "timestamp",
                     "nullable": true,
                     "default": null,
@@ -4162,7 +4924,7 @@
                     "comment": ""
                 },
                 "updated_at": {
-                    "position": 37,
+                    "position": 38,
                     "type": "timestamp",
                     "nullable": true,
                     "default": null,
@@ -4256,6 +5018,16 @@
                     "type": "BTREE",
                     "columns": [
                         "name"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "products_product_type_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "product_type"
                     ],
                     "sub_parts": [
                         null
@@ -5413,8 +6185,16 @@
                     "extra": "",
                     "comment": "通知设置"
                 },
-                "status": {
+                "auto_settings": {
                     "position": 21,
+                    "type": "json",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "自动续费和重签设置"
+                },
+                "status": {
+                    "position": 22,
                     "type": "tinyint",
                     "nullable": false,
                     "default": "1",
@@ -5422,7 +6202,7 @@
                     "comment": "状态: 0=禁用, 1=启用"
                 },
                 "created_at": {
-                    "position": 22,
+                    "position": 23,
                     "type": "timestamp",
                     "nullable": true,
                     "default": null,
@@ -5430,7 +6210,7 @@
                     "comment": ""
                 },
                 "updated_at": {
-                    "position": 23,
+                    "position": 24,
                     "type": "timestamp",
                     "nullable": true,
                     "default": null,

@@ -29,6 +29,7 @@ return new class extends Migration
             $table->timestamp('email_verified_at')->nullable()->comment('邮箱验证时间');
             $table->timestamp('mobile_verified_at')->nullable()->comment('手机验证时间');
             $table->string('notification_settings')->nullable()->comment('通知设置');
+            $table->json('auto_settings')->nullable()->comment('自动续费和重签设置');
             $table->tinyInteger('status')->default(1)->index()->comment('状态: 0=禁用, 1=启用');
             $table->timestamps();
         });

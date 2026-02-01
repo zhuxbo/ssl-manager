@@ -8,6 +8,10 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (Schema::hasTable('deploy_tokens')) {
+            return;
+        }
+
         Schema::create('deploy_tokens', function (Blueprint $table) {
             $table->unsignedInteger('id')->autoIncrement()->comment('ID');
             $table->unsignedBigInteger('user_id')->index()->comment('用户ID');

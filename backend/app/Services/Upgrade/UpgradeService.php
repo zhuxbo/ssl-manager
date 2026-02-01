@@ -14,6 +14,7 @@ class UpgradeService
         protected ReleaseClient $releaseClient,
         protected BackupManager $backupManager,
         protected PackageExtractor $packageExtractor,
+        protected DatabaseStructureService $databaseStructureService,
     ) {}
 
     /**
@@ -201,6 +202,16 @@ class UpgradeService
                 $steps[] = ['step' => 'migrate', 'status' => 'running'];
                 Artisan::call('migrate', ['--force' => true]);
                 $steps[count($steps) - 1]['status'] = 'completed';
+            }
+
+            // 步骤 7.5: 数据库结构校验
+            $structureCheckResult = $this->checkAndFixDatabaseStructure();
+            if ($structureCheckResult && ! ($structureCheckResult['skipped'] ?? false)) {
+                $steps[] = [
+                    'step' => 'structure_check',
+                    'status' => 'completed',
+                    'result' => $structureCheckResult,
+                ];
             }
 
             // 步骤 8: 运行种子
@@ -418,6 +429,9 @@ class UpgradeService
                 $statusManager->completeStep('migrate');
             }
 
+            // 步骤 7.5: 数据库结构校验
+            $structureCheckResult = $this->checkAndFixDatabaseStructure($statusManager);
+
             // 步骤 8: 清理缓存
             if (Config::get('upgrade.behavior.clear_cache', true)) {
                 $statusManager->startStep('clear_cache');
@@ -452,13 +466,14 @@ class UpgradeService
             }
 
             Log::info("升级完成: $currentVersion -> $targetVersion");
-            $statusManager->complete($currentVersion, $targetVersion);
+            $statusManager->complete($currentVersion, $targetVersion, $structureCheckResult);
 
             return [
                 'success' => true,
                 'from_version' => $currentVersion,
                 'to_version' => $targetVersion,
                 'backup_id' => $backupId,
+                'structure_check' => $structureCheckResult,
             ];
 
         } catch (\Exception $e) {
@@ -841,6 +856,112 @@ class UpgradeService
         }
 
         return null;
+    }
+
+    /**
+     * 检查并修复数据库结构
+     */
+    protected function checkAndFixDatabaseStructure(?UpgradeStatusManager $statusManager = null): array
+    {
+        $autoCheck = Config::get('upgrade.behavior.auto_structure_check', true);
+        $autoFix = Config::get('upgrade.behavior.auto_structure_fix', true);
+
+        if (! $autoCheck) {
+            Log::info('[Upgrade] 数据库结构校验已禁用');
+
+            return ['skipped' => true];
+        }
+
+        $statusManager?->startStep('structure_check');
+
+        $checkResult = $this->databaseStructureService->check();
+
+        if (! $checkResult['has_diff']) {
+            Log::info('[Upgrade] 数据库结构校验通过，无差异');
+            $statusManager?->completeStep('structure_check');
+
+            return [
+                'has_diff' => false,
+                'message' => '数据库结构一致',
+            ];
+        }
+
+        // 有差异，记录日志
+        $summary = $checkResult['summary'];
+        Log::warning('[Upgrade] 数据库结构存在差异', $summary);
+
+        // 尝试自动修复（仅 ADD 类型）
+        if ($autoFix && $summary['can_auto_fix']) {
+            Log::info('[Upgrade] 尝试自动修复数据库结构');
+            $fixResult = $this->databaseStructureService->fix();
+
+            if ($fixResult['success']) {
+                Log::info('[Upgrade] 数据库结构自动修复成功', [
+                    'executed' => count($fixResult['executed']),
+                ]);
+                $statusManager?->completeStep('structure_check');
+
+                return [
+                    'has_diff' => true,
+                    'auto_fixed' => true,
+                    'executed_count' => count($fixResult['executed']),
+                    'message' => '数据库结构差异已自动修复',
+                ];
+            } else {
+                Log::error('[Upgrade] 数据库结构自动修复失败', $fixResult['errors']);
+            }
+        }
+
+        // 无法自动修复，记录警告
+        $warningMessage = $this->buildStructureWarningMessage($summary);
+        Log::warning('[Upgrade] 数据库结构需要手动处理: '.$warningMessage);
+
+        $statusManager?->completeStep('structure_check');
+
+        return [
+            'has_diff' => true,
+            'auto_fixed' => false,
+            'summary' => $summary,
+            'message' => $warningMessage,
+        ];
+    }
+
+    /**
+     * 构建结构警告消息
+     */
+    protected function buildStructureWarningMessage(array $summary): string
+    {
+        $parts = [];
+
+        if (! empty($summary['missing_tables'])) {
+            $parts[] = '缺失表: '.implode(', ', $summary['missing_tables']);
+        }
+        if (! empty($summary['missing_columns'])) {
+            $parts[] = '缺失列: '.implode(', ', array_slice($summary['missing_columns'], 0, 5));
+            if (count($summary['missing_columns']) > 5) {
+                $parts[count($parts) - 1] .= ' 等'.count($summary['missing_columns']).'个';
+            }
+        }
+        if (! empty($summary['modified_columns'])) {
+            $parts[] = '需修改列: '.implode(', ', array_slice($summary['modified_columns'], 0, 3));
+        }
+        if (! empty($summary['extra_tables'])) {
+            $parts[] = '多余表: '.implode(', ', $summary['extra_tables']);
+        }
+        if (! empty($summary['extra_indexes'])) {
+            $parts[] = '多余索引: '.implode(', ', array_slice($summary['extra_indexes'], 0, 3));
+            if (count($summary['extra_indexes']) > 3) {
+                $parts[count($parts) - 1] .= ' 等'.count($summary['extra_indexes']).'个';
+            }
+        }
+        if (! empty($summary['missing_foreign_keys'])) {
+            $parts[] = '缺失外键: '.count($summary['missing_foreign_keys']).'个';
+        }
+        if (! empty($summary['extra_foreign_keys'])) {
+            $parts[] = '多余外键: '.count($summary['extra_foreign_keys']).'个';
+        }
+
+        return implode('; ', $parts) ?: '存在结构差异';
     }
 
     /**
