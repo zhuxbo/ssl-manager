@@ -826,8 +826,8 @@ PYEOF
             fi
             echo ""
             echo -e "${YELLOW}提示: 使用以下命令查看和修复结构差异：${NC}"
-            echo "  php artisan db:structure        # 查看差异"
-            echo "  php artisan db:structure --fix  # 自动修复"
+            echo "  php artisan db:structure --check  # 查看差异"
+            echo "  php artisan db:structure --fix    # 自动修复"
         fi
     else
         cd "$INSTALL_DIR/backend"
@@ -848,8 +848,8 @@ PYEOF
             fi
             echo ""
             echo -e "${YELLOW}提示: 使用以下命令查看和修复结构差异：${NC}"
-            echo "  php artisan db:structure        # 查看差异"
-            echo "  php artisan db:structure --fix  # 自动修复"
+            echo "  php artisan db:structure --check  # 查看差异"
+            echo "  php artisan db:structure --fix    # 自动修复"
         fi
     fi
 

@@ -371,6 +371,36 @@ class DatabaseStructureService
     }
 
     /**
+     * 描述列的具体差异
+     */
+    protected function describeColumnDifferences(array $standard, array $current): string
+    {
+        $differences = [];
+
+        if ($standard['type'] !== $current['type']) {
+            $differences[] = "类型 {$current['type']} => {$standard['type']}";
+        }
+
+        if ($standard['nullable'] !== $current['nullable']) {
+            $currentNull = $current['nullable'] ? 'NULL' : 'NOT NULL';
+            $standardNull = $standard['nullable'] ? 'NULL' : 'NOT NULL';
+            $differences[] = "$currentNull => $standardNull";
+        }
+
+        if ($standard['default'] !== $current['default']) {
+            $currentDefault = $current['default'] === null ? 'NULL' : "'{$current['default']}'";
+            $standardDefault = $standard['default'] === null ? 'NULL' : "'{$standard['default']}'";
+            $differences[] = "默认值 $currentDefault => $standardDefault";
+        }
+
+        if (empty($differences)) {
+            return '(未知差异)';
+        }
+
+        return implode(', ', $differences);
+    }
+
+    /**
      * 转义默认值中的单引号
      */
     protected function escapeDefaultValue(string $value): string
@@ -416,7 +446,8 @@ class DatabaseStructureService
                 $summary['extra_columns'][] = "$tableName.$col";
             }
             foreach ($tableDiff['modified_columns'] ?? [] as $col => $def) {
-                $summary['modified_columns'][] = "$tableName.$col";
+                $diffDesc = $this->describeColumnDifferences($def['standard'], $def['current']);
+                $summary['modified_columns'][] = "$tableName.$col: $diffDesc";
                 $summary['can_auto_fix'] = false;
                 $summary['manual_actions'][] = "修改列 $tableName.$col";
             }

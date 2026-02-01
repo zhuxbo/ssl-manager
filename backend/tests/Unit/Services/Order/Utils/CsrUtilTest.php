@@ -55,7 +55,7 @@ class CsrUtilTest extends TestCase
         $this->assertArrayHasKey('csr', $result);
         $this->assertArrayHasKey('private_key', $result);
         $this->assertStringContainsString('BEGIN CERTIFICATE REQUEST', $result['csr']);
-        // PHP 8+ 使用 PKCS#8 格式，所以是 BEGIN PRIVATE KEY 而不是 BEGIN EC PRIVATE KEY
+        // PHP 8+ 使用 PKCS#8 格式（通用私钥格式），而非 EC 专用格式
         $this->assertStringContainsString('BEGIN PRIVATE KEY', $result['private_key']);
     }
 

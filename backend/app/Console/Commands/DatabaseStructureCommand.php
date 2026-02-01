@@ -753,18 +753,12 @@ class DatabaseStructureCommand extends Command
                     $this->warn('[WARNING]  需手动处理（MODIFY）:');
                 }
                 foreach ($tableDiff['modified_columns'] as $columnName => $columnDiff) {
+                    $differences = $this->describeColumnDifferences($columnDiff['standard'], $columnDiff['current']);
                     $this->line(sprintf(
-                        '  - 列 <comment>%s.%s</comment>: %s => %s',
+                        '  - 列 <comment>%s.%s</comment>: %s',
                         $tableName,
                         $columnName,
-                        $columnDiff['current']['type'],
-                        $columnDiff['standard']['type']
-                    ));
-                    $this->line(sprintf(
-                        '    建议: ALTER TABLE %s MODIFY COLUMN %s %s',
-                        $tableName,
-                        $columnName,
-                        $columnDiff['standard']['type']
+                        $differences
                     ));
                 }
             }
@@ -1198,5 +1192,35 @@ class DatabaseStructureCommand extends Command
                 }
             }
         }
+    }
+
+    /**
+     * 描述列的具体差异
+     */
+    private function describeColumnDifferences(array $standard, array $current): string
+    {
+        $differences = [];
+
+        if ($standard['type'] !== $current['type']) {
+            $differences[] = "类型 {$current['type']} => {$standard['type']}";
+        }
+
+        if ($standard['nullable'] !== $current['nullable']) {
+            $currentNull = $current['nullable'] ? 'NULL' : 'NOT NULL';
+            $standardNull = $standard['nullable'] ? 'NULL' : 'NOT NULL';
+            $differences[] = "$currentNull => $standardNull";
+        }
+
+        if ($standard['default'] !== $current['default']) {
+            $currentDefault = $current['default'] === null ? 'NULL' : "'{$current['default']}'";
+            $standardDefault = $standard['default'] === null ? 'NULL' : "'{$standard['default']}'";
+            $differences[] = "默认值 $currentDefault => $standardDefault";
+        }
+
+        if (empty($differences)) {
+            return '(未知差异)';
+        }
+
+        return implode(', ', $differences);
     }
 }

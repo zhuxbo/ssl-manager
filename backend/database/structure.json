@@ -1,7 +1,7 @@
 {
     "version": "1.0",
     "mysql_version": "8.0.44",
-    "generated_at": "2026-02-01 18:13:48",
+    "generated_at": "2026-02-02 00:51:34",
     "database": {
         "name": "manager",
         "charset": "utf8mb4",
@@ -825,7 +825,7 @@
             "engine": "InnoDB",
             "collation": "utf8mb4_0900_ai_ci",
             "comment": "",
-            "auto_increment": 1,
+            "auto_increment": 2,
             "columns": {
                 "id": {
                     "position": 1,
@@ -2425,7 +2425,7 @@
             "engine": "InnoDB",
             "collation": "utf8mb4_0900_ai_ci",
             "comment": "",
-            "auto_increment": 1,
+            "auto_increment": 75092029592897,
             "columns": {
                 "id": {
                     "position": 1,
@@ -3796,7 +3796,7 @@
             "engine": "InnoDB",
             "collation": "utf8mb4_0900_ai_ci",
             "comment": "",
-            "auto_increment": 1,
+            "auto_increment": 9,
             "columns": {
                 "id": {
                     "position": 1,
@@ -4625,7 +4625,7 @@
             "engine": "InnoDB",
             "collation": "utf8mb4_0900_ai_ci",
             "comment": "",
-            "auto_increment": 1,
+            "auto_increment": 37,
             "columns": {
                 "id": {
                     "position": 1,
@@ -5082,7 +5082,7 @@
             "engine": "InnoDB",
             "collation": "utf8mb4_0900_ai_ci",
             "comment": "",
-            "auto_increment": 1,
+            "auto_increment": 8,
             "columns": {
                 "id": {
                     "position": 1,
@@ -5179,7 +5179,7 @@
             "engine": "InnoDB",
             "collation": "utf8mb4_0900_ai_ci",
             "comment": "",
-            "auto_increment": 1,
+            "auto_increment": 36,
             "columns": {
                 "id": {
                     "position": 1,
@@ -5610,7 +5610,7 @@
             "engine": "InnoDB",
             "collation": "utf8mb4_0900_ai_ci",
             "comment": "",
-            "auto_increment": 1,
+            "auto_increment": 6,
             "columns": {
                 "id": {
                     "position": 1,

@@ -27,8 +27,7 @@ import {
   ElEmpty,
   ElTooltip,
   ElSelect,
-  ElOption,
-  ElAlert
+  ElOption
 } from "element-plus";
 
 defineOptions({
@@ -576,52 +575,66 @@ onUnmounted(() => {
     </el-card>
 
     <!-- 数据库结构警告 -->
-    <el-alert
+    <el-card
       v-if="structureWarning.show"
-      :title="
-        structureWarning.canAutoFix
-          ? '数据库结构存在差异（可自动修复）'
-          : '数据库结构存在差异（需手动处理）'
-      "
-      :type="structureWarning.canAutoFix ? 'warning' : 'error'"
-      show-icon
-      :closable="true"
       class="mb-4"
-      @close="structureWarning.show = false"
+      :body-style="{
+        backgroundColor: structureWarning.canAutoFix ? '#fef9e7' : '#fdedec'
+      }"
     >
-      <template #default>
-        <div class="structure-warning-content">
-          <pre class="text-sm whitespace-pre-wrap mb-2">{{
-            structureWarning.message
-          }}</pre>
-          <div
-            v-if="structureWarning.manualActions.length"
-            class="manual-actions mt-2"
+      <template #header>
+        <div class="flex justify-between items-center">
+          <span
+            class="font-bold"
+            :class="
+              structureWarning.canAutoFix ? 'text-yellow-700' : 'text-red-600'
+            "
           >
-            <div class="font-bold text-sm mb-1">需手动执行的操作：</div>
-            <ul class="list-disc pl-4 text-sm">
-              <li
-                v-for="(action, idx) in structureWarning.manualActions"
-                :key="idx"
-              >
-                {{ action }}
-              </li>
-            </ul>
-          </div>
-          <div class="mt-3 text-sm text-gray-600">
+            {{
+              structureWarning.canAutoFix
+                ? "数据库结构存在差异（可自动修复）"
+                : "数据库结构存在差异（需手动处理）"
+            }}
+          </span>
+          <el-button type="text" @click="structureWarning.show = false">
+            关闭
+          </el-button>
+        </div>
+      </template>
+      <div class="structure-warning-content">
+        <pre class="text-sm whitespace-pre-wrap mb-2">{{
+          structureWarning.message
+        }}</pre>
+        <div
+          v-if="structureWarning.manualActions.length"
+          class="manual-actions mt-2"
+        >
+          <div class="font-bold text-sm mb-1">需手动执行的操作：</div>
+          <ul class="list-disc pl-4 text-sm">
+            <li
+              v-for="(action, idx) in structureWarning.manualActions"
+              :key="idx"
+            >
+              {{ action }}
+            </li>
+          </ul>
+        </div>
+        <div class="mt-3 text-sm text-gray-600 space-y-1">
+          <div>
             <code class="bg-gray-100 px-2 py-1 rounded"
-              >php artisan db:structure</code
+              >php artisan db:structure --check</code
             >
             查看详细差异
-            <span class="mx-2">|</span>
+          </div>
+          <div>
             <code class="bg-gray-100 px-2 py-1 rounded"
               >php artisan db:structure --fix</code
             >
             自动修复
           </div>
         </div>
-      </template>
-    </el-alert>
+      </div>
+    </el-card>
 
     <!-- 历史版本 -->
     <el-card class="mb-4">
