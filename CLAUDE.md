@@ -1,5 +1,7 @@
 # Manager Monorepo
 
+> **维护指引**：保持本文件精简，仅包含项目概览和快速参考。详细规范写入 `skills/` 目录。
+
 ## 项目结构
 
 ```
@@ -21,6 +23,7 @@ skills/         # 开发规范（详细文档）
 - **提交前格式化** - 后端 `./vendor/bin/pint`，前端 `pnpm prettier --write`
 - **base 目录只读** - 通过 git subtree 同步上游代码，不要修改
 - **PHP 8.3+** - 双引号变量不加大括号（如 `"$var"` 而非 `"{$var}"`）
+- **测试发现 bug 必须修复代码** - 测试的目的是发现 bug 并修复，绝不修改测试去迎合错误的代码
 
 ## 开发规范
 
@@ -54,3 +57,9 @@ skills/         # 开发规范（详细文档）
 - `orders.auto_reissue`: 订单级自动重签开关（null 时回落到用户设置）
 - `users.auto_settings`: 用户级默认设置 `{"auto_renew": false, "auto_reissue": false}`
 - `AutoRenewCommand` 同时处理续费和重签，根据订单周期与证书到期时间差判断
+
+## 测试
+
+- 纯单元测试：`php artisan test --exclude-group=database`
+- 全部测试需 MySQL 连接
+- 详见 `skills/backend-dev/SKILL.md` 测试章节

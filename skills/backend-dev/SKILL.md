@@ -480,3 +480,50 @@ ValidateCommand 定时验证
 | `schedule:auto-renew` | 每小时 | 自动续费/重签 |
 | `delegation:check` | 每天 05:30 | CNAME 委托健康检查 |
 | `delegation:cleanup` | 每天 06:00 | 委托 DNS 清理 |
+
+---
+
+## 测试
+
+### 运行测试
+
+```bash
+php artisan test                           # 全部测试（需 MySQL）
+php artisan test --exclude-group=database  # 纯单元测试（无需数据库）
+php artisan test --coverage --min=80       # 覆盖率报告
+```
+
+### 测试分组
+
+- `#[Group('database')]` - 需要数据库连接的集成测试
+- 无标记 - 纯单元测试，可在任何环境运行
+
+### 测试文件
+
+| 目录/文件 | 类型 | 说明 |
+|----------|------|------|
+| `tests/Unit/Services/Order/Utils/DomainUtilTest.php` | 纯单元 | 域名工具类（66 测试） |
+| `tests/Unit/Services/Order/Utils/CsrUtilTest.php` | 纯单元 | CSR 工具类（39 测试） |
+| `tests/Unit/Services/Delegation/*StaticTest.php` | 纯单元 | 委托服务静态方法 |
+| `tests/Unit/Services/Delegation/*Test.php` | 集成 | 委托服务数据库操作 |
+| `tests/Unit/Services/Order/AutoRenewServiceTest.php` | 集成 | 自动续费判定逻辑 |
+
+### CreatesTestData Trait
+
+`tests/Traits/CreatesTestData.php` 提供测试数据创建方法：
+
+| 方法 | 说明 |
+|------|------|
+| `createTestUser()` | 创建测试用户 |
+| `createTestProduct()` | 创建测试产品（使用 Factory） |
+| `createTestOrder()` | 创建测试订单 |
+| `createTestCert()` | 创建测试证书 |
+| `createTestDelegation()` | 创建测试委托记录 |
+| `generateTestCsr()` | 生成测试 CSR |
+
+### 编写测试规范
+
+1. **纯单元测试**：测试静态方法、工具函数，不依赖数据库
+2. **集成测试**：需要数据库时，添加 `#[Group('database')]` 标记
+3. **使用 DataProvider**：参数化测试用例
+4. **Mock 策略**：外部服务（DNS、上游 API）使用 Mockery 模拟

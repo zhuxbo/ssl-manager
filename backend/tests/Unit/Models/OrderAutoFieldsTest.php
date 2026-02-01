@@ -6,9 +6,11 @@ use App\Models\Order;
 use App\Models\Product;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use PHPUnit\Framework\Attributes\Group;
 use Tests\TestCase;
 use Tests\Traits\CreatesTestData;
 
+#[Group('database')]
 class OrderAutoFieldsTest extends TestCase
 {
     use CreatesTestData, RefreshDatabase;

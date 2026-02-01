@@ -14,10 +14,12 @@ use App\Services\Notification\NotificationCenter;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
+use PHPUnit\Framework\Attributes\Group;
 use ReflectionClass;
 use ReflectionException;
 use Tests\TestCase;
 
+#[Group('database')]
 class NotificationCenterTest extends TestCase
 {
     use RefreshDatabase;

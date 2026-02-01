@@ -4,9 +4,11 @@ namespace Tests\Unit\Models;
 
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use PHPUnit\Framework\Attributes\Group;
 use Tests\TestCase;
 use Tests\Traits\CreatesTestData;
 
+#[Group('database')]
 class UserAutoSettingsTest extends TestCase
 {
     use CreatesTestData, RefreshDatabase;

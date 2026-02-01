@@ -48,10 +48,12 @@ class AutoRenewService
         }
 
         // 检查订单周期与证书到期时间相差小于7天
+        // period_till - expires_at < 7 时执行续费
         $periodTill = $order->period_till;
         $expiresAt = $cert->expires_at;
         if ($periodTill && $expiresAt) {
-            $daysDiff = $periodTill->diffInDays($expiresAt, false);
+            // diffInDays 返回 period_till - expires_at 的天数
+            $daysDiff = $expiresAt->diffInDays($periodTill, false);
             if ($daysDiff >= 7) {
                 return false;
             }
@@ -90,10 +92,12 @@ class AutoRenewService
         }
 
         // 检查订单周期与证书到期时间相差大于7天
+        // period_till - expires_at > 7 时执行重签
         $periodTill = $order->period_till;
         $expiresAt = $cert->expires_at;
         if ($periodTill && $expiresAt) {
-            $daysDiff = $periodTill->diffInDays($expiresAt, false);
+            // diffInDays 返回 period_till - expires_at 的天数
+            $daysDiff = $expiresAt->diffInDays($periodTill, false);
             if ($daysDiff <= 7) {
                 return false;
             }

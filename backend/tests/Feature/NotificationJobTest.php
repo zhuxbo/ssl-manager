@@ -14,8 +14,10 @@ use Database\Seeders\DatabaseSeeder;
 use Exception;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Mockery;
+use PHPUnit\Framework\Attributes\Group;
 use Tests\TestCase;
 
+#[Group('database')]
 class NotificationJobTest extends TestCase
 {
     use RefreshDatabase;
