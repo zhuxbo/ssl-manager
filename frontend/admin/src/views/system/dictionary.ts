@@ -136,7 +136,7 @@ export const validationMethodOptions = [
 ];
 
 export const validationMethodLabels: { [key: string]: string } = {
-  delegation: "委托验证(自动签发)",
+  delegation: "委托验证(自动续签)",
   txt: "TXT(解析验证)",
   cname: "CNAME(解析验证)",
   file: "FILE(文件验证)",

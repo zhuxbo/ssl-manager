@@ -499,7 +499,7 @@ class IndexController extends Controller
                         $result['file'] = '文件验证 FILE';
                         break;
                     case 'delegation':
-                        $result['delegation'] = '委托验证（自动签发）';
+                        $result['delegation'] = '委托验证(自动续签)';
                         break;
                 }
             }

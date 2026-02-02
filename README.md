@@ -3,7 +3,7 @@
 [![GitHub Release](https://img.shields.io/github/v/release/zhuxbo/cert-manager?include_prereleases)](https://github.com/zhuxbo/cert-manager/releases)
 [![CI](https://github.com/zhuxbo/cert-manager/actions/workflows/ci.yml/badge.svg)](https://github.com/zhuxbo/cert-manager/actions/workflows/ci.yml)
 
-SSL 证书管理系统，支持多级代理、自动签发、在线升级。
+SSL 证书管理系统，支持多级代理、自动续签、在线升级。
 
 ## 安装
 
@@ -108,7 +108,7 @@ develop/            # 开发环境（见 develop/README.md）
 
 ### CNAME 委托
 
-将域名验证 CNAME 记录指向平台托管域名，实现自动签发：
+将域名验证 CNAME 记录指向平台托管域名，实现自动续签：
 
 ```
 _acme-challenge.example.com  →  *******.your-platform.com
