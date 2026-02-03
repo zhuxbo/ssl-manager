@@ -82,6 +82,28 @@ class ValidateCommand extends Command
                         $cert = $order->latestCert;
                         $action = new Action($order->user_id);
 
+                        // 对于需要验证内容的方法，优先检查 validation 是否就绪
+                        $method = $cert->dcv['method'] ?? '';
+                        if (in_array($method, ['txt', 'cname', 'file', 'http', 'https'], true)) {
+                            if (! $action->isValidationReady($cert->validation ?? null, $method)) {
+                                $this->info("订单 #$order->id: validation 未就绪，先执行同步");
+                                try {
+                                    $action->sync($order->id, true);
+                                    $cert->refresh();
+                                } catch (Throwable $e) {
+                                    $this->warn("订单 #$order->id: 同步失败 - ".$e->getMessage());
+                                }
+
+                                // 同步后再次检查
+                                if (! $action->isValidationReady($cert->validation ?? null, $method)) {
+                                    $this->warn("订单 #$order->id: 同步后 validation 仍未就绪，跳过本次验证");
+                                    $this->setNextCheckAt($record);
+
+                                    continue;
+                                }
+                            }
+                        }
+
                         // 创建 delegation 任务处理 TXT 记录写入
                         if ($cert->dcv['method'] === 'txt') {
                             // 检测 validation 是否为空

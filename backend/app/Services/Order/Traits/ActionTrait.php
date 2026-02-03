@@ -563,6 +563,48 @@ trait ActionTrait
     }
 
     /**
+     * 判断验证记录是否准备就绪
+     *
+     * 仅用于判断是否可以开始验证，不依赖 dcv.dns.value
+     *
+     * @param  array|null  $validation  验证信息数组
+     * @param  string|null  $method  验证方法（txt/cname/http/https/file）
+     */
+    public function isValidationReady(?array $validation, ?string $method): bool
+    {
+        if (empty($validation) || ! is_array($validation)) {
+            return false;
+        }
+
+        $method = strtolower((string) $method);
+
+        // txt/cname 验证依赖 value
+        if (in_array($method, ['txt', 'cname'], true)) {
+            foreach ($validation as $item) {
+                if (empty($item['value'] ?? '')) {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        // http/https/file 验证依赖 content
+        if (in_array($method, ['http', 'https', 'file'], true)) {
+            foreach ($validation as $item) {
+                if (empty($item['content'] ?? '')) {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        // 其他验证方式只要有 validation 即可
+        return true;
+    }
+
+    /**
      * 写入委托验证的 TXT 记录
      *
      * @param  array  $validation  验证信息数组

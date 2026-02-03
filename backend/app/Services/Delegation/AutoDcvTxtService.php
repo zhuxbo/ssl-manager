@@ -136,13 +136,17 @@ class AutoDcvTxtService
                 continue;
             }
 
-            if (empty($item['host']) || empty($item['domain']) || empty($item['value'])) {
+            $domain = $item['domain'] ?? '';
+            $value = $item['value'] ?? '';
+            $host = $item['host'] ?? '';
+
+            if (empty($domain) || empty($value)) {
                 Log::warning("订单 #$order->id validation[$index] 配置不完整", [
                     'order_id' => $order->id,
                     'index' => $index,
-                    'host' => $item['host'] ?? '',
-                    'domain' => $item['domain'] ?? '',
-                    'value' => $item['value'] ?? '',
+                    'host' => $host,
+                    'domain' => $domain,
+                    'value' => $value,
                 ]);
 
                 $updatedValidation[$index] = $item;
@@ -150,9 +154,29 @@ class AutoDcvTxtService
                 continue;
             }
 
+            // 优先使用 validation 内的 host，缺失时回退到 dcv.dns.host
+            if (empty($host)) {
+                $dcvHost = $cert->dcv['dns']['host'] ?? '';
+                if (empty($dcvHost)) {
+                    Log::warning("订单 #$order->id validation[$index] 缺少 host 且 dcv.dns.host 为空", [
+                        'order_id' => $order->id,
+                        'index' => $index,
+                        'domain' => $domain,
+                    ]);
+
+                    $updatedValidation[$index] = $item;
+
+                    continue;
+                }
+
+                $host = $dcvHost.'.'.ltrim($domain, '*.');
+            } elseif (! str_contains($host, '.')) {
+                // 仅前缀时补全域名
+                $host = $host.'.'.ltrim($domain, '*.');
+            }
+
             // 设置 host 和 token
-            $host = $cert->dcv['dns']['host'].'.'.ltrim($item['domain'], '*.');
-            $token = $item['value'];
+            $token = $value;
 
             // 拆分 prefix 和 zone
             [$prefix, $zone] = $this->splitPrefixAndZone($host);

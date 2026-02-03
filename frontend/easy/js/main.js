@@ -629,7 +629,8 @@
     let currentMethod =
       window.appState.validation.method ||
       Object.keys(product.validation_methods || {})[0];
-    if (dcv.is_delegate === true) {
+    if (dcv.is_delegate) {
+      // 宽松判断，兼容 true/1/"true"
       currentMethod = "delegation";
     }
     methodSelect.value = currentMethod;
@@ -672,7 +673,7 @@
   function updateValidationDisplay(method, dcv) {
     // 判断是否为委托验证（dcv.is_delegate 标记优先于 method）
     const certDcv = window.appState.cert?.dcv || {};
-    const isDelegate = certDcv.is_delegate === true;
+    const isDelegate = Boolean(certDcv.is_delegate); // 宽松判断，兼容 true/1/"true"
     const isDNS = !isDelegate && ["cname", "txt"].includes(method);
     const isFile = ["file", "http", "https"].includes(method);
 
@@ -681,22 +682,14 @@
       document.getElementById("dns-validation").style.display = "block";
       document.getElementById("file-validation").style.display = "none";
 
-      // 获取委托验证前缀
+      // 获取委托验证前缀（主机记录只显示前缀，与 user/admin 保持一致）
       const ca = certDcv.ca || window.appState.product?.ca || "";
       const prefix = getDelegationPrefix(ca);
-      // 获取域名（去除通配符前缀）
-      const domain = (
-        window.appState.validation.domain ||
-        window.appState.cert?.domains ||
-        ""
-      ).replace(/^\*\./, "");
-      // 委托验证的主机记录
-      const delegationHost = `${prefix}.${domain}`;
       // 委托验证的目标从 validation 获取
       const delegationTarget =
         window.appState.validation.delegation_target || "";
 
-      document.getElementById("dns-host").value = delegationHost;
+      document.getElementById("dns-host").value = prefix;
       document.getElementById("dns-type").value = "CNAME";
       document.getElementById("dns-value").value = delegationTarget;
 

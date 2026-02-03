@@ -45,6 +45,10 @@ trait OrderController
     {
         // 重置域名验证记录，重新开始验证计时
         DomainValidationRecord::where('order_id', $id)->delete();
+
+        // 清除委托写入标记，强制重新处理
+        $this->clearAutoTxtWrittenMarks($id);
+
         $this->action->revalidate($id);
     }
 
@@ -203,6 +207,11 @@ trait OrderController
         // 重置域名验证记录，重新开始验证计时
         DomainValidationRecord::whereIn('order_id', $validated['ids'])->delete();
 
+        // 清除委托写入标记，强制重新处理
+        foreach ($validated['ids'] as $id) {
+            $this->clearAutoTxtWrittenMarks($id);
+        }
+
         $this->action->batchRevalidate($validated['ids']);
     }
 
@@ -273,5 +282,37 @@ trait OrderController
             'auto_renew' => $order->auto_renew,
             'auto_reissue' => $order->auto_reissue,
         ]);
+    }
+
+    /**
+     * 清除订单的委托写入标记
+     */
+    protected function clearAutoTxtWrittenMarks(int $orderId): void
+    {
+        $order = Order::with('latestCert')->find($orderId);
+        if (! $order || ! $order->latestCert) {
+            return;
+        }
+
+        $cert = $order->latestCert;
+        $validation = $cert->validation;
+
+        if (empty($validation) || ! is_array($validation)) {
+            return;
+        }
+
+        $hasChanges = false;
+        foreach ($validation as &$item) {
+            if (isset($item['auto_txt_written'])) {
+                unset($item['auto_txt_written'], $item['auto_txt_written_at']);
+                $hasChanges = true;
+            }
+        }
+        unset($item);
+
+        if ($hasChanges) {
+            $cert->validation = $validation;
+            $cert->save();
+        }
     }
 }

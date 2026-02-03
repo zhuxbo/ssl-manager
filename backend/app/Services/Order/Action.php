@@ -609,6 +609,20 @@ class Action
         $cert = $order->latestCert;
         $cert->status != 'processing' && $this->error('订单状态只有是待验证才能重新验证');
 
+        // 对于需要验证内容的方法，优先检查 validation 是否就绪
+        $method = $cert->dcv['method'] ?? '';
+        if (in_array($method, ['txt', 'cname', 'file', 'http', 'https'], true)) {
+            if (! $this->isValidationReady($cert->validation ?? null, $method)) {
+                $this->sync($orderId, true);
+                $cert->refresh();
+
+                // 同步后仍未就绪则报错
+                if (! $this->isValidationReady($cert->validation ?? null, $method)) {
+                    $this->error('验证记录同步中，请稍后再试');
+                }
+            }
+        }
+
         // 创建 delegation 任务处理 TXT 记录写入（SMIME/CodeSign/DocSign 没有 DCV）
         if (isset($cert->dcv['method']) && $cert->dcv['method'] === 'txt') {
             // 检测 validation 是否为空

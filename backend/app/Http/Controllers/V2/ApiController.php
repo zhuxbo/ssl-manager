@@ -97,6 +97,12 @@ class ApiController extends Controller
             }
 
             $item = $item->toArray();
+            // API 不暴露 delegation 验证方法
+            if (isset($item['validation_methods'])) {
+                $item['validation_methods'] = array_values(
+                    array_diff($item['validation_methods'], ['delegation'])
+                );
+            }
             $item['periods'] = array_map('intval', $item['periods']);
             $item['cost'] = $cost;
             $data[] = $item;
@@ -183,6 +189,12 @@ class ApiController extends Controller
     {
         $params = $this->request->all();
 
+        // API 不支持委托验证方法
+        $validationMethod = $params['validation_method'] ?? '';
+        if ($validationMethod === 'delegation') {
+            $this->error('API 不支持委托验证方法');
+        }
+
         $this->checkReferId($params['refer_id'] ?? '');
 
         $product = Product::where('code', $params['product_code'] ?? null)->where('status', 1)->first();
@@ -232,6 +244,12 @@ class ApiController extends Controller
     {
         $params = $this->request->all();
 
+        // API 不支持委托验证方法
+        $validationMethod = $params['validation_method'] ?? '';
+        if ($validationMethod === 'delegation') {
+            $this->error('API 不支持委托验证方法');
+        }
+
         $this->checkReferId($params['refer_id'] ?? '');
 
         // 处理order_id参数兼容
@@ -277,6 +295,12 @@ class ApiController extends Controller
     public function reissue(): void
     {
         $params = $this->request->all();
+
+        // API 不支持委托验证方法
+        $validationMethod = $params['validation_method'] ?? '';
+        if ($validationMethod === 'delegation') {
+            $this->error('API 不支持委托验证方法');
+        }
 
         $this->checkReferId($params['refer_id'] ?? '');
 
@@ -552,6 +576,11 @@ class ApiController extends Controller
     {
         $order_id = $this->processOrderIdParam();
         $method = $this->request->input('method', '');
+
+        // API 不支持委托验证方法
+        if ($method === 'delegation') {
+            $this->error('API 不支持委托验证方法');
+        }
 
         $this->action->updateDCV($order_id, $method);
     }
