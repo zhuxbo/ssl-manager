@@ -160,7 +160,7 @@ class Action
 
             if ($latestCert['action'] == 'renew') {
                 Cert::where(['status' => 'active', 'order_id' => $params['order_id']])->update(['status' => 'renewed']);
-                $latestCert['last_cert_id'] = $order->latest_cert_id;
+                $latestCert['last_cert_id'] = $params['last_cert_id'];
             }
 
             $cert = Cert::create($latestCert);

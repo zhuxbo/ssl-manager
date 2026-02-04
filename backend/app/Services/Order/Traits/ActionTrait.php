@@ -104,14 +104,19 @@ trait ActionTrait
 
             $order || $this->error('订单或相关数据不存在');
 
-            // active 和 expired 都可以重签
+            // 证书状态为 active 和 expired 都可以重签 只要订单没过期
             if (! in_array($order->latestCert->status, ['active', 'expired']) && $params['action'] == 'reissue') {
                 $this->error('订单状态错误');
             }
 
-            // 只有 active 可以续费
-            if ($order->latestCert->status != 'active' && $params['action'] == 'renew') {
-                $this->error('订单状态错误');
+            // 只有 active 可以续费，且订单到期前30天内才能续费
+            if ($params['action'] == 'renew') {
+                if ($order->latestCert->status != 'active') {
+                    $this->error('订单状态错误');
+                }
+                if ($order->period_till && $order->period_till->gt(now()->addDays(30))) {
+                    $this->error('订单到期前30天内才能续费');
+                }
             }
 
             // 订单已过期不可重签或续费
@@ -943,20 +948,25 @@ trait ActionTrait
         DB::beginTransaction();
         try {
             if ($cert->last_cert_id) {
+                // 尝试恢复旧证书状态
                 $last_cert = Cert::where('id', $cert->last_cert_id)->first();
                 if ($last_cert) {
                     $last_cert->status = 'active';
                     $last_cert->save();
-                    if ($cert->action == 'reissue') {
-                        $order->latest_cert_id = $last_cert->id;
-                        $order->amount = bcsub((string) $order->amount, $cert->amount, 2);
-                        $order->save();
-                    }
-                    if ($cert->action == 'renew') {
-                        $order->delete();
-                    }
+                }
+
+                if ($cert->action == 'reissue') {
+                    // 重签：必须有旧证书才能恢复
+                    $last_cert || $this->error('未找到上个证书');
+                    $order->latest_cert_id = $last_cert->id;
+                    $order->amount = bcsub((string) $order->amount, $cert->amount, 2);
+                    $order->save();
+                } elseif ($cert->action == 'renew') {
+                    // 续费：删除新订单（无论旧证书是否存在）
+                    $order->delete();
                 }
             } else {
+                // 新订单：直接删除
                 $order->delete();
             }
             $cert->delete();
@@ -968,7 +978,7 @@ trait ActionTrait
     }
 
     /**
-     * 取消待支付订单
+     * 取消待提交订单
      *
      * @throws Throwable
      */
@@ -1018,6 +1028,21 @@ trait ActionTrait
 
                 // 删除当前证书
                 $cert->delete();
+            } elseif ($cert->action === 'renew') {
+                // renew 取消时恢复上个订单的证书状态
+                if ($cert->last_cert_id) {
+                    $last_cert = Cert::where('id', $cert->last_cert_id)->first();
+                    if ($last_cert) {
+                        $last_cert->status = 'active';
+                        $last_cert->save();
+                    }
+                }
+                // 获取交易信息并创建取消记录
+                $transaction = OrderUtil::getCancelTransaction($order->toArray());
+                Transaction::create($transaction);
+                // 删除当前证书和订单
+                $cert->delete();
+                $order->delete();
             } else {
                 // 获取交易信息
                 $transaction = OrderUtil::getCancelTransaction($order->toArray());

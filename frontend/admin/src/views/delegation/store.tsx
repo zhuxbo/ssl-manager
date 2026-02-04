@@ -141,7 +141,7 @@ export const useDelegationStore = (
   const showBatchStore = ref(false);
   const batchStoreRef = ref();
   const batchStoreValues = ref<BatchStoreParams>({
-    user_id: 0,
+    user_id: undefined,
     zones: "",
     prefix: ""
   });
@@ -163,6 +163,7 @@ export const useDelegationStore = (
             totalField="total"
             placeholder="请选择用户"
             onChange={onChange}
+            refreshKey={showBatchStore.value ? 1 : 0}
           />
         );
       }
@@ -216,7 +217,7 @@ export const useDelegationStore = (
   function openBatchStoreForm() {
     showBatchStore.value = true;
     batchStoreValues.value = {
-      user_id: 0,
+      user_id: undefined,
       zones: "",
       prefix: "_acme-challenge"
     };

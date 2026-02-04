@@ -67,6 +67,12 @@ export function useOrderTable() {
         return true;
       });
 
+      // 添加空检查
+      if (uniqueDelegations.length === 0) {
+        message("暂无可复制的委托验证记录", { type: "warning" });
+        return;
+      }
+
       const records = uniqueDelegations.map((item: any) => {
         const zone =
           item.delegation_zone || (item.domain || "").replace(/^\*\./, "");
@@ -115,13 +121,15 @@ export function useOrderTable() {
       cellRenderer: ({ row }) => {
         const commonName = row.latest_cert?.common_name;
         const dcv = row.latest_cert?.dcv;
+        const validation = row.latest_cert?.validation;
         const shouldShowCopyButton =
           ["unpaid", "pending", "processing"].includes(
             row.latest_cert?.status
           ) &&
           dcv?.method &&
-          (dcv?.is_delegate ||
-            (["cname", "txt"].includes(dcv.method) && dcv?.dns?.value));
+          (dcv?.is_delegate
+            ? validation && validation.some((item: any) => item.delegation_id)
+            : ["cname", "txt"].includes(dcv.method) && dcv?.dns?.value);
 
         return (
           <div className="flex items-center gap-1">

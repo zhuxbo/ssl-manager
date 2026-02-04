@@ -16,7 +16,7 @@ class UpdateRequest extends BaseRequest
             'state' => 'required|string|max:50',
             'city' => 'required|string|max:50',
             'address' => 'required|string|max:255',
-            'postcode' => 'required|string|max:20',
+            'postcode' => 'required|string|min:3|max:20',
             'phone' => 'required|string|max:20',
         ];
     }

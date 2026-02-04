@@ -71,6 +71,7 @@ class ContactController extends BaseController
             ->select([
                 'id', 'user_id', 'first_name', 'last_name', 'identification_number', 'title', 'email', 'phone', 'created_at',
             ])
+            ->selectRaw('CONCAT(last_name, first_name) as full_name')
             ->orderBy('id', 'desc')
             ->offset(($currentPage - 1) * $pageSize)
             ->limit($pageSize)

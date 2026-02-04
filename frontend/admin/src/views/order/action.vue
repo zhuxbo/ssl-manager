@@ -215,7 +215,7 @@
             v-model="formData.contact"
             uri="/contact"
             searchField="first_name"
-            labelField="first_name"
+            labelField="full_name"
             valueField="id"
             itemsField="items"
             totalField="total"

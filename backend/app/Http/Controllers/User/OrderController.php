@@ -119,7 +119,7 @@ class OrderController extends BaseController
             'product' => function ($query) {
                 $query->select(['id', 'name', 'product_type', 'refund_period']);
             }, 'latestCert' => function ($query) {
-                $query->select(['id', 'common_name', 'channel', 'action', 'dcv', 'status', 'amount', 'issuer']);
+                $query->select(['id', 'common_name', 'channel', 'action', 'dcv', 'validation', 'status', 'amount', 'issuer']);
             },
         ])
             ->select(['id', 'product_id', 'latest_cert_id', 'period', 'amount', 'created_at'])

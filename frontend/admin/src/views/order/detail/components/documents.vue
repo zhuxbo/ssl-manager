@@ -1,11 +1,6 @@
 <template>
-  <div class="documents">
-    <el-table
-      v-if="documents.length > 0"
-      :data="documents"
-      size="small"
-      :style="{ width: '100%' }"
-    >
+  <div v-if="documents.length > 0" class="documents">
+    <el-table :data="documents" size="small" :style="{ width: '100%' }">
       <el-table-column prop="type" label="类型" width="140">
         <template #default="{ row }">
           {{ documentTypes[row.type] || row.type }}
@@ -29,7 +24,6 @@
         </template>
       </el-table-column>
     </el-table>
-    <el-empty v-else description="暂无验证文档" :image-size="60" />
   </div>
 </template>
 

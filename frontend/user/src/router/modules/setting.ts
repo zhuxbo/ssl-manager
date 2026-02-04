@@ -4,7 +4,7 @@ export default {
   redirect: "/setting",
   meta: {
     icon: "ri:user-fill",
-    title: "会员中心",
+    title: "系统设置",
     rank: 9
   },
   children: [

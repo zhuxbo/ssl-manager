@@ -153,7 +153,7 @@ class ApiController extends Controller
                 'updated_at',
             ])
             ->where('user_id', '=', $this->user_id)
-            ->orderBy('id', 'ASC')
+            ->orderBy('id', 'DESC')
             ->limit($pageSize)
             ->offset(($page - 1) * $pageSize)
             ->get();
