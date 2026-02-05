@@ -72,13 +72,22 @@ class CnameDelegationServiceTest extends TestCase
         $this->assertEquals('example.com', $delegation->zone);
     }
 
-    public function test_create_or_get_converts_idn_to_ascii(): void
+    public function test_create_or_get_stores_idn_as_unicode(): void
     {
         $user = $this->createTestUser();
 
         $delegation = $this->service->createOrGet($user->id, '中文.com', '_acme-challenge');
 
-        $this->assertEquals('xn--fiq228c.com', $delegation->zone);
+        $this->assertEquals('中文.com', $delegation->zone);
+    }
+
+    public function test_create_or_get_converts_punycode_input_to_unicode(): void
+    {
+        $user = $this->createTestUser();
+
+        $delegation = $this->service->createOrGet($user->id, 'xn--fiq228c.com', '_acme-challenge');
+
+        $this->assertEquals('中文.com', $delegation->zone);
     }
 
     public function test_create_or_get_generates_unique_label_per_user(): void

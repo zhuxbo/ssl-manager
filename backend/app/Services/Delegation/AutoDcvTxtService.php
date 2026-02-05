@@ -258,7 +258,7 @@ class AutoDcvTxtService
      */
     protected function splitPrefixAndZone(string $host): array
     {
-        $host = strtolower(DomainUtil::convertToAscii($host));
+        $host = strtolower(DomainUtil::convertToUnicode($host));
 
         $parts = explode('.', $host);
 
