@@ -19,7 +19,7 @@ return new class extends Migration
             $table->decimal('balance_before', 10)->default(0)->comment('交易前余额');
             $table->decimal('balance_after', 10)->default(0)->comment('交易后余额');
             $table->string('remark', 500)->nullable()->comment('备注');
-            $table->timestamp('created_at')->nullable()->comment('创建时间');
+            $table->timestamp('created_at')->nullable()->index()->comment('创建时间');
         });
     }
 

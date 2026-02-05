@@ -16,7 +16,7 @@ class IndexRequest extends BaseRequest
             'username' => 'nullable|string|max:20',
             'amount' => 'nullable|array|size:1,2',
             'amount.*' => 'numeric',
-            'type' => 'nullable|string|in:addfunds,refunds,deduct',
+            'type' => 'nullable|string|in:addfunds,refunds,deduct,reverse',
             'pay_method' => 'nullable|string',
             'pay_sn' => 'nullable|string',
             'status' => 'nullable|integer|in:0,1,2',

@@ -1,7 +1,7 @@
 {
     "version": "1.0",
-    "mysql_version": "8.0.44",
-    "generated_at": "2026-02-02 00:51:34",
+    "mysql_version": "8.0.45",
+    "generated_at": "2026-02-05 17:53:59",
     "database": {
         "name": "manager",
         "charset": "utf8mb4",
@@ -825,7 +825,7 @@
             "engine": "InnoDB",
             "collation": "utf8mb4_0900_ai_ci",
             "comment": "",
-            "auto_increment": 2,
+            "auto_increment": 1,
             "columns": {
                 "id": {
                     "position": 1,
@@ -2425,7 +2425,7 @@
             "engine": "InnoDB",
             "collation": "utf8mb4_0900_ai_ci",
             "comment": "",
-            "auto_increment": 75092029592897,
+            "auto_increment": 1,
             "columns": {
                 "id": {
                     "position": 1,
@@ -3796,7 +3796,7 @@
             "engine": "InnoDB",
             "collation": "utf8mb4_0900_ai_ci",
             "comment": "",
-            "auto_increment": 9,
+            "auto_increment": 1,
             "columns": {
                 "id": {
                     "position": 1,
@@ -4625,7 +4625,7 @@
             "engine": "InnoDB",
             "collation": "utf8mb4_0900_ai_ci",
             "comment": "",
-            "auto_increment": 37,
+            "auto_increment": 1,
             "columns": {
                 "id": {
                     "position": 1,
@@ -5082,7 +5082,7 @@
             "engine": "InnoDB",
             "collation": "utf8mb4_0900_ai_ci",
             "comment": "",
-            "auto_increment": 8,
+            "auto_increment": 1,
             "columns": {
                 "id": {
                     "position": 1,
@@ -5179,7 +5179,7 @@
             "engine": "InnoDB",
             "collation": "utf8mb4_0900_ai_ci",
             "comment": "",
-            "auto_increment": 36,
+            "auto_increment": 1,
             "columns": {
                 "id": {
                     "position": 1,
@@ -5573,6 +5573,16 @@
                         null
                     ]
                 },
+                "transactions_created_at_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "created_at"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
                 "transactions_transaction_id_index": {
                     "unique": false,
                     "type": "BTREE",
@@ -5610,7 +5620,7 @@
             "engine": "InnoDB",
             "collation": "utf8mb4_0900_ai_ci",
             "comment": "",
-            "auto_increment": 6,
+            "auto_increment": 1,
             "columns": {
                 "id": {
                     "position": 1,

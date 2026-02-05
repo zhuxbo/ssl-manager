@@ -604,10 +604,9 @@ class DatabaseStructureService
         }
 
         $lines[] = implode(",\n", $columnLines);
+        // 仅指定引擎，不指定字符集和排序规则，由目标数据库决定（不同 MySQL 版本默认值不同）
         $engine = $tableSchema['engine'] ?? 'InnoDB';
-        $collation = $tableSchema['collation'] ?? config('database.connections.mysql.collation', 'utf8mb4_unicode_ci');
-        $charset = explode('_', $collation)[0];
-        $lines[] = ") ENGINE=$engine DEFAULT CHARSET=$charset COLLATE=$collation;";
+        $lines[] = ") ENGINE=$engine;";
 
         return implode("\n", $lines);
     }

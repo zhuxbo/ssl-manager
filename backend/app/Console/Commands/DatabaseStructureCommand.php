@@ -273,8 +273,8 @@ class DatabaseStructureCommand extends Command
         $this->containerPort = $port;
 
         // 启动容器，使用 Laravel 配置的字符集和排序规则
-        $charset = config('database.connections.mysql.charset', 'utf8mb4');
-        $collation = config('database.connections.mysql.collation', 'utf8mb4_unicode_ci');
+        $charset = config('database.connections.mysql.charset') ?: 'utf8mb4';
+        $collation = config('database.connections.mysql.collation') ?: 'utf8mb4_unicode_ci';
 
         $cmd = sprintf(
             'docker run -d --name %s -e MYSQL_ROOT_PASSWORD=%s -e MYSQL_DATABASE=%s -p %d:3306 %s --character-set-server=%s --collation-server=%s 2>&1',
@@ -324,7 +324,7 @@ class DatabaseStructureCommand extends Command
      */
     private function waitForMysql(): void
     {
-        $maxAttempts = 30;
+        $maxAttempts = 60;
         $attempt = 0;
 
         while ($attempt < $maxAttempts) {
@@ -411,7 +411,7 @@ class DatabaseStructureCommand extends Command
             'mysql_version' => $this->getMysqlVersion($connection),
             'generated_at' => now()->toDateTimeString(),
             'database' => [
-                'name' => $database,
+                'name' => 'manager',
                 'charset' => Config::get("database.connections.$connection.charset"),
                 'collation' => Config::get("database.connections.$connection.collation"),
             ],
@@ -951,11 +951,9 @@ class DatabaseStructureCommand extends Command
         }
 
         $lines[] = implode(",\n", $columnLines);
-        // 使用原表的引擎和排序规则，如果没有则使用默认值
+        // 仅指定引擎，不指定字符集和排序规则，由目标数据库决定（不同 MySQL 版本默认值不同）
         $engine = $tableSchema['engine'] ?? 'InnoDB';
-        $collation = $tableSchema['collation'] ?? config('database.connections.mysql.collation', 'utf8mb4_unicode_ci');
-        $charset = explode('_', $collation)[0]; // 从排序规则推断字符集
-        $lines[] = ") ENGINE=$engine DEFAULT CHARSET=$charset COLLATE=$collation;";
+        $lines[] = ") ENGINE=$engine;";
 
         return implode("\n", $lines);
     }
