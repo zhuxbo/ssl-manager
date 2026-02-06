@@ -62,7 +62,8 @@ export function useOrganizationStore(onSearch) {
       prop: "country",
       valueType: "select",
       fieldProps: {
-        placeholder: "请选择国家"
+        placeholder: "请选择国家",
+        filterable: true
       },
       options: countryCodes
     },

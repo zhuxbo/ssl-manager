@@ -104,16 +104,24 @@ export function useInvoiceStore(onSearch) {
       prop: "status",
       valueType: "select",
       renderField: (value, onChange) => {
+        const statusLabels = ["处理中", "已开票", "已作废"];
         return (
           <el-select
             v-model={value}
             placeholder="请选择状态"
             onChange={onChange}
-            disabled={status.value === 2}
+            disabled={status.value >= 2}
           >
-            {status.value === 0 && <el-option label="处理中" value={0} />}
-            {status.value !== 2 && <el-option label="已开票" value={1} />}
-            {status.value > 0 && <el-option label="已作废" value={2} />}
+            {/* 隐藏的当前状态选项，仅用于显示当前值 */}
+            <el-option
+              label={statusLabels[status.value] ?? `状态 ${status.value}`}
+              value={status.value}
+              disabled
+              style={{ display: "none" }}
+            />
+            {/* 只显示下一个可选状态 */}
+            {status.value === 0 && <el-option label="已开票" value={1} />}
+            {status.value === 1 && <el-option label="已作废" value={2} />}
           </el-select>
         );
       }
@@ -149,9 +157,8 @@ export function useInvoiceStore(onSearch) {
           ([_, value]) => value !== 0 && value !== ""
         )
       );
+      status.value = 0;
     }
-    storeValues.value.status = storeValues.value.status ?? 0;
-    status.value = storeValues.value.status;
     storeId.value = id;
   }
 
@@ -170,6 +177,7 @@ export function useInvoiceStore(onSearch) {
       storeValues.value = pickByKeys<FormParams>(res.data, FORM_PARAMS_KEYS);
       // 将金额转换为数字
       storeValues.value.amount = Number(storeValues.value.amount ?? 0);
+      status.value = storeValues.value.status ?? 0;
     });
   };
 

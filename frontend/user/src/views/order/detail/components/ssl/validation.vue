@@ -356,7 +356,7 @@
               : currentCheckItem.method
           }}
         </el-descriptions-item>
-        <!-- 委托验证 CNAME 检测 -->
+        <!-- 委托验证：CNAME 委托记录 + TXT 验证记录 -->
         <template v-if="currentCheckItem.delegation_id">
           <el-descriptions-item label="委托域" label-align="right">
             {{
@@ -364,22 +364,97 @@
               currentCheckItem.domain?.replace(/^\*\./, "")
             }}
           </el-descriptions-item>
-          <el-descriptions-item label="CNAME 主机" label-align="right">
+          <!-- CNAME 委托记录检测 -->
+          <el-descriptions-item label="CNAME 委托" label-align="right">
+            <el-tag
+              size="small"
+              :type="
+                currentCheckItem.delegation_cname_checked === true
+                  ? 'success'
+                  : currentCheckItem.delegation_cname_checked === false
+                    ? 'danger'
+                    : 'info'
+              "
+            >
+              {{
+                currentCheckItem.delegation_cname_checked === true
+                  ? "正确"
+                  : currentCheckItem.delegation_cname_checked === false
+                    ? "异常"
+                    : "待检测"
+              }}
+            </el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="查询主机" label-align="right">
             {{ delegationPrefix }}.{{
               currentCheckItem.delegation_zone ||
               currentCheckItem.domain?.replace(/^\*\./, "")
             }}
           </el-descriptions-item>
-          <el-descriptions-item label="需要指向" label-align="right">
+          <el-descriptions-item label="期望指向" label-align="right">
             {{ currentCheckItem.delegation_target }}
           </el-descriptions-item>
           <el-descriptions-item
-            v-if="currentCheckItem.detected_value"
-            label="检测到的值"
+            v-if="currentCheckItem.delegation_cname_detected"
+            label="实际指向"
             label-align="right"
           >
-            {{ currentCheckItem.detected_value }}
+            {{ currentCheckItem.delegation_cname_detected }}
           </el-descriptions-item>
+          <el-descriptions-item
+            v-if="currentCheckItem.delegation_cname_error"
+            label="错误"
+            label-align="right"
+          >
+            <span style="color: var(--el-color-danger)">
+              {{ currentCheckItem.delegation_cname_error }}
+            </span>
+          </el-descriptions-item>
+          <!-- TXT 验证记录检测（仅在有 TXT 值时显示） -->
+          <template v-if="currentCheckItem.value || cert.dcv?.dns?.value">
+            <el-descriptions-item label="TXT 记录" label-align="right">
+              <el-tag
+                size="small"
+                :type="
+                  currentCheckItem.delegation_txt_checked === true
+                    ? 'success'
+                    : currentCheckItem.delegation_txt_checked === false
+                      ? 'danger'
+                      : 'info'
+                "
+              >
+                {{
+                  currentCheckItem.delegation_txt_checked === true
+                    ? "正确"
+                    : currentCheckItem.delegation_txt_checked === false
+                      ? "异常"
+                      : "待检测"
+                }}
+              </el-tag>
+            </el-descriptions-item>
+            <el-descriptions-item label="查询主机" label-align="right">
+              {{ currentCheckItem.delegation_target }}
+            </el-descriptions-item>
+            <el-descriptions-item label="期望值" label-align="right">
+              {{ currentCheckItem.value || cert.dcv?.dns?.value }}
+            </el-descriptions-item>
+            <el-descriptions-item
+              v-if="currentCheckItem.delegation_txt_detected"
+              label="检测到的值"
+              label-align="right"
+            >
+              {{ currentCheckItem.delegation_txt_detected }}
+            </el-descriptions-item>
+            <el-descriptions-item
+              v-if="currentCheckItem.delegation_txt_error"
+              label="错误"
+              label-align="right"
+            >
+              <span style="color: var(--el-color-danger)">
+                {{ currentCheckItem.delegation_txt_error }}
+              </span>
+            </el-descriptions-item>
+          </template>
         </template>
         <template
           v-else-if="
@@ -675,6 +750,7 @@ async function verifyCname(host: string, expectedTarget: string) {
     "https://dns-tools-us.cnssl.com"
   ];
 
+  let lastMsg = "";
   for (const baseUrl of dnsToolsHosts) {
     try {
       const response = await axios.post(
@@ -698,12 +774,72 @@ async function verifyCname(host: string, expectedTarget: string) {
           error: result.matched === "false" ? "CNAME 记录不匹配" : ""
         };
       }
+      if (response.data?.msg)
+        lastMsg = response.data.msg.replace(
+          "批量验证失败：部分或全部验证未通过",
+          "验证未通过"
+        );
     } catch (error) {
       console.debug(`Failed to connect to ${baseUrl}, trying next...`);
       continue;
     }
   }
-  return { checked: false, error: "检测服务不可用" };
+  return {
+    checked: false,
+    detected_value: "",
+    error: lastMsg || "检测服务不可用"
+  };
+}
+
+// 委托验证 TXT 记录检测函数（使用 /api/dns/query 原始查询）
+async function verifyDelegationTxt(targetFqdn: string, expectedValue: string) {
+  const dnsToolsHosts = getConfig()?.DnsTools || [
+    "https://dns-tools-cn.cnssl.com",
+    "https://dns-tools-us.cnssl.com"
+  ];
+
+  const expectedLower = expectedValue.toLowerCase().trim();
+  for (const baseUrl of dnsToolsHosts) {
+    try {
+      const response = await axios.post(
+        `${baseUrl}/api/dns/query`,
+        { domain: targetFqdn, type: "TXT" },
+        { timeout: 10000 }
+      );
+
+      if (response.data?.code !== 1) continue;
+
+      const records = response.data.data?.records || [];
+      const txtValues = records
+        .filter((r: any) => r.type === "TXT" && r.value)
+        .map((r: any) => r.value.replace(/^"|"$/g, "").trim());
+
+      if (txtValues.length === 0) {
+        return {
+          detected_value: "",
+          checked: false,
+          error: "未检测到 TXT 记录"
+        };
+      }
+
+      const matched = txtValues.some(
+        (v: string) => v.toLowerCase() === expectedLower
+      );
+      return {
+        detected_value: txtValues.join(", "),
+        checked: matched,
+        error: matched ? "" : "TXT 记录不匹配"
+      };
+    } catch (error) {
+      console.debug(`Failed to connect to ${baseUrl}, trying next...`);
+      continue;
+    }
+  }
+  return {
+    checked: false,
+    detected_value: "",
+    error: "检测服务不可用"
+  };
 }
 
 // 批量检测函数
@@ -718,19 +854,35 @@ async function batchVerifyValidation(validation: any[], ca?: string) {
   const delegationResults: Map<string, any> = new Map();
   if (delegationItems.length > 0) {
     // 按 delegation_id 分组去重检测
-    const uniqueDelegations = new Map<string, any>();
+    const uniqueDelegationsMap = new Map<string, any>();
     delegationItems.forEach((item: any) => {
-      if (!uniqueDelegations.has(item.delegation_id)) {
-        uniqueDelegations.set(item.delegation_id, item);
+      if (!uniqueDelegationsMap.has(item.delegation_id)) {
+        uniqueDelegationsMap.set(item.delegation_id, item);
       }
     });
 
-    for (const [delegationId, item] of uniqueDelegations) {
+    for (const [delegationId, item] of uniqueDelegationsMap) {
       const zone =
         item.delegation_zone || (item.domain || "").replace(/^\*\./, "");
       const host = `${delegationPrefix.value}.${zone}`;
-      const result = await verifyCname(host, item.delegation_target);
-      delegationResults.set(delegationId, result);
+      const cnameResult = await verifyCname(host, item.delegation_target);
+
+      // 同时检测 TXT 记录
+      const expectedTxtValue = item.value || cert.value.dcv?.dns?.value;
+      const txtResult = expectedTxtValue
+        ? await verifyDelegationTxt(item.delegation_target, expectedTxtValue)
+        : { checked: true, detected_value: "", error: "" };
+
+      delegationResults.set(delegationId, {
+        cname_checked: cnameResult.checked,
+        cname_detected: cnameResult.detected_value || "",
+        cname_error: cnameResult.error || "",
+        txt_checked: txtResult.checked,
+        txt_detected: txtResult.detected_value || "",
+        txt_error: txtResult.error || "",
+        checked: cnameResult.checked && txtResult.checked,
+        error: ""
+      });
     }
   }
 
@@ -767,20 +919,22 @@ async function batchVerifyValidation(validation: any[], ca?: string) {
   let response: AxiosResponse<any, any>;
   let lastError: any;
 
-  for (const endpoint of endpoints) {
-    try {
-      response = await axios.post(endpoint, requestData, {
-        timeout: 10000
-      });
+  if (normalItems.length > 0) {
+    for (const endpoint of endpoints) {
+      try {
+        response = await axios.post(endpoint, requestData, {
+          timeout: 10000
+        });
 
-      // 只要有响应（无论 code 是 0 还是 1），就使用该响应
-      if (response.data !== undefined) {
-        break;
+        // code=1 表示 API 处理成功（含验证结果），code=0 表示 API 错误需尝试下一端点
+        if (response.data?.code === 1) {
+          break;
+        }
+      } catch (error) {
+        lastError = error;
+        console.debug(`Failed to connect to ${endpoint}, trying next...`);
+        continue;
       }
-    } catch (error) {
-      lastError = error;
-      console.debug(`Failed to connect to ${endpoint}, trying next...`);
-      continue;
     }
   }
 
@@ -811,7 +965,12 @@ async function batchVerifyValidation(validation: any[], ca?: string) {
       return {
         ...item,
         checked: delegationResult.checked,
-        detected_value: delegationResult.detected_value || "",
+        delegation_cname_checked: delegationResult.cname_checked,
+        delegation_cname_detected: delegationResult.cname_detected,
+        delegation_cname_error: delegationResult.cname_error,
+        delegation_txt_checked: delegationResult.txt_checked,
+        delegation_txt_detected: delegationResult.txt_detected,
+        delegation_txt_error: delegationResult.txt_error,
         error: delegationResult.error || ""
       };
     }

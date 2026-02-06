@@ -59,6 +59,10 @@ trait OrderController
     {
         // 重置域名验证记录，重新开始验证计时
         DomainValidationRecord::where('order_id', $id)->delete();
+
+        // 清除委托写入标记，切换验证方法时强制重新处理
+        $this->clearAutoTxtWrittenMarks($id);
+
         $method = request()->string('method', '')->trim();
         $this->action->updateDCV($id, $method);
     }

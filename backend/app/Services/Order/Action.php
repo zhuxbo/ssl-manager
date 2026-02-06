@@ -699,6 +699,14 @@ class Action
 
         $cert->save();
 
+        // 切换到委托验证时，创建 delegation 任务写入 TXT 记录
+        if (($cert->dcv['is_delegate'] ?? false) && $cert->status === 'processing') {
+            $autoDcvService = new AutoDcvTxtService;
+            if ($autoDcvService->shouldProcessDelegation($order)) {
+                $this->createTask($orderId, 'delegation');
+            }
+        }
+
         $this->success([
             'dcv' => $result['data']['dcv'] ?? $cert->dcv,
             'validation' => $result['data']['validation'] ?? $cert->validation,

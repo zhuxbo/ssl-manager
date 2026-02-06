@@ -915,12 +915,18 @@
 
   // 更新检测弹窗
   function updateCheckDialog(validation) {
+    const certDcv = window.appState.cert?.dcv || {};
+    const isDelegate = Boolean(certDcv.is_delegate);
+
     document.getElementById("check-domain").textContent =
       validation.domain || "";
-    document.getElementById("check-method").textContent =
-      validation.method || "";
+    document.getElementById("check-method").textContent = isDelegate
+      ? "委托验证 (CNAME)"
+      : validation.method || "";
 
-    const isDNS = ["cname", "txt"].includes(validation.method?.toLowerCase());
+    const isDNS =
+      !isDelegate &&
+      ["cname", "txt"].includes(validation.method?.toLowerCase());
     const isFile = ["file", "http", "https"].includes(
       validation.method?.toLowerCase()
     );
@@ -932,8 +938,78 @@
     document.querySelectorAll(".file-result").forEach(el => {
       el.style.display = isFile ? "table-row" : "none";
     });
+    document.querySelectorAll(".delegation-result").forEach(el => {
+      el.style.display = isDelegate ? "table-row" : "none";
+    });
+    // TXT 行仅在有 TXT 值时显示
+    const hasTxtValue = validation.value || certDcv.dns?.value;
+    document.querySelectorAll(".delegation-txt-result").forEach(el => {
+      el.style.display = isDelegate && hasTxtValue ? "table-row" : "none";
+    });
+    // 错误行按需显示
+    document.querySelectorAll(".delegation-cname-error").forEach(el => {
+      el.style.display =
+        isDelegate && validation.delegation_cname_error ? "table-row" : "none";
+    });
+    document.querySelectorAll(".delegation-txt-error").forEach(el => {
+      el.style.display =
+        isDelegate && hasTxtValue && validation.delegation_txt_error
+          ? "table-row"
+          : "none";
+    });
 
-    if (isDNS) {
+    if (isDelegate) {
+      const ca = certDcv.ca || window.appState.product?.ca || "";
+      const prefix = getDelegationPrefix(ca);
+      const zone =
+        validation.delegation_zone ||
+        (validation.domain || "").replace(/^\*\./, "");
+      const cnameHost = `${prefix}.${zone}`;
+      const delegationTarget = validation.delegation_target || "";
+
+      // CNAME 部分
+      document.getElementById("check-cname-host").textContent = cnameHost;
+      document.getElementById("check-cname-expected").textContent =
+        delegationTarget;
+      document.getElementById("check-cname-detected").textContent =
+        validation.delegation_cname_detected || "-";
+      const cnameStatusEl = document.getElementById("check-cname-status");
+      if (validation.delegation_cname_checked === true) {
+        cnameStatusEl.textContent = "正确";
+        cnameStatusEl.className = "status-badge success";
+      } else if (validation.delegation_cname_checked === false) {
+        cnameStatusEl.textContent = "异常";
+        cnameStatusEl.className = "status-badge error";
+      } else {
+        cnameStatusEl.textContent = "待检测";
+        cnameStatusEl.className = "status-badge";
+      }
+      document.getElementById("check-cname-error").textContent =
+        validation.delegation_cname_error || "";
+
+      // TXT 部分
+      if (hasTxtValue) {
+        document.getElementById("check-txt-host").textContent =
+          delegationTarget;
+        document.getElementById("check-txt-expected").textContent =
+          validation.value || certDcv.dns?.value || "";
+        document.getElementById("check-txt-detected").textContent =
+          validation.delegation_txt_detected || "-";
+        const txtStatusEl = document.getElementById("check-txt-status");
+        if (validation.delegation_txt_checked === true) {
+          txtStatusEl.textContent = "正确";
+          txtStatusEl.className = "status-badge success";
+        } else if (validation.delegation_txt_checked === false) {
+          txtStatusEl.textContent = "异常";
+          txtStatusEl.className = "status-badge error";
+        } else {
+          txtStatusEl.textContent = "待检测";
+          txtStatusEl.className = "status-badge";
+        }
+        document.getElementById("check-txt-error").textContent =
+          validation.delegation_txt_error || "";
+      }
+    } else if (isDNS) {
       document.getElementById("check-query").textContent =
         validation.query ||
         `${
@@ -977,7 +1053,7 @@
       }
     }
 
-    // 同步“检测”按钮颜色（仅代表检测通过与否，不代表 CA 最终通过）
+    // 同步"检测"按钮颜色（仅代表检测通过与否，不代表 CA 最终通过）
     const testBtn = document.getElementById("test-validation-btn");
     if (testBtn) {
       if (validation.checked) {
@@ -999,44 +1075,85 @@
     setLoading(true, "recheck-btn");
 
     try {
-      // 准备验证数据（优先使用 validation 中的最新值，兼容 name/content 字段）
-      const validationData = {
-        domain: window.appState.validation.domain,
-        method:
-          window.appState.validation.method ||
-          window.appState.cert?.dcv?.method,
-        host:
-          window.appState.validation.host ||
-          window.appState.cert?.dcv?.dns?.host,
-        value:
-          window.appState.validation.value ||
-          window.appState.cert?.dcv?.dns?.value,
-        file_name:
-          window.appState.validation.file_name ||
-          window.appState.validation.name ||
-          window.appState.cert?.dcv?.file?.name,
-        file_content:
-          window.appState.validation.file_content ||
-          window.appState.validation.content ||
-          window.appState.cert?.dcv?.file?.content,
-        link: window.appState.validation.link
-      };
+      const certDcv = window.appState.cert?.dcv || {};
+      const isDelegate = Boolean(certDcv.is_delegate);
 
-      const result = await API.verifyDCV(validationData);
+      if (isDelegate) {
+        // 委托验证：同时检测 CNAME 和 TXT
+        const validation = window.appState.validation;
+        const ca = certDcv.ca || window.appState.product?.ca || "";
+        const prefix = getDelegationPrefix(ca);
+        const zone =
+          validation.delegation_zone ||
+          (validation.domain || "").replace(/^\*\./, "");
+        const cnameHost = `${prefix}.${zone}`;
+        const delegationTarget = validation.delegation_target || "";
 
-      // 更新验证状态
-      Object.assign(window.appState.validation, result);
+        const cnameResult = await API.verifyCname(cnameHost, delegationTarget);
 
-      // 更新弹窗显示
-      updateCheckDialog(window.appState.validation);
+        // TXT 检测（仅在有值时）
+        const expectedTxtValue = validation.value || certDcv.dns?.value;
+        const txtResult = expectedTxtValue
+          ? await API.verifyDelegationTxt(delegationTarget, expectedTxtValue)
+          : { checked: true, detected_value: "", error: "" };
 
-      // 检测按钮绿色高亮（仅表示检测通过）
-      const testBtn = document.getElementById("test-validation-btn");
-      if (testBtn) {
-        if (result.checked) testBtn.classList.add("btn-success");
-        else testBtn.classList.remove("btn-success");
+        const overallChecked = cnameResult.checked && txtResult.checked;
+
+        Object.assign(window.appState.validation, {
+          checked: overallChecked,
+          error: "",
+          delegation_cname_checked: cnameResult.checked,
+          delegation_cname_detected: cnameResult.detected_value || "",
+          delegation_cname_error: cnameResult.error || "",
+          delegation_txt_checked: txtResult.checked,
+          delegation_txt_detected: txtResult.detected_value || "",
+          delegation_txt_error: txtResult.error || ""
+        });
+
+        updateCheckDialog(window.appState.validation);
+
+        const testBtn = document.getElementById("test-validation-btn");
+        if (testBtn) {
+          if (overallChecked) testBtn.classList.add("btn-success");
+          else testBtn.classList.remove("btn-success");
+        }
+        if (overallChecked) showToast("验证通过", "success");
+      } else {
+        // 普通验证
+        const validationData = {
+          domain: window.appState.validation.domain,
+          method:
+            window.appState.validation.method ||
+            window.appState.cert?.dcv?.method,
+          host:
+            window.appState.validation.host ||
+            window.appState.cert?.dcv?.dns?.host,
+          value:
+            window.appState.validation.value ||
+            window.appState.cert?.dcv?.dns?.value,
+          file_name:
+            window.appState.validation.file_name ||
+            window.appState.validation.name ||
+            window.appState.cert?.dcv?.file?.name,
+          file_content:
+            window.appState.validation.file_content ||
+            window.appState.validation.content ||
+            window.appState.cert?.dcv?.file?.content,
+          link: window.appState.validation.link
+        };
+
+        const result = await API.verifyDCV(validationData);
+
+        Object.assign(window.appState.validation, result);
+        updateCheckDialog(window.appState.validation);
+
+        const testBtn = document.getElementById("test-validation-btn");
+        if (testBtn) {
+          if (result.checked) testBtn.classList.add("btn-success");
+          else testBtn.classList.remove("btn-success");
+        }
+        if (result.checked) showToast("验证通过", "success");
       }
-      if (result.checked) showToast("验证通过", "success");
     } catch (error) {
       showToast(error.message, "error");
     } finally {
