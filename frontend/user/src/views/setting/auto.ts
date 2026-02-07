@@ -5,7 +5,7 @@ import type { AutoPreferences } from "@/api/setting";
 export function useAutoPreference() {
   const autoSettings = ref<AutoPreferences>({
     auto_renew: false,
-    auto_reissue: false
+    auto_reissue: true
   });
   const autoLoading = ref(false);
 

@@ -140,17 +140,6 @@ const { autoSettings, autoLoading, handleAutoToggle } = useAutoPreference();
       <div class="notification-channel__items">
         <div class="notification-item">
           <div class="notification-item__label">
-            <span>自动续费</span>
-            <small>订单到期时自动购买新订单（需扣费）</small>
-          </div>
-          <el-switch
-            v-model="autoSettings.auto_renew"
-            :loading="autoLoading"
-            @change="handleAutoToggle('auto_renew')"
-          />
-        </div>
-        <div class="notification-item">
-          <div class="notification-item__label">
             <span>自动重签</span>
             <small>证书到期时自动重签（订单周期内免费）</small>
           </div>
@@ -158,6 +147,17 @@ const { autoSettings, autoLoading, handleAutoToggle } = useAutoPreference();
             v-model="autoSettings.auto_reissue"
             :loading="autoLoading"
             @change="handleAutoToggle('auto_reissue')"
+          />
+        </div>
+        <div class="notification-item">
+          <div class="notification-item__label">
+            <span>自动续费</span>
+            <small>订单到期时自动购买新订单（需扣费）</small>
+          </div>
+          <el-switch
+            v-model="autoSettings.auto_renew"
+            :loading="autoLoading"
+            @change="handleAutoToggle('auto_renew')"
           />
         </div>
       </div>

@@ -73,27 +73,21 @@ export function useNotificationRecordTable() {
     },
     {
       label: "通道结果",
-      prop: "channel_results",
+      prop: "result",
       minWidth: 220,
       cellRenderer: ({ row }) => {
-        if (!row.data?.channel_results) {
+        const result = row.data?.result;
+        if (!result) {
           return <span class="text-muted">-</span>;
         }
         return (
-          <div>
-            {Object.entries(row.data.channel_results).map(
-              ([channel, result]: [string, any]) => (
-                <el-tag
-                  key={channel}
-                  size="small"
-                  type={result.status === "sent" ? "success" : "danger"}
-                  class="mr-1 mb-1"
-                >
-                  {channel} {result.status}
-                </el-tag>
-              )
-            )}
-          </div>
+          <el-tag
+            size="small"
+            type={result.status === "sent" ? "success" : "danger"}
+          >
+            {result.channel}: {result.status === "sent" ? "成功" : "失败"}
+            {result.message ? ` (${result.message})` : ""}
+          </el-tag>
         );
       }
     },

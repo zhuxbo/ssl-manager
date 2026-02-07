@@ -264,7 +264,7 @@ class User extends BaseModel implements AuthenticatableContract, JWTSubject
 
         return [
             'auto_renew' => (bool) ($value['auto_renew'] ?? false),
-            'auto_reissue' => (bool) ($value['auto_reissue'] ?? false),
+            'auto_reissue' => (bool) ($value['auto_reissue'] ?? true),
         ];
     }
 
