@@ -197,6 +197,59 @@ class DelegationController extends BaseController
     }
 
     /**
+     * 批量创建委托（管理员为用户批量创建）
+     */
+    public function batchStore(): void
+    {
+        $validated = request()->validate([
+            'user_id' => 'required|integer|exists:users,id',
+            'zones' => 'required|string',
+            'prefix' => 'required|string|in:_acme-challenge,_dnsauth,_pki-validation,_certum',
+        ]);
+
+        // 解析域名列表（支持逗号、换行、空格分隔）
+        $zones = preg_split('/[\s,\n]+/', $validated['zones'], -1, PREG_SPLIT_NO_EMPTY);
+        $zones = array_map('trim', $zones);
+        $zones = array_filter($zones);
+        $zones = array_unique($zones);
+
+        if (empty($zones)) {
+            $this->error('请提供至少一个域名');
+        }
+
+        if (count($zones) > 100) {
+            $this->error('单次最多创建100个委托记录');
+        }
+
+        $created = [];
+        $failed = [];
+
+        foreach ($zones as $zone) {
+            try {
+                $delegation = $this->delegationService->createOrGet(
+                    $validated['user_id'],
+                    $zone,
+                    $validated['prefix']
+                );
+                $created[] = $this->delegationService->withCnameGuide($delegation);
+            } catch (Throwable $e) {
+                $failed[] = [
+                    'zone' => $zone,
+                    'error' => $e->getMessage(),
+                ];
+            }
+        }
+
+        $this->success([
+            'created' => $created,
+            'failed' => $failed,
+            'total' => count($zones),
+            'success_count' => count($created),
+            'fail_count' => count($failed),
+        ]);
+    }
+
+    /**
      * 手动触发健康检查
      */
     public function check($id): void

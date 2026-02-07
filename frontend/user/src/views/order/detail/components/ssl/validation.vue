@@ -1,6 +1,85 @@
 <template>
+  <!-- 委托验证：单条记录时与普通 DCV 格式统一 -->
   <div
-    v-if="['cname', 'txt'].includes(cert.dcv?.method) && cert.dcv?.dns?.value"
+    v-if="cert.dcv?.is_delegate && uniqueDelegations.length === 1"
+    class="descriptions"
+  >
+    <div style="margin-top: 18px">
+      <el-form-item label="主机记录：" label-width="82px">
+        <el-input :model-value="delegationPrefix" spellcheck="false">
+          <template #suffix>
+            <Copy :copied="delegationPrefix" />
+          </template>
+        </el-input>
+      </el-form-item>
+      <el-form-item label="解析类型：" label-width="82px">
+        <el-input model-value="CNAME" :disabled="true" style="width: 73px" />
+      </el-form-item>
+      <el-form-item label="记录值：" label-width="82px">
+        <el-input
+          :model-value="uniqueDelegations[0].delegation_target"
+          spellcheck="false"
+        >
+          <template #suffix>
+            <Copy :copied="uniqueDelegations[0].delegation_target" />
+          </template>
+        </el-input>
+      </el-form-item>
+    </div>
+  </div>
+  <!-- 委托验证：多条记录时表格显示 -->
+  <div
+    v-else-if="cert.dcv?.is_delegate && uniqueDelegations.length > 1"
+    class="descriptions"
+  >
+    <div style="margin-bottom: 10px">
+      <table>
+        <thead>
+          <tr>
+            <th style="text-align: left; padding: 8px 8px 8px 0">主机记录</th>
+            <th style="text-align: center; padding: 8px">解析类型</th>
+            <th style="text-align: left; padding: 8px 0 8px 8px; width: 400px">
+              记录值
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="(item, index) in uniqueDelegations" :key="index">
+            <td style="padding: 4px 8px 4px 0">
+              <el-input :model-value="delegationPrefix" spellcheck="false">
+                <template #suffix>
+                  <Copy :copied="getDelegationHost(item)" />
+                </template>
+                <template #append>.{{ getDelegationZone(item) }}</template>
+              </el-input>
+            </td>
+            <td style="padding: 4px 8px; text-align: center">
+              <el-input
+                model-value="CNAME"
+                :disabled="true"
+                style="width: 70px"
+              />
+            </td>
+            <td style="padding: 4px 0 4px 8px">
+              <el-input
+                :model-value="item.delegation_target"
+                spellcheck="false"
+              >
+                <template #suffix>
+                  <Copy :copied="item.delegation_target" />
+                </template>
+              </el-input>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <!-- 普通 DNS 验证：显示 dns 记录信息 -->
+  <div
+    v-else-if="
+      ['cname', 'txt'].includes(cert.dcv?.method) && cert.dcv?.dns?.value
+    "
     class="descriptions"
   >
     <div style="margin-top: 18px">
@@ -134,24 +213,28 @@
       >
       <el-button
         v-if="
-          ['cname', 'txt'].includes(cert.dcv?.method) &&
-          cert.dcv?.dns?.value &&
+          ((['cname', 'txt'].includes(cert.dcv?.method) &&
+            cert.dcv?.dns?.value) ||
+            cert.dcv?.is_delegate) &&
           ['unpaid', 'pending', 'processing'].includes(cert.status) &&
           !allVerified
         "
         type="primary"
         style="margin-left: 16px"
-        @click="copyDnsRecords()"
+        @click="copyAllRecords()"
         >复制解析</el-button
       >
       <el-button
         v-if="
           cert.validation?.length > 1 &&
-          ['cname', 'txt', 'file', 'http', 'https'].includes(
+          (['cname', 'txt', 'file', 'http', 'https'].includes(
             cert.dcv?.method
-          ) &&
+          ) ||
+            cert.dcv?.is_delegate) &&
           !allVerified &&
-          (cert.dcv?.dns?.value || cert.dcv?.file?.content) &&
+          (cert.dcv?.dns?.value ||
+            cert.dcv?.file?.content ||
+            cert.dcv?.is_delegate) &&
           ['unpaid', 'pending', 'processing'].includes(cert.status)
         "
         :disabled="isChecking"
@@ -199,7 +282,9 @@
                   'webmaster'
                 ].includes(item.method) &&
                 ['unpaid', 'pending', 'processing'].includes(cert.status) &&
-                (cert.dcv?.dns?.value || cert.dcv?.file?.content)
+                (cert.dcv?.dns?.value ||
+                  cert.dcv?.file?.content ||
+                  cert.dcv?.is_delegate)
               "
               link
               @click="checkSingleValidation(item)"
@@ -265,10 +350,114 @@
           {{ currentCheckItem.domain }}
         </el-descriptions-item>
         <el-descriptions-item label="验证方式" label-align="right">
-          {{ currentCheckItem.method }}
+          {{
+            currentCheckItem.delegation_id
+              ? "委托验证 (CNAME)"
+              : currentCheckItem.method
+          }}
         </el-descriptions-item>
+        <!-- 委托验证：CNAME 委托记录 + TXT 验证记录 -->
+        <template v-if="currentCheckItem.delegation_id">
+          <el-descriptions-item label="委托域" label-align="right">
+            {{
+              currentCheckItem.delegation_zone ||
+              currentCheckItem.domain?.replace(/^\*\./, "")
+            }}
+          </el-descriptions-item>
+          <!-- CNAME 委托记录检测 -->
+          <el-descriptions-item label="CNAME 委托" label-align="right">
+            <el-tag
+              size="small"
+              :type="
+                currentCheckItem.delegation_cname_checked === true
+                  ? 'success'
+                  : currentCheckItem.delegation_cname_checked === false
+                    ? 'danger'
+                    : 'info'
+              "
+            >
+              {{
+                currentCheckItem.delegation_cname_checked === true
+                  ? "正确"
+                  : currentCheckItem.delegation_cname_checked === false
+                    ? "异常"
+                    : "待检测"
+              }}
+            </el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="查询主机" label-align="right">
+            {{ delegationPrefix }}.{{
+              currentCheckItem.delegation_zone ||
+              currentCheckItem.domain?.replace(/^\*\./, "")
+            }}
+          </el-descriptions-item>
+          <el-descriptions-item label="期望指向" label-align="right">
+            {{ currentCheckItem.delegation_target }}
+          </el-descriptions-item>
+          <el-descriptions-item
+            v-if="currentCheckItem.delegation_cname_detected"
+            label="实际指向"
+            label-align="right"
+          >
+            {{ currentCheckItem.delegation_cname_detected }}
+          </el-descriptions-item>
+          <el-descriptions-item
+            v-if="currentCheckItem.delegation_cname_error"
+            label="错误"
+            label-align="right"
+          >
+            <span style="color: var(--el-color-danger)">
+              {{ currentCheckItem.delegation_cname_error }}
+            </span>
+          </el-descriptions-item>
+          <!-- TXT 验证记录检测（仅在有 TXT 值时显示） -->
+          <template v-if="currentCheckItem.value || cert.dcv?.dns?.value">
+            <el-descriptions-item label="TXT 记录" label-align="right">
+              <el-tag
+                size="small"
+                :type="
+                  currentCheckItem.delegation_txt_checked === true
+                    ? 'success'
+                    : currentCheckItem.delegation_txt_checked === false
+                      ? 'danger'
+                      : 'info'
+                "
+              >
+                {{
+                  currentCheckItem.delegation_txt_checked === true
+                    ? "正确"
+                    : currentCheckItem.delegation_txt_checked === false
+                      ? "异常"
+                      : "待检测"
+                }}
+              </el-tag>
+            </el-descriptions-item>
+            <el-descriptions-item label="查询主机" label-align="right">
+              {{ currentCheckItem.delegation_target }}
+            </el-descriptions-item>
+            <el-descriptions-item label="期望值" label-align="right">
+              {{ currentCheckItem.value || cert.dcv?.dns?.value }}
+            </el-descriptions-item>
+            <el-descriptions-item
+              v-if="currentCheckItem.delegation_txt_detected"
+              label="检测到的值"
+              label-align="right"
+            >
+              {{ currentCheckItem.delegation_txt_detected }}
+            </el-descriptions-item>
+            <el-descriptions-item
+              v-if="currentCheckItem.delegation_txt_error"
+              label="错误"
+              label-align="right"
+            >
+              <span style="color: var(--el-color-danger)">
+                {{ currentCheckItem.delegation_txt_error }}
+              </span>
+            </el-descriptions-item>
+          </template>
+        </template>
         <template
-          v-if="
+          v-else-if="
             ['cname', 'txt'].includes(currentCheckItem.method?.toLowerCase())
           "
         >
@@ -397,14 +586,69 @@ const allVerified = computed(() => {
   return verified;
 });
 
-const validationMethod = ref(cert.value.dcv?.method);
+// 获取委托验证前缀
+const getDelegationPrefix = (ca?: string) => {
+  const caLower = (ca || "").toLowerCase();
+  switch (caLower) {
+    case "sectigo":
+    case "comodo":
+      return "_pki-validation";
+    case "certum":
+      return "_certum";
+    case "digicert":
+    case "geotrust":
+    case "thawte":
+    case "rapidssl":
+    case "symantec":
+    case "trustasia":
+      return "_dnsauth";
+    default:
+      return "_acme-challenge";
+  }
+};
+
+// 委托验证前缀
+const delegationPrefix = computed(() =>
+  getDelegationPrefix(cert.value.dcv?.ca || order.product?.ca)
+);
+
+// 获取委托验证的域名部分
+const getDelegationZone = (item: any) => {
+  return item.delegation_zone || (item.domain || "").replace(/^\*\./, "");
+};
+
+// 获取委托验证的完整主机记录
+const getDelegationHost = (item: any) => {
+  return `${delegationPrefix.value}.${getDelegationZone(item)}`;
+};
+
+// 去重后的委托列表（按 delegation_id 去重）
+const uniqueDelegations = computed(() => {
+  if (!cert.value?.validation) return [];
+
+  const seen = new Map();
+  return cert.value.validation.filter((item: any) => {
+    if (!item.delegation_id) return false;
+    if (seen.has(item.delegation_id)) return false;
+    seen.set(item.delegation_id, true);
+    return true;
+  });
+});
+
+// 获取显示用的验证方法（考虑委托验证标记）
+const getDisplayMethod = (dcv: any) => {
+  if (dcv?.is_delegate) return "delegation";
+  return dcv?.method;
+};
+
+const validationMethod = ref(getDisplayMethod(cert.value.dcv));
 
 // 添加监听器监听cert.value的变化
 watch(
   () => cert.value,
   newVal => {
     if (newVal) {
-      validationMethod.value = newVal.dcv?.method;
+      validationMethod.value = getDisplayMethod(newVal.dcv);
     }
   }
 );
@@ -463,9 +707,21 @@ const updateValidationMethod = (method: string) => {
     });
 };
 
-const copyDnsRecords = () => {
-  const records = [];
-  if (hostIncludeSubDomain.value) {
+// 复制所有解析记录（支持委托验证和普通 DNS 验证）
+const copyAllRecords = () => {
+  const records: string[] = [];
+
+  // 委托验证
+  if (cert.value.dcv?.is_delegate) {
+    uniqueDelegations.value.forEach((item: any) => {
+      const zone = getDelegationZone(item);
+      records.push(
+        `域名：${zone}\n主机记录：${delegationPrefix.value}\n解析类型：CNAME\n记录值：${item.delegation_target}`
+      );
+    });
+  }
+  // 普通 DNS 验证
+  else if (hostIncludeSubDomain.value) {
     cert.value.validation.forEach(
       (item: { method: string; host: string; domain: string }) => {
         if (item.method === "cname" || item.method === "txt") {
@@ -487,12 +743,151 @@ const copyDnsRecords = () => {
   });
 };
 
+// 委托验证 CNAME 检测函数
+async function verifyCname(host: string, expectedTarget: string) {
+  const dnsToolsHosts = getConfig()?.DnsTools || [
+    "https://dns-tools-cn.cnssl.com",
+    "https://dns-tools-us.cnssl.com"
+  ];
+
+  let lastMsg = "";
+  for (const baseUrl of dnsToolsHosts) {
+    try {
+      const response = await axios.post(
+        `${baseUrl}/api/dcv/verify`,
+        [
+          {
+            domain: host,
+            method: "cname",
+            host: "@",
+            value: expectedTarget
+          }
+        ],
+        { timeout: 10000 }
+      );
+
+      if (response.data?.data?.results) {
+        const result = response.data.data.results[host] || {};
+        return {
+          detected_value: result.value || "",
+          checked: result.matched === "true",
+          error: result.matched === "false" ? "CNAME 记录不匹配" : ""
+        };
+      }
+      if (response.data?.msg)
+        lastMsg = response.data.msg.replace(
+          "批量验证失败：部分或全部验证未通过",
+          "验证未通过"
+        );
+    } catch (error) {
+      console.debug(`Failed to connect to ${baseUrl}, trying next...`);
+      continue;
+    }
+  }
+  return {
+    checked: false,
+    detected_value: "",
+    error: lastMsg || "检测服务不可用"
+  };
+}
+
+// 委托验证 TXT 记录检测函数（使用 /api/dns/query 原始查询）
+async function verifyDelegationTxt(targetFqdn: string, expectedValue: string) {
+  const dnsToolsHosts = getConfig()?.DnsTools || [
+    "https://dns-tools-cn.cnssl.com",
+    "https://dns-tools-us.cnssl.com"
+  ];
+
+  const expectedLower = expectedValue.toLowerCase().trim();
+  for (const baseUrl of dnsToolsHosts) {
+    try {
+      const response = await axios.post(
+        `${baseUrl}/api/dns/query`,
+        { domain: targetFqdn, type: "TXT" },
+        { timeout: 10000 }
+      );
+
+      if (response.data?.code !== 1) continue;
+
+      const records = response.data.data?.records || [];
+      const txtValues = records
+        .filter((r: any) => r.type === "TXT" && r.value)
+        .map((r: any) => r.value.replace(/^"|"$/g, "").trim());
+
+      if (txtValues.length === 0) {
+        return {
+          detected_value: "",
+          checked: false,
+          error: "未检测到 TXT 记录"
+        };
+      }
+
+      const matched = txtValues.some(
+        (v: string) => v.toLowerCase() === expectedLower
+      );
+      return {
+        detected_value: txtValues.join(", "),
+        checked: matched,
+        error: matched ? "" : "TXT 记录不匹配"
+      };
+    } catch (error) {
+      console.debug(`Failed to connect to ${baseUrl}, trying next...`);
+      continue;
+    }
+  }
+  return {
+    checked: false,
+    detected_value: "",
+    error: "检测服务不可用"
+  };
+}
+
 // 批量检测函数
 async function batchVerifyValidation(validation: any[], ca?: string) {
   if (!validation?.length) return validation;
 
-  // 准备请求数据，适配新接口格式
-  const requestData = validation.map((item: any) => {
+  // 分离委托验证和普通验证
+  const delegationItems = validation.filter((item: any) => item.delegation_id);
+  const normalItems = validation.filter((item: any) => !item.delegation_id);
+
+  // 处理委托验证项
+  const delegationResults: Map<string, any> = new Map();
+  if (delegationItems.length > 0) {
+    // 按 delegation_id 分组去重检测
+    const uniqueDelegationsMap = new Map<string, any>();
+    delegationItems.forEach((item: any) => {
+      if (!uniqueDelegationsMap.has(item.delegation_id)) {
+        uniqueDelegationsMap.set(item.delegation_id, item);
+      }
+    });
+
+    for (const [delegationId, item] of uniqueDelegationsMap) {
+      const zone =
+        item.delegation_zone || (item.domain || "").replace(/^\*\./, "");
+      const host = `${delegationPrefix.value}.${zone}`;
+      const cnameResult = await verifyCname(host, item.delegation_target);
+
+      // 同时检测 TXT 记录
+      const expectedTxtValue = item.value || cert.value.dcv?.dns?.value;
+      const txtResult = expectedTxtValue
+        ? await verifyDelegationTxt(item.delegation_target, expectedTxtValue)
+        : { checked: true, detected_value: "", error: "" };
+
+      delegationResults.set(delegationId, {
+        cname_checked: cnameResult.checked,
+        cname_detected: cnameResult.detected_value || "",
+        cname_error: cnameResult.error || "",
+        txt_checked: txtResult.checked,
+        txt_detected: txtResult.detected_value || "",
+        txt_error: txtResult.error || "",
+        checked: cnameResult.checked && txtResult.checked,
+        error: ""
+      });
+    }
+  }
+
+  // 准备普通验证的请求数据
+  const requestData = normalItems.map((item: any) => {
     const baseData: any = {
       domain: item.domain,
       method: item.method?.toLowerCase()
@@ -524,25 +919,28 @@ async function batchVerifyValidation(validation: any[], ca?: string) {
   let response: AxiosResponse<any, any>;
   let lastError: any;
 
-  for (const endpoint of endpoints) {
-    try {
-      response = await axios.post(endpoint, requestData, {
-        timeout: 10000
-      });
+  if (normalItems.length > 0) {
+    for (const endpoint of endpoints) {
+      try {
+        response = await axios.post(endpoint, requestData, {
+          timeout: 10000
+        });
 
-      // 只要有响应（无论 code 是 0 还是 1），就使用该响应
-      if (response.data !== undefined) {
-        break;
+        // code=1 表示 API 处理成功（含验证结果），code=0 表示 API 错误需尝试下一端点
+        if (response.data?.code === 1) {
+          break;
+        }
+      } catch (error) {
+        lastError = error;
+        console.debug(`Failed to connect to ${endpoint}, trying next...`);
+        continue;
       }
-    } catch (error) {
-      lastError = error;
-      console.debug(`Failed to connect to ${endpoint}, trying next...`);
-      continue;
     }
   }
 
-  // 处理返回数据
-  if (response?.data) {
+  // 处理普通验证的返回数据
+  const normalResults: { [key: string]: any } = {};
+  if (response?.data && normalItems.length > 0) {
     // code=1 时数据在 data.results 中，code=0 时可能在 errors 中
     const results = response.data.data?.results || {};
     const errors = response.data.errors || [];
@@ -556,48 +954,61 @@ async function batchVerifyValidation(validation: any[], ca?: string) {
       });
     }
 
-    return validation.map((item: any) => {
-      const resultKey = item.domain;
-      const checkResult = results[resultKey];
+    Object.assign(normalResults, results);
+  }
 
-      if (checkResult) {
-        const updateData: any = {
-          ...item,
-          checked: checkResult.matched === "true",
-          error: checkResult.matched === "false" ? `验证失败` : ""
-        };
+  // 合并所有结果
+  return validation.map((item: any) => {
+    // 委托验证项使用委托验证结果
+    if (item.delegation_id && delegationResults.has(item.delegation_id)) {
+      const delegationResult = delegationResults.get(item.delegation_id);
+      return {
+        ...item,
+        checked: delegationResult.checked,
+        delegation_cname_checked: delegationResult.cname_checked,
+        delegation_cname_detected: delegationResult.cname_detected,
+        delegation_cname_error: delegationResult.cname_error,
+        delegation_txt_checked: delegationResult.txt_checked,
+        delegation_txt_detected: delegationResult.txt_detected,
+        delegation_txt_error: delegationResult.txt_error,
+        error: delegationResult.error || ""
+      };
+    }
 
-        // 根据验证方法设置检测值和额外信息
-        if (["txt", "cname"].includes(item.method?.toLowerCase())) {
-          updateData.detected_value = checkResult.value || "";
-          // 保存查询信息用于显示
-          updateData.query = checkResult.query || "";
-          updateData.query_sub = checkResult.query_sub || "";
-          updateData.value_sub = checkResult.value_sub || "";
-        } else if (
-          ["file", "http", "https"].includes(item.method?.toLowerCase())
-        ) {
-          // 对于文件验证，content 可能已被截断
-          updateData.detected_value = checkResult.content || "";
-          // 保存链接信息
-          updateData.link =
-            checkResult.link ||
-            checkResult.link_https ||
-            checkResult.link_http ||
-            item.link;
-        }
+    // 普通验证项使用普通验证结果
+    const checkResult = normalResults[item.domain];
+    if (checkResult) {
+      const updateData: any = {
+        ...item,
+        checked: checkResult.matched === "true",
+        error: checkResult.matched === "false" ? `验证失败` : ""
+      };
 
-        return updateData;
+      // 根据验证方法设置检测值和额外信息
+      if (["txt", "cname"].includes(item.method?.toLowerCase())) {
+        updateData.detected_value = checkResult.value || "";
+        // 保存查询信息用于显示
+        updateData.query = checkResult.query || "";
+        updateData.query_sub = checkResult.query_sub || "";
+        updateData.value_sub = checkResult.value_sub || "";
+      } else if (
+        ["file", "http", "https"].includes(item.method?.toLowerCase())
+      ) {
+        // 对于文件验证，content 可能已被截断
+        updateData.detected_value = checkResult.content || "";
+        // 保存链接信息
+        updateData.link =
+          checkResult.link ||
+          checkResult.link_https ||
+          checkResult.link_http ||
+          item.link;
       }
-      return item;
-    });
-  }
 
-  // 如果所有节点都失败，返回原数据
-  if (lastError) {
-    console.error("All DCV verify endpoints failed:", lastError);
-  }
-  return validation;
+      return updateData;
+    }
+
+    return item;
+  });
 }
 
 // 添加状态变量
@@ -668,11 +1079,14 @@ const debouncedVerifyItem = debounce(verifyItem, 500);
 async function startBatchVerify() {
   if (
     !cert.value?.validation?.length ||
-    !["cname", "txt", "file", "http", "https"].includes(
+    (!["cname", "txt", "file", "http", "https"].includes(
       cert.value.dcv?.method
-    ) ||
+    ) &&
+      !cert.value.dcv?.is_delegate) ||
     allVerified.value ||
-    (!cert.value.dcv?.dns?.value && !cert.value.dcv?.file?.content) ||
+    (!cert.value.dcv?.dns?.value &&
+      !cert.value.dcv?.file?.content &&
+      !cert.value.dcv?.is_delegate) ||
     !["unpaid", "pending", "processing"].includes(cert.value.status)
   ) {
     return;

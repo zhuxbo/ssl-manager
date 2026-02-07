@@ -8,9 +8,12 @@ use App\Bootstrap\ApiExceptions;
 use App\Exceptions\ApiResponseException;
 use App\Jobs\TaskJob;
 use App\Models\Cert;
+use App\Models\CnameDelegation;
 use App\Models\Order;
 use App\Models\Task;
 use App\Models\Transaction;
+use App\Services\Delegation\CnameDelegationService;
+use App\Services\Delegation\DelegationDnsService;
 use App\Services\Order\Utils\CsrUtil;
 use App\Services\Order\Utils\DomainUtil;
 use App\Services\Order\Utils\FilterUtil;
@@ -101,14 +104,19 @@ trait ActionTrait
 
             $order || $this->error('订单或相关数据不存在');
 
-            // active 和 expired 都可以重签
+            // 证书状态为 active 和 expired 都可以重签 只要订单没过期
             if (! in_array($order->latestCert->status, ['active', 'expired']) && $params['action'] == 'reissue') {
                 $this->error('订单状态错误');
             }
 
-            // 只有 active 可以续费
-            if ($order->latestCert->status != 'active' && $params['action'] == 'renew') {
-                $this->error('订单状态错误');
+            // 只有 active 可以续费，且订单到期前30天内才能续费
+            if ($params['action'] == 'renew') {
+                if ($order->latestCert->status != 'active') {
+                    $this->error('订单状态错误');
+                }
+                if ($order->period_till && $order->period_till->gt(now()->addDays(30))) {
+                    $this->error('订单到期前30天内才能续费');
+                }
             }
 
             // 订单已过期不可重签或续费
@@ -119,9 +127,14 @@ trait ActionTrait
             $params['last_cert_id'] = $order->latestCert->id;
             $params['last_cert'] = $order->latestCert->toArray();
 
-            // 续费默认继承旧订单的自动续费设置（除非显式传入）
-            if ($params['action'] === 'renew' && ! array_key_exists('auto_renew', $params)) {
-                $params['auto_renew'] = (bool) $order->auto_renew;
+            // 续费默认继承旧订单的自动续费/重签设置（除非显式传入）
+            if ($params['action'] === 'renew') {
+                if (! array_key_exists('auto_renew', $params)) {
+                    $params['auto_renew'] = $order->auto_renew;
+                }
+                if (! array_key_exists('auto_reissue', $params)) {
+                    $params['auto_reissue'] = $order->auto_reissue;
+                }
             }
 
             CsrUtil::matchKey($params['csr'] ?? '', $order->latestCert->private_key ?? '')
@@ -163,8 +176,9 @@ trait ActionTrait
         $order['period'] = (int) ($params['period'] ?? 0);
         $order['contact'] = $params['contact'] ?? null;
         isset($params['organization']) && $order['organization'] = $params['organization'];
-        // 如果请求包含自动续费标记，则持久化到新订单
-        array_key_exists('auto_renew', $params) && $order['auto_renew'] = (bool) $params['auto_renew'];
+        // 如果请求包含自动续费/重签标记，则持久化到新订单
+        array_key_exists('auto_renew', $params) && $order['auto_renew'] = $params['auto_renew'];
+        array_key_exists('auto_reissue', $params) && $order['auto_reissue'] = $params['auto_reissue'];
 
         return $order;
     }
@@ -318,7 +332,16 @@ trait ActionTrait
                 $cert['unique_value'] ?? ''
             );
 
-            $cert['validation'] = $this->generateValidation($cert['dcv'], $cert['alternative_names']);
+            $cert['validation'] = $this->generateValidation(
+                $cert['dcv'],
+                $cert['alternative_names'],
+                $params['user_id'] ?? null
+            );
+
+            // 如果是委托验证，尝试写入 TXT 记录
+            if ($cert['dcv']['is_delegate'] ?? false) {
+                $cert['validation'] = $this->writeDelegationTxtRecords($cert['validation']);
+            }
         }
 
         return $cert;
@@ -369,13 +392,52 @@ trait ActionTrait
     {
         $method = strtolower($method);
 
+        // delegate 方法转换为 txt，并标记为委托验证
+        $isDelegate = $method === 'delegation';
+        if ($isDelegate) {
+            $method = 'txt';
+        }
+
         if (strtolower($ca) === 'sectigo' && in_array($method, ['cname', 'http', 'https'])) {
             $dcv = $this->generateSectigoDcv($method, $csr, $unique_value);
         } else {
             $dcv = ['method' => $method];
         }
 
+        // 标记委托验证和 CA 信息
+        if ($isDelegate) {
+            $dcv['is_delegate'] = true;
+            $dcv['ca'] = strtolower($ca); // 保存 CA 用于确定委托前缀
+        }
+
         return $dcv;
+    }
+
+    /**
+     * 合并 DCV 数据，根据用户当前选择决定委托验证标记
+     *
+     * @param  array|null  $apiDcv  从 API 返回的新 DCV 数据
+     * @param  array|null  $newDcv  根据用户选择生成的 DCV 数据（包含 is_delegate 和 ca）
+     */
+    protected function mergeDcv(?array $apiDcv, ?array $newDcv): ?array
+    {
+        if ($apiDcv === null) {
+            return $newDcv;
+        }
+
+        if ($newDcv === null) {
+            return $apiDcv;
+        }
+
+        // 从新 DCV 保留委托验证标记（根据用户当前选择生成）
+        if (! empty($newDcv['is_delegate'])) {
+            $apiDcv['is_delegate'] = true;
+            if (! empty($newDcv['ca'])) {
+                $apiDcv['ca'] = $newDcv['ca'];
+            }
+        }
+
+        return $apiDcv;
     }
 
     /**
@@ -431,11 +493,19 @@ trait ActionTrait
 
     /**
      * 生成验证信息
+     *
+     * @param  array  $dcv  DCV 信息
+     * @param  string  $domains  域名列表（逗号分隔）
+     * @param  int|null  $userId  用户ID（委托验证时需要）
      */
-    protected function generateValidation(array $dcv, string $domains): ?array
+    protected function generateValidation(array $dcv, string $domains, ?int $userId = null): ?array
     {
         $method = strtolower($dcv['method']);
+        $isDelegate = $dcv['is_delegate'] ?? false;
         $domains = explode(',', trim($domains, ','));
+
+        // 委托验证时需要查找委托记录
+        $delegationService = $isDelegate && $userId ? app(CnameDelegationService::class) : null;
 
         foreach ($domains as $k => $domain) {
             if (! $domain) {
@@ -443,6 +513,39 @@ trait ActionTrait
             }
 
             $validation[$k] = ['domain' => $domain, 'method' => $method];
+
+            // 标记委托验证
+            if ($isDelegate) {
+                $validation[$k]['is_delegate'] = true;
+
+                // 查找或创建委托记录
+                if ($delegationService) {
+                    // 根据 CA 确定委托前缀（不同 CA 使用不同的验证前缀）
+                    $prefix = $this->getDelegationPrefixForCa($dcv['ca'] ?? '');
+
+                    // 判断是否精确匹配前缀（ACME/DigiCert 需要每个子域单独委托）
+                    $isExactMatch = in_array($prefix, ['_acme-challenge', '_dnsauth']);
+
+                    // 精确匹配：使用完整域名；模糊匹配：使用根域
+                    $zone = $isExactMatch
+                        ? ltrim($domain, '*.')
+                        : DomainUtil::getRootDomain($domain);
+
+                    // 查找委托记录（不检查 valid 状态，后续即时验证）
+                    $delegation = $delegationService->findDelegation($userId, $domain, $prefix);
+
+                    // 找不到则自动创建
+                    if (! $delegation) {
+                        $delegation = $delegationService->createOrGet($userId, $zone, $prefix);
+                    }
+
+                    // 始终保存委托信息（即使 valid=false）
+                    $validation[$k]['delegation_id'] = $delegation->id;
+                    $validation[$k]['delegation_target'] = $delegation->target_fqdn;
+                    $validation[$k]['delegation_valid'] = $delegation->valid;
+                    $validation[$k]['delegation_zone'] = $delegation->zone;
+                }
+            }
 
             if (($method == 'cname' || $method == 'txt') && isset($dcv['dns']['value'])) {
                 $validation[$k]['host'] = $dcv['dns']['host'];
@@ -462,6 +565,133 @@ trait ActionTrait
         }
 
         return $validation ?? null;
+    }
+
+    /**
+     * 判断验证记录是否准备就绪
+     *
+     * 仅用于判断是否可以开始验证，不依赖 dcv.dns.value
+     *
+     * @param  array|null  $validation  验证信息数组
+     * @param  string|null  $method  验证方法（txt/cname/http/https/file）
+     */
+    public function isValidationReady(?array $validation, ?string $method): bool
+    {
+        if (empty($validation) || ! is_array($validation)) {
+            return false;
+        }
+
+        $method = strtolower((string) $method);
+
+        // txt/cname 验证依赖 value
+        if (in_array($method, ['txt', 'cname'], true)) {
+            foreach ($validation as $item) {
+                if (empty($item['value'] ?? '')) {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        // http/https/file 验证依赖 content
+        if (in_array($method, ['http', 'https', 'file'], true)) {
+            foreach ($validation as $item) {
+                if (empty($item['content'] ?? '')) {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        // 其他验证方式只要有 validation 即可
+        return true;
+    }
+
+    /**
+     * 写入委托验证的 TXT 记录
+     *
+     * @param  array  $validation  验证信息数组
+     * @return array 更新后的验证信息数组
+     */
+    protected function writeDelegationTxtRecords(array $validation): array
+    {
+        $dnsService = app(DelegationDnsService::class);
+
+        // 按 delegation_id 分组收集 tokens
+        $tokensByDelegation = [];
+        foreach ($validation as $item) {
+            $delegationId = $item['delegation_id'] ?? null;
+            $delegationValid = $item['delegation_valid'] ?? false;
+
+            // 跳过无效委托或已写入的
+            if (! $delegationId || ! $delegationValid || ($item['auto_txt_written'] ?? false)) {
+                continue;
+            }
+
+            if (! isset($tokensByDelegation[$delegationId])) {
+                $tokensByDelegation[$delegationId] = [
+                    'tokens' => [],
+                    'delegation' => CnameDelegation::find($delegationId),
+                ];
+            }
+
+            if (! empty($item['value'])) {
+                $tokensByDelegation[$delegationId]['tokens'][] = $item['value'];
+            }
+        }
+
+        // 批量写入 TXT 记录
+        $writtenDelegations = [];
+        foreach ($tokensByDelegation as $delegationId => $data) {
+            $delegation = $data['delegation'];
+            $tokens = array_unique($data['tokens']);
+
+            if (! $delegation || empty($tokens)) {
+                continue;
+            }
+
+            $isSuccess = $dnsService->setTxtByLabel(
+                $delegation->proxy_zone,
+                $delegation->label,
+                $tokens
+            );
+
+            if ($isSuccess) {
+                $writtenDelegations[$delegationId] = true;
+            }
+        }
+
+        // 更新 validation 中的写入标记
+        foreach ($validation as &$item) {
+            $delegationId = $item['delegation_id'] ?? null;
+            if ($delegationId && isset($writtenDelegations[$delegationId])) {
+                $item['auto_txt_written'] = true;
+                $item['auto_txt_written_at'] = now()->toDateTimeString();
+            }
+        }
+
+        return $validation;
+    }
+
+    /**
+     * 根据 CA 获取委托验证前缀
+     *
+     * 不同 CA 使用不同的 DNS TXT 记录前缀：
+     * - Sectigo: _pki-validation
+     * - Certum: _certum
+     * - DigiCert/GeoTrust/Thawte/RapidSSL/TrustAsia: _dnsauth
+     * - ACME (Let's Encrypt 等): _acme-challenge
+     */
+    protected function getDelegationPrefixForCa(string $ca): string
+    {
+        return match (strtolower($ca)) {
+            'sectigo', 'comodo' => '_pki-validation',
+            'certum' => '_certum',
+            'digicert', 'geotrust', 'thawte', 'rapidssl', 'symantec', 'trustasia' => '_dnsauth',
+            default => '_acme-challenge',
+        };
     }
 
     /**
@@ -718,20 +948,25 @@ trait ActionTrait
         DB::beginTransaction();
         try {
             if ($cert->last_cert_id) {
+                // 尝试恢复旧证书状态
                 $last_cert = Cert::where('id', $cert->last_cert_id)->first();
                 if ($last_cert) {
                     $last_cert->status = 'active';
                     $last_cert->save();
-                    if ($cert->action == 'reissue') {
-                        $order->latest_cert_id = $last_cert->id;
-                        $order->amount = bcsub((string) $order->amount, $cert->amount, 2);
-                        $order->save();
-                    }
-                    if ($cert->action == 'renew') {
-                        $order->delete();
-                    }
+                }
+
+                if ($cert->action == 'reissue') {
+                    // 重签：必须有旧证书才能恢复
+                    $last_cert || $this->error('未找到上个证书');
+                    $order->latest_cert_id = $last_cert->id;
+                    $order->amount = bcsub((string) $order->amount, $cert->amount, 2);
+                    $order->save();
+                } elseif ($cert->action == 'renew') {
+                    // 续费：删除新订单（无论旧证书是否存在）
+                    $order->delete();
                 }
             } else {
+                // 新订单：直接删除
                 $order->delete();
             }
             $cert->delete();
@@ -743,7 +978,7 @@ trait ActionTrait
     }
 
     /**
-     * 取消待支付订单
+     * 取消待提交订单
      *
      * @throws Throwable
      */
@@ -793,6 +1028,21 @@ trait ActionTrait
 
                 // 删除当前证书
                 $cert->delete();
+            } elseif ($cert->action === 'renew') {
+                // renew 取消时恢复上个订单的证书状态
+                if ($cert->last_cert_id) {
+                    $last_cert = Cert::where('id', $cert->last_cert_id)->first();
+                    if ($last_cert) {
+                        $last_cert->status = 'active';
+                        $last_cert->save();
+                    }
+                }
+                // 获取交易信息并创建取消记录
+                $transaction = OrderUtil::getCancelTransaction($order->toArray());
+                Transaction::create($transaction);
+                // 删除当前证书和订单
+                $cert->delete();
+                $order->delete();
             } else {
                 // 获取交易信息
                 $transaction = OrderUtil::getCancelTransaction($order->toArray());

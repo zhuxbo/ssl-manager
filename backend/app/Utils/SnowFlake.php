@@ -4,9 +4,8 @@ declare(strict_types=1);
 
 namespace App\Utils;
 
-use Illuminate\Support\Facades\Redis as RedisFacade;
+use Illuminate\Support\Facades\Cache;
 use InvalidArgumentException;
-use Redis;
 use RuntimeException;
 
 class SnowFlake
@@ -32,27 +31,14 @@ class SnowFlake
     protected static string $lockKey = 'snowflake_lock';
 
     /**
-     * @var string 存储 last 和 count 的哈希key
+     * @var string 存储 last 和 count 的key
      */
     protected static string $stateKey = 'snowflake_state';
 
     /**
-     * @var Redis|null 原生Redis实例
+     * @var \Illuminate\Contracts\Cache\Lock|null 当前持有的锁实例
      */
-    protected static ?Redis $redisClient = null;
-
-    /**
-     * 初始化Redis连接，通过Laravel Facade获取原生Redis对象
-     */
-    protected static function initRedis(): void
-    {
-        if (self::$redisClient === null) {
-            // 通过Laravel的Redis门面获取PhpRedis连接对象
-            // 然后获取底层原生 \Redis 客户端实例
-            $connection = RedisFacade::connection();
-            self::$redisClient = $connection->client();
-        }
-    }
+    protected static ?\Illuminate\Contracts\Cache\Lock $currentLock = null;
 
     /**
      * 设置机器ID
@@ -66,30 +52,32 @@ class SnowFlake
     }
 
     /**
-     * 尝试获取Redis锁
+     * 尝试获取锁
      */
     protected static function acquireLock(int $timeoutSeconds = 1, int $retryCount = 10, int $retryDelayUs = 50000): bool
     {
-        self::initRedis();
         for ($i = 0; $i < $retryCount; $i++) {
-            // 使用 NX EX 参数获取锁，Redis原生客户端的set参数需组合成数组或使用rawCommand
-            // phpredis原生: $redis->set($key, $value, ['nx', 'ex' => $timeout])
-            $res = self::$redisClient->set(self::$lockKey, '1', ['nx', 'ex' => $timeoutSeconds]);
-            if ($res === true || $res === 'OK') {
+            $lock = Cache::lock(self::$lockKey, $timeoutSeconds);
+            if ($lock->get()) {
+                self::$currentLock = $lock;
+
                 return true;
             }
-            usleep($retryDelayUs); // 等待后重试
+            usleep($retryDelayUs);
         }
 
         return false;
     }
 
     /**
-     * 释放Redis锁
+     * 释放锁
      */
     protected static function releaseLock(): void
     {
-        self::$redisClient->del(self::$lockKey);
+        if (self::$currentLock !== null) {
+            self::$currentLock->release();
+            self::$currentLock = null;
+        }
     }
 
     /**
@@ -97,12 +85,8 @@ class SnowFlake
      */
     public static function initState(): void
     {
-        self::initRedis();
-        if (! self::$redisClient->exists(self::$stateKey)) {
-            self::$redisClient->hMset(self::$stateKey, [
-                'last' => 0,
-                'count' => 0,
-            ]);
+        if (! Cache::has(self::$stateKey)) {
+            Cache::forever(self::$stateKey, ['last' => 0, 'count' => 0]);
         }
     }
 
@@ -119,7 +103,7 @@ class SnowFlake
 
         self::initState();
 
-        // 获取Redis锁
+        // 获取锁
         if (! self::acquireLock()) {
             throw new RuntimeException('无法获取雪花锁，生成ID失败');
         }
@@ -128,8 +112,7 @@ class SnowFlake
             $currentTime = (int) floor(microtime(true) * 1000);
             $offsetTime = $currentTime - self::EPOCH;
 
-            // 返回数组索引值
-            $state = self::$redisClient->hMget(self::$stateKey, ['last', 'count']);
+            $state = Cache::get(self::$stateKey, ['last' => 0, 'count' => 0]);
             $last = (int) $state['last'];
             $count = (int) $state['count'];
 
@@ -164,7 +147,7 @@ class SnowFlake
             $id = bindec($binaryStr);
 
             // 更新状态
-            self::$redisClient->hMset(self::$stateKey, [
+            Cache::forever(self::$stateKey, [
                 'last' => $offsetTime,
                 'count' => $count,
             ]);

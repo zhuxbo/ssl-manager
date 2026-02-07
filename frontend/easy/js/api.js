@@ -11,9 +11,9 @@ window.API = (function () {
     const defaultOptions = {
       method: "GET",
       headers: {
-        "Content-Type": "application/json",
+        "Content-Type": "application/json"
       },
-      ...options,
+      ...options
     };
 
     // 如果有 body 且是对象，转换为 JSON
@@ -47,7 +47,7 @@ window.API = (function () {
   async function apply(data) {
     return request("/apply", {
       method: "POST",
-      body: data,
+      body: data
     });
   }
 
@@ -55,7 +55,7 @@ window.API = (function () {
   async function check(tid, email) {
     return request("/check", {
       method: "POST",
-      body: { tid, email },
+      body: { tid, email }
     });
   }
 
@@ -67,7 +67,7 @@ window.API = (function () {
     // 准备请求数据
     const requestData = {
       domain: validation.domain,
-      method: validation.method.toLowerCase(),
+      method: validation.method.toLowerCase()
     };
 
     // 根据验证方法添加相应字段
@@ -91,16 +91,15 @@ window.API = (function () {
         const response = await fetch(endpoint, {
           method: "POST",
           headers: {
-            "Content-Type": "application/json",
+            "Content-Type": "application/json"
           },
-          body: JSON.stringify([requestData]),
+          body: JSON.stringify([requestData])
         });
 
-        // 只要有响应就返回
         if (response.ok) {
           const data = await response.json();
 
-          // 处理返回数据
+          // code=1: API 处理成功，有验证结果
           if (data.data?.results) {
             const result = data.data.results[validation.domain];
             if (result) {
@@ -111,31 +110,11 @@ window.API = (function () {
                 query: result.query,
                 query_sub: result.query_sub,
                 value_sub: result.value_sub,
-                link: result.link || result.link_https || result.link_http,
-              };
-            }
-          } else if (data.errors?.length > 0) {
-            // 处理错误返回
-            const error = data.errors.find(
-              (e) => e.domain === validation.domain
-            );
-            if (error) {
-              return {
-                checked: error.matched === "true",
-                error: error.matched === "false" ? "验证失败" : "",
-                detected_value: error.value || error.content || "",
-                query: error.query,
-                query_sub: error.query_sub,
-                value_sub: error.value_sub,
+                link: result.link || result.link_https || result.link_http
               };
             }
           }
-
-          // 如果没有找到对应域名的结果
-          return {
-            checked: false,
-            error: "未找到验证结果",
-          };
+          // code=0 或未找到结果，尝试下一端点
         }
       } catch (error) {
         lastError = error;
@@ -146,10 +125,97 @@ window.API = (function () {
     throw lastError || new Error("验证服务不可用");
   }
 
+  // 委托验证 CNAME 检测
+  async function verifyCname(host, expectedTarget) {
+    const endpoints = Config.getDCVEndpoints();
+    let lastMsg = "";
+    for (const endpoint of endpoints) {
+      try {
+        const response = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify([
+            { domain: host, method: "cname", host: "@", value: expectedTarget }
+          ])
+        });
+        if (response.ok) {
+          const data = await response.json();
+          if (data.data?.results) {
+            const result = data.data.results[host] || {};
+            return {
+              detected_value: result.value || "",
+              checked: result.matched === "true",
+              error: result.matched === "false" ? "CNAME 记录不匹配" : ""
+            };
+          }
+          if (data.msg)
+            lastMsg = data.msg.replace(
+              "批量验证失败：部分或全部验证未通过",
+              "验证未通过"
+            );
+        }
+      } catch (error) {
+        continue;
+      }
+    }
+    return {
+      checked: false,
+      detected_value: "",
+      error: lastMsg || "检测服务不可用"
+    };
+  }
+
+  // 委托验证 TXT 检测（使用 /api/dns/query 原始查询）
+  async function verifyDelegationTxt(targetFqdn, expectedValue) {
+    const dnsToolsHosts = Config.getConfig("dnsTools") || [
+      "https://dns-tools-cn.cnssl.com",
+      "https://dns-tools-us.cnssl.com"
+    ];
+    const expectedLower = expectedValue.toLowerCase().trim();
+
+    for (const baseUrl of dnsToolsHosts) {
+      try {
+        const response = await fetch(`${baseUrl}/api/dns/query`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ domain: targetFqdn, type: "TXT" })
+        });
+        if (!response.ok) continue;
+        const data = await response.json();
+        if (data.code !== 1) continue;
+
+        const records = data.data?.records || [];
+        const txtValues = records
+          .filter(r => r.type === "TXT" && r.value)
+          .map(r => r.value.replace(/^"|"$/g, "").trim());
+
+        if (txtValues.length === 0) {
+          return {
+            detected_value: "",
+            checked: false,
+            error: "未检测到 TXT 记录"
+          };
+        }
+
+        const matched = txtValues.some(v => v.toLowerCase() === expectedLower);
+        return {
+          detected_value: txtValues.join(", "),
+          checked: matched,
+          error: matched ? "" : "TXT 记录不匹配"
+        };
+      } catch (error) {
+        continue;
+      }
+    }
+    return { checked: false, detected_value: "", error: "检测服务不可用" };
+  }
+
   return {
     request,
     apply,
     check,
     verifyDCV,
+    verifyCname,
+    verifyDelegationTxt
   };
 })();

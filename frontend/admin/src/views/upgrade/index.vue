@@ -26,7 +26,6 @@ import {
   ElProgress,
   ElEmpty,
   ElTooltip,
-  ElDivider,
   ElSelect,
   ElOption
 } from "element-plus";
@@ -58,6 +57,21 @@ const showUpgradeProgress = ref(false);
 const upgradeStatus = ref<UpgradeStatus | null>(null);
 const pollingInterval = ref<ReturnType<typeof setInterval> | null>(null);
 
+// 数据库结构检查警告
+const structureWarning = ref<{
+  show: boolean;
+  canAutoFix: boolean;
+  autoFixed: boolean;
+  message: string;
+  manualActions: string[];
+}>({
+  show: false,
+  canAutoFix: true,
+  autoFixed: false,
+  message: "",
+  manualActions: []
+});
+
 // 步骤名称映射
 const stepNames: Record<string, string> = {
   fetch_release: "获取版本信息",
@@ -71,6 +85,7 @@ const stepNames: Record<string, string> = {
   composer_install: "安装依赖",
   migrate: "运行数据库迁移",
   seed: "初始化数据",
+  structure_check: "数据库结构校验",
   clear_cache: "清理缓存",
   update_version: "更新版本号",
   cleanup: "清理临时文件",
@@ -223,6 +238,41 @@ const pollUpgradeStatus = async () => {
       message(`升级成功！${data.from_version} -> ${data.to_version}`, {
         type: "success"
       });
+      // 检查数据库结构警告
+      if (data.structure_check?.has_diff && !data.structure_check?.auto_fixed) {
+        const sc = data.structure_check;
+        const summary = sc.summary;
+        const items: string[] = [];
+
+        if (summary.missing_tables?.length)
+          items.push(`缺失表: ${summary.missing_tables.join(", ")}`);
+        if (summary.extra_tables?.length)
+          items.push(`多余表: ${summary.extra_tables.join(", ")}`);
+        if (summary.missing_columns?.length)
+          items.push(`缺失列: ${summary.missing_columns.join(", ")}`);
+        if (summary.extra_columns?.length)
+          items.push(`多余列: ${summary.extra_columns.join(", ")}`);
+        if (summary.modified_columns?.length)
+          items.push(`类型不匹配: ${summary.modified_columns.join(", ")}`);
+        if (summary.missing_indexes?.length)
+          items.push(`缺失索引: ${summary.missing_indexes.join(", ")}`);
+        if (summary.extra_indexes?.length)
+          items.push(`多余索引: ${summary.extra_indexes.join(", ")}`);
+        if (summary.missing_foreign_keys?.length)
+          items.push(`缺失外键: ${summary.missing_foreign_keys.join(", ")}`);
+        if (summary.extra_foreign_keys?.length)
+          items.push(`多余外键: ${summary.extra_foreign_keys.join(", ")}`);
+
+        structureWarning.value = {
+          show: true,
+          canAutoFix: sc.summary?.can_auto_fix ?? false,
+          autoFixed: sc.auto_fixed,
+          message: items.join("\n"),
+          manualActions: summary.manual_actions || []
+        };
+      } else {
+        structureWarning.value.show = false;
+      }
       // 刷新版本信息
       await loadVersion();
       await loadBackups();
@@ -388,7 +438,12 @@ onUnmounted(() => {
             <div class="text-gray-500 text-sm">版本号</div>
             <div class="text-lg font-bold">
               {{ currentVersion.version }}
-              <el-tag v-if="currentVersion.channel === 'dev'" type="warning" size="small" class="ml-2">
+              <el-tag
+                v-if="currentVersion.channel === 'dev'"
+                type="warning"
+                size="small"
+                class="ml-2"
+              >
                 开发版
               </el-tag>
             </div>
@@ -399,7 +454,9 @@ onUnmounted(() => {
           </div>
           <div v-if="currentVersion.build_time">
             <div class="text-gray-500 text-sm">构建时间</div>
-            <div class="text-lg">{{ formatDate(currentVersion.build_time) }}</div>
+            <div class="text-lg">
+              {{ formatDate(currentVersion.build_time) }}
+            </div>
           </div>
           <div>
             <div class="text-gray-500 text-sm mb-1">发布通道</div>
@@ -415,9 +472,7 @@ onUnmounted(() => {
           </div>
         </div>
       </div>
-      <div v-else class="text-gray-400">
-        加载中...
-      </div>
+      <div v-else class="text-gray-400">加载中...</div>
     </el-card>
 
     <!-- 更新信息 -->
@@ -438,7 +493,9 @@ onUnmounted(() => {
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
           <div>
             <div class="text-gray-500 text-sm">最新版本</div>
-            <div class="text-lg font-bold text-green-600">{{ updateInfo.latest_version }}</div>
+            <div class="text-lg font-bold text-green-600">
+              {{ updateInfo.latest_version }}
+            </div>
           </div>
           <div v-if="updateInfo.release_date">
             <div class="text-gray-500 text-sm">发布时间</div>
@@ -451,7 +508,9 @@ onUnmounted(() => {
         </div>
         <div v-if="updateInfo.changelog">
           <div class="text-gray-500 text-sm mb-2">更新日志</div>
-          <div class="changelog bg-gray-50 p-4 rounded whitespace-pre-wrap text-sm">
+          <div
+            class="changelog bg-gray-50 p-4 rounded whitespace-pre-wrap text-sm"
+          >
             {{ updateInfo.changelog }}
           </div>
         </div>
@@ -475,14 +534,18 @@ onUnmounted(() => {
       <div class="upgrade-progress">
         <el-progress
           :percentage="upgradeProgress"
-          :status="upgrading ? '' : upgradeProgress === 100 ? 'success' : 'exception'"
+          :status="
+            upgrading ? '' : upgradeProgress === 100 ? 'success' : 'exception'
+          "
           class="mb-4"
         />
         <div
           v-if="upgradeStatus?.current_step && upgrading"
           class="text-blue-500 text-sm mb-4"
         >
-          正在执行：{{ stepNames[upgradeStatus.current_step] || upgradeStatus.current_step }}
+          正在执行：{{
+            stepNames[upgradeStatus.current_step] || upgradeStatus.current_step
+          }}
         </div>
         <div class="steps">
           <div
@@ -490,9 +553,15 @@ onUnmounted(() => {
             :key="step.step"
             class="step flex items-center gap-2 py-2"
           >
-            <span v-if="step.status === 'completed'" class="text-green-500">✓</span>
-            <span v-else-if="step.status === 'failed'" class="text-red-500">✗</span>
-            <span v-else-if="step.status === 'running'" class="text-blue-500">○</span>
+            <span v-if="step.status === 'completed'" class="text-green-500"
+              >✓</span
+            >
+            <span v-else-if="step.status === 'failed'" class="text-red-500"
+              >✗</span
+            >
+            <span v-else-if="step.status === 'running'" class="text-blue-500"
+              >○</span
+            >
             <span v-else class="text-gray-400">○</span>
             <span :class="{ 'text-red-500': step.status === 'failed' }">
               {{ stepNames[step.step] || step.step }}
@@ -500,6 +569,68 @@ onUnmounted(() => {
             <span v-if="step.error" class="text-red-500 text-sm">
               ({{ step.error }})
             </span>
+          </div>
+        </div>
+      </div>
+    </el-card>
+
+    <!-- 数据库结构警告 -->
+    <el-card
+      v-if="structureWarning.show"
+      class="mb-4"
+      :body-style="{
+        backgroundColor: structureWarning.canAutoFix ? '#fef9e7' : '#fdedec'
+      }"
+    >
+      <template #header>
+        <div class="flex justify-between items-center">
+          <span
+            class="font-bold"
+            :class="
+              structureWarning.canAutoFix ? 'text-yellow-700' : 'text-red-600'
+            "
+          >
+            {{
+              structureWarning.canAutoFix
+                ? "数据库结构存在差异（可自动修复）"
+                : "数据库结构存在差异（需手动处理）"
+            }}
+          </span>
+          <el-button type="text" @click="structureWarning.show = false">
+            关闭
+          </el-button>
+        </div>
+      </template>
+      <div class="structure-warning-content">
+        <pre class="text-sm whitespace-pre-wrap mb-2">{{
+          structureWarning.message
+        }}</pre>
+        <div
+          v-if="structureWarning.manualActions.length"
+          class="manual-actions mt-2"
+        >
+          <div class="font-bold text-sm mb-1">需手动执行的操作：</div>
+          <ul class="list-disc pl-4 text-sm">
+            <li
+              v-for="(action, idx) in structureWarning.manualActions"
+              :key="idx"
+            >
+              {{ action }}
+            </li>
+          </ul>
+        </div>
+        <div class="mt-3 text-sm text-gray-600 space-y-1">
+          <div>
+            <code class="bg-gray-100 px-2 py-1 rounded"
+              >php artisan db:structure --check</code
+            >
+            查看详细差异
+          </div>
+          <div>
+            <code class="bg-gray-100 px-2 py-1 rounded"
+              >php artisan db:structure --fix</code
+            >
+            自动修复
           </div>
         </div>
       </div>
@@ -555,7 +686,10 @@ onUnmounted(() => {
               </el-button>
             </el-tooltip>
           </div>
-          <div v-if="release.body" class="text-sm text-gray-600 mt-2 whitespace-pre-wrap">
+          <div
+            v-if="release.body"
+            class="text-sm text-gray-600 mt-2 whitespace-pre-wrap"
+          >
             {{ release.body }}
           </div>
         </div>
@@ -583,9 +717,9 @@ onUnmounted(() => {
             <div>
               <div class="font-bold">{{ backup.id }}</div>
               <div class="text-gray-500 text-sm mt-1">
-                版本: {{ backup.version }} |
-                创建时间: {{ formatDate(backup.created_at) }} |
-                大小: {{ formatBytes(backup.size) }}
+                版本: {{ backup.version }} | 创建时间:
+                {{ formatDate(backup.created_at) }} | 大小:
+                {{ formatBytes(backup.size) }}
               </div>
               <div class="text-gray-400 text-xs mt-1">
                 包含:
@@ -602,11 +736,7 @@ onUnmounted(() => {
                 @confirm="handleRollback(backup.id)"
               >
                 <template #reference>
-                  <el-button
-                    type="warning"
-                    size="small"
-                    :loading="rollingBack"
-                  >
+                  <el-button type="warning" size="small" :loading="rollingBack">
                     回滚
                   </el-button>
                 </template>
@@ -618,9 +748,7 @@ onUnmounted(() => {
                 @confirm="handleDeleteBackup(backup.id)"
               >
                 <template #reference>
-                  <el-button type="danger" size="small">
-                    删除
-                  </el-button>
+                  <el-button type="danger" size="small"> 删除 </el-button>
                 </template>
               </el-popconfirm>
             </div>
@@ -636,5 +764,16 @@ onUnmounted(() => {
 .changelog {
   max-height: 200px;
   overflow-y: auto;
+}
+
+.structure-warning-content pre {
+  background: rgba(0, 0, 0, 0.03);
+  padding: 8px 12px;
+  border-radius: 4px;
+  margin: 0;
+}
+
+.structure-warning-content code {
+  font-family: "SF Mono", Monaco, "Courier New", monospace;
 }
 </style>

@@ -2,9 +2,11 @@
 
 namespace App\Console\Commands;
 
+use App\Models\CnameDelegation;
 use App\Models\DomainValidationRecord;
 use App\Models\Order;
 use App\Services\Delegation\AutoDcvTxtService;
+use App\Services\Delegation\CnameDelegationService;
 use App\Services\Order\Action;
 use App\Services\Order\Utils\VerifyUtil;
 use Illuminate\Console\Command;
@@ -80,6 +82,28 @@ class ValidateCommand extends Command
                         $cert = $order->latestCert;
                         $action = new Action($order->user_id);
 
+                        // 对于需要验证内容的方法，优先检查 validation 是否就绪
+                        $method = $cert->dcv['method'] ?? '';
+                        if (in_array($method, ['txt', 'cname', 'file', 'http', 'https'], true)) {
+                            if (! $action->isValidationReady($cert->validation ?? null, $method)) {
+                                $this->info("订单 #$order->id: validation 未就绪，先执行同步");
+                                try {
+                                    $action->sync($order->id, true);
+                                    $cert->refresh();
+                                } catch (Throwable $e) {
+                                    $this->warn("订单 #$order->id: 同步失败 - ".$e->getMessage());
+                                }
+
+                                // 同步后再次检查
+                                if (! $action->isValidationReady($cert->validation ?? null, $method)) {
+                                    $this->warn("订单 #$order->id: 同步后 validation 仍未就绪，跳过本次验证");
+                                    $this->setNextCheckAt($record);
+
+                                    continue;
+                                }
+                            }
+                        }
+
                         // 创建 delegation 任务处理 TXT 记录写入
                         if ($cert->dcv['method'] === 'txt') {
                             // 检测 validation 是否为空
@@ -98,6 +122,9 @@ class ValidateCommand extends Command
                         // 根据证书状态和验证方法决定验证方式
                         if ($cert->status === 'processing' && in_array($cert->dcv['method'] ?? '',
                             ['txt', 'cname', 'file', 'http', 'https'])) {
+
+                            // 委托验证：执行即时检测
+                            $this->checkDelegationValidity($cert->validation);
 
                             // 执行域名验证（DNS/HTTP/HTTPS验证）
                             $verified = VerifyUtil::verifyValidation($cert->validation);
@@ -179,5 +206,49 @@ class ValidateCommand extends Command
 
         // 如果所有时间节点都已过去，返回0（停止验证）
         return 0;
+    }
+
+    /**
+     * 检测委托验证的有效性
+     * 在执行验证前即时检测委托记录状态
+     *
+     * @param  array|null  $validation  验证信息数组
+     */
+    protected function checkDelegationValidity(?array $validation): void
+    {
+        if (empty($validation) || ! is_array($validation)) {
+            return;
+        }
+
+        // 提取并去重 delegation_id，避免同一委托被多次检测
+        $delegationIds = collect($validation)
+            ->pluck('delegation_id')
+            ->filter()
+            ->unique()
+            ->values()
+            ->toArray();
+
+        if (empty($delegationIds)) {
+            return;
+        }
+
+        $delegationService = app(CnameDelegationService::class);
+
+        foreach ($delegationIds as $delegationId) {
+            $delegation = CnameDelegation::find($delegationId);
+            if (! $delegation) {
+                $this->warn("委托记录 #$delegationId 不存在");
+
+                continue;
+            }
+
+            // 即时检测委托状态
+            $valid = $delegationService->checkAndUpdateValidity($delegation);
+            if ($valid) {
+                $this->info("委托 #{$delegation->id} ({$delegation->zone}) 检测有效");
+            } else {
+                $this->warn("委托 #{$delegation->id} ({$delegation->zone}) 检测无效: {$delegation->last_error}");
+            }
+        }
     }
 }

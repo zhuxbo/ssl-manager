@@ -3,11 +3,11 @@
 namespace Tests\Unit\Services\Upgrade;
 
 use App\Services\Upgrade\BackupManager;
+use App\Services\Upgrade\DatabaseStructureService;
 use App\Services\Upgrade\PackageExtractor;
 use App\Services\Upgrade\ReleaseClient;
 use App\Services\Upgrade\UpgradeService;
 use App\Services\Upgrade\VersionManager;
-use Illuminate\Support\Facades\Config;
 use Mockery;
 use Tests\TestCase;
 
@@ -44,7 +44,8 @@ class UpgradeServiceTest extends TestCase
             $versionManager,
             $releaseClient,
             Mockery::mock(BackupManager::class),
-            Mockery::mock(PackageExtractor::class)
+            Mockery::mock(PackageExtractor::class),
+            Mockery::mock(DatabaseStructureService::class)
         );
 
         $result = $service->checkForUpdate();
@@ -80,7 +81,8 @@ class UpgradeServiceTest extends TestCase
             $versionManager,
             $releaseClient,
             Mockery::mock(BackupManager::class),
-            Mockery::mock(PackageExtractor::class)
+            Mockery::mock(PackageExtractor::class),
+            Mockery::mock(DatabaseStructureService::class)
         );
 
         $result = $service->checkForUpdate();
@@ -108,7 +110,8 @@ class UpgradeServiceTest extends TestCase
             $versionManager,
             $releaseClient,
             Mockery::mock(BackupManager::class),
-            Mockery::mock(PackageExtractor::class)
+            Mockery::mock(PackageExtractor::class),
+            Mockery::mock(DatabaseStructureService::class)
         );
 
         $result = $service->checkForUpdate();
@@ -137,7 +140,8 @@ class UpgradeServiceTest extends TestCase
             $versionManager,
             $releaseClient,
             Mockery::mock(BackupManager::class),
-            Mockery::mock(PackageExtractor::class)
+            Mockery::mock(PackageExtractor::class),
+            Mockery::mock(DatabaseStructureService::class)
         );
 
         $result = $service->getReleaseHistory(5);
@@ -160,7 +164,8 @@ class UpgradeServiceTest extends TestCase
             Mockery::mock(VersionManager::class),
             Mockery::mock(ReleaseClient::class),
             $backupManager,
-            Mockery::mock(PackageExtractor::class)
+            Mockery::mock(PackageExtractor::class),
+            Mockery::mock(DatabaseStructureService::class)
         );
 
         $result = $service->getBackups();
@@ -180,7 +185,8 @@ class UpgradeServiceTest extends TestCase
             Mockery::mock(VersionManager::class),
             Mockery::mock(ReleaseClient::class),
             $backupManager,
-            Mockery::mock(PackageExtractor::class)
+            Mockery::mock(PackageExtractor::class),
+            Mockery::mock(DatabaseStructureService::class)
         );
 
         $result = $service->rollback('invalid_backup');
@@ -201,7 +207,8 @@ class UpgradeServiceTest extends TestCase
             Mockery::mock(VersionManager::class),
             Mockery::mock(ReleaseClient::class),
             $backupManager,
-            Mockery::mock(PackageExtractor::class)
+            Mockery::mock(PackageExtractor::class),
+            Mockery::mock(DatabaseStructureService::class)
         );
 
         $result = $service->deleteBackup('backup_123');

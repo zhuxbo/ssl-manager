@@ -1,4 +1,5 @@
 <?php
+
 /*
  * Copyright (c) 2017-2025 Tencent. All Rights Reserved.
  *
@@ -14,7 +15,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 namespace App\Services\Delegation\Sdk\TencentCloud\Dnspod\V20210323\Models;
+
 use App\Services\Delegation\Sdk\TencentCloud\Common\AbstractModel;
 
 /**
@@ -22,9 +25,9 @@ use App\Services\Delegation\Sdk\TencentCloud\Common\AbstractModel;
  *
  * @method string getDomain() 获取域名
  * @method void setDomain(string $Domain) 设置域名
- * @method integer getRecordId() 获取记录 ID
+ * @method int getRecordId() 获取记录 ID
  * @method void setRecordId(integer $RecordId) 设置记录 ID
- * @method integer getDomainId() 获取域名 ID
+ * @method int getDomainId() 获取域名 ID
  * @method void setDomainId(integer $DomainId) 设置域名 ID
  */
 class DeleteRecordRequest extends AbstractModel
@@ -35,19 +38,16 @@ class DeleteRecordRequest extends AbstractModel
     public $Domain;
 
     /**
-     * @var integer 记录 ID
+     * @var int 记录 ID
      */
     public $RecordId;
 
     /**
-     * @var integer 域名 ID
+     * @var int 域名 ID
      */
     public $DomainId;
 
-    function __construct()
-    {
-
-    }
+    public function __construct() {}
 
     /**
      * For internal only. DO NOT USE IT.
@@ -57,16 +57,16 @@ class DeleteRecordRequest extends AbstractModel
         if ($param === null) {
             return;
         }
-        if (array_key_exists("Domain",$param) and $param["Domain"] !== null) {
-            $this->Domain = $param["Domain"];
+        if (array_key_exists('Domain', $param) and $param['Domain'] !== null) {
+            $this->Domain = $param['Domain'];
         }
 
-        if (array_key_exists("RecordId",$param) and $param["RecordId"] !== null) {
-            $this->RecordId = $param["RecordId"];
+        if (array_key_exists('RecordId', $param) and $param['RecordId'] !== null) {
+            $this->RecordId = $param['RecordId'];
         }
 
-        if (array_key_exists("DomainId",$param) and $param["DomainId"] !== null) {
-            $this->DomainId = $param["DomainId"];
+        if (array_key_exists('DomainId', $param) and $param['DomainId'] !== null) {
+            $this->DomainId = $param['DomainId'];
         }
     }
 }

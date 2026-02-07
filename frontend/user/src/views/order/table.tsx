@@ -12,6 +12,27 @@ import {
 } from "./dictionary";
 import { periodLabels } from "@/views/system/dictionary";
 
+// 获取委托验证前缀
+const getDelegationPrefix = (ca?: string) => {
+  const caLower = (ca || "").toLowerCase();
+  switch (caLower) {
+    case "sectigo":
+    case "comodo":
+      return "_pki-validation";
+    case "certum":
+      return "_certum";
+    case "digicert":
+    case "geotrust":
+    case "thawte":
+    case "rapidssl":
+    case "symantec":
+    case "trustasia":
+      return "_dnsauth";
+    default:
+      return "_acme-challenge";
+  }
+};
+
 export function useOrderTable() {
   const tableRef = ref();
   const selectedIds = ref([]);
@@ -31,10 +52,44 @@ export function useOrderTable() {
 
   const copyDnsRecords = (row: any) => {
     const cert = row.latest_cert;
+    const dcv = cert.dcv;
+
+    // 委托验证
+    if (dcv?.is_delegate) {
+      const prefix = getDelegationPrefix(dcv.ca || row.product?.ca);
+      const validation = cert.validation || [];
+      // 按 delegation_id 去重
+      const seen = new Map();
+      const uniqueDelegations = validation.filter((item: any) => {
+        if (!item.delegation_id) return false;
+        if (seen.has(item.delegation_id)) return false;
+        seen.set(item.delegation_id, true);
+        return true;
+      });
+
+      // 添加空检查
+      if (uniqueDelegations.length === 0) {
+        message("暂无可复制的委托验证记录", { type: "warning" });
+        return;
+      }
+
+      const records = uniqueDelegations.map((item: any) => {
+        const zone =
+          item.delegation_zone || (item.domain || "").replace(/^\*\./, "");
+        return `域名：${zone}\n主机记录：${prefix}\n解析类型：CNAME\n记录值：${item.delegation_target}`;
+      });
+
+      navigator.clipboard.writeText(records.join("\n\n")).then(() => {
+        message("解析记录已复制到剪贴板", { type: "success" });
+      });
+      return;
+    }
+
+    // 普通 DNS 验证
     const domain = cert.common_name;
-    const host = cert.dcv.dns.host;
-    const type = cert.dcv.dns.type;
-    const value = cert.dcv.dns.value;
+    const host = dcv.dns.host;
+    const type = dcv.dns.type;
+    const value = dcv.dns.value;
 
     const record = `域名：${domain}\n主机记录：${host}\n解析类型：${type}\n记录值：${value}`;
 
@@ -65,13 +120,16 @@ export function useOrderTable() {
       minWidth: 150,
       cellRenderer: ({ row }) => {
         const commonName = row.latest_cert?.common_name;
+        const dcv = row.latest_cert?.dcv;
+        const validation = row.latest_cert?.validation;
         const shouldShowCopyButton =
           ["unpaid", "pending", "processing"].includes(
             row.latest_cert?.status
           ) &&
-          row.latest_cert?.dcv?.method &&
-          ["cname", "txt"].includes(row.latest_cert.dcv.method) &&
-          row.latest_cert.dcv?.dns?.value;
+          dcv?.method &&
+          (dcv?.is_delegate
+            ? validation && validation.some((item: any) => item.delegation_id)
+            : ["cname", "txt"].includes(dcv.method) && dcv?.dns?.value);
 
         return (
           <div className="flex items-center gap-1">

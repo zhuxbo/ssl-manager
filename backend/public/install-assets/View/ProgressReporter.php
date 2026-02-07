@@ -87,7 +87,7 @@ class ProgressReporter
             (function() {
                 var logDiv = document.getElementById("install-log-div");
                 var titleDiv = document.createElement("div");
-                titleDiv.innerHTML = "<strong>[' . $step . '/' . $this->totalSteps . '] ' . $escapedTitle . '...</strong>";
+                titleDiv.innerHTML = "<strong>['.$step.'/'.$this->totalSteps.'] '.$escapedTitle.'...</strong>";
                 titleDiv.style.marginTop = "15px";
                 logDiv.appendChild(titleDiv);
             })();
@@ -118,7 +118,7 @@ class ProgressReporter
                 var logDiv = document.getElementById("install-log-div");
                 var successDiv = document.createElement("div");
                 successDiv.className = "success";
-                successDiv.innerHTML = "✓ ' . $escapedMessage . '";
+                successDiv.innerHTML = "✓ '.$escapedMessage.'";
                 logDiv.appendChild(successDiv);
             })();
         </script>';
@@ -147,7 +147,7 @@ class ProgressReporter
                 var logDiv = document.getElementById("install-log-div");
                 var preElement = document.createElement("pre");
                 preElement.className = "dark-output";
-                preElement.textContent = ' . $jsonOutput . ';
+                preElement.textContent = '.$jsonOutput.';
                 logDiv.appendChild(preElement);
             })();
         </script>';
@@ -175,7 +175,7 @@ class ProgressReporter
                 var logDiv = document.getElementById("install-log-div");
                 var warningDiv = document.createElement("div");
                 warningDiv.className = "warning";
-                warningDiv.innerHTML = "⚠ ' . $escapedMessage . '";
+                warningDiv.innerHTML = "⚠ '.$escapedMessage.'";
                 logDiv.appendChild(warningDiv);
             })();
         </script>';
@@ -190,7 +190,7 @@ class ProgressReporter
         if ($this->streamMode) {
             $this->sendEvent([
                 'type' => 'error',
-                'message' => '安装失败: ' . $message,
+                'message' => '安装失败: '.$message,
             ]);
 
             return;
@@ -203,7 +203,7 @@ class ProgressReporter
                 var logDiv = document.getElementById("install-log-div");
                 var errorDiv = document.createElement("div");
                 errorDiv.className = "error";
-                errorDiv.innerHTML = "✘ 安装失败: ' . $escapedMessage . '";
+                errorDiv.innerHTML = "✘ 安装失败: '.$escapedMessage.'";
                 logDiv.appendChild(errorDiv);
             })();
         </script>';
@@ -228,7 +228,7 @@ class ProgressReporter
      */
     private function sendEvent(array $data): void
     {
-        echo json_encode($data, JSON_UNESCAPED_UNICODE) . "\n";
+        echo json_encode($data, JSON_UNESCAPED_UNICODE)."\n";
         $this->flush();
 
         // 添加小延迟确保浏览器能接收到

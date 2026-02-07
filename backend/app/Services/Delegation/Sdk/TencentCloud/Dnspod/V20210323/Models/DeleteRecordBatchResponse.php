@@ -1,4 +1,5 @@
 <?php
+
 /*
  * Copyright (c) 2017-2025 Tencent. All Rights Reserved.
  *
@@ -14,13 +15,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 namespace App\Services\Delegation\Sdk\TencentCloud\Dnspod\V20210323\Models;
+
 use App\Services\Delegation\Sdk\TencentCloud\Common\AbstractModel;
 
 /**
  * DeleteRecordBatch返回参数结构体
  *
- * @method integer getJobId() 获取批量任务 ID
+ * @method int getJobId() 获取批量任务 ID
  * @method void setJobId(integer $JobId) 设置批量任务 ID
  * @method array getDetailList() 获取任务详情
  * @method void setDetailList(array $DetailList) 设置任务详情
@@ -30,7 +33,7 @@ use App\Services\Delegation\Sdk\TencentCloud\Common\AbstractModel;
 class DeleteRecordBatchResponse extends AbstractModel
 {
     /**
-     * @var integer 批量任务 ID
+     * @var int 批量任务 ID
      */
     public $JobId;
 
@@ -44,10 +47,7 @@ class DeleteRecordBatchResponse extends AbstractModel
      */
     public $RequestId;
 
-    function __construct()
-    {
-
-    }
+    public function __construct() {}
 
     /**
      * For internal only. DO NOT USE IT.
@@ -57,21 +57,21 @@ class DeleteRecordBatchResponse extends AbstractModel
         if ($param === null) {
             return;
         }
-        if (array_key_exists("JobId",$param) and $param["JobId"] !== null) {
-            $this->JobId = $param["JobId"];
+        if (array_key_exists('JobId', $param) and $param['JobId'] !== null) {
+            $this->JobId = $param['JobId'];
         }
 
-        if (array_key_exists("DetailList",$param) and $param["DetailList"] !== null) {
+        if (array_key_exists('DetailList', $param) and $param['DetailList'] !== null) {
             $this->DetailList = [];
-            foreach ($param["DetailList"] as $key => $value){
-                $obj = new DeleteRecordBatchDetail();
+            foreach ($param['DetailList'] as $key => $value) {
+                $obj = new DeleteRecordBatchDetail;
                 $obj->deserialize($value);
                 array_push($this->DetailList, $obj);
             }
         }
 
-        if (array_key_exists("RequestId",$param) and $param["RequestId"] !== null) {
-            $this->RequestId = $param["RequestId"];
+        if (array_key_exists('RequestId', $param) and $param['RequestId'] !== null) {
+            $this->RequestId = $param['RequestId'];
         }
     }
 }

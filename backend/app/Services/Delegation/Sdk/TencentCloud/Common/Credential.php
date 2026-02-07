@@ -1,4 +1,5 @@
 <?php
+
 /*
  * Copyright (c) 2017 Tencent. All Rights Reserved.
  *
@@ -20,7 +21,6 @@ namespace App\Services\Delegation\Sdk\TencentCloud\Common;
 
 /**
  * 证书类，保存认证相关参数
- * @package App\Services\Delegation\Sdk\TencentCloud\Common
  */
 class Credential
 {
@@ -41,9 +41,10 @@ class Credential
 
     /**
      * Credential constructor.
-     * @param string $secretId   secretId
-     * @param string $secretKey  secretKey
-     * @param string $token token
+     *
+     * @param  string  $secretId  secretId
+     * @param  string  $secretKey  secretKey
+     * @param  string  $token  token
      */
     public function __construct($secretId, $secretKey, $token = null)
     {
@@ -54,16 +55,18 @@ class Credential
 
     /**
      * 设置secretId
-     * @param string $secretId secretId
+     *
+     * @param  string  $secretId  secretId
      */
-    public function  setSecretId($secretId)
+    public function setSecretId($secretId)
     {
         $this->secretId = $secretId;
     }
 
     /**
      * 设置secretKey
-     * @param string $secretKey secretKey
+     *
+     * @param  string  $secretKey  secretKey
      */
     public function setSecretKey($secretKey)
     {
@@ -71,7 +74,7 @@ class Credential
     }
 
     /**
-     * @param string $token 要设置的token
+     * @param  string  $token  要设置的token
      */
     public function setToken($token)
     {
@@ -80,6 +83,7 @@ class Credential
 
     /**
      * 获取secretId
+     *
      * @return string secretId
      */
     public function getSecretId()
@@ -89,6 +93,7 @@ class Credential
 
     /**
      * 获取secretKey
+     *
      * @return string secretKey
      */
     public function getSecretKey()
@@ -98,6 +103,7 @@ class Credential
 
     /**
      * 获取token
+     *
      * @return null|string token
      */
     public function getToken()

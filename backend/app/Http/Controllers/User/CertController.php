@@ -27,8 +27,10 @@ class CertController extends Controller
             $query->where('order_id', $validated['order_id']);
         }
         if (! empty($validated['domain'])) {
-            $query->where('common_name', 'like', "%{$validated['domain']}%")
-                ->orWhere('alternative_names', 'like', "%{$validated['domain']}%");
+            $query->where(function ($q) use ($validated) {
+                $q->where('common_name', 'like', "%{$validated['domain']}%")
+                    ->orWhere('alternative_names', 'like', "%{$validated['domain']}%");
+            });
         }
         if (! empty($validated['issued_at'])) {
             $query->whereBetween('issued_at', $validated['issued_at']);

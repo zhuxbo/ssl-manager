@@ -47,6 +47,35 @@ const brandStats = ref<BrandStats[]>([]);
 const userLevelDistribution = ref<UserLevelDistribution[]>([]);
 const healthStatus = ref<HealthStatus>();
 
+// 周期切换
+type Period = "daily" | "weekly" | "monthly";
+const periodLabels = { daily: "日", weekly: "周", monthly: "月" } as const;
+const periodCompareLabels = {
+  daily: "较昨日",
+  weekly: "较上周",
+  monthly: "较上月"
+} as const;
+
+// 用户卡片周期
+const userPeriod = ref<Period>("daily");
+
+// 订单卡片周期
+const orderPeriod = ref<Period>("daily");
+
+// 充值卡片周期
+const rechargePeriod = ref<Period>("daily");
+const rechargeDelta = computed(() => {
+  const f = systemOverview.value?.finance?.[rechargePeriod.value];
+  return (f?.recharge || 0) - (f?.prev_recharge || 0);
+});
+
+// 消费卡片周期
+const consumptionPeriod = ref<Period>("daily");
+const consumptionDelta = computed(() => {
+  const f = systemOverview.value?.finance?.[consumptionPeriod.value];
+  return (f?.consumption || 0) - (f?.prev_consumption || 0);
+});
+
 // 加载状态
 const chartsLoading = ref(true);
 const refreshing = ref(false);
@@ -168,9 +197,15 @@ const systemTrendsChartData = computed(() => {
         color: "#10B981"
       },
       {
-        name: "收入",
-        data: trendsData.value.map(item => item.revenue),
-        color: "#F59E0B",
+        name: "充值",
+        data: trendsData.value.map(item => item.recharge),
+        color: "#22C55E",
+        yAxisIndex: 1
+      },
+      {
+        name: "消费",
+        data: trendsData.value.map(item => item.consumption),
+        color: "#EF4444",
         yAxisIndex: 1
       }
     ]
@@ -325,18 +360,35 @@ onMounted(async () => {
 
       <!-- 核心指标卡片 -->
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <!-- 总用户数 -->
+        <!-- 用户数 -->
         <div class="bg-white dark:bg-[#141414] rounded-lg p-6">
           <div class="flex items-center justify-between">
             <div>
-              <p class="text-sm font-medium text-gray-600 dark:text-gray-400">
-                总用户数
-              </p>
+              <div class="flex items-center gap-2">
+                <p class="text-sm font-medium text-gray-600 dark:text-gray-400">
+                  用户数
+                </p>
+                <div class="flex gap-1">
+                  <span
+                    v-for="(label, key) in periodLabels"
+                    :key="key"
+                    class="text-xs px-1.5 py-0.5 rounded cursor-pointer transition-colors"
+                    :class="
+                      userPeriod === key
+                        ? 'bg-blue-100 text-blue-600 dark:bg-blue-900 dark:text-blue-400'
+                        : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
+                    "
+                    @click="userPeriod = key"
+                  >
+                    {{ label }}
+                  </span>
+                </div>
+              </div>
               <p class="text-2xl font-bold text-gray-900 dark:text-white">
                 {{ formatNumber(systemOverview?.monthly?.total_users || 0) }}
               </p>
               <p class="text-xs text-gray-500 dark:text-gray-400">
-                今日新增: +{{ systemOverview?.daily?.new_users || 0 }}
+                新增: +{{ systemOverview?.new_users?.[userPeriod] || 0 }}
               </p>
             </div>
             <div class="p-3 bg-blue-100 dark:bg-blue-900 rounded-full">
@@ -357,18 +409,37 @@ onMounted(async () => {
           </div>
         </div>
 
-        <!-- 有效订单数 -->
+        <!-- 有效/总 订单数 -->
         <div class="bg-white dark:bg-[#141414] rounded-lg p-6">
           <div class="flex items-center justify-between">
             <div>
-              <p class="text-sm font-medium text-gray-600 dark:text-gray-400">
-                有效订单数
-              </p>
+              <div class="flex items-center gap-2">
+                <p class="text-sm font-medium text-gray-600 dark:text-gray-400">
+                  有效/总 订单数
+                </p>
+                <div class="flex gap-1">
+                  <span
+                    v-for="(label, key) in periodLabels"
+                    :key="key"
+                    class="text-xs px-1.5 py-0.5 rounded cursor-pointer transition-colors"
+                    :class="
+                      orderPeriod === key
+                        ? 'bg-blue-100 text-blue-600 dark:bg-blue-900 dark:text-blue-400'
+                        : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
+                    "
+                    @click="orderPeriod = key"
+                  >
+                    {{ label }}
+                  </span>
+                </div>
+              </div>
               <p class="text-2xl font-bold text-gray-900 dark:text-white">
                 {{ formatNumber(systemOverview?.monthly?.active_orders || 0) }}
+                /
+                {{ formatNumber(systemOverview?.monthly?.total_orders || 0) }}
               </p>
               <p class="text-xs text-gray-500 dark:text-gray-400">
-                今日新增: +{{ systemOverview?.daily?.new_active_orders || 0 }}
+                新增: +{{ systemOverview?.new_orders?.[orderPeriod] || 0 }}
               </p>
             </div>
             <div class="p-3 bg-green-100 dark:bg-green-900 rounded-full">
@@ -389,21 +460,41 @@ onMounted(async () => {
           </div>
         </div>
 
-        <!-- 总订单数 -->
+        <!-- 充值 -->
         <div class="bg-white dark:bg-[#141414] rounded-lg p-6">
           <div class="flex items-center justify-between">
             <div>
-              <p class="text-sm font-medium text-gray-600 dark:text-gray-400">
-                总订单数
-              </p>
+              <div class="flex items-center gap-2">
+                <p class="text-sm font-medium text-gray-600 dark:text-gray-400">
+                  充值
+                </p>
+                <div class="flex gap-1">
+                  <span
+                    v-for="(label, key) in periodLabels"
+                    :key="key"
+                    class="text-xs px-1.5 py-0.5 rounded cursor-pointer transition-colors"
+                    :class="
+                      rechargePeriod === key
+                        ? 'bg-blue-100 text-blue-600 dark:bg-blue-900 dark:text-blue-400'
+                        : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
+                    "
+                    @click="rechargePeriod = key"
+                  >
+                    {{ label }}
+                  </span>
+                </div>
+              </div>
               <p class="text-2xl font-bold text-gray-900 dark:text-white">
-                {{ formatNumber(systemOverview?.monthly?.total_orders || 0) }}
+                {{
+                  formatCurrency(
+                    systemOverview?.finance?.[rechargePeriod]?.recharge || 0
+                  )
+                }}
               </p>
               <p class="text-xs text-gray-500 dark:text-gray-400">
-                本月新增:
-                {{ systemOverview?.daily?.monthly_active_orders || 0 }}/{{
-                  systemOverview?.daily?.monthly_inactive_orders || 0
-                }}
+                {{ periodCompareLabels[rechargePeriod] }}:
+                {{ rechargeDelta >= 0 ? "+" : ""
+                }}{{ formatCurrency(rechargeDelta) }}
               </p>
             </div>
             <div class="p-3 bg-orange-100 dark:bg-orange-900 rounded-full">
@@ -417,28 +508,49 @@ onMounted(async () => {
                   stroke-linecap="round"
                   stroke-linejoin="round"
                   stroke-width="2"
-                  d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"
+                  d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"
                 />
               </svg>
             </div>
           </div>
         </div>
 
-        <!-- 总收入 -->
+        <!-- 消费 -->
         <div class="bg-white dark:bg-[#141414] rounded-lg p-6">
           <div class="flex items-center justify-between">
             <div>
-              <p class="text-sm font-medium text-gray-600 dark:text-gray-400">
-                总收入
-              </p>
+              <div class="flex items-center gap-2">
+                <p class="text-sm font-medium text-gray-600 dark:text-gray-400">
+                  消费
+                </p>
+                <div class="flex gap-1">
+                  <span
+                    v-for="(label, key) in periodLabels"
+                    :key="key"
+                    class="text-xs px-1.5 py-0.5 rounded cursor-pointer transition-colors"
+                    :class="
+                      consumptionPeriod === key
+                        ? 'bg-blue-100 text-blue-600 dark:bg-blue-900 dark:text-blue-400'
+                        : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
+                    "
+                    @click="consumptionPeriod = key"
+                  >
+                    {{ label }}
+                  </span>
+                </div>
+              </div>
               <p class="text-2xl font-bold text-gray-900 dark:text-white">
                 {{
-                  formatCurrency(systemOverview?.monthly?.total_revenue || 0)
+                  formatCurrency(
+                    systemOverview?.finance?.[consumptionPeriod]?.consumption ||
+                      0
+                  )
                 }}
               </p>
               <p class="text-xs text-gray-500 dark:text-gray-400">
-                今日收入:
-                {{ formatCurrency(systemOverview?.daily?.daily_revenue || 0) }}
+                {{ periodCompareLabels[consumptionPeriod] }}:
+                {{ consumptionDelta >= 0 ? "+" : ""
+                }}{{ formatCurrency(consumptionDelta) }}
               </p>
             </div>
             <div class="p-3 bg-yellow-100 dark:bg-yellow-900 rounded-full">
@@ -452,7 +564,7 @@ onMounted(async () => {
                   stroke-linecap="round"
                   stroke-linejoin="round"
                   stroke-width="2"
-                  d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"
+                  d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"
                 />
               </svg>
             </div>
@@ -600,7 +712,7 @@ onMounted(async () => {
             :series="systemTrendsChartData.series"
             :y-axis-config="[
               { name: '用户/订单', position: 'left' as const },
-              { name: '收入', position: 'right' as const }
+              { name: '充值/消费', position: 'right' as const }
             ]"
             height="320px"
             :show-data-zoom="true"

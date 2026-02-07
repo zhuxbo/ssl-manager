@@ -2,8 +2,8 @@
 
 namespace App\Http\Requests\Product;
 
-use Illuminate\Validation\Validator;
 use App\Models\Product;
+use Illuminate\Validation\Validator;
 
 class UpdateRequest extends BaseProductRequest
 {
@@ -18,7 +18,6 @@ class UpdateRequest extends BaseProductRequest
 
         return $this;
     }
-
 
     public function rules(): array
     {

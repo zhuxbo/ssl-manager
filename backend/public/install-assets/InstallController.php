@@ -4,7 +4,6 @@ namespace Install;
 
 use Install\Checker\RequirementChecker;
 use Install\Connector\DatabaseConnector;
-use Install\Connector\RedisConnector;
 use Install\DTO\InstallConfig;
 use Install\Installer\Cleaner;
 use Install\Installer\InstallExecutor;
@@ -23,8 +22,6 @@ class InstallController
 
     private DatabaseConnector $databaseConnector;
 
-    private RedisConnector $redisConnector;
-
     private InstallConfig $config;
 
     private array $errors = [];
@@ -40,10 +37,9 @@ class InstallController
     public function __construct(?string $projectRoot = null)
     {
         $this->projectRoot = $projectRoot ?? dirname(__DIR__, 2);
-        $this->renderer = new Renderer();
+        $this->renderer = new Renderer;
         $this->requirementChecker = new RequirementChecker($this->projectRoot);
-        $this->databaseConnector = new DatabaseConnector();
-        $this->redisConnector = new RedisConnector();
+        $this->databaseConnector = new DatabaseConnector;
         $this->config = InstallConfig::fromSession();
     }
 
@@ -67,7 +63,7 @@ class InstallController
      */
     private function checkInstallStatus(): void
     {
-        $envFile = $this->projectRoot . '/.env';
+        $envFile = $this->projectRoot.'/.env';
 
         if (! file_exists($envFile)) {
             return;
@@ -110,7 +106,7 @@ class InstallController
      */
     private function parseEnvValue(string $content, string $key): ?string
     {
-        if (preg_match('/' . $key . '=(.*)/', $content, $matches)) {
+        if (preg_match('/'.$key.'=(.*)/', $content, $matches)) {
             return trim($matches[1]);
         }
 
@@ -189,9 +185,9 @@ class InstallController
         if (! $this->databaseConnector->isEmpty()) {
             $tables = $this->databaseConnector->getTables();
             $tablesList = implode(', ', $tables);
-            $this->errors[] = '数据库不为空，包含 ' . count($tables) . ' 个表 ('
-                . (strlen($tablesList) > 100 ? substr($tablesList, 0, 100) . '...' : $tablesList)
-                . ')，必须使用空数据库进行安装';
+            $this->errors[] = '数据库不为空，包含 '.count($tables).' 个表 ('
+                .(strlen($tablesList) > 100 ? substr($tablesList, 0, 100).'...' : $tablesList)
+                .')，必须使用空数据库进行安装';
             $this->canProceed = false;
             $_SESSION['install_db_empty'] = false;
 
@@ -199,15 +195,6 @@ class InstallController
         }
 
         $_SESSION['install_db_empty'] = true;
-
-        // 测试 Redis 连接
-        if (! $this->redisConnector->test($this->config)) {
-            $this->errors[] = $this->redisConnector->getError();
-            $this->canProceed = false;
-            $this->stage = 'env';
-
-            return;
-        }
 
         // 所有检查通过，进入安装阶段
         $this->stage = 'install';
@@ -227,7 +214,7 @@ class InstallController
      */
     private function handleSelfDelete(): void
     {
-        $cleaner = new Cleaner();
+        $cleaner = new Cleaner;
 
         if ($cleaner->scheduleCleanup()) {
             $this->renderer->header();
@@ -385,10 +372,6 @@ class InstallController
             'DB_DATABASE' => htmlspecialchars($this->config->dbDatabase),
             'DB_USERNAME' => htmlspecialchars($this->config->dbUsername),
             'DB_PASSWORD' => htmlspecialchars($this->config->dbPassword),
-            'REDIS_HOST' => htmlspecialchars($this->config->redisHost),
-            'REDIS_PORT' => htmlspecialchars((string) $this->config->redisPort),
-            'REDIS_USERNAME' => htmlspecialchars($this->config->redisUsername),
-            'REDIS_PASSWORD' => htmlspecialchars($this->config->redisPassword),
         ];
 
         echo $this->renderer->render('config-form', $configVars);
@@ -406,15 +389,15 @@ class InstallController
             echo '<div class="requirement success"><strong>数据库连接:</strong> 成功</div>';
 
             if (! empty($this->config->mysqlVersion)) {
-                echo '<div class="requirement info"><strong>MySQL 版本:</strong> ' . $this->config->mysqlVersion . '</div>';
-                echo '<div class="requirement info"><strong>排序规则:</strong> ' . $this->config->dbCollation . '</div>';
+                echo '<div class="requirement info"><strong>MySQL 版本:</strong> '.$this->config->mysqlVersion.'</div>';
+                echo '<div class="requirement info"><strong>排序规则:</strong> '.$this->config->dbCollation.'</div>';
             }
 
             if ($_SESSION['install_db_empty'] ?? false) {
                 echo '<div class="requirement success"><strong>数据库状态:</strong> 空数据库，可以安装</div>';
             } else {
                 echo '<div class="requirement error"><strong>数据库状态:</strong> 数据库不为空，必须使用空数据库</div>';
-                echo '<a href="' . $_SERVER['PHP_SELF'] . '" class="btn">返回重新配置</a>';
+                echo '<a href="'.$_SERVER['PHP_SELF'].'" class="btn">返回重新配置</a>';
                 $this->canProceed = false;
 
                 return;
@@ -422,7 +405,7 @@ class InstallController
         } else {
             echo '<div class="requirement error"><strong>数据库连接:</strong> 失败</div>';
             echo '<p>请返回上一步检查数据库配置</p>';
-            echo '<a href="' . $_SERVER['PHP_SELF'] . '" class="btn">返回重新配置</a>';
+            echo '<a href="'.$_SERVER['PHP_SELF'].'" class="btn">返回重新配置</a>';
             $this->canProceed = false;
 
             return;
@@ -447,15 +430,15 @@ class InstallController
         // 隐藏配置字段
         foreach ($this->config->toArray() as $key => $value) {
             $key = str_replace('_', '_', $key);
-            echo '<input type="hidden" name="' . htmlspecialchars($key) . '" value="' . htmlspecialchars((string) $value) . '">';
+            echo '<input type="hidden" name="'.htmlspecialchars($key).'" value="'.htmlspecialchars((string) $value).'">';
         }
 
         echo '<div class="requirement success">';
         echo '<strong>将使用以下配置安装:</strong><br>';
-        echo '数据库主机: ' . htmlspecialchars($this->config->dbHost) . '<br>';
-        echo '数据库端口: ' . htmlspecialchars((string) $this->config->dbPort) . '<br>';
-        echo '数据库名称: ' . htmlspecialchars($this->config->dbDatabase) . '<br>';
-        echo '数据库用户: ' . htmlspecialchars($this->config->dbUsername) . '<br>';
+        echo '数据库主机: '.htmlspecialchars($this->config->dbHost).'<br>';
+        echo '数据库端口: '.htmlspecialchars((string) $this->config->dbPort).'<br>';
+        echo '数据库名称: '.htmlspecialchars($this->config->dbDatabase).'<br>';
+        echo '数据库用户: '.htmlspecialchars($this->config->dbUsername).'<br>';
         echo '</div>';
 
         echo '<input type="hidden" name="action" value="install">';
@@ -516,7 +499,7 @@ class InstallController
         echo '<ul>';
 
         foreach ($steps as $step) {
-            echo '<li>' . htmlspecialchars($step) . '</li>';
+            echo '<li>'.htmlspecialchars($step).'</li>';
         }
 
         echo '</ul>';
@@ -571,14 +554,14 @@ class InstallController
         echo '<div class="requirement warning">';
         echo '<strong>调试模式激活</strong><br>';
 
-        $envFile = $this->projectRoot . '/.env';
-        echo '.env文件存在: ' . (file_exists($envFile) ? '是' : '否') . '<br>';
-        echo '系统已安装: ' . ($this->isInstalled ? '是' : '否') . '<br>';
+        $envFile = $this->projectRoot.'/.env';
+        echo '.env文件存在: '.(file_exists($envFile) ? '是' : '否').'<br>';
+        echo '系统已安装: '.($this->isInstalled ? '是' : '否').'<br>';
 
         if (file_exists($envFile)) {
             $envContent = file_get_contents($envFile);
             echo '<strong>.env文件内容预览:</strong><br>';
-            echo '<pre>' . htmlspecialchars(substr($envContent, 0, 500)) . '</pre>';
+            echo '<pre>'.htmlspecialchars(substr($envContent, 0, 500)).'</pre>';
         }
 
         echo '</div>';

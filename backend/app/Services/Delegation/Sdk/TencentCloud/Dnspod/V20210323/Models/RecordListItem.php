@@ -1,4 +1,5 @@
 <?php
+
 /*
  * Copyright (c) 2017-2025 Tencent. All Rights Reserved.
  *
@@ -14,13 +15,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 namespace App\Services\Delegation\Sdk\TencentCloud\Dnspod\V20210323\Models;
+
 use App\Services\Delegation\Sdk\TencentCloud\Common\AbstractModel;
 
 /**
  * 记录列表元素
  *
- * @method integer getRecordId() 获取记录Id
+ * @method int getRecordId() 获取记录Id
  * @method void setRecordId(integer $RecordId) 设置记录Id
  * @method string getValue() 获取记录值
  * @method void setValue(string $Value) 设置记录值
@@ -36,23 +39,23 @@ use App\Services\Delegation\Sdk\TencentCloud\Common\AbstractModel;
  * @method void setLineId(string $LineId) 设置线路Id
  * @method string getType() 获取记录类型
  * @method void setType(string $Type) 设置记录类型
- * @method integer getWeight() 获取记录权重
+ * @method int getWeight() 获取记录权重
  * @method void setWeight(integer $Weight) 设置记录权重
  * @method string getMonitorStatus() 获取记录监控状态
  * @method void setMonitorStatus(string $MonitorStatus) 设置记录监控状态
  * @method string getRemark() 获取记录备注说明
  * @method void setRemark(string $Remark) 设置记录备注说明
- * @method integer getTTL() 获取记录缓存时间
+ * @method int getTTL() 获取记录缓存时间
  * @method void setTTL(integer $TTL) 设置记录缓存时间
- * @method integer getMX() 获取MX值
+ * @method int getMX() 获取MX值
  * @method void setMX(integer $MX) 设置MX值
- * @method boolean getDefaultNS() 获取是否是默认的ns记录
+ * @method bool getDefaultNS() 获取是否是默认的ns记录
  * @method void setDefaultNS(boolean $DefaultNS) 设置是否是默认的ns记录
  */
 class RecordListItem extends AbstractModel
 {
     /**
-     * @var integer 记录Id
+     * @var int 记录Id
      */
     public $RecordId;
 
@@ -92,7 +95,7 @@ class RecordListItem extends AbstractModel
     public $Type;
 
     /**
-     * @var integer 记录权重
+     * @var int 记录权重
      */
     public $Weight;
 
@@ -107,24 +110,21 @@ class RecordListItem extends AbstractModel
     public $Remark;
 
     /**
-     * @var integer 记录缓存时间
+     * @var int 记录缓存时间
      */
     public $TTL;
 
     /**
-     * @var integer MX值
+     * @var int MX值
      */
     public $MX;
 
     /**
-     * @var boolean 是否是默认的ns记录
+     * @var bool 是否是默认的ns记录
      */
     public $DefaultNS;
 
-    function __construct()
-    {
-
-    }
+    public function __construct() {}
 
     /**
      * For internal only. DO NOT USE IT.
@@ -134,60 +134,60 @@ class RecordListItem extends AbstractModel
         if ($param === null) {
             return;
         }
-        if (array_key_exists("RecordId",$param) and $param["RecordId"] !== null) {
-            $this->RecordId = $param["RecordId"];
+        if (array_key_exists('RecordId', $param) and $param['RecordId'] !== null) {
+            $this->RecordId = $param['RecordId'];
         }
 
-        if (array_key_exists("Value",$param) and $param["Value"] !== null) {
-            $this->Value = $param["Value"];
+        if (array_key_exists('Value', $param) and $param['Value'] !== null) {
+            $this->Value = $param['Value'];
         }
 
-        if (array_key_exists("Status",$param) and $param["Status"] !== null) {
-            $this->Status = $param["Status"];
+        if (array_key_exists('Status', $param) and $param['Status'] !== null) {
+            $this->Status = $param['Status'];
         }
 
-        if (array_key_exists("UpdatedOn",$param) and $param["UpdatedOn"] !== null) {
-            $this->UpdatedOn = $param["UpdatedOn"];
+        if (array_key_exists('UpdatedOn', $param) and $param['UpdatedOn'] !== null) {
+            $this->UpdatedOn = $param['UpdatedOn'];
         }
 
-        if (array_key_exists("Name",$param) and $param["Name"] !== null) {
-            $this->Name = $param["Name"];
+        if (array_key_exists('Name', $param) and $param['Name'] !== null) {
+            $this->Name = $param['Name'];
         }
 
-        if (array_key_exists("Line",$param) and $param["Line"] !== null) {
-            $this->Line = $param["Line"];
+        if (array_key_exists('Line', $param) and $param['Line'] !== null) {
+            $this->Line = $param['Line'];
         }
 
-        if (array_key_exists("LineId",$param) and $param["LineId"] !== null) {
-            $this->LineId = $param["LineId"];
+        if (array_key_exists('LineId', $param) and $param['LineId'] !== null) {
+            $this->LineId = $param['LineId'];
         }
 
-        if (array_key_exists("Type",$param) and $param["Type"] !== null) {
-            $this->Type = $param["Type"];
+        if (array_key_exists('Type', $param) and $param['Type'] !== null) {
+            $this->Type = $param['Type'];
         }
 
-        if (array_key_exists("Weight",$param) and $param["Weight"] !== null) {
-            $this->Weight = $param["Weight"];
+        if (array_key_exists('Weight', $param) and $param['Weight'] !== null) {
+            $this->Weight = $param['Weight'];
         }
 
-        if (array_key_exists("MonitorStatus",$param) and $param["MonitorStatus"] !== null) {
-            $this->MonitorStatus = $param["MonitorStatus"];
+        if (array_key_exists('MonitorStatus', $param) and $param['MonitorStatus'] !== null) {
+            $this->MonitorStatus = $param['MonitorStatus'];
         }
 
-        if (array_key_exists("Remark",$param) and $param["Remark"] !== null) {
-            $this->Remark = $param["Remark"];
+        if (array_key_exists('Remark', $param) and $param['Remark'] !== null) {
+            $this->Remark = $param['Remark'];
         }
 
-        if (array_key_exists("TTL",$param) and $param["TTL"] !== null) {
-            $this->TTL = $param["TTL"];
+        if (array_key_exists('TTL', $param) and $param['TTL'] !== null) {
+            $this->TTL = $param['TTL'];
         }
 
-        if (array_key_exists("MX",$param) and $param["MX"] !== null) {
-            $this->MX = $param["MX"];
+        if (array_key_exists('MX', $param) and $param['MX'] !== null) {
+            $this->MX = $param['MX'];
         }
 
-        if (array_key_exists("DefaultNS",$param) and $param["DefaultNS"] !== null) {
-            $this->DefaultNS = $param["DefaultNS"];
+        if (array_key_exists('DefaultNS', $param) and $param['DefaultNS'] !== null) {
+            $this->DefaultNS = $param['DefaultNS'];
         }
     }
 }

@@ -16,7 +16,12 @@ const apiUrl = () => {
 };
 
 export const useApi = () => {
-  const apiValues = ref<{ token: string; allowed_ips: string[] }>({
+  const apiValues = ref<{
+    api_url: string;
+    token: string;
+    allowed_ips: string[];
+  }>({
+    api_url: apiUrl(),
     token: "",
     allowed_ips: []
   });
@@ -28,8 +33,7 @@ export const useApi = () => {
       prop: "api_url",
       valueType: "input",
       fieldProps: {
-        value: apiUrl(),
-        disabled: true
+        readonly: true
       },
       fieldSlots: {
         suffix: () =>
@@ -42,7 +46,7 @@ export const useApi = () => {
               link: true,
               onClick: () => {
                 navigator.clipboard
-                  .writeText(apiUrl())
+                  .writeText(apiValues.value.api_url)
                   .then(() => {
                     message("API地址已复制到剪贴板", {
                       type: "success"

@@ -28,8 +28,8 @@ class CnameDelegationService
      */
     public function createOrGet(int $userId, string $zone, string $prefix): CnameDelegation
     {
-        // 规范化域名：转换为小写ASCII
-        $zone = strtolower(DomainUtil::convertToAscii($zone));
+        // 规范化域名：转换为小写Unicode
+        $zone = strtolower(DomainUtil::convertToUnicode($zone));
 
         // 查找是否已存在
         $delegation = CnameDelegation::where([
@@ -83,6 +83,54 @@ class CnameDelegationService
     }
 
     /**
+     * 智能匹配委托记录（不检查 valid 状态，用于即时验证场景）
+     *
+     * 仅匹配完整 FQDN : _acme-challenge _dnsauth
+     * 优先匹配子域，未命中则回落到根域: _certum _pki-validation
+     *
+     * @param  int  $userId  用户ID
+     * @param  string  $domain  域名（如 example.com 或 sub.example.com）
+     * @param  string  $prefix  委托前缀
+     */
+    public function findDelegation(int $userId, string $domain, string $prefix): ?CnameDelegation
+    {
+        // 规范化域名，去掉通配符前缀
+        $domain = ltrim(strtolower(DomainUtil::convertToUnicode($domain)), '*.');
+
+        // ACME/DigiCert: 仅匹配完整 FQDN
+        if ($prefix === '_acme-challenge' || $prefix === '_dnsauth') {
+            return CnameDelegation::where([
+                'user_id' => $userId,
+                'zone' => $domain,
+                'prefix' => $prefix,
+            ])->first();
+        }
+
+        // 其他前缀: 优先匹配子域
+        $delegation = CnameDelegation::where([
+            'user_id' => $userId,
+            'zone' => $domain,
+            'prefix' => $prefix,
+        ])->first();
+
+        if ($delegation) {
+            return $delegation;
+        }
+
+        // 回落到根域
+        $rootDomain = DomainUtil::getRootDomain($domain);
+        if ($rootDomain && $rootDomain !== $domain) {
+            return CnameDelegation::where([
+                'user_id' => $userId,
+                'zone' => $rootDomain,
+                'prefix' => $prefix,
+            ])->first();
+        }
+
+        return null;
+    }
+
+    /**
      * 智能匹配有效的委托记录
      *
      * 仅匹配完整 FQDN : _acme-challenge _dnsauth
@@ -94,8 +142,8 @@ class CnameDelegationService
      */
     public function findValidDelegation(int $userId, string $domain, string $prefix): ?CnameDelegation
     {
-        // 规范化域名
-        $domain = strtolower(DomainUtil::convertToAscii($domain));
+        // 规范化域名，去掉通配符前缀
+        $domain = ltrim(strtolower(DomainUtil::convertToUnicode($domain)), '*.');
 
         // ACME: 仅匹配完整 FQDN
         if ($prefix === '_acme-challenge' || $prefix === '_dnsauth') {
@@ -141,7 +189,8 @@ class CnameDelegationService
      */
     public function checkAndUpdateValidity(CnameDelegation $delegation): bool
     {
-        $host = "$delegation->prefix.$delegation->zone";
+        // DNS 查询需要 Punycode 格式
+        $host = DomainUtil::convertToAscii("$delegation->prefix.$delegation->zone");
         $expectedTarget = $delegation->target_fqdn;
 
         try {
@@ -201,6 +250,19 @@ class CnameDelegationService
         ];
 
         return $data;
+    }
+
+    /**
+     * 根据 CA 获取委托验证前缀
+     */
+    public static function getDelegationPrefixForCa(string $ca): string
+    {
+        return match (strtolower($ca)) {
+            'sectigo', 'comodo' => '_pki-validation',
+            'certum' => '_certum',
+            'digicert', 'geotrust', 'thawte', 'rapidssl', 'symantec', 'trustasia' => '_dnsauth',
+            default => '_acme-challenge',
+        };
     }
 
     /**

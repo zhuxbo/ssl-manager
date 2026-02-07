@@ -29,7 +29,7 @@ class AccountController extends Controller
         $protected = $jws['protected'];
 
         // 验证 URL
-        $expectedUrl = rtrim(config('app.url'), '/') . '/acme/new-acct';
+        $expectedUrl = rtrim(config('app.url'), '/').'/acme/new-acct';
         if (($protected['url'] ?? '') !== $expectedUrl) {
             return $this->acmeError('malformed', 'URL mismatch', 400);
         }
@@ -37,14 +37,14 @@ class AccountController extends Controller
         // 只查询现有账户
         if ($payload['onlyReturnExisting'] ?? false) {
             $jwk = $this->jwsService->extractPublicKey($protected);
-            if (!$jwk) {
+            if (! $jwk) {
                 return $this->acmeError('malformed', 'Missing JWK', 400);
             }
 
             $keyId = $this->jwsService->computeKeyId($jwk);
             $account = $this->accountService->findByKeyId($keyId);
 
-            if (!$account) {
+            if (! $account) {
                 return $this->acmeError('accountDoesNotExist', 'Account not found', 400);
             }
 
@@ -53,7 +53,7 @@ class AccountController extends Controller
 
         // 验证 EAB
         $eab = $payload['externalAccountBinding'] ?? null;
-        if (!$eab) {
+        if (! $eab) {
             return $this->acmeError('externalAccountRequired', 'External account binding required', 400);
         }
 
@@ -61,7 +61,7 @@ class AccountController extends Controller
         $eabProtected = json_decode($this->jwsService->base64UrlDecode($eab['protected']), true);
         $eabKid = $eabProtected['kid'] ?? null;
 
-        if (!$eabKid) {
+        if (! $eabKid) {
             return $this->acmeError('malformed', 'Invalid EAB kid', 400);
         }
 
@@ -73,9 +73,10 @@ class AccountController extends Controller
         if ($updated === 0) {
             // 检查是订单不存在还是已被使用
             $exists = Order::where('eab_kid', $eabKid)->exists();
-            if (!$exists) {
+            if (! $exists) {
                 return $this->acmeError('unauthorized', 'Invalid EAB credentials', 401);
             }
+
             return $this->acmeError('unauthorized', 'EAB credentials already used', 401);
         }
 
@@ -83,15 +84,16 @@ class AccountController extends Controller
         $order = Order::where('eab_kid', $eabKid)->first();
 
         // 验证 EAB HMAC 签名
-        if (!$this->verifyEabSignature($eab, $order->eab_hmac)) {
+        if (! $this->verifyEabSignature($eab, $order->eab_hmac)) {
             // 签名验证失败，回滚标记
             $order->update(['eab_used_at' => null]);
+
             return $this->acmeError('unauthorized', 'Invalid EAB signature', 401);
         }
 
         // 提取 JWK 和联系方式
         $jwk = $this->jwsService->extractPublicKey($protected);
-        if (!$jwk) {
+        if (! $jwk) {
             return $this->acmeError('malformed', 'Missing JWK', 400);
         }
 
@@ -105,6 +107,7 @@ class AccountController extends Controller
         }
 
         $status = $result['created'] ? 201 : 200;
+
         return $this->accountResponse($result['account'], $status);
     }
 
@@ -141,7 +144,7 @@ class AccountController extends Controller
      */
     private function verifyEabSignature(array $eab, string $hmacKey): bool
     {
-        $signingInput = $eab['protected'] . '.' . $eab['payload'];
+        $signingInput = $eab['protected'].'.'.$eab['payload'];
         $decodedHmac = $this->jwsService->base64UrlDecode($hmacKey);
         $expectedSignature = hash_hmac('sha256', $signingInput, $decodedHmac, true);
 

@@ -28,7 +28,7 @@ class AcmeJwsMiddleware
         $body = $request->getContent();
         $jws = $this->jwsService->parse($body);
 
-        if (!$jws) {
+        if (! $jws) {
             return $this->acmeError('malformed', 'Invalid JWS format', 400);
         }
 
@@ -36,13 +36,13 @@ class AcmeJwsMiddleware
 
         // 验证 Nonce
         $nonce = $protected['nonce'] ?? null;
-        if (!$nonce || !$this->nonceService->verify($nonce)) {
+        if (! $nonce || ! $this->nonceService->verify($nonce)) {
             return $this->acmeError('badNonce', 'Invalid or expired nonce', 400);
         }
 
         // 验证 URL
         $url = $protected['url'] ?? '';
-        if (!$url || $url !== $request->fullUrl()) {
+        if (! $url || $url !== $request->fullUrl()) {
             return $this->acmeError('malformed', 'URL mismatch', 400);
         }
 
@@ -56,7 +56,7 @@ class AcmeJwsMiddleware
             // 使用 KID 查找账户
             $account = $this->jwsService->findAccountByKid($kid);
 
-            if (!$account) {
+            if (! $account) {
                 return $this->acmeError('accountDoesNotExist', 'Account not found', 400);
             }
 
@@ -66,17 +66,17 @@ class AcmeJwsMiddleware
             }
 
             $jwk = $account->public_key;
-        } elseif (!$jwk) {
+        } elseif (! $jwk) {
             return $this->acmeError('malformed', 'Missing JWK or KID', 400);
         }
 
         // 验证签名
-        if (!$this->jwsService->verify($jws, $jwk)) {
+        if (! $this->jwsService->verify($jws, $jwk)) {
             return $this->acmeError('badSignatureAlgorithm', 'Invalid signature', 400);
         }
 
         // 如果通过 JWK 验证，尝试查找账户
-        if (!$account && $jwk) {
+        if (! $account && $jwk) {
             $keyId = $this->jwsService->computeKeyId($jwk);
             $account = $this->accountService->findByKeyId($keyId);
         }

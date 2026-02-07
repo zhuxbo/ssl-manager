@@ -155,6 +155,7 @@ class FundController extends BaseController
 
     /**
      * 确认平台充值
+     *
      * @throws Throwable
      */
     public function platformRecharge(Request $request): void

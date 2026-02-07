@@ -197,7 +197,29 @@ curl -fsSL https://release.example.com/install.sh | sudo bash -s -- --version 0.
 
 ## 远程发布
 
-### 配置
+### 服务器设置
+
+在远程 release 服务器上执行以下配置：
+
+```bash
+# 1. 创建 release 用户
+useradd -m -s /bin/bash release
+
+# 2. 设置 SSH 密钥登录
+mkdir -p /home/release/.ssh
+chmod 700 /home/release/.ssh
+
+# 将本地公钥添加到 authorized_keys
+echo "ssh-ed25519 AAAA... your-key" >> /home/release/.ssh/authorized_keys
+chmod 600 /home/release/.ssh/authorized_keys
+chown -R release:release /home/release/.ssh
+
+# 3. 创建部署目录并设置权限
+mkdir -p /www/wwwroot/release.example.com
+chown -R release:release /www/wwwroot/release.example.com
+```
+
+### 本地配置
 
 ```bash
 # 1. 创建配置文件

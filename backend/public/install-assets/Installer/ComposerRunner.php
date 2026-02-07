@@ -68,7 +68,7 @@ class ComposerRunner
         }
 
         if ($this->composerPath) {
-            $this->output[] = '[Composer] 路径: ' . $this->composerPath;
+            $this->output[] = '[Composer] 路径: '.$this->composerPath;
         }
     }
 
@@ -79,7 +79,7 @@ class ComposerRunner
     {
         if ($this->composerPath && $this->phpBinary) {
             // 使用指定的 PHP 运行 Composer
-            return escapeshellarg($this->phpBinary) . ' ' . escapeshellarg($this->composerPath);
+            return escapeshellarg($this->phpBinary).' '.escapeshellarg($this->composerPath);
         }
 
         // 回退：直接使用 composer 命令
@@ -115,8 +115,8 @@ class ComposerRunner
         $composerCmd = $this->getComposerCommand();
         // 设置 HOME 和 COMPOSER_HOME 环境变量，避免缓存目录权限问题
         $homeDir = getenv('HOME') ?: '/tmp';
-        $env = "HOME=" . escapeshellarg($homeDir) . " COMPOSER_HOME=" . escapeshellarg($homeDir . '/.composer');
-        $command = "$env $composerCmd install --no-interaction --no-dev --optimize-autoloader --no-scripts -d " . escapeshellarg($this->projectRoot) . " 2>&1";
+        $env = 'HOME='.escapeshellarg($homeDir).' COMPOSER_HOME='.escapeshellarg($homeDir.'/.composer');
+        $command = "$env $composerCmd install --no-interaction --no-dev --optimize-autoloader --no-scripts -d ".escapeshellarg($this->projectRoot).' 2>&1';
 
         $this->output[] = "[Command] $command";
         exec($command, $this->output, $this->returnCode);
@@ -130,7 +130,7 @@ class ComposerRunner
     private function configureComposerMirror(): void
     {
         // 1. 优先从 version.json 读取网络配置（用户安装时选择）
-        $versionFile = $this->projectRoot . '/version.json';
+        $versionFile = $this->projectRoot.'/version.json';
         if (file_exists($versionFile)) {
             $versionData = json_decode(file_get_contents($versionFile), true);
             if (isset($versionData['network'])) {
@@ -185,7 +185,7 @@ class ComposerRunner
         // 1. 云服务商元数据检测 - 阿里云
         $aliyunRegion = $this->fetchUrl('http://100.100.100.200/latest/meta-data/region-id', 1);
         if ($aliyunRegion && str_starts_with($aliyunRegion, 'cn-')) {
-            $this->output[] = '[Mirror] 检测到阿里云中国区域: ' . $aliyunRegion;
+            $this->output[] = '[Mirror] 检测到阿里云中国区域: '.$aliyunRegion;
 
             return true;
         }
@@ -196,11 +196,12 @@ class ComposerRunner
             $chinaRegions = ['ap-beijing', 'ap-shanghai', 'ap-guangzhou', 'ap-chengdu', 'ap-chongqing', 'ap-nanjing'];
             foreach ($chinaRegions as $region) {
                 if (str_starts_with($tencentRegion, $region)) {
-                    $this->output[] = '[Mirror] 检测到腾讯云中国区域: ' . $tencentRegion;
+                    $this->output[] = '[Mirror] 检测到腾讯云中国区域: '.$tencentRegion;
 
                     return true;
                 }
             }
+
             // 如果是腾讯云但不是中国区域，则不是中国服务器
             return false;
         }
@@ -263,8 +264,8 @@ class ComposerRunner
     private function resetComposerMirror(): void
     {
         $composerCmd = $this->getComposerCommand();
-        $resetCmd = 'cd ' . escapeshellarg($this->projectRoot)
-            . " && $composerCmd config --unset repo.packagist 2>&1";
+        $resetCmd = 'cd '.escapeshellarg($this->projectRoot)
+            ." && $composerCmd config --unset repo.packagist 2>&1";
 
         exec($resetCmd);
     }

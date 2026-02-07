@@ -55,12 +55,12 @@ class DashboardController extends Controller
         $data = Cache::remember($cacheKey, $cacheMinutes * 60, function () {
             $today = now()->startOfDay();
             $thisMonth = now()->startOfMonth();
+            $thisWeekMonday = now()->startOfWeek();
 
             // 月度数据
             $monthlyData = [
                 'total_users' => User::count(),
                 'total_orders' => Order::count(),
-                'total_revenue' => (float) Order::sum('amount'),
                 'active_orders' => $this->getActiveOrdersCount(),
                 'expiring_orders' => Order::join('certs', 'orders.latest_cert_id', '=', 'certs.id')
                     ->where('certs.status', 'active')
@@ -71,36 +71,40 @@ class DashboardController extends Controller
             // 获取今日API统计
             $todayApiStats = $this->getTodayApiStats();
 
-            // 今日新增有效订单数
-            $todayActiveOrders = Order::whereDate('orders.created_at', $today)
-                ->join('certs', 'orders.latest_cert_id', '=', 'certs.id')
-                ->whereIn('certs.status', ['pending', 'processing', 'active', 'approving'])
-                ->count();
+            // 财务数据：日/周/月充值和消费
+            $financeData = $this->getFinanceData($today, $thisWeekMonday, $thisMonth);
 
-            // 本月新增有效订单数
-            $monthlyActiveOrders = Order::where('orders.created_at', '>=', $thisMonth)
-                ->join('certs', 'orders.latest_cert_id', '=', 'certs.id')
-                ->whereIn('certs.status', ['pending', 'processing', 'active', 'approving'])
-                ->count();
+            // 新增用户统计：日/周/月（一条 SQL）
+            // 跨月周场景下 $thisWeekMonday 可能早于 $thisMonth，取较早者避免周统计被截断
+            $rangeStart = min($thisWeekMonday, $thisMonth);
+            $userRow = User::where('created_at', '>=', $rangeStart)
+                ->selectRaw('SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) as monthly', [$thisMonth])
+                ->selectRaw('SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) as weekly', [$thisWeekMonday])
+                ->selectRaw('SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) as daily', [$today])
+                ->first();
+            $newUsers = [
+                'daily' => (int) $userRow->daily,
+                'weekly' => (int) $userRow->weekly,
+                'monthly' => (int) $userRow->monthly,
+            ];
 
-            // 本月新增无效订单数（失败、过期、取消）
-            $monthlyInactiveOrders = Order::where('orders.created_at', '>=', $thisMonth)
-                ->where(function ($query) {
-                    $query->whereNotNull('orders.cancelled_at')
-                        ->orWhereHas('latestCert', function ($certQuery) {
-                            $certQuery->whereIn('status', ['failed', 'expired', 'cancelled']);
-                        });
+            // 新增有效订单统计：日/周/月（一条 SQL）
+            $orderRow = Order::where('orders.created_at', '>=', $rangeStart)
+                ->whereHas('latestCert', function ($q) {
+                    $q->whereIn('status', self::ACTIVATING_STATUSES);
                 })
-                ->count();
+                ->selectRaw('SUM(CASE WHEN orders.created_at >= ? THEN 1 ELSE 0 END) as monthly', [$thisMonth])
+                ->selectRaw('SUM(CASE WHEN orders.created_at >= ? THEN 1 ELSE 0 END) as weekly', [$thisWeekMonday])
+                ->selectRaw('SUM(CASE WHEN orders.created_at >= ? THEN 1 ELSE 0 END) as daily', [$today])
+                ->first();
+            $newOrders = [
+                'daily' => (int) $orderRow->daily,
+                'weekly' => (int) $orderRow->weekly,
+                'monthly' => (int) $orderRow->monthly,
+            ];
 
             // 每日数据
             $dailyData = [
-                'new_users' => User::whereDate('created_at', $today)->count(),
-                'new_orders' => Order::whereDate('created_at', $today)->count(),
-                'new_active_orders' => $todayActiveOrders,
-                'monthly_active_orders' => $monthlyActiveOrders,
-                'monthly_inactive_orders' => $monthlyInactiveOrders,
-                'daily_revenue' => (float) Order::whereDate('created_at', $today)->sum('amount'),
                 'api_calls' => $todayApiStats['calls'],
                 'api_errors' => $todayApiStats['errors'],
                 'error_rate' => $todayApiStats['error_rate'],
@@ -110,6 +114,9 @@ class DashboardController extends Controller
             return [
                 'monthly' => $monthlyData,
                 'daily' => $dailyData,
+                'finance' => $financeData,
+                'new_users' => $newUsers,
+                'new_orders' => $newOrders,
             ];
         });
 
@@ -183,17 +190,49 @@ class DashboardController extends Controller
         $cacheMinutes = $this->getCacheMinutes();
 
         $trends = Cache::remember($cacheKey, $cacheMinutes * 60, function () use ($days) {
-            // 生成指定天数的数据
+            $startDate = now()->subDays($days - 1)->startOfDay();
+
+            // 用户趋势（GROUP BY 聚合）
+            $userCounts = User::where('created_at', '>=', $startDate)
+                ->selectRaw('DATE(created_at) as date, COUNT(*) as cnt')
+                ->groupByRaw('DATE(created_at)')
+                ->pluck('cnt', 'date');
+
+            // 订单趋势（GROUP BY 聚合）
+            $orderCounts = Order::where('created_at', '>=', $startDate)
+                ->selectRaw('DATE(created_at) as date, COUNT(*) as cnt')
+                ->groupByRaw('DATE(created_at)')
+                ->pluck('cnt', 'date');
+
+            // 充值和消费趋势（一条 SQL 查出所有天数）
+            $financeRows = DB::select("
+                SELECT
+                    DATE(created_at) as date,
+                    COALESCE(SUM(CASE WHEN type IN ('addfunds', 'refunds', 'reverse') THEN amount ELSE 0 END), 0) AS recharge,
+                    COALESCE(ABS(SUM(CASE WHEN type IN ('order', 'cancel', 'deduct') THEN amount ELSE 0 END)), 0) AS consumption
+                FROM transactions
+                WHERE created_at >= ?
+                GROUP BY DATE(created_at)
+            ", [$startDate]);
+
+            $financeMap = [];
+            foreach ($financeRows as $row) {
+                $financeMap[$row->date] = [
+                    'recharge' => round((float) $row->recharge, 2),
+                    'consumption' => round((float) $row->consumption, 2),
+                ];
+            }
+
+            // 组装结果
             $trends = [];
             for ($i = $days - 1; $i >= 0; $i--) {
-                $date = now()->subDays($i);
-                $dateStr = $date->format('Y-m-d');
-
+                $dateStr = now()->subDays($i)->format('Y-m-d');
                 $trends[] = [
                     'date' => $dateStr,
-                    'users' => User::whereDate('created_at', $date)->count(),
-                    'orders' => Order::whereDate('created_at', $date)->count(),
-                    'revenue' => (float) Order::whereDate('created_at', $date)->sum('amount'),
+                    'users' => (int) ($userCounts[$dateStr] ?? 0),
+                    'orders' => (int) ($orderCounts[$dateStr] ?? 0),
+                    'recharge' => $financeMap[$dateStr]['recharge'] ?? 0.00,
+                    'consumption' => $financeMap[$dateStr]['consumption'] ?? 0.00,
                 ];
             }
 
@@ -329,14 +368,72 @@ class DashboardController extends Controller
     }
 
     /**
+     * 活动中的证书状态集（与订单搜索 activating 一致）
+     */
+    private const array ACTIVATING_STATUSES = ['pending', 'processing', 'active', 'approving'];
+
+    /**
      * 获取有效订单数量
-     * 有效订单：通过订单表联查latestCert，状态为pending，processing，active，approving的订单
      */
     private function getActiveOrdersCount(): int
     {
-        return Order::join('certs', 'orders.latest_cert_id', '=', 'certs.id')
-            ->whereIn('certs.status', ['pending', 'processing', 'active', 'approving'])
-            ->count();
+        return Order::whereHas('latestCert', function ($q) {
+            $q->whereIn('status', self::ACTIVATING_STATUSES);
+        })->count();
+    }
+
+    /**
+     * 获取财务数据：日/周/月的充值和消费
+     */
+    private function getFinanceData($today, $thisWeekMonday, $thisMonth): array
+    {
+        $prevDayStart = $today->copy()->subDay();
+        $prevWeekStart = $thisWeekMonday->copy()->subWeek();
+        $prevMonthStart = $thisMonth->copy()->subMonth();
+
+        // 单次扫表，用 CASE WHEN 按日期阈值分桶
+        $row = DB::selectOne("
+            SELECT
+                SUM(CASE WHEN created_at >= ? AND type IN ('addfunds','refunds','reverse') THEN amount ELSE 0 END) AS d_r,
+                ABS(SUM(CASE WHEN created_at >= ? AND type IN ('order','cancel','deduct') THEN amount ELSE 0 END)) AS d_c,
+                SUM(CASE WHEN created_at >= ? AND type IN ('addfunds','refunds','reverse') THEN amount ELSE 0 END) AS w_r,
+                ABS(SUM(CASE WHEN created_at >= ? AND type IN ('order','cancel','deduct') THEN amount ELSE 0 END)) AS w_c,
+                SUM(CASE WHEN created_at >= ? AND type IN ('addfunds','refunds','reverse') THEN amount ELSE 0 END) AS m_r,
+                ABS(SUM(CASE WHEN created_at >= ? AND type IN ('order','cancel','deduct') THEN amount ELSE 0 END)) AS m_c,
+                SUM(CASE WHEN created_at >= ? AND created_at < ? AND type IN ('addfunds','refunds','reverse') THEN amount ELSE 0 END) AS pd_r,
+                ABS(SUM(CASE WHEN created_at >= ? AND created_at < ? AND type IN ('order','cancel','deduct') THEN amount ELSE 0 END)) AS pd_c,
+                SUM(CASE WHEN created_at >= ? AND created_at < ? AND type IN ('addfunds','refunds','reverse') THEN amount ELSE 0 END) AS pw_r,
+                ABS(SUM(CASE WHEN created_at >= ? AND created_at < ? AND type IN ('order','cancel','deduct') THEN amount ELSE 0 END)) AS pw_c,
+                SUM(CASE WHEN created_at >= ? AND created_at < ? AND type IN ('addfunds','refunds','reverse') THEN amount ELSE 0 END) AS pm_r,
+                ABS(SUM(CASE WHEN created_at >= ? AND created_at < ? AND type IN ('order','cancel','deduct') THEN amount ELSE 0 END)) AS pm_c
+            FROM transactions
+            WHERE created_at >= ?
+        ", [
+            $today, $today,
+            $thisWeekMonday, $thisWeekMonday,
+            $thisMonth, $thisMonth,
+            $prevDayStart, $today, $prevDayStart, $today,
+            $prevWeekStart, $thisWeekMonday, $prevWeekStart, $thisWeekMonday,
+            $prevMonthStart, $thisMonth, $prevMonthStart, $thisMonth,
+            $prevMonthStart,
+        ]);
+
+        $r = fn ($v) => round((float) ($v ?? 0), 2);
+
+        return [
+            'daily' => [
+                'recharge' => $r($row->d_r), 'consumption' => $r($row->d_c),
+                'prev_recharge' => $r($row->pd_r), 'prev_consumption' => $r($row->pd_c),
+            ],
+            'weekly' => [
+                'recharge' => $r($row->w_r), 'consumption' => $r($row->w_c),
+                'prev_recharge' => $r($row->pw_r), 'prev_consumption' => $r($row->pw_c),
+            ],
+            'monthly' => [
+                'recharge' => $r($row->m_r), 'consumption' => $r($row->m_c),
+                'prev_recharge' => $r($row->pm_r), 'prev_consumption' => $r($row->pm_c),
+            ],
+        ];
     }
 
     /**

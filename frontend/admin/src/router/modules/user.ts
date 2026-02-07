@@ -59,6 +59,16 @@ export default {
       }
     },
     {
+      path: "/deploy-token",
+      name: "DeployToken",
+      component: () => import("@/views/deployToken/index.vue"),
+      meta: {
+        icon: "ri:key-2-line",
+        title: "部署令牌",
+        keepAlive: true
+      }
+    },
+    {
       path: "/callback",
       name: "Callback",
       component: () => import("@/views/callback/index.vue"),

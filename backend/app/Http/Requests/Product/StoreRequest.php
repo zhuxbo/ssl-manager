@@ -2,12 +2,11 @@
 
 namespace App\Http\Requests\Product;
 
-use Illuminate\Validation\Validator;
 use App\Models\Product;
+use Illuminate\Validation\Validator;
 
 class StoreRequest extends BaseProductRequest
 {
-
     public function rules(): array
     {
         $isSSL = $this->isSSL();

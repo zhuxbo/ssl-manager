@@ -5,11 +5,13 @@ declare(strict_types=1);
 namespace App\Services\Acme;
 
 use App\Models\CaLog;
+use App\Services\LogBuffer;
 use Illuminate\Support\Facades\Http;
 
 class UpstreamClient
 {
     private string $baseUrl;
+
     private string $apiKey;
 
     public function __construct()
@@ -106,11 +108,11 @@ class UpstreamClient
      */
     private function request(string $method, string $endpoint, array $data = []): array
     {
-        if (!$this->baseUrl || !$this->apiKey) {
+        if (! $this->baseUrl || ! $this->apiKey) {
             return ['code' => 0, 'msg' => 'Upstream API not configured'];
         }
 
-        $url = $this->baseUrl . $endpoint;
+        $url = $this->baseUrl.$endpoint;
 
         try {
             $http = Http::withToken($this->apiKey)
@@ -129,12 +131,14 @@ class UpstreamClient
 
             if ($response->successful()) {
                 $json = $response->json();
+
                 return $json['code'] === 1 ? $json : ['code' => 0, 'msg' => $json['msg'] ?? 'Request failed'];
             }
 
-            return ['code' => 0, 'msg' => 'Upstream request failed: ' . $response->status()];
+            return ['code' => 0, 'msg' => 'Upstream request failed: '.$response->status()];
         } catch (\Exception $e) {
             $this->logRequest($method, $url, $data, ['error' => $e->getMessage()], 0, false);
+
             return ['code' => 0, 'msg' => $e->getMessage()];
         }
     }
@@ -144,7 +148,7 @@ class UpstreamClient
      */
     private function logRequest(string $method, string $url, array $params, array $response, int $statusCode, bool $success): void
     {
-        CaLog::create([
+        LogBuffer::add(CaLog::class, [
             'url' => $url,
             'api' => $method,
             'params' => $params,

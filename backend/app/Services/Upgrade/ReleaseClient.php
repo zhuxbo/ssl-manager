@@ -219,7 +219,7 @@ class ReleaseClient
         Log::info("下载: $url");
 
         if ($this->downloadPackage($url, $savePath)) {
-            Log::info("下载成功");
+            Log::info('下载成功');
 
             return true;
         }

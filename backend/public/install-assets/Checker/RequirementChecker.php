@@ -17,10 +17,10 @@ class RequirementChecker
 
     public function __construct(?string $projectRoot = null)
     {
-        $this->phpChecker = new PhpChecker();
-        $this->functionChecker = new FunctionChecker();
+        $this->phpChecker = new PhpChecker;
+        $this->functionChecker = new FunctionChecker;
         $this->permissionChecker = new PermissionChecker($projectRoot);
-        $this->toolChecker = new ToolChecker();
+        $this->toolChecker = new ToolChecker;
     }
 
     /**

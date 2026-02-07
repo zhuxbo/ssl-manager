@@ -1,4 +1,5 @@
 <?php
+
 /*
  * Copyright (c) 2017-2025 Tencent. All Rights Reserved.
  *
@@ -14,13 +15,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 namespace App\Services\Delegation\Sdk\TencentCloud\Dnspod\V20210323\Models;
+
 use App\Services\Delegation\Sdk\TencentCloud\Common\AbstractModel;
 
 /**
  * CreateTXTRecord返回参数结构体
  *
- * @method integer getRecordId() 获取记录ID
+ * @method int getRecordId() 获取记录ID
  * @method void setRecordId(integer $RecordId) 设置记录ID
  * @method string getRequestId() 获取唯一请求 ID
  * @method void setRequestId(string $RequestId) 设置唯一请求 ID
@@ -28,7 +31,7 @@ use App\Services\Delegation\Sdk\TencentCloud\Common\AbstractModel;
 class CreateTXTRecordResponse extends AbstractModel
 {
     /**
-     * @var integer 记录ID
+     * @var int 记录ID
      */
     public $RecordId;
 
@@ -37,10 +40,7 @@ class CreateTXTRecordResponse extends AbstractModel
      */
     public $RequestId;
 
-    function __construct()
-    {
-
-    }
+    public function __construct() {}
 
     /**
      * For internal only. DO NOT USE IT.
@@ -50,12 +50,12 @@ class CreateTXTRecordResponse extends AbstractModel
         if ($param === null) {
             return;
         }
-        if (array_key_exists("RecordId",$param) and $param["RecordId"] !== null) {
-            $this->RecordId = $param["RecordId"];
+        if (array_key_exists('RecordId', $param) and $param['RecordId'] !== null) {
+            $this->RecordId = $param['RecordId'];
         }
 
-        if (array_key_exists("RequestId",$param) and $param["RequestId"] !== null) {
-            $this->RequestId = $param["RequestId"];
+        if (array_key_exists('RequestId', $param) and $param['RequestId'] !== null) {
+            $this->RequestId = $param['RequestId'];
         }
     }
 }

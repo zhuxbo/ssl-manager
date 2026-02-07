@@ -350,7 +350,7 @@ class BackupManager
         exec($command, $output, $returnCode);
 
         if ($returnCode !== 0) {
-            throw new RuntimeException('MySQL 备份失败: ' . implode("\n", $output));
+            throw new RuntimeException('MySQL 备份失败: '.implode("\n", $output));
         }
 
         Log::info('MySQL 备份完成', ['excluded_tables' => $excludeTables]);
@@ -483,7 +483,7 @@ class BackupManager
         exec($command, $output, $returnCode);
 
         if ($returnCode !== 0) {
-            throw new RuntimeException('MySQL 恢复失败: ' . implode("\n", $output));
+            throw new RuntimeException('MySQL 恢复失败: '.implode("\n", $output));
         }
     }
 
@@ -524,7 +524,7 @@ class BackupManager
     protected function readVersionFromFile(): string
     {
         $versionPaths = [
-            dirname(base_path()) . '/version.json',  // 项目根目录（标准部署）
+            dirname(base_path()).'/version.json',  // 项目根目录（标准部署）
             base_path('version.json'),               // backend 目录（Docker）
         ];
 
@@ -550,7 +550,7 @@ class BackupManager
 
         foreach ($files as $file) {
             $filePath = $file->getRealPath();
-            $zipPath = $relativePath . '/' . $file->getRelativePathname();
+            $zipPath = $relativePath.'/'.$file->getRelativePathname();
             $zip->addFile($filePath, $zipPath);
         }
     }

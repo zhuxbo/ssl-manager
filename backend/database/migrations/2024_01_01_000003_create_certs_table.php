@@ -19,7 +19,7 @@ return new class extends Migration
             $table->string('unique_value', 32)->nullable()->comment('唯一值');
             $table->string('issuer', 200)->nullable()->index()->comment('颁发者');
             $table->enum('action', ['new', 'renew', 'reissue'])->default('new')->comment('操作');
-            $table->enum('channel', ['admin', 'web', 'api', 'acme'])->comment('渠道');
+            $table->enum('channel', ['admin', 'web', 'api', 'acme', 'deploy'])->comment('渠道');
             $table->mediumText('params')->nullable()->comment('参数');
             $table->decimal('amount', 10)->default(0)->comment('金额');
             $table->string('common_name', 256)->index()->comment('通用名称');
@@ -32,6 +32,7 @@ return new class extends Migration
             $table->string('documents', 2000)->nullable()->comment('验证文档列表');
             $table->timestamp('issued_at')->nullable()->comment('颁发时间');
             $table->timestamp('expires_at')->nullable()->comment('过期时间');
+            $table->timestamp('auto_deploy_at')->nullable()->comment('自动部署时间');
             $table->char('csr_md5', 32)->nullable()->index()->comment('CSR的MD5');
             $table->mediumText('csr')->nullable()->comment('CSR');
             $table->mediumText('private_key')->nullable()->comment('私钥');

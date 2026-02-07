@@ -117,7 +117,7 @@ class UpgradeController extends BaseController
                 if (! empty($logContent)) {
                     // 获取最后几行日志
                     $lines = array_slice(explode("\n", trim($logContent)), -5);
-                    $errorMessage .= '：' . implode(' ', $lines);
+                    $errorMessage .= '：'.implode(' ', $lines);
                 }
             }
 

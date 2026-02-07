@@ -494,6 +494,26 @@ perform_upgrade() {
     # easy: config.json
     [ -f "$INSTALL_DIR/frontend/easy/config.json" ] && cp "$INSTALL_DIR/frontend/easy/config.json" "$preserve_dir/frontend_config/easy_config.json"
 
+    # 保留自定义 API 适配器（排除核心文件 Api.php 和 default/）
+    local api_adapter_dir="$INSTALL_DIR/backend/app/Services/Order/Api"
+    if [ -d "$api_adapter_dir" ]; then
+        local has_custom=false
+        mkdir -p "$preserve_dir/api_adapters"
+        for item in "$api_adapter_dir"/*; do
+            [ ! -e "$item" ] && continue
+            local name=$(basename "$item")
+            # 跳过核心文件
+            if [ "$name" = "Api.php" ] || [ "$name" = "default" ]; then
+                continue
+            fi
+            # 复制自定义适配器
+            cp -r "$item" "$preserve_dir/api_adapters/"
+            has_custom=true
+            log_info "保留自定义 API 适配器: $name"
+        done
+        [ "$has_custom" = true ] && log_info "已保留自定义 API 适配器"
+    fi
+
     # 5. 删除旧代码
     log_step "清理旧代码..."
     # 只删除后端代码目录（保留 storage 已移走）
@@ -658,6 +678,14 @@ PYEOF
         [ -f "$preserve_dir/frontend_config/easy_config.json" ] && cp "$preserve_dir/frontend_config/easy_config.json" "$INSTALL_DIR/frontend/easy/config.json"
     fi
 
+    # 恢复自定义 API 适配器
+    if [ -d "$preserve_dir/api_adapters" ] && [ "$(ls -A "$preserve_dir/api_adapters" 2>/dev/null)" ]; then
+        local api_adapter_dir="$INSTALL_DIR/backend/app/Services/Order/Api"
+        mkdir -p "$api_adapter_dir"
+        cp -r "$preserve_dir/api_adapters"/* "$api_adapter_dir/"
+        log_info "已恢复自定义 API 适配器"
+    fi
+
     # 8.1 预先修复权限（在执行 artisan 命令前）
     log_step "预设权限..."
 
@@ -775,18 +803,66 @@ PYEOF
         php artisan db:seed --force || true
     fi
 
+    # 10.2 数据库结构校验
+    log_step "数据库结构校验..."
+    local structure_check_result=0
+    local structure_output=""
+    if [ "$DEPLOY_MODE" = "docker" ]; then
+        cd "$INSTALL_DIR"
+        # 检查结构差异
+        structure_output=$($compose_cmd exec -T php sh -c "cd /var/www/html/backend && php artisan db:structure --check" 2>&1) || true
+        if echo "$structure_output" | grep -q "数据库结构完全一致"; then
+            log_success "数据库结构校验通过"
+        else
+            log_warning "检测到数据库结构差异："
+            echo "$structure_output" | head -50
+            echo ""
+            log_warning "尝试自动修复（仅 ADD 操作）..."
+            if $compose_cmd exec -T php sh -c "cd /var/www/html/backend && php artisan db:structure --fix --skip-foreign-keys" 2>&1; then
+                log_success "数据库结构自动修复完成"
+            else
+                log_warning "部分结构差异需要手动处理"
+                structure_check_result=1
+            fi
+            echo ""
+            echo -e "${YELLOW}提示: 使用以下命令查看和修复结构差异：${NC}"
+            echo "  php artisan db:structure --check  # 查看差异"
+            echo "  php artisan db:structure --fix    # 自动修复"
+        fi
+    else
+        cd "$INSTALL_DIR/backend"
+        # 检查结构差异
+        structure_output=$(php artisan db:structure --check 2>&1) || true
+        if echo "$structure_output" | grep -q "数据库结构完全一致"; then
+            log_success "数据库结构校验通过"
+        else
+            log_warning "检测到数据库结构差异："
+            echo "$structure_output" | head -50
+            echo ""
+            log_warning "尝试自动修复（仅 ADD 操作）..."
+            if php artisan db:structure --fix --skip-foreign-keys 2>&1; then
+                log_success "数据库结构自动修复完成"
+            else
+                log_warning "部分结构差异需要手动处理"
+                structure_check_result=1
+            fi
+            echo ""
+            echo -e "${YELLOW}提示: 使用以下命令查看和修复结构差异：${NC}"
+            echo "  php artisan db:structure --check  # 查看差异"
+            echo "  php artisan db:structure --fix    # 自动修复"
+        fi
+    fi
+
     # 11. 清理缓存
     log_step "清理缓存..."
     if [ "$DEPLOY_MODE" = "docker" ]; then
         cd "$INSTALL_DIR"
         $compose_cmd exec -T php sh -c "cd /var/www/html/backend && php artisan config:cache" || true
         $compose_cmd exec -T php sh -c "cd /var/www/html/backend && php artisan route:cache" || true
-        $compose_cmd exec -T php sh -c "cd /var/www/html/backend && php artisan view:cache" || true
     else
         cd "$INSTALL_DIR/backend"
         php artisan config:cache || true
         php artisan route:cache || true
-        php artisan view:cache || true
     fi
 
     # 12. 完整性校验

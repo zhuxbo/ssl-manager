@@ -7,7 +7,6 @@ use App\Services\Acme\NonceService;
 use App\Services\Acme\OrderService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Http\Response;
 
 class OrderController extends Controller
 {
@@ -34,7 +33,7 @@ class OrderController extends Controller
 
         // 验证标识符格式
         foreach ($identifiers as $identifier) {
-            if (!isset($identifier['type'], $identifier['value'])) {
+            if (! isset($identifier['type'], $identifier['value'])) {
                 return $this->acmeError('malformed', 'Invalid identifier format', 400);
             }
 
@@ -72,7 +71,7 @@ class OrderController extends Controller
     {
         $order = $this->orderService->get($token);
 
-        if (!$order) {
+        if (! $order) {
             return $this->acmeError('malformed', 'Order not found', 404);
         }
 
@@ -96,7 +95,7 @@ class OrderController extends Controller
     {
         $order = $this->orderService->get($token);
 
-        if (!$order) {
+        if (! $order) {
             return $this->acmeError('malformed', 'Order not found', 404);
         }
 

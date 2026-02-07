@@ -75,6 +75,27 @@ export interface UpgradeStartResult {
   message: string;
 }
 
+// 数据库结构检查结果
+export interface StructureCheckResult {
+  has_diff: boolean;
+  auto_fixed: boolean;
+  summary?: {
+    missing_tables: string[];
+    extra_tables: string[];
+    missing_columns: string[];
+    extra_columns: string[];
+    modified_columns: string[];
+    missing_indexes: string[];
+    extra_indexes: string[];
+    missing_foreign_keys: string[];
+    extra_foreign_keys: string[];
+    manual_actions: string[];
+    can_auto_fix: boolean;
+  };
+  executed_count?: number;
+  message?: string;
+}
+
 // 升级状态类型（轮询获取）
 export interface UpgradeStatus {
   status: "idle" | "running" | "completed" | "failed";
@@ -89,6 +110,7 @@ export interface UpgradeStatus {
   to_version?: string;
   error?: string;
   message?: string;
+  structure_check?: StructureCheckResult;
 }
 
 // 获取当前版本信息
@@ -138,7 +160,11 @@ export function getBackups(): Promise<BaseResponse<{ backups: BackupInfo[] }>> {
 export function executeRollback(
   backupId: string
 ): Promise<
-  BaseResponse<{ success: boolean; backup_id: string; restored_version: string }>
+  BaseResponse<{
+    success: boolean;
+    backup_id: string;
+    restored_version: string;
+  }>
 > {
   return http.request<
     BaseResponse<{

@@ -17,7 +17,8 @@
 - **框架**: Laravel 11.x
 - **PHP 版本**: 8.3+
 - **数据库**: MySQL 8.0
-- **缓存/队列**: Redis
+- **缓存**: 文件缓存（默认）/ Redis（可选）
+- **队列**: 同步（默认）/ Redis（可选）
 - **认证**: JWT (tymon/jwt-auth)
 - **测试**: PHPUnit + Pest
 - **代码质量**: PHPStan + PHP Pint
@@ -32,9 +33,9 @@
 
 - PHP 8.3+
 - MySQL 8.0+
-- Redis
 - Composer
-- JRE 17+ (可选，用于 keytool 生成 JKS 证书)
+- Redis（可选，用于缓存和队列）
+- JRE 17+（可选，用于 keytool 生成 JKS 证书）
 
 ### 安装步骤
 
@@ -80,6 +81,30 @@
 
 详细安装说明请参考 [INSTALL.md](INSTALL.md)
 
+### Redis 配置（可选）
+
+系统默认使用文件缓存和同步队列，无需 Redis 即可运行。如需启用 Redis 以提升性能，在 `.env` 中添加：
+
+```bash
+# Redis 连接配置
+REDIS_HOST=127.0.0.1
+REDIS_PORT=6379
+REDIS_PASSWORD=
+
+# 启用 Redis 缓存
+CACHE_DRIVER=redis
+REDIS_CACHE_DB=1
+
+# 启用 Redis 队列（需要运行 queue:work）
+QUEUE_CONNECTION=redis
+```
+
+**注意**：启用 Redis 队列后，需要运行队列处理进程：
+
+```bash
+php artisan queue:work --tries=3
+```
+
 IDE 代码提示辅助工具：
 Phpstorm Laravel Idea 插件优先
 barryvdh/laravel-ide-helper 包用于其它 IDE
@@ -88,7 +113,8 @@ barryvdh/laravel-ide-helper 包用于其它 IDE
 
 - **用户端 API**: JWT 认证，路径前缀 `/api/`
 - **管理端 API**: JWT 认证，路径前缀 `/api/admin/`
-- **API v1/v2**: Token 认证，路径前缀 `/api/V1/`, `/api/v2/`
+- **API v2**: Token 认证，路径前缀 `/api/v2/`
+- **Deploy API**: Deploy Token 认证，路径前缀 `/api/deploy/`
 
 ### 响应格式
 
@@ -124,8 +150,8 @@ app/
 ├── Http/Controllers/     # API控制器
 │   ├── User/            # 用户端控制器
 │   ├── Admin/           # 管理端控制器
-│   ├── V1/              # API v1版本
 │   ├── V2/              # API v2版本
+│   ├── Deploy/          # Deploy API
 │   └── Callback/        # 回调处理
 ├── Models/              # 数据模型
 ├── Services/            # 业务逻辑层
@@ -140,9 +166,9 @@ app/
 routes/                  # 路由定义
 ├── api.user.php        # 用户端路由
 ├── api.admin.php       # 管理端路由
-├── api.v1.php          # API v1路由
 ├── api.v2.php          # API v2路由
-└── api.callback.php    # 回调路由
+├── api.deploy.php      # Deploy API路由
+└── callback.php        # 回调路由
 
 database/
 ├── migrations/         # 数据库迁移
@@ -207,6 +233,13 @@ php artisan test
 - 回调通知机制
 - 缓存优化策略
 
+### 证书部署
+
+通过 Deploy API 支持证书自动部署到服务器：
+
+- [cert-deploy](https://github.com/zhuxbo/cert-deploy) - Nginx/Apache 证书部署客户端
+- [cert-deploy-iis](https://github.com/zhuxbo/cert-deploy-iis) - Windows IIS 证书部署客户端
+
 ## 监控与日志
 
 系统提供完整的日志记录和监控功能：
@@ -229,56 +262,12 @@ php artisan test
 
 ## 性能优化
 
-- Redis 缓存策略
+- 缓存策略（文件/Redis）
 - 数据库查询优化
-- 异步队列处理
+- 队列处理（同步/异步）
 - 防重复提交机制
 - 分页查询支持
-
-## 最近更新
-
-### 通知系统优化 (2025-11-21)
-
-#### 🔄 破坏性变更
-
-**NotificationCenter::dispatch() 返回值变更**
-- 从 `array` 改为 `void`，不再返回任何值
-- 通知调度失败会在 debug 模式下记录日志
-- 通知发送状态保存在数据库的 `notifications` 表中
-
-```php
-// ❌ 旧代码
-$result = $notificationCenter->dispatch($intent);
-
-// ✅ 新代码
-$notificationCenter->dispatch($intent);
-// 查询发送状态：Notification::where(...)->first()
-```
-
-#### ✨ 功能改进
-
-1. **修复线程安全问题** - 移除所有 `chdir()` 调用，改用绝对路径操作文件
-2. **统一文件清理** - 使用 `File::deleteDirectory()` 和 `File::delete()` 替代 `exec rm` 和原生 `unlink`，更安全可靠
-3. **规范化返回值** - Channel 接口统一返回格式 `['code' => int, 'msg' => string]`
-4. **优化通道过滤** - 拆分复杂逻辑，添加详细注释
-5. **重构命名** - 将 `NotificationService` 重命名为 `NotificationRepository`，更准确地反映其数据访问层职责
-
-## 贡献指南
-
-1. Fork 项目
-2. 创建功能分支 (`git checkout -b feature/AmazingFeature`)
-3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
-4. 推送到分支 (`git push origin feature/AmazingFeature`)
-5. 创建 Pull Request
 
 ## 许可证
 
 本项目采用 MIT 许可证 - 查看 [LICENSE](LICENSE) 文件了解详情。
-
-## 支持
-
-如有问题或建议，请通过以下方式联系：
-
-- 创建 Issue
-- 发送邮件至项目维护者
-- 查看项目文档和 Wiki

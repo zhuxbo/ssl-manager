@@ -16,6 +16,7 @@ use App\Traits\ApiResponse;
 use Closure;
 use Illuminate\Auth\TokenGuard;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Auth;
 
 class ApiAuthenticate
@@ -45,10 +46,17 @@ class ApiAuthenticate
             $this->error('IP is not allowed');
         }
 
-        $apiToken->update([
-            'last_used_ip' => $request->ip(),
-            'last_used_at' => now(),
-        ]);
+        // 异步更新最后使用信息
+        $tokenId = $apiToken->id;
+        $ip = $request->ip();
+        App::terminating(function () use ($tokenId, $ip) {
+            ApiToken::withoutTimestamps(function () use ($tokenId, $ip) {
+                ApiToken::where('id', $tokenId)->update([
+                    'last_used_ip' => $ip,
+                    'last_used_at' => now(),
+                ]);
+            });
+        });
 
         if ($apiToken->user_id) {
             UserScope::addScopeToModels($apiToken->user_id, [

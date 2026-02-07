@@ -57,6 +57,7 @@ class NotificationCenter
                     $builderClass = $this->resolveBuilder($intent->code, $channel);
                 } catch (RuntimeException) {
                     $this->logSkip($intent, "通知构建器未配置: $intent->code.$channel");
+
                     continue;
                 }
 
@@ -84,6 +85,7 @@ class NotificationCenter
             if (empty($class)) {
                 throw new RuntimeException("通知构建器已禁用: $key");
             }
+
             return $class;
         }
 

@@ -19,7 +19,7 @@ class PackageExtractorTest extends TestCase
         parent::setUp();
 
         $this->extractor = new PackageExtractor;
-        $this->testDir = storage_path('upgrades/test_' . uniqid());
+        $this->testDir = storage_path('upgrades/test_'.uniqid());
         File::makeDirectory($this->testDir, 0755, true);
     }
 
@@ -128,72 +128,6 @@ class PackageExtractorTest extends TestCase
             $this->assertEquals('www', $result);
         } else {
             $this->assertEquals('www-data', $result);
-        }
-    }
-
-    public function test_is_safe_to_delete_blocks_protected_files(): void
-    {
-        $reflection = new \ReflectionClass($this->extractor);
-        $method = $reflection->getMethod('isSafeToDelete');
-        $method->setAccessible(true);
-
-        // 受保护的文件
-        $protectedPaths = [
-            '.env',
-            'storage/logs/test.log',
-            'bootstrap/cache/config.php',
-            'vendor/autoload.php',
-            '.git/config',
-        ];
-
-        foreach ($protectedPaths as $path) {
-            $this->assertFalse(
-                $method->invoke($this->extractor, $path),
-                "Path $path should be protected"
-            );
-        }
-    }
-
-    public function test_is_safe_to_delete_allows_regular_files(): void
-    {
-        $reflection = new \ReflectionClass($this->extractor);
-        $method = $reflection->getMethod('isSafeToDelete');
-        $method->setAccessible(true);
-
-        // 普通文件可以删除
-        $normalPaths = [
-            'app/Http/Controllers/TestController.php',
-            'config/custom.php',
-            'routes/test.php',
-            'database/migrations/test.php',
-        ];
-
-        foreach ($normalPaths as $path) {
-            $this->assertTrue(
-                $method->invoke($this->extractor, $path),
-                "Path $path should be safe to delete"
-            );
-        }
-    }
-
-    public function test_is_safe_to_delete_blocks_path_traversal(): void
-    {
-        $reflection = new \ReflectionClass($this->extractor);
-        $method = $reflection->getMethod('isSafeToDelete');
-        $method->setAccessible(true);
-
-        // 路径穿越攻击
-        $maliciousPaths = [
-            '../../../etc/passwd',
-            'app/../../../etc/passwd',
-            '..\\..\\windows\\system32',
-        ];
-
-        foreach ($maliciousPaths as $path) {
-            $this->assertFalse(
-                $method->invoke($this->extractor, $path),
-                "Path traversal $path should be blocked"
-            );
         }
     }
 

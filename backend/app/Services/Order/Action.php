@@ -12,9 +12,9 @@ use App\Models\Cert;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\Transaction;
+use App\Services\Delegation\AutoDcvTxtService;
 use App\Services\Notification\DTOs\NotificationIntent;
 use App\Services\Notification\NotificationCenter;
-use App\Services\Delegation\AutoDcvTxtService;
 use App\Services\Order\Api\Api;
 use App\Services\Order\Traits\ActionBatchTrait;
 use App\Services\Order\Traits\ActionCallbackTrait;
@@ -44,6 +44,11 @@ class Action
     {
         $this->userId = $userId;
         $this->api = new Api;
+    }
+
+    public function getUserId(): int
+    {
+        return $this->userId;
     }
 
     /**
@@ -90,6 +95,14 @@ class Action
 
                     if ($validator->fails()) {
                         $this->error('产品数据验证失败', $validator->errors()->toArray());
+                    }
+
+                    // 保留本地的 delegation 验证方法（上游 API 不包含此方法）
+                    if (isset($item['validation_methods']) && is_array($item['validation_methods'])) {
+                        $localMethods = $product->validation_methods ?? [];
+                        if (in_array('delegation', $localMethods) && ! in_array('delegation', $item['validation_methods'])) {
+                            $item['validation_methods'][] = 'delegation';
+                        }
                     }
 
                     $product->update($item);
@@ -145,10 +158,13 @@ class Action
             $order = Order::create($orderData);
             $latestCert['order_id'] = $order->id;
 
+            if ($latestCert['action'] == 'renew') {
+                Cert::where(['status' => 'active', 'order_id' => $params['order_id']])->update(['status' => 'renewed']);
+                $latestCert['last_cert_id'] = $params['last_cert_id'];
+            }
+
             $cert = Cert::create($latestCert);
             $order->update(['latest_cert_id' => $cert->id]);
-
-            ($latestCert['action'] == 'renew') && Cert::where(['status' => 'active', 'order_id' => $params['order_id']])->update(['status' => 'renewed']);
 
             DB::commit();
         } catch (Throwable $e) {
@@ -246,6 +262,7 @@ class Action
             Cert::where('id', $order->latest_cert_id)->update(['status' => 'reissued']);
 
             $latestCert['order_id'] = $order->id;
+            $latestCert['last_cert_id'] = $order->latest_cert_id;
             $latestCert['amount'] = $amount;
             $latestCert['status'] = 'unpaid';
 
@@ -342,6 +359,10 @@ class Action
             if ($order->latestCert->last_cert_id) {
                 $lastCert = Cert::where('id', $order->latestCert->last_cert_id)->first();
                 $data['last_api_id'] = $lastCert->api_id;
+
+                // 上个证书的域名列表 用于重签时去除已有域名 部分 CA 重签仅接收新域名
+                $data['last_cert'] = $lastCert->cert;
+                $data['last_alternative_names'] = $lastCert->alternative_names;
             }
 
             $result = $this->api->$action($data);
@@ -354,8 +375,10 @@ class Action
 
             $order->latestCert->api_id = $apiId;
             $order->latestCert->cert_apply_status = $result['data']['cert_apply_status'] ?? 0;
-            $order->latestCert->dcv = $result['data']['dcv'] ?? $order->latestCert->dcv;
-            $order->latestCert->validation = $result['data']['validation'] ?? $order->latestCert->validation;
+            $order->latestCert->dcv = $this->mergeDcv($result['data']['dcv'] ?? null, $order->latestCert->dcv);
+            $order->latestCert->validation = isset($result['data']['validation'])
+                ? $this->mergeValidation($result['data']['validation'], $order->latestCert->validation ?? [])
+                : $order->latestCert->validation;
             $order->latestCert->status = 'processing';
             $order->latestCert->save();
             DB::commit();
@@ -367,8 +390,8 @@ class Action
         $this->success([
             'order_id' => $orderId,
             'cert_apply_status' => $result['data']['cert_apply_status'] ?? 0,
-            'dcv' => $result['data']['dcv'] ?? $data['dcv'] ?? null,
-            'validation' => $result['data']['validation'] ?? $data['validation'] ?? null,
+            'dcv' => $order->latestCert->dcv,
+            'validation' => $order->latestCert->validation,
         ]);
     }
 
@@ -418,6 +441,9 @@ class Action
         }
 
         $data = $result['data'] ?? [];
+
+        // 合并 dcv（保留委托验证标记）
+        $data['dcv'] = $this->mergeDcv($data['dcv'] ?? null, $cert->dcv);
 
         // 合并 validation
         $data['validation'] = isset($data['validation'])
@@ -583,6 +609,20 @@ class Action
         $cert = $order->latestCert;
         $cert->status != 'processing' && $this->error('订单状态只有是待验证才能重新验证');
 
+        // 对于需要验证内容的方法，优先检查 validation 是否就绪
+        $method = $cert->dcv['method'] ?? '';
+        if (in_array($method, ['txt', 'cname', 'file', 'http', 'https'], true)) {
+            if (! $this->isValidationReady($cert->validation ?? null, $method)) {
+                $this->sync($orderId, true);
+                $cert->refresh();
+
+                // 同步后仍未就绪则报错
+                if (! $this->isValidationReady($cert->validation ?? null, $method)) {
+                    $this->error('验证记录同步中，请稍后再试');
+                }
+            }
+        }
+
         // 创建 delegation 任务处理 TXT 记录写入（SMIME/CodeSign/DocSign 没有 DCV）
         if (isset($cert->dcv['method']) && $cert->dcv['method'] === 'txt') {
             // 检测 validation 是否为空
@@ -639,16 +679,33 @@ class Action
 
         if (in_array($cert->status, ['unpaid', 'pending'])) {
             $cert->dcv = $this->generateDcv($order->product->ca, $method, $cert->csr, $cert->unique_value ?? '');
-            $cert->validation = $this->generateValidation($cert->dcv, $cert->alternative_names);
+            $cert->validation = $this->generateValidation($cert->dcv, $cert->alternative_names, $order->user_id);
         } elseif ($cert->status === 'processing') {
-            $result = $this->api->updateDCV($orderId, $method);
-            $cert->dcv = $result['data']['dcv'] ?? $cert->dcv;
-            $cert->validation = $result['data']['validation'] ?? $cert->validation;
+            // 如果从 delegation 切换到其他方法，需要重新生成本地 dcv（会更新 is_delegate）
+            $newDcv = $this->generateDcv($order->product->ca, $method, $cert->csr, $cert->unique_value ?? '');
+            // 传递给上游 API 的方法应该是 txt 而不是 delegation（上游不认识 delegation）
+            $apiMethod = $method === 'delegation' ? 'txt' : $method;
+            $result = $this->api->updateDCV($orderId, $apiMethod);
+            // 使用新生成的 dcv（包含正确的 is_delegate 标记），然后合并 API 返回的 dns/file 信息
+            $cert->dcv = $this->mergeDcv($result['data']['dcv'] ?? null, $newDcv);
+            // 优先使用 API 返回的 validation（多域名/ACME 场景每个域名有独立 token），合并本地委托字段
+            $localValidation = $this->generateValidation($cert->dcv, $cert->alternative_names, $order->user_id) ?? [];
+            $cert->validation = isset($result['data']['validation'])
+                ? $this->mergeValidation($result['data']['validation'], $localValidation)
+                : $localValidation;
         } else {
             $this->error('此订单状态不支持修改验证方法，请刷新页面查看');
         }
 
         $cert->save();
+
+        // 切换到委托验证时，创建 delegation 任务写入 TXT 记录
+        if (($cert->dcv['is_delegate'] ?? false) && $cert->status === 'processing') {
+            $autoDcvService = new AutoDcvTxtService;
+            if ($autoDcvService->shouldProcessDelegation($order)) {
+                $this->createTask($orderId, 'delegation');
+            }
+        }
 
         $this->success([
             'dcv' => $result['data']['dcv'] ?? $cert->dcv,

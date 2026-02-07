@@ -21,7 +21,7 @@ class Renderer
      */
     public function load(string $templateName): string
     {
-        $templateFile = $this->assetsDir . '/' . $templateName . '.html';
+        $templateFile = $this->assetsDir.'/'.$templateName.'.html';
 
         if (! file_exists($templateFile)) {
             throw new \Exception("模板文件不存在: $templateName.html");
@@ -38,7 +38,7 @@ class Renderer
         $template = $this->load($templateName);
 
         foreach ($variables as $key => $value) {
-            $template = str_replace('{{' . $key . '}}', $value, $template);
+            $template = str_replace('{{'.$key.'}}', $value, $template);
         }
 
         return $template;
@@ -49,7 +49,7 @@ class Renderer
      */
     public function header(): void
     {
-        echo file_get_contents($this->assetsDir . '/header.html');
+        echo file_get_contents($this->assetsDir.'/header.html');
     }
 
     /**
@@ -57,7 +57,7 @@ class Renderer
      */
     public function footer(): void
     {
-        echo file_get_contents($this->assetsDir . '/footer.html');
+        echo file_get_contents($this->assetsDir.'/footer.html');
     }
 
     /**
@@ -73,11 +73,11 @@ class Renderer
         $sectionId = $type === 'error' ? 'error-section' : 'warning-section';
         $icon = $type === 'error' ? '✘' : '⚠';
 
-        $html = '<h2 id="' . $sectionId . '">' . $title . '</h2>';
+        $html = '<h2 id="'.$sectionId.'">'.$title.'</h2>';
         $html .= '<div class="log">';
 
         foreach ($messages as $message) {
-            $html .= '<div class="' . $type . '">' . $icon . ' ' . htmlspecialchars($message) . '</div>';
+            $html .= '<div class="'.$type.'">'.$icon.' '.htmlspecialchars($message).'</div>';
         }
 
         $html .= '</div>';
@@ -90,14 +90,15 @@ class Renderer
      */
     public function requirementItem(string $name, string $value, string $status): string
     {
-        return '<div class="' . $status . '" style="padding: 5px;">'
-            . htmlspecialchars($name) . ': ' . htmlspecialchars($value)
-            . '</div>';
+        return '<div class="'.$status.'" style="padding: 5px;">'
+            .htmlspecialchars($name).': '.htmlspecialchars($value)
+            .'</div>';
     }
 
     /**
      * 生成检查项列表 HTML
-     * @param CheckResult[] $items
+     *
+     * @param  CheckResult[]  $items
      */
     public function requirementsList(array $items): string
     {
@@ -117,14 +118,14 @@ class Renderer
     {
         if ($allSuccess) {
             if ($hasWarnings) {
-                return '<span class="success" style="padding: 5px;">✓ ' . $successText . '</span>'
-                    . '<br><span class="warning" style="padding: 5px;">⚠ ' . $warningText . '</span>';
+                return '<span class="success" style="padding: 5px;">✓ '.$successText.'</span>'
+                    .'<br><span class="warning" style="padding: 5px;">⚠ '.$warningText.'</span>';
             }
 
-            return '<span class="success" style="padding: 5px;">✓ ' . $successText . '</span>';
+            return '<span class="success" style="padding: 5px;">✓ '.$successText.'</span>';
         }
 
-        return '<span class="error" style="padding: 5px;">✘ ' . $errorText . '</span>';
+        return '<span class="error" style="padding: 5px;">✘ '.$errorText.'</span>';
     }
 
     /**
@@ -135,23 +136,23 @@ class Renderer
         if ($passed) {
             if ($hasWarnings) {
                 return '<div class="requirement success" style="padding: 15px; margin: 10px 0;">'
-                    . '✓ 系统环境检查已通过，可以继续安装'
-                    . '</div>'
-                    . '<div class="requirement warning" style="padding: 15px; margin: 10px 0;">'
-                    . '⚠ 存在一些可选项警告，建议查看详情'
-                    . '</div>';
+                    .'✓ 系统环境检查已通过，可以继续安装'
+                    .'</div>'
+                    .'<div class="requirement warning" style="padding: 15px; margin: 10px 0;">'
+                    .'⚠ 存在一些可选项警告，建议查看详情'
+                    .'</div>';
             }
 
             return '<div class="requirement success" style="padding: 15px; margin: 10px 0;">'
-                . '✓ 所有系统环境检查已通过，可以继续安装'
-                . '</div>';
+                .'✓ 所有系统环境检查已通过，可以继续安装'
+                .'</div>';
         }
 
         $errorList = implode('、', $errorItems);
 
         return '<div class="requirement error" style="padding: 15px; margin: 10px 0;">'
-            . '✘ 系统环境检查未通过：' . $errorList . '<br>'
-            . '<small style="margin-top: 8px; display: block;">请点击"展开"查看详细信息并解决问题</small>'
-            . '</div>';
+            .'✘ 系统环境检查未通过：'.$errorList.'<br>'
+            .'<small style="margin-top: 8px; display: block;">请点击"展开"查看详细信息并解决问题</small>'
+            .'</div>';
     }
 }

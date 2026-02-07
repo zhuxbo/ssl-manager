@@ -62,7 +62,8 @@ export function useOrganizationStore(onSearch) {
       prop: "country",
       valueType: "select",
       fieldProps: {
-        placeholder: "请选择国家"
+        placeholder: "请选择国家",
+        filterable: true
       },
       options: countryCodes
     },
@@ -128,7 +129,15 @@ export function useOrganizationStore(onSearch) {
         trigger: "blur"
       }
     ],
-    postcode: [{ required: true, message: "请输入邮政编码", trigger: "blur" }]
+    postcode: [
+      { required: true, message: "请输入邮政编码", trigger: "blur" },
+      {
+        min: 3,
+        max: 20,
+        message: "邮政编码长度应为3-20个字符",
+        trigger: "blur"
+      }
+    ]
   };
 
   // 打开表单

@@ -126,15 +126,36 @@
       tid: "",
       email: "",
       domain: "",
-      validation_method: "",
+      validation_method: ""
     },
     product: {},
     validation: {},
     cert: {},
     status: "", // 后端状态：processing/approving/active
     is_applied: false,
-    autoRefreshTimer: null, // 自动刷新定时器
+    autoRefreshTimer: null // 自动刷新定时器
   };
+
+  // 获取委托验证前缀
+  function getDelegationPrefix(ca) {
+    const caLower = (ca || "").toLowerCase();
+    switch (caLower) {
+      case "sectigo":
+      case "comodo":
+        return "_pki-validation";
+      case "certum":
+        return "_certum";
+      case "digicert":
+      case "geotrust":
+      case "thawte":
+      case "rapidssl":
+      case "symantec":
+      case "trustasia":
+        return "_dnsauth";
+      default:
+        return "_acme-challenge";
+    }
+  }
 
   // 通用复制功能（针对移动端优化）
   async function copyToClipboard(text) {
@@ -294,7 +315,7 @@
     window.appState.step = step;
 
     // 隐藏所有步骤内容
-    document.querySelectorAll(".step-content").forEach((content) => {
+    document.querySelectorAll(".step-content").forEach(content => {
       content.style.display = "none";
     });
 
@@ -330,7 +351,7 @@
         ? window.appState.cert.status
         : undefined);
     const steps = Array.from(document.querySelectorAll(".step"));
-    steps.forEach((step) => step.classList.remove("active", "completed"));
+    steps.forEach(step => step.classList.remove("active", "completed"));
 
     if (status === "approving") {
       // 验证已完成（绿色），签发中（蓝色）
@@ -343,7 +364,7 @@
 
     if (status === "active") {
       // 证书签发完成：所有步骤均为绿色
-      steps.forEach((step) => step.classList.add("completed"));
+      steps.forEach(step => step.classList.add("completed"));
       return;
     }
 
@@ -452,7 +473,7 @@
         domain: data.validation.domain || "",
         method: data.validation.method || "",
         host: data.validation.host || "",
-        value: data.validation.value || "",
+        value: data.validation.value || ""
       };
     } else {
       // 从 cert 中获取 validation 数据
@@ -463,7 +484,7 @@
         domain: certValidation.domain || data.cert?.domains || "",
         method: certValidation.method || certDcv.method || "",
         host: certValidation.host || certDcv.dns?.host || "",
-        value: certValidation.value || certDcv.dns?.value || "",
+        value: certValidation.value || certDcv.dns?.value || ""
       };
     }
     window.appState.is_applied = data.is_applied || false;
@@ -475,8 +496,8 @@
       status === "active"
         ? 2
         : status === "approving" || status === "processing"
-        ? 1
-        : 0;
+          ? 1
+          : 0;
 
     // 根据步骤更新界面
     if (step === 2) {
@@ -580,11 +601,11 @@
       file_name:
         validation.file_name || validation.name || dcv.file?.name || "",
       file_content:
-        validation.file_content ||
-        validation.content ||
-        dcv.file?.content ||
-        "",
+        validation.file_content || validation.content || dcv.file?.content || ""
     };
+
+    // 保存 cert 信息（包含 dcv）
+    window.appState.cert = cert;
 
     // 保存产品信息
     window.appState.product = product;
@@ -604,10 +625,14 @@
       });
     }
 
-    // 设置当前验证方式
-    const currentMethod =
+    // 设置当前验证方式（dcv.is_delegate 时使用 delegation，因为后端提交到 CA 时会转换为 txt）
+    let currentMethod =
       window.appState.validation.method ||
       Object.keys(product.validation_methods || {})[0];
+    if (dcv.is_delegate) {
+      // 宽松判断，兼容 true/1/"true"
+      currentMethod = "delegation";
+    }
     methodSelect.value = currentMethod;
     window.appState.apply.validation_method = currentMethod;
     // 保存原始验证方式，用于判断是否有改变
@@ -646,11 +671,38 @@
 
   // 更新验证显示
   function updateValidationDisplay(method, dcv) {
-    const isDNS = ["cname", "txt"].includes(method);
+    // 判断是否为委托验证（dcv.is_delegate 标记优先于 method）
+    const certDcv = window.appState.cert?.dcv || {};
+    const isDelegate = Boolean(certDcv.is_delegate); // 宽松判断，兼容 true/1/"true"
+    const isDNS = !isDelegate && ["cname", "txt"].includes(method);
     const isFile = ["file", "http", "https"].includes(method);
 
+    // 委托验证
+    if (isDelegate) {
+      document.getElementById("dns-validation").style.display = "block";
+      document.getElementById("file-validation").style.display = "none";
+
+      // 获取委托验证前缀（主机记录只显示前缀，与 user/admin 保持一致）
+      const ca = certDcv.ca || window.appState.product?.ca || "";
+      const prefix = getDelegationPrefix(ca);
+      // 委托验证的目标从 validation 获取
+      const delegationTarget =
+        window.appState.validation.delegation_target || "";
+
+      document.getElementById("dns-host").value = prefix;
+      document.getElementById("dns-type").value = "CNAME";
+      document.getElementById("dns-value").value = delegationTarget;
+
+      // 显示复制全部
+      document.getElementById("dns-help-extra").style.display = "inline";
+
+      // 更新帮助链接
+      document.getElementById("help-text").textContent = "如何做委托验证？";
+      document.getElementById("validation-help-link").href =
+        Config.getConfig("helpURL") + "/verify/";
+    }
     // DNS验证
-    if (isDNS) {
+    else if (isDNS) {
       document.getElementById("dns-validation").style.display = "block";
       document.getElementById("file-validation").style.display = "none";
 
@@ -826,8 +878,8 @@
         method: "POST",
         body: {
           tid: window.appState.apply.tid,
-          email: window.appState.apply.email,
-        },
+          email: window.appState.apply.email
+        }
       });
 
       showToast("验证开始，请等几分钟后刷新查看", "success");
@@ -863,25 +915,101 @@
 
   // 更新检测弹窗
   function updateCheckDialog(validation) {
+    const certDcv = window.appState.cert?.dcv || {};
+    const isDelegate = Boolean(certDcv.is_delegate);
+
     document.getElementById("check-domain").textContent =
       validation.domain || "";
-    document.getElementById("check-method").textContent =
-      validation.method || "";
+    document.getElementById("check-method").textContent = isDelegate
+      ? "委托验证 (CNAME)"
+      : validation.method || "";
 
-    const isDNS = ["cname", "txt"].includes(validation.method?.toLowerCase());
+    const isDNS =
+      !isDelegate &&
+      ["cname", "txt"].includes(validation.method?.toLowerCase());
     const isFile = ["file", "http", "https"].includes(
       validation.method?.toLowerCase()
     );
 
     // 显示/隐藏相应内容（在表格中显示为 table-row，避免错乱）
-    document.querySelectorAll(".dns-result").forEach((el) => {
+    document.querySelectorAll(".dns-result").forEach(el => {
       el.style.display = isDNS ? "table-row" : "none";
     });
-    document.querySelectorAll(".file-result").forEach((el) => {
+    document.querySelectorAll(".file-result").forEach(el => {
       el.style.display = isFile ? "table-row" : "none";
     });
+    document.querySelectorAll(".delegation-result").forEach(el => {
+      el.style.display = isDelegate ? "table-row" : "none";
+    });
+    // TXT 行仅在有 TXT 值时显示
+    const hasTxtValue = validation.value || certDcv.dns?.value;
+    document.querySelectorAll(".delegation-txt-result").forEach(el => {
+      el.style.display = isDelegate && hasTxtValue ? "table-row" : "none";
+    });
+    // 错误行按需显示
+    document.querySelectorAll(".delegation-cname-error").forEach(el => {
+      el.style.display =
+        isDelegate && validation.delegation_cname_error ? "table-row" : "none";
+    });
+    document.querySelectorAll(".delegation-txt-error").forEach(el => {
+      el.style.display =
+        isDelegate && hasTxtValue && validation.delegation_txt_error
+          ? "table-row"
+          : "none";
+    });
 
-    if (isDNS) {
+    if (isDelegate) {
+      const ca = certDcv.ca || window.appState.product?.ca || "";
+      const prefix = getDelegationPrefix(ca);
+      const zone =
+        validation.delegation_zone ||
+        (validation.domain || "").replace(/^\*\./, "");
+      const cnameHost = `${prefix}.${zone}`;
+      const delegationTarget = validation.delegation_target || "";
+
+      // CNAME 部分
+      document.getElementById("check-cname-host").textContent = cnameHost;
+      document.getElementById("check-cname-expected").textContent =
+        delegationTarget;
+      document.getElementById("check-cname-detected").textContent =
+        validation.delegation_cname_detected || "-";
+      const cnameStatusEl = document.getElementById("check-cname-status");
+      if (validation.delegation_cname_checked === true) {
+        cnameStatusEl.textContent = "正确";
+        cnameStatusEl.className = "status-badge success";
+      } else if (validation.delegation_cname_checked === false) {
+        cnameStatusEl.textContent = "异常";
+        cnameStatusEl.className = "status-badge error";
+      } else {
+        cnameStatusEl.textContent = "待检测";
+        cnameStatusEl.className = "status-badge";
+      }
+      document.getElementById("check-cname-error").textContent =
+        validation.delegation_cname_error || "";
+
+      // TXT 部分
+      if (hasTxtValue) {
+        document.getElementById("check-txt-host").textContent =
+          delegationTarget;
+        document.getElementById("check-txt-expected").textContent =
+          validation.value || certDcv.dns?.value || "";
+        document.getElementById("check-txt-detected").textContent =
+          validation.delegation_txt_detected || "-";
+        const txtStatusEl = document.getElementById("check-txt-status");
+        if (validation.delegation_txt_checked === true) {
+          txtStatusEl.textContent = "正确";
+          txtStatusEl.className = "status-badge success";
+        } else if (validation.delegation_txt_checked === false) {
+          txtStatusEl.textContent = "异常";
+          txtStatusEl.className = "status-badge error";
+        } else {
+          txtStatusEl.textContent = "待检测";
+          txtStatusEl.className = "status-badge";
+        }
+        document.getElementById("check-txt-error").textContent =
+          validation.delegation_txt_error || "";
+      }
+    } else if (isDNS) {
       document.getElementById("check-query").textContent =
         validation.query ||
         `${
@@ -925,7 +1053,7 @@
       }
     }
 
-    // 同步“检测”按钮颜色（仅代表检测通过与否，不代表 CA 最终通过）
+    // 同步"检测"按钮颜色（仅代表检测通过与否，不代表 CA 最终通过）
     const testBtn = document.getElementById("test-validation-btn");
     if (testBtn) {
       if (validation.checked) {
@@ -947,44 +1075,85 @@
     setLoading(true, "recheck-btn");
 
     try {
-      // 准备验证数据（优先使用 validation 中的最新值，兼容 name/content 字段）
-      const validationData = {
-        domain: window.appState.validation.domain,
-        method:
-          window.appState.validation.method ||
-          window.appState.cert?.dcv?.method,
-        host:
-          window.appState.validation.host ||
-          window.appState.cert?.dcv?.dns?.host,
-        value:
-          window.appState.validation.value ||
-          window.appState.cert?.dcv?.dns?.value,
-        file_name:
-          window.appState.validation.file_name ||
-          window.appState.validation.name ||
-          window.appState.cert?.dcv?.file?.name,
-        file_content:
-          window.appState.validation.file_content ||
-          window.appState.validation.content ||
-          window.appState.cert?.dcv?.file?.content,
-        link: window.appState.validation.link,
-      };
+      const certDcv = window.appState.cert?.dcv || {};
+      const isDelegate = Boolean(certDcv.is_delegate);
 
-      const result = await API.verifyDCV(validationData);
+      if (isDelegate) {
+        // 委托验证：同时检测 CNAME 和 TXT
+        const validation = window.appState.validation;
+        const ca = certDcv.ca || window.appState.product?.ca || "";
+        const prefix = getDelegationPrefix(ca);
+        const zone =
+          validation.delegation_zone ||
+          (validation.domain || "").replace(/^\*\./, "");
+        const cnameHost = `${prefix}.${zone}`;
+        const delegationTarget = validation.delegation_target || "";
 
-      // 更新验证状态
-      Object.assign(window.appState.validation, result);
+        const cnameResult = await API.verifyCname(cnameHost, delegationTarget);
 
-      // 更新弹窗显示
-      updateCheckDialog(window.appState.validation);
+        // TXT 检测（仅在有值时）
+        const expectedTxtValue = validation.value || certDcv.dns?.value;
+        const txtResult = expectedTxtValue
+          ? await API.verifyDelegationTxt(delegationTarget, expectedTxtValue)
+          : { checked: true, detected_value: "", error: "" };
 
-      // 检测按钮绿色高亮（仅表示检测通过）
-      const testBtn = document.getElementById("test-validation-btn");
-      if (testBtn) {
-        if (result.checked) testBtn.classList.add("btn-success");
-        else testBtn.classList.remove("btn-success");
+        const overallChecked = cnameResult.checked && txtResult.checked;
+
+        Object.assign(window.appState.validation, {
+          checked: overallChecked,
+          error: "",
+          delegation_cname_checked: cnameResult.checked,
+          delegation_cname_detected: cnameResult.detected_value || "",
+          delegation_cname_error: cnameResult.error || "",
+          delegation_txt_checked: txtResult.checked,
+          delegation_txt_detected: txtResult.detected_value || "",
+          delegation_txt_error: txtResult.error || ""
+        });
+
+        updateCheckDialog(window.appState.validation);
+
+        const testBtn = document.getElementById("test-validation-btn");
+        if (testBtn) {
+          if (overallChecked) testBtn.classList.add("btn-success");
+          else testBtn.classList.remove("btn-success");
+        }
+        if (overallChecked) showToast("验证通过", "success");
+      } else {
+        // 普通验证
+        const validationData = {
+          domain: window.appState.validation.domain,
+          method:
+            window.appState.validation.method ||
+            window.appState.cert?.dcv?.method,
+          host:
+            window.appState.validation.host ||
+            window.appState.cert?.dcv?.dns?.host,
+          value:
+            window.appState.validation.value ||
+            window.appState.cert?.dcv?.dns?.value,
+          file_name:
+            window.appState.validation.file_name ||
+            window.appState.validation.name ||
+            window.appState.cert?.dcv?.file?.name,
+          file_content:
+            window.appState.validation.file_content ||
+            window.appState.validation.content ||
+            window.appState.cert?.dcv?.file?.content,
+          link: window.appState.validation.link
+        };
+
+        const result = await API.verifyDCV(validationData);
+
+        Object.assign(window.appState.validation, result);
+        updateCheckDialog(window.appState.validation);
+
+        const testBtn = document.getElementById("test-validation-btn");
+        if (testBtn) {
+          if (result.checked) testBtn.classList.add("btn-success");
+          else testBtn.classList.remove("btn-success");
+        }
+        if (result.checked) showToast("验证通过", "success");
       }
-      if (result.checked) showToast("验证通过", "success");
     } catch (error) {
       showToast(error.message, "error");
     } finally {
@@ -999,7 +1168,7 @@
 
   // 通用确认弹窗（返回 Promise<boolean>）
   function showConfirm(message) {
-    return new Promise((resolve) => {
+    return new Promise(resolve => {
       const dialog = document.getElementById("confirm-dialog");
       const msgEl = document.getElementById("confirm-message");
       const okBtn = document.getElementById("confirm-ok");
@@ -1115,8 +1284,8 @@
         body: {
           tid: window.appState.apply.tid,
           email: window.appState.apply.email,
-          validation_method: newMethod,
-        },
+          validation_method: newMethod
+        }
       });
 
       window.appState.apply.validation_method = newMethod;
@@ -1140,12 +1309,12 @@
         {
           method: "POST",
           headers: {
-            "Content-Type": "application/json",
+            "Content-Type": "application/json"
           },
           body: JSON.stringify({
             tid: window.appState.apply.tid,
-            email: window.appState.apply.email,
-          }),
+            email: window.appState.apply.email
+          })
         }
       );
 
@@ -1218,13 +1387,13 @@
       const response = await fetch(`${Config.getConfig("baseURL")}/download`, {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
+          "Content-Type": "application/json"
         },
         body: JSON.stringify({
           tid: window.appState.apply.tid,
           email: window.appState.apply.email,
-          type: type,
-        }),
+          type: type
+        })
       });
 
       if (!response.ok) {
@@ -1273,7 +1442,7 @@
 
   // 复制功能
   function setupCopyButtons() {
-    document.querySelectorAll(".copy-btn").forEach((btn) => {
+    document.querySelectorAll(".copy-btn").forEach(btn => {
       btn.addEventListener("click", function () {
         const targetId = this.getAttribute("data-copy");
         const target = document.getElementById(targetId);
@@ -1348,7 +1517,7 @@
       });
 
     // 绑定下载链接
-    document.querySelectorAll(".download-link").forEach((link) => {
+    document.querySelectorAll(".download-link").forEach(link => {
       link.addEventListener("click", function (e) {
         e.preventDefault();
         const type = this.getAttribute("data-type");
@@ -1359,7 +1528,7 @@
     // 弹窗关闭
     document
       .querySelectorAll(".dialog-close, .dialog-close-btn")
-      .forEach((btn) => {
+      .forEach(btn => {
         btn.addEventListener("click", closeDialog);
       });
 

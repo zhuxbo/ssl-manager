@@ -2,13 +2,19 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Product extends BaseModel
 {
+    use HasFactory;
+
     const string TYPE_SSL = 'ssl';
+
     const string TYPE_CODESIGN = 'codesign';
+
     const string TYPE_SMIME = 'smime';
+
     const string TYPE_DOCSIGN = 'docsign';
 
     protected $fillable = [
@@ -71,6 +77,7 @@ class Product extends BaseModel
     public function getCostAttribute(): array
     {
         $cost = is_json($this->attributes['cost']) ? json_decode($this->attributes['cost'], true) : [];
+
         return $this->getCost($cost);
     }
 

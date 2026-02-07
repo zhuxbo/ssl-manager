@@ -161,6 +161,7 @@ class DatabaseStructureCommand extends Command
 
     /**
      * 处理检测功能
+     *
      * @throws Exception
      */
     private function handleCheck(): int
@@ -194,6 +195,7 @@ class DatabaseStructureCommand extends Command
 
     /**
      * 处理修复功能
+     *
      * @throws Exception
      */
     private function handleFix(): int
@@ -254,6 +256,7 @@ class DatabaseStructureCommand extends Command
 
     /**
      * 启动 MySQL Docker 容器
+     *
      * @throws Exception
      */
     private function startMysqlContainer(): void
@@ -270,8 +273,8 @@ class DatabaseStructureCommand extends Command
         $this->containerPort = $port;
 
         // 启动容器，使用 Laravel 配置的字符集和排序规则
-        $charset = config('database.connections.mysql.charset', 'utf8mb4');
-        $collation = config('database.connections.mysql.collation', 'utf8mb4_unicode_ci');
+        $charset = config('database.connections.mysql.charset') ?: 'utf8mb4';
+        $collation = config('database.connections.mysql.collation') ?: 'utf8mb4_unicode_ci';
 
         $cmd = sprintf(
             'docker run -d --name %s -e MYSQL_ROOT_PASSWORD=%s -e MYSQL_DATABASE=%s -p %d:3306 %s --character-set-server=%s --collation-server=%s 2>&1',
@@ -295,6 +298,7 @@ class DatabaseStructureCommand extends Command
 
     /**
      * 查找可用端口
+     *
      * @throws Exception
      */
     private function findAvailablePort(): int
@@ -315,11 +319,12 @@ class DatabaseStructureCommand extends Command
 
     /**
      * 等待 MySQL 服务就绪
+     *
      * @throws Exception
      */
     private function waitForMysql(): void
     {
-        $maxAttempts = 30;
+        $maxAttempts = 60;
         $attempt = 0;
 
         while ($attempt < $maxAttempts) {
@@ -406,7 +411,7 @@ class DatabaseStructureCommand extends Command
             'mysql_version' => $this->getMysqlVersion($connection),
             'generated_at' => now()->toDateTimeString(),
             'database' => [
-                'name' => $database,
+                'name' => 'manager',
                 'charset' => Config::get("database.connections.$connection.charset"),
                 'collation' => Config::get("database.connections.$connection.collation"),
             ],
@@ -748,18 +753,12 @@ class DatabaseStructureCommand extends Command
                     $this->warn('[WARNING]  需手动处理（MODIFY）:');
                 }
                 foreach ($tableDiff['modified_columns'] as $columnName => $columnDiff) {
+                    $differences = $this->describeColumnDifferences($columnDiff['standard'], $columnDiff['current']);
                     $this->line(sprintf(
-                        '  - 列 <comment>%s.%s</comment>: %s => %s',
+                        '  - 列 <comment>%s.%s</comment>: %s',
                         $tableName,
                         $columnName,
-                        $columnDiff['current']['type'],
-                        $columnDiff['standard']['type']
-                    ));
-                    $this->line(sprintf(
-                        '    建议: ALTER TABLE %s MODIFY COLUMN %s %s',
-                        $tableName,
-                        $columnName,
-                        $columnDiff['standard']['type']
+                        $differences
                     ));
                 }
             }
@@ -871,6 +870,7 @@ class DatabaseStructureCommand extends Command
 
     /**
      * 生成 CREATE TABLE 语句
+     *
      * @noinspection DuplicatedCode
      */
     private function generateCreateTableStatement(string $tableName, array $tableSchema): string
@@ -951,17 +951,16 @@ class DatabaseStructureCommand extends Command
         }
 
         $lines[] = implode(",\n", $columnLines);
-        // 使用原表的引擎和排序规则，如果没有则使用默认值
+        // 仅指定引擎，不指定字符集和排序规则，由目标数据库决定（不同 MySQL 版本默认值不同）
         $engine = $tableSchema['engine'] ?? 'InnoDB';
-        $collation = $tableSchema['collation'] ?? config('database.connections.mysql.collation', 'utf8mb4_unicode_ci');
-        $charset = explode('_', $collation)[0]; // 从排序规则推断字符集
-        $lines[] = ") ENGINE=$engine DEFAULT CHARSET=$charset COLLATE=$collation;";
+        $lines[] = ") ENGINE=$engine;";
 
         return implode("\n", $lines);
     }
 
     /**
      * 生成 ADD COLUMN 语句
+     *
      * @noinspection DuplicatedCode
      */
     private function generateAddColumnStatement(string $tableName, string $columnName, array $columnDef): string
@@ -991,6 +990,7 @@ class DatabaseStructureCommand extends Command
 
     /**
      * 生成 ADD INDEX 语句
+     *
      * @noinspection DuplicatedCode
      */
     private function generateAddIndexStatement(string $tableName, string $indexName, array $indexDef): string
@@ -1161,6 +1161,64 @@ class DatabaseStructureCommand extends Command
                     $this->line("$tableName.$indexName");
                 }
             }
+
+            if (! empty($tableDiff['missing_foreign_keys'])) {
+                if (! $hasManual) {
+                    $this->newLine();
+                    $this->warn('以下项目需要手动处理:');
+                    $this->newLine();
+                    $hasManual = true;
+                }
+
+                $this->warn('缺失的外键（ADD FOREIGN KEY）:');
+                foreach ($tableDiff['missing_foreign_keys'] as $fkName => $fkDef) {
+                    $this->line("$tableName.$fkName");
+                }
+            }
+
+            if (! empty($tableDiff['extra_foreign_keys'])) {
+                if (! $hasManual) {
+                    $this->newLine();
+                    $this->warn('以下项目需要手动处理:');
+                    $this->newLine();
+                    $hasManual = true;
+                }
+
+                $this->warn('多余的外键（DROP FOREIGN KEY）:');
+                foreach ($tableDiff['extra_foreign_keys'] as $fkName => $fkDef) {
+                    $this->line("$tableName.$fkName");
+                }
+            }
         }
+    }
+
+    /**
+     * 描述列的具体差异
+     */
+    private function describeColumnDifferences(array $standard, array $current): string
+    {
+        $differences = [];
+
+        if ($standard['type'] !== $current['type']) {
+            $differences[] = "类型 {$current['type']} => {$standard['type']}";
+        }
+
+        if ($standard['nullable'] !== $current['nullable']) {
+            $currentNull = $current['nullable'] ? 'NULL' : 'NOT NULL';
+            $standardNull = $standard['nullable'] ? 'NULL' : 'NOT NULL';
+            $differences[] = "$currentNull => $standardNull";
+        }
+
+        if ($standard['default'] !== $current['default']) {
+            $currentDefault = $current['default'] === null ? 'NULL' : "'{$current['default']}'";
+            $standardDefault = $standard['default'] === null ? 'NULL' : "'{$standard['default']}'";
+            $differences[] = "默认值 $currentDefault => $standardDefault";
+        }
+
+        if (empty($differences)) {
+            return '(未知差异)';
+        }
+
+        return implode(', ', $differences);
     }
 }

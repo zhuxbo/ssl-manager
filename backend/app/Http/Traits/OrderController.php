@@ -45,6 +45,10 @@ trait OrderController
     {
         // 重置域名验证记录，重新开始验证计时
         DomainValidationRecord::where('order_id', $id)->delete();
+
+        // 清除委托写入标记，强制重新处理
+        $this->clearAutoTxtWrittenMarks($id);
+
         $this->action->revalidate($id);
     }
 
@@ -55,6 +59,10 @@ trait OrderController
     {
         // 重置域名验证记录，重新开始验证计时
         DomainValidationRecord::where('order_id', $id)->delete();
+
+        // 清除委托写入标记，切换验证方法时强制重新处理
+        $this->clearAutoTxtWrittenMarks($id);
+
         $method = request()->string('method', '')->trim();
         $this->action->updateDCV($id, $method);
     }
@@ -203,6 +211,11 @@ trait OrderController
         // 重置域名验证记录，重新开始验证计时
         DomainValidationRecord::whereIn('order_id', $validated['ids'])->delete();
 
+        // 清除委托写入标记，强制重新处理
+        foreach ($validated['ids'] as $id) {
+            $this->clearAutoTxtWrittenMarks($id);
+        }
+
         $this->action->batchRevalidate($validated['ids']);
     }
 
@@ -235,5 +248,75 @@ trait OrderController
     {
         $validated = $request->validated();
         $this->action->batchRevokeCancel($validated['ids']);
+    }
+
+    /**
+     * 更新订单自动续费/重签设置
+     */
+    public function updateAutoSettings(int $id): void
+    {
+        $validated = request()->validate([
+            'auto_renew' => 'nullable',
+            'auto_reissue' => 'nullable',
+        ]);
+
+        $order = Order::where('id', $id);
+
+        // 用户端只能更新自己的订单
+        if ($this->action->getUserId()) {
+            $order->where('user_id', $this->action->getUserId());
+        }
+
+        $order = $order->first();
+        if (! $order) {
+            $this->error('订单不存在');
+        }
+
+        // "global" 字符串表示使用全局设置，转换为 null
+        if (array_key_exists('auto_renew', $validated)) {
+            $order->auto_renew = $validated['auto_renew'] === 'global' ? null : $validated['auto_renew'];
+        }
+        if (array_key_exists('auto_reissue', $validated)) {
+            $order->auto_reissue = $validated['auto_reissue'] === 'global' ? null : $validated['auto_reissue'];
+        }
+
+        $order->save();
+
+        $this->success([
+            'auto_renew' => $order->auto_renew,
+            'auto_reissue' => $order->auto_reissue,
+        ]);
+    }
+
+    /**
+     * 清除订单的委托写入标记
+     */
+    protected function clearAutoTxtWrittenMarks(int $orderId): void
+    {
+        $order = Order::with('latestCert')->find($orderId);
+        if (! $order || ! $order->latestCert) {
+            return;
+        }
+
+        $cert = $order->latestCert;
+        $validation = $cert->validation;
+
+        if (empty($validation) || ! is_array($validation)) {
+            return;
+        }
+
+        $hasChanges = false;
+        foreach ($validation as &$item) {
+            if (isset($item['auto_txt_written'])) {
+                unset($item['auto_txt_written'], $item['auto_txt_written_at']);
+                $hasChanges = true;
+            }
+        }
+        unset($item);
+
+        if ($hasChanges) {
+            $cert->validation = $validation;
+            $cert->save();
+        }
     }
 }

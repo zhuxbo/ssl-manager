@@ -4,7 +4,7 @@ import type { IndexParams } from "@/api/delegation";
 import * as delegationApi from "@/api/delegation";
 import { message } from "@shared/utils";
 
-export function useDelegation(tableRef) {
+export function useDelegation(tableRef, selectedIds: { value: number[] }) {
   const search = ref<IndexParams>({});
 
   const dataList = ref([]);
@@ -74,6 +74,31 @@ export function useDelegation(tableRef) {
       });
   };
 
+  const handleBatchCopy = () => {
+    if (!selectedIds.value.length) {
+      message("请先选择委托记录", { type: "warning" });
+      return;
+    }
+
+    delegationApi.batchShow(selectedIds.value).then(res => {
+      if (res.data && Array.isArray(res.data)) {
+        const copyText = res.data
+          .map((item: any) => {
+            const subdomain =
+              item.cname_to?.host?.replace(`.${item.zone}`, "") || item.prefix;
+            return `域名: ${item.zone}\n主机记录: ${subdomain}\n记录类型: CNAME\n记录值: ${item.target_fqdn || item.cname_to?.value || ""}`;
+          })
+          .join("\n\n");
+
+        navigator.clipboard.writeText(copyText).then(() => {
+          message("已复制 " + res.data.length + " 条委托记录到剪贴板", {
+            type: "success"
+          });
+        });
+      }
+    });
+  };
+
   function onSearch() {
     loading.value = true;
     const params = {
@@ -124,6 +149,7 @@ export function useDelegation(tableRef) {
     handleStore,
     handleDestroy,
     handleBatchDestroy,
-    handleCheck
+    handleCheck,
+    handleBatchCopy
   };
 }

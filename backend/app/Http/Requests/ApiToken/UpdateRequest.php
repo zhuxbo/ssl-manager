@@ -14,6 +14,7 @@ class UpdateRequest extends BaseRequest
             'user_id' => 'required|integer|exists:users,id|unique:api_tokens,user_id,'.$apiTokenId,
             'token' => 'nullable|string|alpha_num|max:128',
             'allowed_ips' => 'nullable|array',
+            'allowed_ips.*' => 'ip',
             'rate_limit' => 'nullable|integer',
             'status' => 'nullable|integer',
         ];
@@ -28,9 +29,9 @@ class UpdateRequest extends BaseRequest
 
         if (isset($this->allowed_ips) && is_array($this->allowed_ips)) {
             $this->merge([
-                'allowed_ips' => array_filter($this->allowed_ips, function ($ip) {
-                    return ! empty($ip);
-                }),
+                'allowed_ips' => array_values(array_filter($this->allowed_ips, function ($ip) {
+                    return ! empty(trim($ip));
+                })),
             ]);
         }
     }

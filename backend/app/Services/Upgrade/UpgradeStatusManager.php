@@ -124,7 +124,7 @@ class UpgradeStatusManager
     /**
      * 标记升级完成
      */
-    public function complete(string $fromVersion, string $toVersion): void
+    public function complete(string $fromVersion, string $toVersion, ?array $structureCheck = null): void
     {
         $data = $this->get();
         if ($data) {
@@ -133,6 +133,9 @@ class UpgradeStatusManager
             $data['from_version'] = $fromVersion;
             $data['to_version'] = $toVersion;
             $data['progress'] = 100;
+            if ($structureCheck !== null) {
+                $data['structure_check'] = $structureCheck;
+            }
             $this->save($data);
         }
     }
@@ -162,9 +165,20 @@ class UpgradeStatusManager
             return null;
         }
 
-        $content = file_get_contents($this->statusFile);
+        $handle = fopen($this->statusFile, 'r');
+        if ($handle === false) {
+            return null;
+        }
 
-        return json_decode($content, true);
+        try {
+            flock($handle, LOCK_SH);
+            $content = stream_get_contents($handle);
+            flock($handle, LOCK_UN);
+
+            return json_decode($content, true);
+        } finally {
+            fclose($handle);
+        }
     }
 
     /**
@@ -188,32 +202,37 @@ class UpgradeStatusManager
     }
 
     /**
-     * 保存状态
+     * 保存状态（使用文件锁防止并发冲突）
      */
     protected function save(array $data): void
     {
         // 确保目录存在且可写
         $this->ensureDirectory();
 
-        $result = @file_put_contents(
-            $this->statusFile,
-            json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
-        );
-
-        if ($result === false) {
-            $dir = dirname($this->statusFile);
-            $error = "无法写入升级状态文件: {$this->statusFile}";
-
-            if (! is_dir($dir)) {
-                $error .= " (目录不存在)";
-            } elseif (! is_writable($dir)) {
-                $error .= " (目录不可写)";
-            } elseif (file_exists($this->statusFile) && ! is_writable($this->statusFile)) {
-                $error .= " (文件不可写)";
-            }
-
+        $handle = fopen($this->statusFile, 'c');
+        if ($handle === false) {
+            $error = "无法打开状态文件: {$this->statusFile}";
             Log::error($error);
             throw new \RuntimeException($error);
+        }
+
+        try {
+            if (! flock($handle, LOCK_EX)) {
+                throw new \RuntimeException("无法获取文件锁: {$this->statusFile}");
+            }
+
+            ftruncate($handle, 0);
+            rewind($handle);
+            $content = json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            $result = fwrite($handle, $content);
+            fflush($handle);
+            flock($handle, LOCK_UN);
+
+            if ($result === false) {
+                throw new \RuntimeException("无法写入状态文件: {$this->statusFile}");
+            }
+        } finally {
+            fclose($handle);
         }
     }
 
@@ -247,6 +266,10 @@ class UpgradeStatusManager
 
         if (Config::get('upgrade.behavior.clear_cache', true)) {
             $steps++; // clear_cache
+        }
+
+        if (Config::get('upgrade.behavior.auto_structure_check', true)) {
+            $steps++; // structure_check
         }
 
         // composer_install 是动态的，暂不计入

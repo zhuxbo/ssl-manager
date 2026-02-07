@@ -6,8 +6,8 @@ use App\Models\AdminLog;
 use App\Models\ApiLog;
 use App\Models\CallbackLog;
 use App\Models\EasyLog;
-use App\Models\Order;
 use App\Models\UserLog;
+use App\Services\LogBuffer;
 use App\Traits\LogSanitizer;
 use Closure;
 use Illuminate\Http\Request;
@@ -101,8 +101,8 @@ class LogOperation
             // 根据路由前缀记录不同类型的日志
             if ($request->is(['api/V1/*', 'api/v2/*'])) {
                 $this->logApiRequest($request, $logData);
-            } elseif ($request->is(['api/auto/*'])) {
-                $this->logApiAutoRequest($request, $logData);
+            } elseif ($request->is(['api/deploy', 'api/deploy/*'])) {
+                $this->logApiDeployRequest($request, $logData);
             } elseif ($request->is('api/admin/*')) {
                 $this->logAdminRequest($request, $logData);
             } elseif ($request->is('api/easy/*')) {
@@ -153,32 +153,20 @@ class LogOperation
      */
     protected function logApiRequest(Request $request, array $logData): void
     {
-        ApiLog::create(array_merge($logData, [
+        LogBuffer::add(ApiLog::class, array_merge($logData, [
             'user_id' => Auth::guard('api')->user()?->user_id,
             'version' => $this->getApiVersion($request),
         ]));
     }
 
     /**
-     * 记录 API Auto 请求日志
+     * 记录 API Deploy 请求日志
      */
-    protected function logApiAutoRequest(Request $request, array $logData): void
+    protected function logApiDeployRequest(Request $request, array $logData): void
     {
-        // 优先从 request 中获取控制器缓存的查询结果，避免重复查询
-        $order = $request->attributes->get('auto_order');
-
-        // 如果控制器没有缓存，则进行查询（理论上不应该发生）
-        if ($order === null) {
-            $referId = $request->bearerToken();
-            $order = Order::with('latestCert')
-                ->whereHas('latestCert', function ($query) use ($referId) {
-                    $query->where('refer_id', $referId);
-                })->first();
-        }
-
-        ApiLog::create(array_merge($logData, [
-            'user_id' => $order?->user_id,
-            'version' => 'auto',
+        LogBuffer::add(ApiLog::class, array_merge($logData, [
+            'user_id' => $request->attributes->get('authenticated_user_id'),
+            'version' => 'deploy',
         ]));
     }
 
@@ -187,7 +175,7 @@ class LogOperation
      */
     protected function logAdminRequest(Request $request, array $logData): void
     {
-        AdminLog::create(array_merge($logData, [
+        LogBuffer::add(AdminLog::class, array_merge($logData, [
             'admin_id' => Auth::guard('admin')->id(),
             'module' => $this->getModule($request),
             'action' => $this->getAction($request),
@@ -199,7 +187,7 @@ class LogOperation
      */
     protected function logUserRequest(Request $request, array $logData): void
     {
-        UserLog::create(array_merge($logData, [
+        LogBuffer::add(UserLog::class, array_merge($logData, [
             'user_id' => Auth::guard('user')->id(),
             'module' => $this->getModule($request),
             'action' => $this->getAction($request),
@@ -211,7 +199,7 @@ class LogOperation
      */
     protected function logCallbackRequest(array $logData): void
     {
-        CallbackLog::create($logData);
+        LogBuffer::add(CallbackLog::class, $logData);
     }
 
     /**
@@ -219,7 +207,7 @@ class LogOperation
      */
     protected function logEasyRequest(array $logData): void
     {
-        EasyLog::create($logData);
+        LogBuffer::add(EasyLog::class, $logData);
     }
 
     /**

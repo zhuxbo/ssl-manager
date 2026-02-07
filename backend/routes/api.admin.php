@@ -10,6 +10,7 @@ use App\Http\Controllers\Admin\ChainController;
 use App\Http\Controllers\Admin\ContactController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\DelegationController;
+use App\Http\Controllers\Admin\DeployTokenController;
 use App\Http\Controllers\Admin\FundController;
 use App\Http\Controllers\Admin\InvoiceController;
 use App\Http\Controllers\Admin\InvoiceLimitController;
@@ -78,6 +79,7 @@ Route::prefix('admin')->middleware('api.admin')->group(function () {
     RouteHelper::registerResourceRoutes('organization', OrganizationController::class);
     RouteHelper::registerResourceRoutes('callback', CallbackController::class);
     RouteHelper::registerResourceRoutes('api-token', ApiTokenController::class);
+    RouteHelper::registerResourceRoutes('deploy-token', DeployTokenController::class);
     RouteHelper::registerResourceRoutes('product', ProductController::class);
     Route::prefix('product')->group(function () {
         Route::post('import', [ProductController::class, 'import']);
@@ -122,6 +124,7 @@ Route::prefix('admin')->middleware('api.admin')->group(function () {
         Route::post('batch-sync', [OrderController::class, 'batchSync']);
         Route::post('batch-commit-cancel', [OrderController::class, 'batchCommitCancel']);
         Route::post('batch-revoke-cancel', [OrderController::class, 'batchRevokeCancel']);
+        Route::patch('auto-settings/{id}', [OrderController::class, 'updateAutoSettings'])->where('id', '[0-9]+');
     });
 
     // 证书路由
@@ -190,6 +193,7 @@ Route::prefix('admin')->middleware('api.admin')->group(function () {
     RouteHelper::registerResourceRoutes('delegation', DelegationController::class);
     Route::prefix('delegation')->group(function () {
         Route::post('check/{id}', [DelegationController::class, 'check'])->where('id', '[0-9]+');
+        Route::post('batch-store', [DelegationController::class, 'batchStore']);
     });
 
     // 通知管理

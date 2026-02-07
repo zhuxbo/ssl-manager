@@ -40,7 +40,7 @@
       查看
     </el-button>
     <el-button
-      v-if="['processing'].includes(row.latest_cert?.status)"
+      v-if="['processing'].includes(row.latest_cert?.status) && hasDcvInfo(row)"
       class="reset-margin !outline-none"
       type="primary"
       link
@@ -107,6 +107,20 @@ defineProps<{
   row: any;
   size?: "default" | "small" | "large";
 }>();
+
+const hasDcvInfo = (row: any) => {
+  const dcv = row.latest_cert?.dcv;
+  if (!dcv) return false;
+
+  // 委托验证检查 validation 数组
+  if (dcv.is_delegate) {
+    const validation = row.latest_cert?.validation;
+    return validation && validation.length > 0;
+  }
+
+  // 普通验证检查 dns 或 file 信息
+  return dcv.dns?.value || dcv.file?.name;
+};
 
 const allowCancel = (row: any) => {
   if (

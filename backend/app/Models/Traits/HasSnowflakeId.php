@@ -9,7 +9,7 @@ trait HasSnowflakeId
     public static function bootHasSnowflakeId(): void
     {
         static::creating(function ($model) {
-            if (!$model->id) {
+            if (! $model->id) {
                 $model->id = SnowFlake::generateParticle();
             }
         });

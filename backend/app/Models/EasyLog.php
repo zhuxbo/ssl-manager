@@ -4,8 +4,6 @@ namespace App\Models;
 
 class EasyLog extends BaseModel
 {
-    protected $connection = 'log';
-
     const null UPDATED_AT = null;
 
     protected $fillable = [

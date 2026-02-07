@@ -33,7 +33,7 @@ class PackageExtractor
             throw new RuntimeException("升级包不存在: $packagePath");
         }
 
-        $extractDir = $this->downloadPath . '/extract_' . uniqid();
+        $extractDir = $this->downloadPath.'/extract_'.uniqid();
         File::makeDirectory($extractDir, 0755, true);
 
         $zip = new ZipArchive;
@@ -140,9 +140,6 @@ class PackageExtractor
                 $this->updateVersionJsonWithPreservedFields($versionFile);
             }
 
-            // 处理删除的文件
-            $this->processDeletedFiles($extractedPath);
-
             // 清理缓存和临时文件
             $this->cleanupCacheFiles();
 
@@ -161,6 +158,9 @@ class PackageExtractor
     protected function applyBackendUpgrade(string $sourceDir): void
     {
         $targetDir = base_path();
+
+        // 保护自定义 API 适配器：先备份
+        $preservedApiAdapters = $this->preserveCustomApiAdapters($targetDir);
 
         // 需要同步的目录
         $dirs = ['app', 'config', 'database', 'routes', 'bootstrap', 'public'];
@@ -189,6 +189,9 @@ class PackageExtractor
                 File::copy($sourceFile, $targetFile);
             }
         }
+
+        // 恢复自定义 API 适配器
+        $this->restoreCustomApiAdapters($targetDir, $preservedApiAdapters);
     }
 
     /**
@@ -200,6 +203,12 @@ class PackageExtractor
         'user' => ['logo.svg', 'platform-config.json', 'qrcode.png'],
         'easy' => ['config.json'],
     ];
+
+    /**
+     * API 适配器目录中的核心文件（可被升级覆盖）
+     * 其他文件/目录为用户自定义适配器，需要保护
+     */
+    protected array $coreApiAdapterFiles = ['Api.php', 'default'];
 
     /**
      * 应用前端升级
@@ -251,6 +260,112 @@ class PackageExtractor
             $filePath = "$targetDir/$file";
             File::put($filePath, $content);
             Log::info("恢复前端配置文件: $type/$file");
+        }
+    }
+
+    /**
+     * 保留自定义 API 适配器
+     * 排除核心文件（Api.php, default/），保留用户自定义的适配器目录
+     */
+    protected function preserveCustomApiAdapters(string $targetDir): array
+    {
+        $preserved = [];
+        $apiAdapterDir = "$targetDir/app/Services/Order/Api";
+
+        if (! File::isDirectory($apiAdapterDir)) {
+            return $preserved;
+        }
+
+        // 遍历 Api 目录下的所有文件和目录
+        $items = array_merge(
+            File::files($apiAdapterDir),
+            File::directories($apiAdapterDir)
+        );
+
+        foreach ($items as $item) {
+            $name = is_string($item) ? basename($item) : $item->getFilename();
+
+            // 跳过核心文件
+            if (in_array($name, $this->coreApiAdapterFiles)) {
+                continue;
+            }
+
+            $itemPath = is_string($item) ? $item : $item->getRealPath();
+
+            // 保存自定义适配器
+            if (File::isDirectory($itemPath)) {
+                // 目录：递归复制到临时数组
+                $preserved[$name] = [
+                    'type' => 'directory',
+                    'files' => $this->getDirectoryContents($itemPath),
+                ];
+                Log::info("保留自定义 API 适配器目录: $name");
+            } else {
+                // 文件
+                $preserved[$name] = [
+                    'type' => 'file',
+                    'content' => File::get($itemPath),
+                ];
+                Log::info("保留自定义 API 适配器文件: $name");
+            }
+        }
+
+        return $preserved;
+    }
+
+    /**
+     * 获取目录内容（递归）
+     */
+    protected function getDirectoryContents(string $dir): array
+    {
+        $contents = [];
+        $files = File::allFiles($dir);
+
+        foreach ($files as $file) {
+            $relativePath = $file->getRelativePathname();
+            $contents[$relativePath] = File::get($file->getRealPath());
+        }
+
+        return $contents;
+    }
+
+    /**
+     * 恢复自定义 API 适配器
+     */
+    protected function restoreCustomApiAdapters(string $targetDir, array $preserved): void
+    {
+        if (empty($preserved)) {
+            return;
+        }
+
+        $apiAdapterDir = "$targetDir/app/Services/Order/Api";
+
+        // 确保目录存在
+        if (! File::isDirectory($apiAdapterDir)) {
+            File::makeDirectory($apiAdapterDir, 0755, true);
+        }
+
+        foreach ($preserved as $name => $data) {
+            $targetPath = "$apiAdapterDir/$name";
+
+            if ($data['type'] === 'directory') {
+                // 恢复目录
+                foreach ($data['files'] as $relativePath => $content) {
+                    $filePath = "$targetPath/$relativePath";
+                    $fileDir = dirname($filePath);
+
+                    if (! File::isDirectory($fileDir)) {
+                        File::makeDirectory($fileDir, 0755, true);
+                    }
+
+                    File::put($filePath, $content);
+                }
+                Log::info("恢复自定义 API 适配器目录: $name");
+            } else {
+                // 恢复文件
+                File::put($targetPath, $data['content']);
+                Log::info("恢复自定义 API 适配器文件: $name");
+            }
         }
     }
 
@@ -358,7 +473,7 @@ class PackageExtractor
 
             if ($returnCode !== 0) {
                 $errorOutput = implode("\n", $output);
-                Log::error("rsync 同步失败", [
+                Log::error('rsync 同步失败', [
                     'source' => $source,
                     'target' => $target,
                     'return_code' => $returnCode,
@@ -366,7 +481,7 @@ class PackageExtractor
                 ]);
 
                 // rsync 失败时降级到 PHP 方式
-                Log::info("rsync 失败，降级到 PHP 文件复制");
+                Log::info('rsync 失败，降级到 PHP 文件复制');
                 $this->syncDirectoryPhp($source, $target);
             }
         } else {
@@ -560,109 +675,8 @@ class PackageExtractor
         }
 
         // 写入合并后的配置
-        File::put($targetFile, json_encode($newConfig, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . "\n");
+        File::put($targetFile, json_encode($newConfig, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)."\n");
         Log::info('已更新项目根目录 version.json', ['preserved' => array_keys($preserved)]);
-    }
-
-    /**
-     * 处理删除的文件
-     */
-    protected function processDeletedFiles(string $extractedPath): void
-    {
-        // 查找 deleted-files.txt
-        $deletedFilesPath = $this->findDeletedFilesList($extractedPath);
-        if (! $deletedFilesPath) {
-            Log::info('升级包中没有 deleted-files.txt，跳过文件删除');
-
-            return;
-        }
-
-        $content = File::get($deletedFilesPath);
-        $files = array_filter(array_map('trim', explode("\n", $content)));
-
-        if (empty($files)) {
-            Log::info('deleted-files.txt 为空，跳过文件删除');
-
-            return;
-        }
-
-        $baseDir = base_path();
-        $deletedCount = 0;
-
-        foreach ($files as $relativePath) {
-            // 移除 backend/ 前缀（git diff 输出的路径包含 backend/）
-            if (str_starts_with($relativePath, 'backend/')) {
-                $relativePath = substr($relativePath, 8);
-            }
-
-            // 安全检查：不允许删除配置文件和用户数据
-            if ($this->isSafeToDelete($relativePath)) {
-                $fullPath = "$baseDir/$relativePath";
-                if (File::exists($fullPath)) {
-                    File::delete($fullPath);
-                    $deletedCount++;
-                    Log::info("删除文件: $relativePath");
-                }
-            } else {
-                Log::warning("跳过受保护的文件: $relativePath");
-            }
-        }
-
-        Log::info("共删除 $deletedCount 个文件");
-    }
-
-    /**
-     * 查找 deleted-files.txt
-     */
-    protected function findDeletedFilesList(string $extractedPath): ?string
-    {
-        $possiblePaths = [
-            "$extractedPath/deleted-files.txt",
-        ];
-
-        // 在子目录中查找
-        $dirs = File::directories($extractedPath);
-        foreach ($dirs as $dir) {
-            $possiblePaths[] = "$dir/deleted-files.txt";
-        }
-
-        foreach ($possiblePaths as $path) {
-            if (File::exists($path)) {
-                return $path;
-            }
-        }
-
-        return null;
-    }
-
-    /**
-     * 检查文件是否可以安全删除
-     */
-    protected function isSafeToDelete(string $relativePath): bool
-    {
-        // 检查路径穿越攻击
-        if (str_contains($relativePath, '../') || str_contains($relativePath, '..\\')) {
-            Log::warning("检测到路径穿越尝试: $relativePath");
-
-            return false;
-        }
-
-        // 不允许删除的文件和目录
-        $protected = [
-            '.env',
-            'storage/',
-            'bootstrap/cache/',
-            'vendor/',
-            '.git/',
-        ];
-
-        foreach ($protected as $pattern) {
-            if (str_starts_with($relativePath, $pattern) || $relativePath === rtrim($pattern, '/')) {
-                return false;
-            }
-        }
-
-        return true;
     }
 
     /**
@@ -777,8 +791,8 @@ class PackageExtractor
             $dirsStr = implode(', ', $notWritable);
 
             throw new RuntimeException(
-                "以下目录不可写: {$dirsStr}。" .
-                "请检查文件权限，确保 Web 服务用户 ($webUser) 有写权限。" .
+                "以下目录不可写: {$dirsStr}。".
+                "请检查文件权限，确保 Web 服务用户 ($webUser) 有写权限。".
                 "可以尝试运行: chown -R $webUser:$webUser $targetDir"
             );
         }
@@ -787,7 +801,7 @@ class PackageExtractor
         $storagePath = "$targetDir/storage";
         if (is_dir($storagePath) && ! is_writable($storagePath)) {
             throw new RuntimeException(
-                "storage 目录不可写: {$storagePath}。" .
+                "storage 目录不可写: {$storagePath}。".
                 '请确保 storage 目录及其子目录有写权限。'
             );
         }

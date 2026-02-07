@@ -1,4 +1,5 @@
 <?php
+
 /*
  * Copyright (c) 2017-2025 Tencent. All Rights Reserved.
  *
@@ -14,7 +15,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 namespace App\Services\Delegation\Sdk\TencentCloud\Dnspod\V20210323\Models;
+
 use App\Services\Delegation\Sdk\TencentCloud\Common\AbstractModel;
 
 /**
@@ -30,10 +33,7 @@ class DeleteRecordResponse extends AbstractModel
      */
     public $RequestId;
 
-    function __construct()
-    {
-
-    }
+    public function __construct() {}
 
     /**
      * For internal only. DO NOT USE IT.
@@ -43,8 +43,8 @@ class DeleteRecordResponse extends AbstractModel
         if ($param === null) {
             return;
         }
-        if (array_key_exists("RequestId",$param) and $param["RequestId"] !== null) {
-            $this->RequestId = $param["RequestId"];
+        if (array_key_exists('RequestId', $param) and $param['RequestId'] !== null) {
+            $this->RequestId = $param['RequestId'];
         }
     }
 }

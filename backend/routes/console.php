@@ -28,12 +28,6 @@ Schedule::command('schedule:purge')
     ->name('purge-expired-data')
     ->description('清理过期数据');
 
-// CNAME委托健康检查任务 - 每天执行一次
-Schedule::command('delegation:check')
-    ->dailyAt('05:30')
-    ->name('check-cname-delegations')
-    ->description('检查CNAME委托有效性');
-
 // CNAME委托DNS清理任务 - 每天凌晨6点执行
 Schedule::command('delegation:cleanup')
     ->dailyAt('06:00')

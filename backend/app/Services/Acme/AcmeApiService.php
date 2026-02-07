@@ -31,7 +31,7 @@ class AcmeApiService
         // 本地处理：查找或创建用户、创建订单、生成 EAB
         $user = User::where('email', $customer)->first();
 
-        if (!$user) {
+        if (! $user) {
             return ['code' => 0, 'msg' => 'User not found'];
         }
 
@@ -39,7 +39,7 @@ class AcmeApiService
             ->where('product_type', 'acme')
             ->first();
 
-        if (!$product) {
+        if (! $product) {
             return ['code' => 0, 'msg' => 'Product not found'];
         }
 
@@ -88,7 +88,7 @@ class AcmeApiService
 
         $account = AcmeAccount::find($accountId);
 
-        if (!$account) {
+        if (! $account) {
             return ['code' => 0, 'msg' => 'Account not found'];
         }
 
@@ -114,11 +114,11 @@ class AcmeApiService
 
         $account = AcmeAccount::find($accountId);
 
-        if (!$account) {
+        if (! $account) {
             return ['code' => 0, 'msg' => 'Account not found'];
         }
 
-        $identifiers = array_map(fn($d) => ['type' => 'dns', 'value' => $d], $domains);
+        $identifiers = array_map(fn ($d) => ['type' => 'dns', 'value' => $d], $domains);
 
         $result = $this->orderService->create($account, $identifiers);
 
@@ -143,7 +143,7 @@ class AcmeApiService
 
         $order = $this->orderService->getById($orderId);
 
-        if (!$order) {
+        if (! $order) {
             return ['code' => 0, 'msg' => 'Order not found'];
         }
 
@@ -164,11 +164,11 @@ class AcmeApiService
 
         $order = AcmeOrder::with('authorizations')->find($orderId);
 
-        if (!$order) {
+        if (! $order) {
             return ['code' => 0, 'msg' => 'Order not found'];
         }
 
-        $authorizations = $order->authorizations->map(fn($a) => [
+        $authorizations = $order->authorizations->map(fn ($a) => [
             'id' => $a->id,
             'identifier' => [
                 'type' => $a->identifier_type,
@@ -200,7 +200,7 @@ class AcmeApiService
 
         $authorization = $this->orderService->getAuthorization((string) $challengeId);
 
-        if (!$authorization) {
+        if (! $authorization) {
             return ['code' => 0, 'msg' => 'Challenge not found'];
         }
 
@@ -223,7 +223,7 @@ class AcmeApiService
 
         $order = $this->orderService->getById($orderId);
 
-        if (!$order) {
+        if (! $order) {
             return ['code' => 0, 'msg' => 'Order not found'];
         }
 
@@ -250,11 +250,11 @@ class AcmeApiService
 
         $order = $this->orderService->getById($orderId);
 
-        if (!$order) {
+        if (! $order) {
             return ['code' => 0, 'msg' => 'Order not found'];
         }
 
-        if ($order->status !== 'valid' || !$order->certificate) {
+        if ($order->status !== 'valid' || ! $order->certificate) {
             return ['code' => 0, 'msg' => 'Certificate not ready'];
         }
 
@@ -295,7 +295,7 @@ class AcmeApiService
         ];
 
         if ($order->relationLoaded('authorizations')) {
-            $data['authorizations'] = $order->authorizations->map(fn($a) => [
+            $data['authorizations'] = $order->authorizations->map(fn ($a) => [
                 'id' => $a->id,
                 'identifier' => [
                     'type' => $a->identifier_type,

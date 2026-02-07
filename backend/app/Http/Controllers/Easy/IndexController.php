@@ -135,6 +135,10 @@ class IndexController extends Controller
                     'validation_methods' => $product['validation_methods'],
                 ],
                 'validation' => $order->latestCert->validation[0] ?? [],
+                'cert' => [
+                    'dcv' => $order->latestCert->dcv,
+                    'domains' => $order->latestCert->alternative_names,
+                ],
                 'status' => 'processing',
             ]);
         }
@@ -143,6 +147,10 @@ class IndexController extends Controller
             $this->success([
                 'step' => 2,
                 'validation' => $order->latestCert->validation[0] ?? [],
+                'cert' => [
+                    'dcv' => $order->latestCert->dcv,
+                    'domains' => $order->latestCert->alternative_names,
+                ],
                 'status' => 'approving',
             ]);
         }
@@ -374,13 +382,16 @@ class IndexController extends Controller
 
         try {
             $action->updateDCV($order->order_id, $params['validation_method'] ?? 'cname');
+            $this->success();
         } catch (ApiResponseException $e) {
             $result = $e->getApiResponse();
-            if ($result['code'] === 0) {
-                // 防止订单信息与 CA 未同步
-                $action->createTask($order->order_id, 'sync', 10);
-                $this->error($result['msg'], $result['errors'] ?? null);
+            // Action::updateDCV 成功时也会抛出 ApiResponseException，需要检查 code
+            if ($result['code'] === 1) {
+                $this->success();
             }
+            // 防止订单信息与 CA 未同步
+            $action->createTask($order->order_id, 'sync', 10);
+            $this->error($result['msg'] ?? '更新失败', $result['errors'] ?? null);
         }
     }
 
@@ -487,6 +498,9 @@ class IndexController extends Controller
                     case 'file':
                         $result['file'] = '文件验证 FILE';
                         break;
+                    case 'delegation':
+                        $result['delegation'] = '委托验证(自动续签)';
+                        break;
                 }
             }
         }
@@ -557,7 +571,7 @@ class IndexController extends Controller
         $rules = [
             'domain' => 'required',
             'email' => 'required|email',
-            'validation_method' => 'required|in:file,http,https,cname,txt',
+            'validation_method' => 'required|in:file,http,https,cname,txt,delegation',
         ];
 
         $messages = [

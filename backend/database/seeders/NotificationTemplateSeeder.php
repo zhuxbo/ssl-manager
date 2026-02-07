@@ -292,13 +292,15 @@ HTML;
             .data-table td { border-bottom: 1px solid #333 !important; color: #e1e1e1 !important; }
             .warning-box { background-color: #332b00 !important; border-left-color: #f59e0b !important; }
             .warning-text { color: #fbbf24 !important; }
+            .error-box { background-color: #3b1818 !important; border-left-color: #dc2626 !important; }
+            .error-text { color: #f87171 !important; }
         }
     </style>
 </head>
 <body style="margin: 0; padding: 0; background-color: #f4f6f8;">
 
     <div style="display: none; font-size: 1px; line-height: 1px; max-height: 0px; max-width: 0px; opacity: 0; overflow: hidden; mso-hide: all; font-family: sans-serif;">
-        您的 SSL 证书即将过期，请尽快处理续费。
+        您的 SSL 证书即将到期，请尽快处理。
     </div>
 
     <center style="width: 100%; background-color: #f4f6f8;">
@@ -324,7 +326,7 @@ HTML;
                                 </p>
 
                                 <p style="margin: 0 0 25px 0; font-size: 15px; line-height: 26px; color: #555555;">
-                                    为了不影响网站的正常访问和数据安全，请注意下列证书即将到期，建议您尽快完成续费。
+                                    您的下列证书即将到期，为了不影响网站的正常访问和数据安全，请您尽快检查以下证书的 “自动重签/续费” 以及 “域名委托” 设置，或联系我们完成续期。
                                 </p>
 
                                 <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" class="data-table" style="margin-bottom: 24px; border-collapse: collapse; width: 100%;">
@@ -365,7 +367,7 @@ HTML;
                                 <div class="warning-box" style="background-color: #fffbeb; border-left: 4px solid #f59e0b; padding: 15px; border-radius: 0 4px 4px 0; margin-bottom: 30px;">
                                     <p class="warning-text" style="margin: 0; font-size: 14px; line-height: 22px; color: #92400e;">
                                         <strong>重要提示：</strong><br>
-                                        证书过期后，浏览器将拦截访问并显示“不安全”警告，严重影响用户信任。
+                                        证书到期后，浏览器将拦截访问并显示"不安全"警告，严重影响用户信任。
                                     </p>
                                 </div>
 
@@ -373,7 +375,7 @@ HTML;
                                     <tr>
                                         <td align="center">
                                             <a href="{{ $site_url }}" style="background-color:#f59e0b; border-radius:4px; color:#ffffff; display:inline-block; font-family:sans-serif; font-size:16px; font-weight:bold; line-height:44px; text-align:center; text-decoration:none; width:200px; -webkit-text-size-adjust:none;">
-                                                立即续费
+                                                立即续期
                                             </a>
                                         </td>
                                     </tr>

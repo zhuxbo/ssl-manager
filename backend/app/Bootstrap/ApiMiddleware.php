@@ -2,11 +2,14 @@
 
 namespace App\Bootstrap;
 
+use App\Http\Middleware\AcmeJwsMiddleware;
 use App\Http\Middleware\AdminAuthenticate;
 use App\Http\Middleware\AdminRefreshTokenAuthenticate;
 use App\Http\Middleware\ApiAuthenticate;
+use App\Http\Middleware\DeployAuthenticate;
 use App\Http\Middleware\DynamicCors;
 use App\Http\Middleware\FilterUserIdParameter;
+use App\Http\Middleware\FlushLogs;
 use App\Http\Middleware\ForceJsonResponse;
 use App\Http\Middleware\LoginRateLimiter;
 use App\Http\Middleware\LogOperation;
@@ -17,7 +20,6 @@ use App\Http\Middleware\TrimStrings;
 use App\Http\Middleware\TrustProxies;
 use App\Http\Middleware\UserAuthenticate;
 use App\Http\Middleware\UserRefreshTokenAuthenticate;
-use App\Http\Middleware\AcmeJwsMiddleware;
 use Illuminate\Foundation\Configuration\Middleware as Config;
 use Illuminate\Foundation\Http\Middleware\ConvertEmptyStringsToNull;
 use Illuminate\Foundation\Http\Middleware\ValidatePostSize;
@@ -41,6 +43,7 @@ class ApiMiddleware
             TimezoneMiddleware::class,
             ForceJsonResponse::class,
             LogOperation::class,
+            FlushLogs::class,
         ]);
 
         // 全局路由中间件组 在 RouteServiceProvider 中全局加载
@@ -62,9 +65,10 @@ class ApiMiddleware
             ApiAuthenticate::class,
         ]);
 
-        // API Auto 中间件组
-        $middleware->group('api.auto', [
-            RateLimiter::class.':auto',
+        // API Deploy 中间件组
+        $middleware->group('api.deploy', [
+            RateLimiter::class.':deploy',
+            DeployAuthenticate::class,
         ]);
 
         // ACME 中间件组

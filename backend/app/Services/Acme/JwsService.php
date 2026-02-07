@@ -15,7 +15,7 @@ class JwsService
     {
         $data = json_decode($body, true);
 
-        if (!$data || !isset($data['protected'], $data['payload'], $data['signature'])) {
+        if (! $data || ! isset($data['protected'], $data['payload'], $data['signature'])) {
             return null;
         }
 
@@ -39,13 +39,13 @@ class JwsService
      */
     public function verify(array $jws, array $publicKey): bool
     {
-        $signingInput = $jws['raw_protected'] . '.' . $jws['raw_payload'];
+        $signingInput = $jws['raw_protected'].'.'.$jws['raw_payload'];
         $signature = $this->base64UrlDecode($jws['signature']);
 
         // 从 JWK 构建 PEM 公钥
         $pem = $this->jwkToPem($publicKey);
 
-        if (!$pem) {
+        if (! $pem) {
             return false;
         }
 
@@ -61,7 +61,7 @@ class JwsService
 
         $publicKeyResource = openssl_pkey_get_public($pem);
 
-        if (!$publicKeyResource) {
+        if (! $publicKeyResource) {
             return false;
         }
 
@@ -146,7 +146,7 @@ class JwsService
         $payload = $outerJws['payload'] ?? [];
         $eab = $payload['externalAccountBinding'] ?? null;
 
-        if (!$eab) {
+        if (! $eab) {
             return false;
         }
 
@@ -159,7 +159,7 @@ class JwsService
         }
 
         // 验证 HMAC 签名
-        $signingInput = $eab['protected'] . '.' . $eab['payload'];
+        $signingInput = $eab['protected'].'.'.$eab['payload'];
         $hmacKey = $this->base64UrlDecode($eabHmac);
         $expectedSignature = hash_hmac('sha256', $signingInput, $hmacKey, true);
 
@@ -223,16 +223,16 @@ class JwsService
         $modulus = $this->encodeAsn1Integer($n);
         $exponent = $this->encodeAsn1Integer($e);
 
-        $rsaPublicKey = chr(0x30) . $this->encodeAsn1Length(strlen($modulus) + strlen($exponent)) . $modulus . $exponent;
+        $rsaPublicKey = chr(0x30).$this->encodeAsn1Length(strlen($modulus) + strlen($exponent)).$modulus.$exponent;
 
         // OID for rsaEncryption
-        $oid = chr(0x30) . chr(0x0d) . chr(0x06) . chr(0x09) . hex2bin('2a864886f70d010101') . chr(0x05) . chr(0x00);
+        $oid = chr(0x30).chr(0x0D).chr(0x06).chr(0x09).hex2bin('2a864886f70d010101').chr(0x05).chr(0x00);
 
-        $bitString = chr(0x03) . $this->encodeAsn1Length(strlen($rsaPublicKey) + 1) . chr(0x00) . $rsaPublicKey;
+        $bitString = chr(0x03).$this->encodeAsn1Length(strlen($rsaPublicKey) + 1).chr(0x00).$rsaPublicKey;
 
-        $der = chr(0x30) . $this->encodeAsn1Length(strlen($oid) + strlen($bitString)) . $oid . $bitString;
+        $der = chr(0x30).$this->encodeAsn1Length(strlen($oid) + strlen($bitString)).$oid.$bitString;
 
-        return "-----BEGIN PUBLIC KEY-----\n" . chunk_split(base64_encode($der), 64, "\n") . "-----END PUBLIC KEY-----";
+        return "-----BEGIN PUBLIC KEY-----\n".chunk_split(base64_encode($der), 64, "\n").'-----END PUBLIC KEY-----';
     }
 
     /**
@@ -251,19 +251,19 @@ class JwsService
             default => hex2bin('2a8648ce3d030107'),
         };
 
-        $point = chr(0x04) . $x . $y;
+        $point = chr(0x04).$x.$y;
 
         // 构建 ASN.1 结构
-        $ecOid = chr(0x06) . chr(0x07) . hex2bin('2a8648ce3d0201'); // ecPublicKey
-        $curveOid = chr(0x06) . chr(strlen($oid)) . $oid;
+        $ecOid = chr(0x06).chr(0x07).hex2bin('2a8648ce3d0201'); // ecPublicKey
+        $curveOid = chr(0x06).chr(strlen($oid)).$oid;
 
-        $algorithmIdentifier = chr(0x30) . $this->encodeAsn1Length(strlen($ecOid) + strlen($curveOid)) . $ecOid . $curveOid;
+        $algorithmIdentifier = chr(0x30).$this->encodeAsn1Length(strlen($ecOid) + strlen($curveOid)).$ecOid.$curveOid;
 
-        $bitString = chr(0x03) . $this->encodeAsn1Length(strlen($point) + 1) . chr(0x00) . $point;
+        $bitString = chr(0x03).$this->encodeAsn1Length(strlen($point) + 1).chr(0x00).$point;
 
-        $der = chr(0x30) . $this->encodeAsn1Length(strlen($algorithmIdentifier) + strlen($bitString)) . $algorithmIdentifier . $bitString;
+        $der = chr(0x30).$this->encodeAsn1Length(strlen($algorithmIdentifier) + strlen($bitString)).$algorithmIdentifier.$bitString;
 
-        return "-----BEGIN PUBLIC KEY-----\n" . chunk_split(base64_encode($der), 64, "\n") . "-----END PUBLIC KEY-----";
+        return "-----BEGIN PUBLIC KEY-----\n".chunk_split(base64_encode($der), 64, "\n").'-----END PUBLIC KEY-----';
     }
 
     /**
@@ -273,15 +273,15 @@ class JwsService
     {
         // 空字符串返回 ASN.1 编码的 0
         if ($data === '') {
-            return chr(0x02) . chr(0x01) . chr(0x00);
+            return chr(0x02).chr(0x01).chr(0x00);
         }
 
         // 如果最高位是1，需要添加前导0
         if (ord($data[0]) & 0x80) {
-            $data = chr(0x00) . $data;
+            $data = chr(0x00).$data;
         }
 
-        return chr(0x02) . $this->encodeAsn1Length(strlen($data)) . $data;
+        return chr(0x02).$this->encodeAsn1Length(strlen($data)).$data;
     }
 
     /**
@@ -295,10 +295,10 @@ class JwsService
 
         $bytes = '';
         while ($length > 0) {
-            $bytes = chr($length & 0xff) . $bytes;
+            $bytes = chr($length & 0xFF).$bytes;
             $length >>= 8;
         }
 
-        return chr(0x80 | strlen($bytes)) . $bytes;
+        return chr(0x80 | strlen($bytes)).$bytes;
     }
 }

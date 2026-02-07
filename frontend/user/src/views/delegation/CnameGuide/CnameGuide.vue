@@ -36,6 +36,7 @@
     </div>
 
     <template #footer>
+      <el-button @click="copyAll">一键复制全部</el-button>
       <el-button type="primary" @click="visible = false"> 知道了 </el-button>
     </template>
   </el-dialog>
@@ -102,6 +103,21 @@ const cnameValue = computed(() => {
  * 复制文本到剪贴板
  */
 const copyText = (text: string): void => {
+  navigator.clipboard
+    .writeText(text)
+    .then(() => {
+      ElMessage.success("复制成功");
+    })
+    .catch(() => {
+      ElMessage.error("复制失败");
+    });
+};
+
+/**
+ * 一键复制全部
+ */
+const copyAll = (): void => {
+  const text = `域名: ${props.options?.zone}\n主机记录: ${hostRecord.value}\n记录类型: CNAME\n记录值: ${cnameValue.value}`;
   navigator.clipboard
     .writeText(text)
     .then(() => {

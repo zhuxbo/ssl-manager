@@ -38,6 +38,7 @@ class User extends BaseModel implements AuthenticatableContract, JWTSubject
         'email_verified_at',
         'status',
         'notification_settings',
+        'auto_settings',
     ];
 
     protected $hidden = [
@@ -53,6 +54,7 @@ class User extends BaseModel implements AuthenticatableContract, JWTSubject
         'logout_at' => 'datetime',
         'email_verified_at' => 'datetime',
         'notification_settings' => 'json',
+        'auto_settings' => 'json',
     ];
 
     /**
@@ -227,6 +229,43 @@ class User extends BaseModel implements AuthenticatableContract, JWTSubject
         $settings = $this->notification_settings ?? [];
 
         return (bool) data_get($settings, $channel.'.'.$type, true);
+    }
+
+    /**
+     * 获取自动设置
+     */
+    public function getAutoSettingsAttribute($value): array
+    {
+        return $this->normalizeAutoSettings($value);
+    }
+
+    /**
+     * 设置自动设置
+     */
+    public function setAutoSettingsAttribute($value): void
+    {
+        $this->attributes['auto_settings'] = json_encode(
+            $this->normalizeAutoSettings($value)
+        );
+    }
+
+    /**
+     * 归一化自动设置
+     */
+    protected function normalizeAutoSettings(mixed $value): array
+    {
+        if (is_string($value)) {
+            $value = json_decode($value, true) ?? [];
+        }
+
+        if (! is_array($value)) {
+            $value = [];
+        }
+
+        return [
+            'auto_renew' => (bool) ($value['auto_renew'] ?? false),
+            'auto_reissue' => (bool) ($value['auto_reissue'] ?? false),
+        ];
     }
 
     /**

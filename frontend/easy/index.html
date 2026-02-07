@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
@@ -446,6 +446,50 @@
             <tr class="dns-result" style="display: none">
               <th>检测到的值</th>
               <td><span id="check-detected"></span></td>
+            </tr>
+            <!-- 委托验证：CNAME 检测 -->
+            <tr class="delegation-result" style="display: none">
+              <th>CNAME 委托</th>
+              <td>
+                <span id="check-cname-status" class="status-badge"></span>
+              </td>
+            </tr>
+            <tr class="delegation-result" style="display: none">
+              <th>查询主机</th>
+              <td><span id="check-cname-host"></span></td>
+            </tr>
+            <tr class="delegation-result" style="display: none">
+              <th>期望指向</th>
+              <td><span id="check-cname-expected"></span></td>
+            </tr>
+            <tr class="delegation-result" style="display: none">
+              <th>实际指向</th>
+              <td><span id="check-cname-detected"></span></td>
+            </tr>
+            <tr class="delegation-cname-error" style="display: none">
+              <th>错误</th>
+              <td><span id="check-cname-error" class="error-text"></span></td>
+            </tr>
+            <!-- 委托验证：TXT 检测 -->
+            <tr class="delegation-txt-result" style="display: none">
+              <th>TXT 记录</th>
+              <td><span id="check-txt-status" class="status-badge"></span></td>
+            </tr>
+            <tr class="delegation-txt-result" style="display: none">
+              <th>查询主机</th>
+              <td><span id="check-txt-host"></span></td>
+            </tr>
+            <tr class="delegation-txt-result" style="display: none">
+              <th>期望值</th>
+              <td><span id="check-txt-expected"></span></td>
+            </tr>
+            <tr class="delegation-txt-result" style="display: none">
+              <th>检测到的值</th>
+              <td><span id="check-txt-detected"></span></td>
+            </tr>
+            <tr class="delegation-txt-error" style="display: none">
+              <th>错误</th>
+              <td><span id="check-txt-error" class="error-text"></span></td>
             </tr>
             <tr class="file-result" style="display: none">
               <th>验证链接</th>

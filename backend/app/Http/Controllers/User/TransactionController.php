@@ -48,8 +48,8 @@ class TransactionController extends BaseController
 
         $total = $query->count();
         $items = $query->select([
-                'type', 'transaction_id', 'amount', 'balance_before', 'balance_after', 'remark', 'created_at',
-            ])
+            'type', 'transaction_id', 'amount', 'balance_before', 'balance_after', 'remark', 'created_at',
+        ])
             ->orderBy('id', 'desc')
             ->offset(($currentPage - 1) * $pageSize)
             ->limit($pageSize)

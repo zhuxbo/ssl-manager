@@ -16,10 +16,6 @@ class InstallConfig
         public string $dbCollation = '',
         public ?string $mysqlVersion = null,
         public ?float $mysqlMajorVersion = null,
-        public string $redisHost = '127.0.0.1',
-        public int $redisPort = 6379,
-        public string $redisUsername = '',
-        public string $redisPassword = '',
     ) {}
 
     /**
@@ -38,10 +34,6 @@ class InstallConfig
             dbCollation: $data['db_collation'] ?? '',
             mysqlVersion: $data['mysql_version'] ?? null,
             mysqlMajorVersion: isset($data['mysql_major_version']) ? (float) $data['mysql_major_version'] : null,
-            redisHost: $data['redis_host'] ?? '127.0.0.1',
-            redisPort: (int) ($data['redis_port'] ?? 6379),
-            redisUsername: $data['redis_username'] ?? '',
-            redisPassword: $data['redis_password'] ?? '',
         );
     }
 
@@ -66,18 +58,6 @@ class InstallConfig
         }
         if (isset($_POST['db_password'])) {
             $config->dbPassword = trim($_POST['db_password']);
-        }
-        if (isset($_POST['redis_host'])) {
-            $config->redisHost = trim($_POST['redis_host']);
-        }
-        if (isset($_POST['redis_port'])) {
-            $config->redisPort = (int) trim($_POST['redis_port']);
-        }
-        if (isset($_POST['redis_username'])) {
-            $config->redisUsername = trim($_POST['redis_username']);
-        }
-        if (isset($_POST['redis_password'])) {
-            $config->redisPassword = trim($_POST['redis_password']);
         }
 
         return $config;
@@ -105,10 +85,6 @@ class InstallConfig
             'db_collation' => $this->dbCollation,
             'mysql_version' => $this->mysqlVersion,
             'mysql_major_version' => $this->mysqlMajorVersion,
-            'redis_host' => $this->redisHost,
-            'redis_port' => $this->redisPort,
-            'redis_username' => $this->redisUsername,
-            'redis_password' => $this->redisPassword,
         ];
     }
 

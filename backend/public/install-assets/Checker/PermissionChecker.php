@@ -22,13 +22,14 @@ class PermissionChecker
     private function getDirectories(): array
     {
         return [
-            $this->projectRoot . '/storage',
-            $this->projectRoot . '/bootstrap/cache',
+            $this->projectRoot.'/storage',
+            $this->projectRoot.'/bootstrap/cache',
         ];
     }
 
     /**
      * 检查所有目录权限
+     *
      * @return CheckResult[]
      */
     public function check(): array
@@ -47,7 +48,7 @@ class PermissionChecker
      */
     private function checkDirectory(string $directory): CheckResult
     {
-        $name = '目录权限: ' . basename($directory);
+        $name = '目录权限: '.basename($directory);
 
         if (! is_dir($directory)) {
             return CheckResult::error(

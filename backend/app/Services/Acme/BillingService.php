@@ -64,7 +64,7 @@ class BillingService
     public function findValidOrder(User $user): ?Order
     {
         return Order::where('user_id', $user->id)
-            ->whereHas('product', fn($q) => $q->where('product_type', 'acme'))
+            ->whereHas('product', fn ($q) => $q->where('product_type', 'acme'))
             ->where('period_till', '>', now())
             ->whereNull('cancelled_at')
             ->orderBy('period_till', 'desc')
@@ -77,7 +77,7 @@ class BillingService
     public function findLastOrder(User $user): ?Order
     {
         return Order::where('user_id', $user->id)
-            ->whereHas('product', fn($q) => $q->where('product_type', 'acme'))
+            ->whereHas('product', fn ($q) => $q->where('product_type', 'acme'))
             ->orderBy('created_at', 'desc')
             ->first();
     }
@@ -89,7 +89,7 @@ class BillingService
     {
         $product = $lastOrder->product;
 
-        if (!$product) {
+        if (! $product) {
             return ['success' => false, 'message' => 'Product not found'];
         }
 
@@ -146,7 +146,7 @@ class BillingService
     {
         $fund = $user->funds->first();
 
-        if (!$fund) {
+        if (! $fund) {
             throw new \Exception('User has no fund account');
         }
 

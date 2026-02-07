@@ -57,22 +57,43 @@ return [
     // 升级行为配置
     'behavior' => [
         // 升级前是否强制备份
-        'force_backup' => true,
+        'force_backup' => env('UPGRADE_FORCE_BACKUP', true),
 
         // 升级前是否进入维护模式
-        'maintenance_mode' => true,
+        'maintenance_mode' => env('UPGRADE_MAINTENANCE_MODE', true),
 
         // 升级后是否自动清理缓存
-        'clear_cache' => true,
+        'clear_cache' => env('UPGRADE_CLEAR_CACHE', true),
 
         // 升级后是否自动运行迁移
-        'auto_migrate' => true,
+        'auto_migrate' => env('UPGRADE_AUTO_MIGRATE', true),
 
         // 升级后是否自动运行种子（seeder 有防御性检测，可重复执行）
-        'auto_seed' => true,
+        'auto_seed' => env('UPGRADE_AUTO_SEED', true),
 
         // 指定种子类，null 表示 DatabaseSeeder
         'seed_class' => null,
+
+        // 升级后是否自动校验数据库结构
+        'auto_structure_check' => env('UPGRADE_AUTO_STRUCTURE_CHECK', true),
+
+        // 发现差异时是否自动修复（仅 ADD 类型：缺失的表、列、索引）
+        'auto_structure_fix' => env('UPGRADE_AUTO_STRUCTURE_FIX', true),
+
+        // 列注释严格比对
+        'strict_comment_check' => env('UPGRADE_STRICT_COMMENT_CHECK', false),
+    ],
+
+    // 结构校验时排除的系统表
+    'exclude_tables' => [
+        'migrations',
+        'failed_jobs',
+        'password_reset_tokens',
+        'personal_access_tokens',
+        'telescope_entries',
+        'telescope_entries_tags',
+        'telescope_monitoring',
+        'queue_batches',
     ],
 
     // 版本限制

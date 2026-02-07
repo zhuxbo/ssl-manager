@@ -34,6 +34,7 @@ abstract class Authenticate
 
     /**
      * 中间件入口
+     *
      * @throws AuthenticationException
      */
     public function handle(Request $request, Closure $next)
@@ -89,6 +90,7 @@ abstract class Authenticate
 
     /**
      * 检查 token_version + “黑名单宽限期”
+     *
      * @throws AuthenticationException
      */
     protected function checkTokenVersionGraceful(JWTGuard $guard, $payload): void

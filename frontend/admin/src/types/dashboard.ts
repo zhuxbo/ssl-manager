@@ -9,15 +9,17 @@ export interface ApiVersionStats {
   success_rate: number;
 }
 
+// 财务数据
+export interface FinancePeriod {
+  recharge: number;
+  consumption: number;
+  prev_recharge: number;
+  prev_consumption: number;
+}
+
 // 系统概览数据
 export interface SystemOverviewData {
   daily: {
-    new_users: number;
-    new_orders: number;
-    new_active_orders: number;
-    monthly_active_orders: number;
-    monthly_inactive_orders: number;
-    daily_revenue: number;
     api_calls: number;
     api_errors: number;
     error_rate: number;
@@ -28,7 +30,21 @@ export interface SystemOverviewData {
     total_orders: number;
     active_orders: number;
     expiring_orders: number;
-    total_revenue: number;
+  };
+  finance: {
+    daily: FinancePeriod;
+    weekly: FinancePeriod;
+    monthly: FinancePeriod;
+  };
+  new_users: {
+    daily: number;
+    weekly: number;
+    monthly: number;
+  };
+  new_orders: {
+    daily: number;
+    weekly: number;
+    monthly: number;
   };
 }
 
@@ -54,7 +70,8 @@ export interface TrendDataPoint {
   date: string;
   users: number;
   orders: number;
-  revenue: number;
+  recharge: number;
+  consumption: number;
 }
 
 // 产品销售排行

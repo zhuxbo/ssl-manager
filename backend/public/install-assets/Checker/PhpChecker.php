@@ -78,19 +78,20 @@ class PhpChecker
             return CheckResult::success(
                 'PHP 版本',
                 $currentVersion,
-                "要求 >= " . self::REQUIRED_VERSION
+                '要求 >= '.self::REQUIRED_VERSION
             );
         }
 
         return CheckResult::error(
             'PHP 版本',
             $currentVersion,
-            "PHP 版本必须 >= " . self::REQUIRED_VERSION . "，当前版本: $currentVersion"
+            'PHP 版本必须 >= '.self::REQUIRED_VERSION."，当前版本: $currentVersion"
         );
     }
 
     /**
      * 检查所有必需的扩展
+     *
      * @return CheckResult[]
      */
     public function checkExtensions(): array

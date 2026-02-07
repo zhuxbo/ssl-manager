@@ -70,6 +70,53 @@ docker compose exec php sh     # 进入容器
 docker compose exec php php artisan <cmd>  # Artisan
 ```
 
+---
+
+## 开发环境 Docker
+
+开发环境位于 `develop/` 目录，与生产环境独立。
+
+### 启动
+
+```bash
+cd develop
+./start.sh up    # 启动
+./start.sh down  # 停止
+```
+
+### 服务说明
+
+| 服务 | 端口 | 说明 |
+|------|------|------|
+| mysql | 3307 | MySQL 8.0（避免与本地 3306 冲突） |
+| backend | 8001 | Laravel artisan serve |
+| admin | 5201 | Vite dev server（管理端） |
+| user | 5202 | Vite dev server（用户端） |
+| redis | 6379 | 可选，需 `--profile redis` |
+
+### 自动初始化
+
+backend 容器启动时自动执行：
+```bash
+php artisan migrate --force
+php artisan db:seed --force
+php artisan serve --host=0.0.0.0 --port=8000
+```
+
+### 前端代理配置
+
+Vite 通过 `VITE_API_TARGET` 环境变量配置 API 代理：
+```yaml
+environment:
+  VITE_API_TARGET: http://backend:8000
+```
+
+### 注意事项
+
+- 本地 MySQL 占用 3306 时，修改 `.env` 中 `MYSQL_PORT=3307`
+- 需要先创建外部网络：`docker network create cnssl-dev-network`
+- 首次启动前端需要安装依赖，admin 健康后 user 才启动
+
 ### 配置修改
 
 | 文件 | 说明 | 修改后操作 |

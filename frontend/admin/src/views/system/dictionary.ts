@@ -48,6 +48,7 @@ const caConfig = (getConfig("CAs") as string[]) || [
   "certum",
   "digicert",
   "globalsign",
+  "trustasia",
   "sheca",
   "cfca"
 ];
@@ -121,6 +122,7 @@ export const nameTypeLabels: { [key: string]: string } = {
 
 // 验证方法选项
 export const validationMethodOptions = [
+  { label: "委托验证", value: "delegation" },
   { label: "TXT", value: "txt" },
   { label: "CNAME", value: "cname" },
   { label: "FILE", value: "file" },
@@ -134,6 +136,7 @@ export const validationMethodOptions = [
 ];
 
 export const validationMethodLabels: { [key: string]: string } = {
+  delegation: "委托验证(自动续签)",
   txt: "TXT(解析验证)",
   cname: "CNAME(解析验证)",
   file: "FILE(文件验证)",

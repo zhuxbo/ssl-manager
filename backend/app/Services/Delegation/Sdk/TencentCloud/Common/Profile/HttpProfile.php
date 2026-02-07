@@ -1,4 +1,5 @@
 <?php
+
 /*
  * Copyright (c) 2017 Tencent. All Rights Reserved.
  *
@@ -21,30 +22,28 @@ namespace App\Services\Delegation\Sdk\TencentCloud\Common\Profile;
 /**
  * http相关参数类
  * Class HttpProfile
- * @package App\Services\Delegation\Sdk\TencentCloud\Common\Profile
  */
 class HttpProfile
 {
-
     /**
      * @var string https访问
      */
-    public static $REQ_HTTPS = "https://";
+    public static $REQ_HTTPS = 'https://';
 
     /**
      * @var string http访问
      */
-    public static $REQ_HTTP = "http://";
+    public static $REQ_HTTP = 'http://';
 
     /**
-     * @var string  post请求
+     * @var string post请求
      */
-    public static $REQ_POST = "POST";
+    public static $REQ_POST = 'POST';
 
     /**
-     * @var string  get请求
+     * @var string get请求
      */
-    public static $REQ_GET = "GET";
+    public static $REQ_GET = 'GET';
 
     /**
      * @var int 时间一分钟
@@ -62,7 +61,7 @@ class HttpProfile
     private $endpoint;
 
     /**
-     * @var integer 请求超时时长，单位为秒
+     * @var int 请求超时时长，单位为秒
      */
     private $reqTimeout;
 
@@ -82,30 +81,32 @@ class HttpProfile
     private $rootDomain;
 
     /**
-     * @var boolean
+     * @var bool
      */
     private $keepAlive;
 
     /**
      * HttpProfile constructor.
-     * @param string $protocol  请求协议
-     * @param string $endpoint  请求接入点域名(xx.[region.]tencentcloudapi.com)
-     * @param string $reqMethod http请求方法，目前支持POST GET
-     * @param integer $reqTimeout 请求超时时间，单位:s
+     *
+     * @param  string  $protocol  请求协议
+     * @param  string  $endpoint  请求接入点域名(xx.[region.]tencentcloudapi.com)
+     * @param  string  $reqMethod  http请求方法，目前支持POST GET
+     * @param  int  $reqTimeout  请求超时时间，单位:s
      */
-    public function __construct($protocol = null, $endpoint = null, $reqMethod = null,  $reqTimeout = null)
+    public function __construct($protocol = null, $endpoint = null, $reqMethod = null, $reqTimeout = null)
     {
         $this->reqMethod = $reqMethod ? $reqMethod : HttpProfile::$REQ_POST;
         $this->endpoint = $endpoint;
         $this->reqTimeout = $reqTimeout ? $reqTimeout : HttpProfile::$TM_MINUTE;
         $this->protocol = $protocol ? $protocol : HttpProfile::$REQ_HTTPS;
-        $this->rootDomain = "tencentcloudapi.com";
+        $this->rootDomain = 'tencentcloudapi.com';
         $this->keepAlive = false;
     }
 
     /**
      * 设置http请求方法
-     * @param string $reqMethod http请求方法，目前支持POST GET
+     *
+     * @param  string  $reqMethod  http请求方法，目前支持POST GET
      */
     public function setReqMethod($reqMethod)
     {
@@ -114,15 +115,18 @@ class HttpProfile
 
     /**
      * 设置请求协议
-     * @param string $protocol 请求协议（https://  http://）
+     *
+     * @param  string  $protocol  请求协议（https://  http://）
      */
-    public function setProtocol($protocol) {
+    public function setProtocol($protocol)
+    {
         $this->protocol = $protocol;
     }
 
     /**
      * 设置请求接入点域名
-     * @param string $endpoint 请求接入点域名(xx.[region.]tencentcloudapi.com)
+     *
+     * @param  string  $endpoint  请求接入点域名(xx.[region.]tencentcloudapi.com)
      */
     public function setEndpoint($endpoint)
     {
@@ -131,7 +135,8 @@ class HttpProfile
 
     /**
      * 设置请求超时时间
-     * @param integer $reqTimeout 请求超时时间，单位:s
+     *
+     * @param  int  $reqTimeout  请求超时时间，单位:s
      */
     public function setReqTimeout($reqTimeout)
     {
@@ -140,7 +145,8 @@ class HttpProfile
 
     /**
      * 设置请求代理
-     * @param string|array $proxy 请求代理配置
+     *
+     * @param  string|array  $proxy  请求代理配置
      */
     public function setProxy($proxy)
     {
@@ -149,6 +155,7 @@ class HttpProfile
 
     /**
      * 获取请求方法
+     *
      * @return null|string 请求方法
      */
     public function getReqMethod()
@@ -158,6 +165,7 @@ class HttpProfile
 
     /**
      * 获取请求协议
+     *
      * @return null|string 请求协议
      */
     public function getProtocol()
@@ -167,6 +175,7 @@ class HttpProfile
 
     /**
      * 获取请求超时时间
+     *
      * @return int 请求超时时间
      */
     public function getReqTimeout()
@@ -176,6 +185,7 @@ class HttpProfile
 
     /**
      * 获取请求接入点域名
+     *
      * @return null|string 接入点域名
      */
     public function getEndpoint()
@@ -185,6 +195,7 @@ class HttpProfile
 
     /**
      * 获取请求代理
+     *
      * @return null|string|array
      */
     public function getProxy()
@@ -203,13 +214,15 @@ class HttpProfile
     }
 
     /**
-     * @param boolean $flag
+     * @param  bool  $flag
      */
-    public function setKeepAlive($flag) {
+    public function setKeepAlive($flag)
+    {
         $this->keepAlive = $flag;
     }
 
-    public function getKeepAlive() {
+    public function getKeepAlive()
+    {
         return $this->keepAlive;
     }
 }
