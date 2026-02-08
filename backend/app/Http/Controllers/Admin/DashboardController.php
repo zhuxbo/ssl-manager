@@ -208,8 +208,8 @@ class DashboardController extends Controller
             $financeRows = DB::select("
                 SELECT
                     DATE(created_at) as date,
-                    COALESCE(SUM(CASE WHEN type IN ('addfunds', 'refunds', 'reverse') THEN amount ELSE 0 END), 0) AS recharge,
-                    COALESCE(ABS(SUM(CASE WHEN type IN ('order', 'cancel', 'deduct') THEN amount ELSE 0 END)), 0) AS consumption
+                    COALESCE(SUM(CASE WHEN type IN ('addfunds', 'refunds') THEN amount ELSE 0 END), 0) AS recharge,
+                    COALESCE(ABS(SUM(CASE WHEN type IN ('order', 'cancel', 'deduct', 'reverse') THEN amount ELSE 0 END)), 0) AS consumption
                 FROM transactions
                 WHERE created_at >= ?
                 GROUP BY DATE(created_at)
@@ -394,18 +394,18 @@ class DashboardController extends Controller
         // 单次扫表，用 CASE WHEN 按日期阈值分桶
         $row = DB::selectOne("
             SELECT
-                SUM(CASE WHEN created_at >= ? AND type IN ('addfunds','refunds','reverse') THEN amount ELSE 0 END) AS d_r,
-                ABS(SUM(CASE WHEN created_at >= ? AND type IN ('order','cancel','deduct') THEN amount ELSE 0 END)) AS d_c,
-                SUM(CASE WHEN created_at >= ? AND type IN ('addfunds','refunds','reverse') THEN amount ELSE 0 END) AS w_r,
-                ABS(SUM(CASE WHEN created_at >= ? AND type IN ('order','cancel','deduct') THEN amount ELSE 0 END)) AS w_c,
-                SUM(CASE WHEN created_at >= ? AND type IN ('addfunds','refunds','reverse') THEN amount ELSE 0 END) AS m_r,
-                ABS(SUM(CASE WHEN created_at >= ? AND type IN ('order','cancel','deduct') THEN amount ELSE 0 END)) AS m_c,
-                SUM(CASE WHEN created_at >= ? AND created_at < ? AND type IN ('addfunds','refunds','reverse') THEN amount ELSE 0 END) AS pd_r,
-                ABS(SUM(CASE WHEN created_at >= ? AND created_at < ? AND type IN ('order','cancel','deduct') THEN amount ELSE 0 END)) AS pd_c,
-                SUM(CASE WHEN created_at >= ? AND created_at < ? AND type IN ('addfunds','refunds','reverse') THEN amount ELSE 0 END) AS pw_r,
-                ABS(SUM(CASE WHEN created_at >= ? AND created_at < ? AND type IN ('order','cancel','deduct') THEN amount ELSE 0 END)) AS pw_c,
-                SUM(CASE WHEN created_at >= ? AND created_at < ? AND type IN ('addfunds','refunds','reverse') THEN amount ELSE 0 END) AS pm_r,
-                ABS(SUM(CASE WHEN created_at >= ? AND created_at < ? AND type IN ('order','cancel','deduct') THEN amount ELSE 0 END)) AS pm_c
+                SUM(CASE WHEN created_at >= ? AND type IN ('addfunds','refunds') THEN amount ELSE 0 END) AS d_r,
+                ABS(SUM(CASE WHEN created_at >= ? AND type IN ('order','cancel','deduct','reverse') THEN amount ELSE 0 END)) AS d_c,
+                SUM(CASE WHEN created_at >= ? AND type IN ('addfunds','refunds') THEN amount ELSE 0 END) AS w_r,
+                ABS(SUM(CASE WHEN created_at >= ? AND type IN ('order','cancel','deduct','reverse') THEN amount ELSE 0 END)) AS w_c,
+                SUM(CASE WHEN created_at >= ? AND type IN ('addfunds','refunds') THEN amount ELSE 0 END) AS m_r,
+                ABS(SUM(CASE WHEN created_at >= ? AND type IN ('order','cancel','deduct','reverse') THEN amount ELSE 0 END)) AS m_c,
+                SUM(CASE WHEN created_at >= ? AND created_at < ? AND type IN ('addfunds','refunds') THEN amount ELSE 0 END) AS pd_r,
+                ABS(SUM(CASE WHEN created_at >= ? AND created_at < ? AND type IN ('order','cancel','deduct','reverse') THEN amount ELSE 0 END)) AS pd_c,
+                SUM(CASE WHEN created_at >= ? AND created_at < ? AND type IN ('addfunds','refunds') THEN amount ELSE 0 END) AS pw_r,
+                ABS(SUM(CASE WHEN created_at >= ? AND created_at < ? AND type IN ('order','cancel','deduct','reverse') THEN amount ELSE 0 END)) AS pw_c,
+                SUM(CASE WHEN created_at >= ? AND created_at < ? AND type IN ('addfunds','refunds') THEN amount ELSE 0 END) AS pm_r,
+                ABS(SUM(CASE WHEN created_at >= ? AND created_at < ? AND type IN ('order','cancel','deduct','reverse') THEN amount ELSE 0 END)) AS pm_c
             FROM transactions
             WHERE created_at >= ?
         ", [
