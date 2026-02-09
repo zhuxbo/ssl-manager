@@ -215,6 +215,14 @@ MANIFEST_FILE="manifest.json"
 WORK_DIR=$(mktemp -d)
 trap "rm -rf $WORK_DIR" EXIT
 
+# 清理 macOS/Windows 系统文件
+cleanup_os_files() {
+    local dir="$1"
+    find "$dir" -name '.DS_Store' -type f -delete 2>/dev/null || true
+    find "$dir" -name '__MACOSX' -type d -prune -exec rm -rf {} + 2>/dev/null || true
+    find "$dir" -name 'Thumbs.db' -type f -delete 2>/dev/null || true
+}
+
 # 阶段 1: 创建完整安装包
 log_step "阶段 1: 创建完整安装包"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -292,7 +300,8 @@ cat > "$FULL_DIR/manifest.json" <<EOF
 }
 EOF
 
-# 打包
+# 清理系统文件后打包
+cleanup_os_files "$FULL_DIR"
 cd "$WORK_DIR"
 zip -rq "$OUTPUT_DIR/$FULL_PACKAGE" full -x "*/.git/*" -x "*/.git*"
 FULL_SIZE=$(du -h "$OUTPUT_DIR/$FULL_PACKAGE" | cut -f1)
@@ -403,7 +412,8 @@ cat > "$UPGRADE_DIR/UPGRADE.md" <<EOF
 
 EOF
 
-# 打包
+# 清理系统文件后打包
+cleanup_os_files "$UPGRADE_DIR"
 cd "$WORK_DIR"
 zip -rq "$OUTPUT_DIR/$UPGRADE_PACKAGE" upgrade -x "*/.git/*" -x "*/.git*"
 UPGRADE_SIZE=$(du -h "$OUTPUT_DIR/$UPGRADE_PACKAGE" | cut -d'	' -f1)
@@ -469,7 +479,8 @@ chmod +x upgrade.sh
 注意：Nginx 配置已统一打包在完整包的 nginx 目录中。
 EOF
 
-    # 打包
+    # 清理系统文件后打包
+    cleanup_os_files "$SCRIPT_PKG_DIR"
     cd "$WORK_DIR"
     zip -rq "$OUTPUT_DIR/$SCRIPT_PACKAGE" script-deploy
     SCRIPT_SIZE=$(du -h "$OUTPUT_DIR/$SCRIPT_PACKAGE" | cut -d'	' -f1)

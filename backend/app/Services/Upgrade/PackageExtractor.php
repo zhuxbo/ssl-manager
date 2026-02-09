@@ -225,6 +225,10 @@ class PackageExtractor
         // 保护用户配置文件：先备份
         $preserved = $this->preserveFrontendConfig($targetDir, $type);
 
+        // 清空旧前端文件（构建产物带 hash，不清理会越积越多）
+        File::deleteDirectory($targetDir);
+        File::makeDirectory($targetDir, 0755, true);
+
         // 同步目录
         $this->syncDirectory($sourceDir, $targetDir);
 
