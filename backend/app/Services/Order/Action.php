@@ -160,7 +160,6 @@ class Action
 
             if ($latestCert['action'] == 'renew') {
                 Cert::where(['status' => 'active', 'order_id' => $params['order_id']])->update(['status' => 'renewed']);
-                $latestCert['last_cert_id'] = $params['last_cert_id'];
             }
 
             $cert = Cert::create($latestCert);
@@ -262,7 +261,6 @@ class Action
             Cert::where('id', $order->latest_cert_id)->update(['status' => 'reissued']);
 
             $latestCert['order_id'] = $order->id;
-            $latestCert['last_cert_id'] = $order->latest_cert_id;
             $latestCert['amount'] = $amount;
             $latestCert['status'] = 'unpaid';
 
@@ -578,9 +576,10 @@ class Action
                     $order = Order::create($orderData);
                 } else {
                     $order = FindUtil::Order($cert->order_id);
+                    // 导入订单只有 reissue 必需 last_cert_id
+                    $cert->last_cert_id = $order->latest_cert_id;
                 }
 
-                $cert->last_cert_id = $order->latest_cert_id;
                 $cert->order_id = $order->id;
                 $cert->save();
 

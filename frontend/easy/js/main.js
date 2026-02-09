@@ -1086,10 +1086,13 @@
         const zone =
           validation.delegation_zone ||
           (validation.domain || "").replace(/^\*\./, "");
-        const cnameHost = `${prefix}.${zone}`;
         const delegationTarget = validation.delegation_target || "";
 
-        const cnameResult = await API.verifyCname(cnameHost, delegationTarget);
+        const cnameResult = await API.verifyCname(
+          zone,
+          prefix,
+          delegationTarget
+        );
 
         // TXT 检测（仅在有值时）
         const expectedTxtValue = validation.value || certDcv.dns?.value;
@@ -1111,6 +1114,19 @@
         });
 
         updateCheckDialog(window.appState.validation);
+
+        // TXT 冲突检测：非阻塞，不影响主验证流程
+        const cnameHost = `${prefix}.${zone}`;
+        API.queryTxtRecords(cnameHost)
+          .then(records => {
+            if (records.length > 0) {
+              showToast(
+                `检测到 ${cnameHost} 存在TXT记录，TXT和CNAME同一名称同时存在会导致CNAME委托不生效，请删除TXT记录`,
+                "error"
+              );
+            }
+          })
+          .catch(() => {});
 
         const testBtn = document.getElementById("test-validation-btn");
         if (testBtn) {

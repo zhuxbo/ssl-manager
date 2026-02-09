@@ -44,6 +44,12 @@ export function useDelegation(tableRef) {
         message(res.msg || "检查完成", {
           type: "success"
         });
+        if (res.data?.warning) {
+          message(res.data.warning, {
+            type: "warning",
+            duration: 8000
+          });
+        }
         onSearch();
       })
       .catch(error => {

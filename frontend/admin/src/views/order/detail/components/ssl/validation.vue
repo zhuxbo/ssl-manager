@@ -455,6 +455,16 @@
               </span>
             </el-descriptions-item>
           </template>
+          <!-- TXT 冲突警告 -->
+          <el-descriptions-item
+            v-if="currentCheckItem.delegation_txt_conflict"
+            label="冲突警告"
+            label-align="right"
+          >
+            <span style="color: var(--el-color-warning)">
+              {{ currentCheckItem.delegation_txt_conflict }}
+            </span>
+          </el-descriptions-item>
         </template>
         <template
           v-else-if="
@@ -744,7 +754,11 @@ const copyAllRecords = () => {
 };
 
 // 委托验证 CNAME 检测函数
-async function verifyCname(host: string, expectedTarget: string) {
+async function verifyCname(
+  domain: string,
+  host: string,
+  expectedTarget: string
+) {
   const dnsToolsHosts = getConfig()?.DnsTools || [
     "https://dns-tools-cn.cnssl.com",
     "https://dns-tools-us.cnssl.com"
@@ -755,19 +769,12 @@ async function verifyCname(host: string, expectedTarget: string) {
     try {
       const response = await axios.post(
         `${baseUrl}/api/dcv/verify`,
-        [
-          {
-            domain: host,
-            method: "cname",
-            host: "@",
-            value: expectedTarget
-          }
-        ],
+        [{ domain, method: "cname", host, value: expectedTarget }],
         { timeout: 10000 }
       );
 
       if (response.data?.data?.results) {
-        const result = response.data.data.results[host] || {};
+        const result = response.data.data.results[domain] || {};
         return {
           detected_value: result.value || "",
           checked: result.matched === "true",
@@ -807,7 +814,13 @@ async function verifyDelegationTxt(targetFqdn: string, expectedValue: string) {
         { timeout: 10000 }
       );
 
-      if (response.data?.code !== 1) continue;
+      if (response.data?.code !== 1) {
+        return {
+          detected_value: "",
+          checked: false,
+          error: "未检测到 TXT 记录"
+        };
+      }
 
       const records = response.data.data?.records || [];
       const txtValues = records
@@ -864,14 +877,49 @@ async function batchVerifyValidation(validation: any[], ca?: string) {
     for (const [delegationId, item] of uniqueDelegationsMap) {
       const zone =
         item.delegation_zone || (item.domain || "").replace(/^\*\./, "");
-      const host = `${delegationPrefix.value}.${zone}`;
-      const cnameResult = await verifyCname(host, item.delegation_target);
+      const cnameResult = await verifyCname(
+        zone,
+        delegationPrefix.value,
+        item.delegation_target
+      );
 
       // 同时检测 TXT 记录
       const expectedTxtValue = item.value || cert.value.dcv?.dns?.value;
       const txtResult = expectedTxtValue
         ? await verifyDelegationTxt(item.delegation_target, expectedTxtValue)
         : { checked: true, detected_value: "", error: "" };
+
+      // TXT 冲突检测：CNAME 和 TXT 不能共存于同一名称
+      const cnameHost = `${delegationPrefix.value}.${zone}`;
+      let txtConflict = "";
+      try {
+        const dnsToolsHosts = getConfig()?.DnsTools || [
+          "https://dns-tools-cn.cnssl.com",
+          "https://dns-tools-us.cnssl.com"
+        ];
+        for (const baseUrl of dnsToolsHosts) {
+          try {
+            const res = await axios.post(
+              `${baseUrl}/api/dns/query`,
+              { domain: cnameHost, type: "TXT" },
+              { timeout: 10000 }
+            );
+            if (res.data?.code === 1) {
+              const txtRecords = (res.data.data?.records || []).filter(
+                (r: any) => r.type === "TXT" && r.value
+              );
+              if (txtRecords.length > 0) {
+                txtConflict = `检测到 ${cnameHost} 存在 TXT 记录，TXT 和 CNAME 同名共存会导致委托不生效，请删除 TXT 记录`;
+              }
+            }
+            break;
+          } catch {
+            continue;
+          }
+        }
+      } catch {
+        // 非关键检测，忽略错误
+      }
 
       delegationResults.set(delegationId, {
         cname_checked: cnameResult.checked,
@@ -880,6 +928,7 @@ async function batchVerifyValidation(validation: any[], ca?: string) {
         txt_checked: txtResult.checked,
         txt_detected: txtResult.detected_value || "",
         txt_error: txtResult.error || "",
+        txt_conflict: txtConflict,
         checked: cnameResult.checked && txtResult.checked,
         error: ""
       });
@@ -971,6 +1020,7 @@ async function batchVerifyValidation(validation: any[], ca?: string) {
         delegation_txt_checked: delegationResult.txt_checked,
         delegation_txt_detected: delegationResult.txt_detected,
         delegation_txt_error: delegationResult.txt_error,
+        delegation_txt_conflict: delegationResult.txt_conflict || "",
         error: delegationResult.error || ""
       };
     }

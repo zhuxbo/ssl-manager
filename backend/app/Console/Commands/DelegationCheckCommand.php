@@ -26,7 +26,7 @@ class DelegationCheckCommand extends Command
      *
      * @var string
      */
-    protected $signature = 'delegation:check {--dry-run : 只检查不删除}';
+    protected $signature = 'delegation:check {--dry-run : 只检查不删除} {--check-txt : 检测TXT冲突}';
 
     /**
      * The console command description.
@@ -49,7 +49,8 @@ class DelegationCheckCommand extends Command
     public function handle(): void
     {
         $dryRun = $this->option('dry-run');
-        $this->info('开始检查 CNAME 委托健康状态...'.($dryRun ? ' (dry-run 模式)' : ''));
+        $checkTxt = $this->option('check-txt');
+        $this->info('开始检查 CNAME 委托健康状态...'.($dryRun ? ' (dry-run 模式)' : '').($checkTxt ? ' (含TXT冲突检测)' : ''));
 
         $totalCount = 0;
         $validCount = 0;
@@ -58,12 +59,20 @@ class DelegationCheckCommand extends Command
         $errorCount = 0;
 
         // 批量处理委托记录
-        CnameDelegation::query()->chunkById(200, function ($delegations) use ($dryRun, &$totalCount, &$validCount, &$invalidKeepCount, &$deletedCount, &$errorCount) {
+        CnameDelegation::query()->chunkById(200, function ($delegations) use ($dryRun, $checkTxt, &$totalCount, &$validCount, &$invalidKeepCount, &$deletedCount, &$errorCount) {
             foreach ($delegations as $delegation) {
                 $totalCount++;
 
                 try {
                     $isValid = $this->delegationService->checkAndUpdateValidity($delegation);
+
+                    // 检测 TXT 冲突（仅在 --check-txt 时执行，避免批量查询拉长耗时）
+                    if ($checkTxt) {
+                        $txtWarning = $this->delegationService->checkTxtConflict($delegation);
+                        if ($txtWarning) {
+                            $this->warn("  ⚠ $txtWarning");
+                        }
+                    }
 
                     if ($isValid) {
                         $validCount++;

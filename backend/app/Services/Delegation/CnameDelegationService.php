@@ -97,7 +97,7 @@ class CnameDelegationService
         // 规范化域名，去掉通配符前缀
         $domain = ltrim(strtolower(DomainUtil::convertToUnicode($domain)), '*.');
 
-        // ACME/DigiCert: 仅匹配完整 FQDN
+        // ACME/DigiCert: 仅匹配完整 FQDN（不做 www 归一化，保留精确匹配语义）
         if ($prefix === '_acme-challenge' || $prefix === '_dnsauth') {
             return CnameDelegation::where([
                 'user_id' => $userId,
@@ -106,7 +106,15 @@ class CnameDelegationService
             ])->first();
         }
 
-        // 其他前缀: 优先匹配子域
+        // _certum/_pki-validation 等回落前缀：www.根域名 直接去除 www，避免无意义的查询
+        if (str_starts_with($domain, 'www.')) {
+            $stripped = substr($domain, 4);
+            if (DomainUtil::getRootDomain($stripped) === $stripped) {
+                $domain = $stripped;
+            }
+        }
+
+        // 优先匹配子域
         $delegation = CnameDelegation::where([
             'user_id' => $userId,
             'zone' => $domain,
@@ -145,7 +153,7 @@ class CnameDelegationService
         // 规范化域名，去掉通配符前缀
         $domain = ltrim(strtolower(DomainUtil::convertToUnicode($domain)), '*.');
 
-        // ACME: 仅匹配完整 FQDN
+        // ACME/DigiCert: 仅匹配完整 FQDN（不做 www 归一化，保留精确匹配语义）
         if ($prefix === '_acme-challenge' || $prefix === '_dnsauth') {
             return CnameDelegation::where([
                 'user_id' => $userId,
@@ -155,7 +163,15 @@ class CnameDelegationService
             ])->first();
         }
 
-        // 其他前缀: 优先匹配子域
+        // _certum/_pki-validation 等回落前缀：www.根域名 直接去除 www，避免无意义的查询
+        if (str_starts_with($domain, 'www.')) {
+            $stripped = substr($domain, 4);
+            if (DomainUtil::getRootDomain($stripped) === $stripped) {
+                $domain = $stripped;
+            }
+        }
+
+        // 优先匹配子域
         $delegation = CnameDelegation::where([
             'user_id' => $userId,
             'zone' => $domain,
@@ -250,6 +266,30 @@ class CnameDelegationService
         ];
 
         return $data;
+    }
+
+    /**
+     * 检测 TXT 记录冲突
+     * CNAME 不能与其他记录类型共存，如果同名下有 TXT 记录则委托不生效
+     */
+    public function checkTxtConflict(CnameDelegation $delegation): ?string
+    {
+        $host = DomainUtil::convertToAscii("$delegation->prefix.$delegation->zone");
+
+        try {
+            $txtRecords = VerifyUtil::queryTxtRecords($host);
+
+            if (! empty($txtRecords)) {
+                return "检测到 $host 存在TXT记录，TXT和CNAME同一名称同时存在会导致CNAME委托不生效，请删除TXT记录";
+            }
+        } catch (Throwable $e) {
+            Log::warning('TXT冲突检测异常', [
+                'host' => $host,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        return null;
     }
 
     /**
