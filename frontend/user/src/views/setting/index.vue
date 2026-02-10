@@ -85,21 +85,6 @@ const { autoSettings, autoLoading, handleAutoToggle } = useAutoPreference();
     </el-card>
     <el-card shadow="never" :style="{ border: 'none', paddingTop: '20px' }">
       <PlusForm
-        v-model="apiValues"
-        :columns="apiColumns"
-        :rules="apiRules"
-        label-width="100"
-        label-position="right"
-        label-suffix=""
-        footer-align="right"
-        submit-text="保存"
-        reset-text="重置"
-        :onSubmit="handleApiUpdate"
-        :onReset="resetApiToken"
-      />
-    </el-card>
-    <el-card shadow="never" :style="{ border: 'none', paddingTop: '20px' }">
-      <PlusForm
         v-model="deployValues"
         :columns="deployColumns"
         :rules="deployRules"
@@ -111,6 +96,21 @@ const { autoSettings, autoLoading, handleAutoToggle } = useAutoPreference();
         reset-text="重置"
         :onSubmit="handleDeployUpdate"
         :onReset="resetDeployToken"
+      />
+    </el-card>
+    <el-card shadow="never" :style="{ border: 'none', paddingTop: '20px' }">
+      <PlusForm
+        v-model="apiValues"
+        :columns="apiColumns"
+        :rules="apiRules"
+        label-width="100"
+        label-position="right"
+        label-suffix=""
+        footer-align="right"
+        submit-text="保存"
+        reset-text="重置"
+        :onSubmit="handleApiUpdate"
+        :onReset="resetApiToken"
       />
     </el-card>
     <el-card shadow="never" :style="{ border: 'none', paddingTop: '20px' }">

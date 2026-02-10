@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Exceptions\ApiResponseException;
 use App\Models\AdminLog;
 use App\Models\ApiLog;
 use App\Models\CallbackLog;
@@ -10,6 +11,7 @@ use App\Models\EasyLog;
 use App\Models\ErrorLog;
 use App\Models\Fund;
 use App\Models\Order;
+use App\Models\Task;
 use App\Models\UserLog;
 use App\Services\Order\Action;
 use Illuminate\Console\Command;
@@ -17,6 +19,8 @@ use Throwable;
 
 class PurgeCommand extends Command
 {
+    private const SYNC_INTERVAL_HOURS = 24;
+
     /**
      * The name and signature of the console command.
      *
@@ -88,6 +92,25 @@ class PurgeCommand extends Command
         $result = ErrorLog::where('created_at', '<', now()->subDays(90))->delete();
         $this->info("Purged $result error logs");
 
+        // 预同步：距退款期限2-4天的处理中订单，24小时内无同步则创建sync任务
+        $preSyncOrders = Order::with(['latestCert'])
+            ->join('products', 'orders.product_id', '=', 'products.id')
+            ->whereHas('latestCert', fn ($query) => $query->where('status', 'processing'))
+            ->whereRaw('orders.created_at <= DATE_SUB(NOW(), INTERVAL products.refund_period - 4 DAY)')
+            ->whereRaw('orders.created_at > DATE_SUB(NOW(), INTERVAL products.refund_period - 2 DAY)')
+            ->select('orders.*')
+            ->get();
+
+        $preSyncCount = 0;
+        foreach ($preSyncOrders as $order) {
+            if (! $this->hasRecentSyncAttempt($order->id)) {
+                $action = new Action;
+                $action->createTask($order->id, 'sync');
+                $preSyncCount++;
+            }
+        }
+        $this->info("Pre-sync created for $preSyncCount orders");
+
         // 取消临近退款期限的处理中订单（还剩2天内的订单）
         $orders = Order::with(['latestCert'])
             ->join('products', 'orders.product_id', '=', 'products.id')
@@ -99,12 +122,27 @@ class PurgeCommand extends Command
 
         if ($orders->isNotEmpty()) {
             $canceledCount = 0;
+            $action = new Action;
+
             foreach ($orders as $order) {
                 try {
-                    // 直接设置证书状态为取消中
-                    $order->latestCert->update(['status' => 'cancelling']);
+                    // 取消前执行即时同步
+                    if (! $this->syncImmediately($action, $order)) {
+                        $this->info("Order $order->id: sync error, skip cancel");
 
-                    $action = new Action;
+                        continue;
+                    }
+
+                    // 刷新证书状态
+                    $order->latestCert->refresh();
+                    if ($order->latestCert->status !== 'processing') {
+                        $this->info("Order $order->id: status changed to $order->latestCert->status after sync, skip cancel");
+
+                        continue;
+                    }
+
+                    // 仍是processing，执行取消
+                    $order->latestCert->update(['status' => 'cancelling']);
 
                     // 删除相关任务
                     $action->deleteTask($order->id, 'commit,sync,revalidate');
@@ -114,7 +152,7 @@ class PurgeCommand extends Command
 
                     $canceledCount++;
                 } catch (Throwable $e) {
-                    $this->error("Failed to cancel order $order->id: ".$e->getMessage());
+                    $this->error("Failed to process order $order->id: ".$e->getMessage());
                 }
             }
 
@@ -122,5 +160,64 @@ class PurgeCommand extends Command
         } else {
             $this->info('No orders to cancel near refund deadline');
         }
+    }
+
+    /**
+     * 判断是否在同步间隔内有过同步记录。
+     */
+    private function hasRecentSyncAttempt(int $orderId): bool
+    {
+        $threshold = now()->subHours(self::SYNC_INTERVAL_HOURS);
+
+        return Task::where('order_id', $orderId)
+            ->where('action', 'sync')
+            ->where(function ($query) use ($threshold) {
+                $query->where('started_at', '>=', $threshold)
+                    ->orWhere('last_execute_at', '>=', $threshold);
+            })
+            ->exists();
+    }
+
+    /**
+     * 立即执行同步并记录结果，force 模式下成功时静默返回不抛异常。
+     */
+    private function syncImmediately(Action $action, Order $order): bool
+    {
+        try {
+            $action->sync($order->id, true);
+
+            return true;
+        } catch (ApiResponseException $e) {
+            $result = $e->getApiResponse();
+            $status = ($result['code'] ?? 0) === 1 ? 'successful' : 'failed';
+            $this->recordSyncAttempt($order->id, $result, $status);
+
+            return $status === 'successful';
+        } catch (Throwable $e) {
+            $this->recordSyncAttempt($order->id, [
+                'code' => 0,
+                'msg' => $e->getMessage(),
+            ], 'failed');
+
+            return false;
+        }
+    }
+
+    /**
+     * 记录一次即时同步的结果，避免推送队列任务。
+     */
+    private function recordSyncAttempt(int $orderId, array $result, string $status): void
+    {
+        Task::create([
+            'order_id' => $orderId,
+            'action' => 'sync',
+            'result' => $result,
+            'attempts' => 1,
+            'started_at' => now(),
+            'last_execute_at' => now(),
+            'source' => getControllerCategory(),
+            'weight' => 0,
+            'status' => $status,
+        ]);
     }
 }

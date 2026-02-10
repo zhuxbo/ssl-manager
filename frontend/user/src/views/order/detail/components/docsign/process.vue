@@ -34,7 +34,8 @@
         <tr
           v-if="
             order.product.validation_type !== 'dv' &&
-            order.brand?.toLowerCase() === 'certum'
+            order.brand?.toLowerCase() === 'certum' &&
+            hasDocuments
           "
         >
           <td class="label" />
@@ -64,6 +65,12 @@ import dayjs from "dayjs";
 
 const order = inject("order") as any;
 const cert = inject("cert") as any;
+
+const hasDocuments = computed(() => {
+  const docs = cert.value?.documents;
+  if (!docs) return false;
+  return Array.isArray(docs) ? docs.length > 0 : true;
+});
 
 const getStatusColor = (status: string) => {
   return computed(() => {

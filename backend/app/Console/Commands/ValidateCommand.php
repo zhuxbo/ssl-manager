@@ -73,87 +73,80 @@ class ValidateCommand extends Command
                     $record->save();
                 }
 
-                // 检查验证是否已超过最大时间限制（48小时）
-                $elapsed_hours = $record->created_at->diffInHours(now());
-                if ($elapsed_hours < 48) {
+                // 检查是否到了验证时间
+                if ($record->next_check_at->timestamp <= time()) {
+                    $cert = $order->latestCert;
+                    $action = new Action($order->user_id);
 
-                    // 检查是否到了验证时间
-                    if ($record->next_check_at->timestamp <= time()) {
-                        $cert = $order->latestCert;
-                        $action = new Action($order->user_id);
+                    // 对于需要验证内容的方法，优先检查 validation 是否就绪
+                    $method = $cert->dcv['method'] ?? '';
+                    if (in_array($method, ['txt', 'cname', 'file', 'http', 'https'], true)) {
+                        if (! $action->isValidationReady($cert->validation ?? null, $method)) {
+                            $this->info("订单 #$order->id: validation 未就绪，先执行同步");
+                            try {
+                                $action->sync($order->id, true);
+                                $cert->refresh();
+                            } catch (Throwable $e) {
+                                $this->warn("订单 #$order->id: 同步失败 - ".$e->getMessage());
+                            }
 
-                        // 对于需要验证内容的方法，优先检查 validation 是否就绪
-                        $method = $cert->dcv['method'] ?? '';
-                        if (in_array($method, ['txt', 'cname', 'file', 'http', 'https'], true)) {
+                            // 同步后再次检查
                             if (! $action->isValidationReady($cert->validation ?? null, $method)) {
-                                $this->info("订单 #$order->id: validation 未就绪，先执行同步");
-                                try {
-                                    $action->sync($order->id, true);
-                                    $cert->refresh();
-                                } catch (Throwable $e) {
-                                    $this->warn("订单 #$order->id: 同步失败 - ".$e->getMessage());
-                                }
+                                $this->warn("订单 #$order->id: 同步后 validation 仍未就绪，跳过本次验证");
+                                $this->setNextCheckAt($record);
 
-                                // 同步后再次检查
-                                if (! $action->isValidationReady($cert->validation ?? null, $method)) {
-                                    $this->warn("订单 #$order->id: 同步后 validation 仍未就绪，跳过本次验证");
-                                    $this->setNextCheckAt($record);
-
-                                    continue;
-                                }
+                                continue;
                             }
                         }
-
-                        // 创建 delegation 任务处理 TXT 记录写入
-                        if ($cert->dcv['method'] === 'txt') {
-                            // 检测 validation 是否为空
-                            $isEmpty = empty($cert->validation) || ! is_array($cert->validation);
-
-                            if (! $isEmpty) {
-                                // 检测是需要处理委托
-                                $autoDcvService = new AutoDcvTxtService;
-                                $shouldProcessDelegation = $autoDcvService->shouldProcessDelegation($order);
-
-                                // 创建委托任务
-                                $shouldProcessDelegation && $action->createTask($order->id, 'delegation');
-                            }
-                        }
-
-                        // 根据证书状态和验证方法决定验证方式
-                        if ($cert->status === 'processing' && in_array($cert->dcv['method'] ?? '',
-                            ['txt', 'cname', 'file', 'http', 'https'])) {
-
-                            // 委托验证：执行即时检测
-                            $this->checkDelegationValidity($cert->validation);
-
-                            // 执行域名验证（DNS/HTTP/HTTPS验证）
-                            $verified = VerifyUtil::verifyValidation($cert->validation);
-
-                            if ($verified['code'] == 1) {
-                                // 验证成功：创建重新验证任务
-                                $action->createTask($order->id, 'revalidate');
-                                $this->info("订单 #$order->id: 验证成功，已创建提交CA验证的任务");
-                            } else {
-                                // 验证失败
-                                $errorMsg = $verified['msg'] ?: '验证失败';
-                                $this->warn("订单 #$order->id: $errorMsg");
-                            }
-                        } else {
-                            // 其他状态：直接创建同步任务（如approving状态等待CA处理）
-                            $action = new Action($order->user_id);
-                            $action->createTask($order->id, 'sync');
-                            $this->info("订单 #$order->id: 已创建同步任务");
-                        }
-
-                        // 无论验证成功失败，都基于创建时间设置下次检测时间
-                        $this->setNextCheckAt($record);
                     }
 
-                    $nextCheckTime = $record->next_check_at->format('Y-m-d H:i:s');
-                    $this->info("订单 #$order->id: 下次检测时间 $nextCheckTime");
-                } else {
-                    $this->warn("订单 #$order->id: 验证超时（超过48小时），停止检测");
+                    // 创建 delegation 任务处理 TXT 记录写入
+                    if ($cert->dcv['method'] === 'txt') {
+                        // 检测 validation 是否为空
+                        $isEmpty = empty($cert->validation) || ! is_array($cert->validation);
+
+                        if (! $isEmpty) {
+                            // 检测是需要处理委托
+                            $autoDcvService = new AutoDcvTxtService;
+                            $shouldProcessDelegation = $autoDcvService->shouldProcessDelegation($order);
+
+                            // 创建委托任务
+                            $shouldProcessDelegation && $action->createTask($order->id, 'delegation');
+                        }
+                    }
+
+                    // 根据证书状态和验证方法决定验证方式
+                    if ($cert->status === 'processing' && in_array($cert->dcv['method'] ?? '',
+                        ['txt', 'cname', 'file', 'http', 'https'])) {
+
+                        // 委托验证：执行即时检测
+                        $this->checkDelegationValidity($cert->validation);
+
+                        // 执行域名验证（DNS/HTTP/HTTPS验证）
+                        $verified = VerifyUtil::verifyValidation($cert->validation);
+
+                        if ($verified['code'] == 1) {
+                            // 验证成功：创建重新验证任务
+                            $action->createTask($order->id, 'revalidate');
+                            $this->info("订单 #$order->id: 验证成功，已创建提交CA验证的任务");
+                        } else {
+                            // 验证失败
+                            $errorMsg = $verified['msg'] ?: '验证失败';
+                            $this->warn("订单 #$order->id: $errorMsg");
+                        }
+                    } else {
+                        // 其他状态：直接创建同步任务（如approving状态等待CA处理）
+                        $action = new Action($order->user_id);
+                        $action->createTask($order->id, 'sync');
+                        $this->info("订单 #$order->id: 已创建同步任务");
+                    }
+
+                    // 无论验证成功失败，都基于创建时间设置下次检测时间
+                    $this->setNextCheckAt($record);
                 }
+
+                $nextCheckTime = $record->next_check_at->format('Y-m-d H:i:s');
+                $this->info("订单 #$order->id: 下次检测时间 $nextCheckTime");
             } catch (Throwable $e) {
                 $this->error("订单 #$order->id: 验证异常 - {$e->getMessage()}");
             }
@@ -193,7 +186,7 @@ class ValidateCommand extends Command
      * 根据已过去的时间获取下一个时间节点
      *
      * @param  int  $elapsed_minutes  从创建时间已过去的分钟数
-     * @return int 下一个时间节点（分钟），0表示没有更多节点
+     * @return int 下一个时间节点（分钟）
      */
     protected function getNextTimeNode(int $elapsed_minutes): int
     {
@@ -204,8 +197,11 @@ class ValidateCommand extends Command
             }
         }
 
-        // 如果所有时间节点都已过去，返回0（停止验证）
-        return 0;
+        // 所有时间节点用完后，每12小时检测一次
+        $lastNode = end($this->time_nodes);
+        $intervals = (int) floor(($elapsed_minutes - $lastNode) / 720) + 1;
+
+        return $lastNode + $intervals * 720;
     }
 
     /**
