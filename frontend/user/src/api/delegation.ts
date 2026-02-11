@@ -27,6 +27,7 @@ export interface DelegationItem {
     host: string;
     value: string;
   };
+  warning?: string;
 }
 
 /** 获取委托列表 */

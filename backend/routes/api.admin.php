@@ -57,7 +57,7 @@ Route::prefix('admin')->middleware('api.admin')->group(function () {
         Route::get('top-products', [DashboardController::class, 'topProducts']);
         Route::get('brand-stats', [DashboardController::class, 'brandStats']);
         Route::get('user-level-distribution', [DashboardController::class, 'userLevelDistribution']);
-        Route::get('health-status', [DashboardController::class, 'healthStatus']);
+        Route::get('finance-overview', [DashboardController::class, 'financeOverview']);
         Route::post('clear-cache', [DashboardController::class, 'clearCache']);
     });
 

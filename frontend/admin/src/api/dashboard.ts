@@ -7,7 +7,7 @@ import type {
   TopProduct,
   BrandStats,
   UserLevelDistribution,
-  HealthStatus
+  FinanceOverviewData
 } from "@/types/dashboard";
 
 // 获取管理端Dashboard总览数据
@@ -67,9 +67,13 @@ export function getUserLevelDistribution(): Promise<
   );
 }
 
-// 获取系统健康状态
-export function getHealthStatus(): Promise<BaseResponse<HealthStatus>> {
-  return http.get<BaseResponse<HealthStatus>, null>("/dashboard/health-status");
+// 获取财务概览
+export function getFinanceOverview(): Promise<
+  BaseResponse<FinanceOverviewData>
+> {
+  return http.get<BaseResponse<FinanceOverviewData>, null>(
+    "/dashboard/finance-overview"
+  );
 }
 
 // 清除Dashboard缓存

@@ -64,6 +64,17 @@ class UserController extends BaseController
         if (! empty($validated['created_at'])) {
             $query->whereBetween('created_at', $validated['created_at']);
         }
+        if (! empty($validated['balance'])) {
+            if ($validated['balance'][0] !== null && $validated['balance'][0] !== '') {
+                $query->where('balance', '>=', $validated['balance'][0]);
+            }
+            if ($validated['balance'][1] !== null && $validated['balance'][1] !== '') {
+                $query->where('balance', '<=', $validated['balance'][1]);
+            }
+        }
+        if (! empty($validated['credit_limit'])) {
+            $query->where('credit_limit', '<', 0)->where('credit_limit', '>=', -abs($validated['credit_limit']));
+        }
 
         $total = $query->count();
         $items = $query->with([

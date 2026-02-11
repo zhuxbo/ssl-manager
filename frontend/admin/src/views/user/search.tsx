@@ -116,6 +116,61 @@ export const useUserSearch = (onSearch: () => void) => {
       }
     },
     {
+      label: "余额",
+      prop: "balance",
+      hasLabel: true,
+      renderField: (value, onChange) => {
+        const current = (value as [string | null, string | null]) || [
+          null,
+          null
+        ];
+        return (
+          <div class="flex items-center gap-1" style="width: 100%">
+            <el-input
+              modelValue={current[0] ?? ""}
+              placeholder="最小值"
+              type="number"
+              step="0.01"
+              style="flex: 1"
+              onUpdate:modelValue={(v: string) => {
+                onChange([v || null, current[1]]);
+              }}
+            />
+            <span class="text-gray-400 shrink-0">~</span>
+            <el-input
+              modelValue={current[1] ?? ""}
+              placeholder="最大值"
+              type="number"
+              step="0.01"
+              style="flex: 1"
+              onUpdate:modelValue={(v: string) => {
+                onChange([current[0], v || null]);
+              }}
+            />
+          </div>
+        );
+      }
+    },
+    {
+      label: "信用额度",
+      prop: "credit_limit",
+      hasLabel: true,
+      renderField: (value, onChange) => {
+        return (
+          <el-input
+            modelValue={value ?? ""}
+            placeholder="最大额度"
+            type="number"
+            step="0.01"
+            min={0}
+            onUpdate:modelValue={(v: string) => onChange(v || undefined)}
+          >
+            {{ prefix: () => <span class="text-gray-500">-</span> }}
+          </el-input>
+        );
+      }
+    },
+    {
       label: "创建时间",
       prop: "created_at",
       valueType: "date-picker",
