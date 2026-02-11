@@ -98,8 +98,10 @@ export function update(
 }
 
 /** 手动触发健康检查 */
-export function check(id: number): Promise<BaseResponse<DelegationItem>> {
-  return http.post<BaseResponse<DelegationItem>, null>(
+export function check(
+  id: number
+): Promise<BaseResponse<DelegationItem & { warning?: string }>> {
+  return http.post<BaseResponse<DelegationItem & { warning?: string }>, null>(
     `/delegation/check/${id}`
   );
 }

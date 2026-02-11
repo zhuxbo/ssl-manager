@@ -15,7 +15,8 @@ return new class extends Migration
         Schema::create('deploy_tokens', function (Blueprint $table) {
             $table->unsignedInteger('id')->autoIncrement()->comment('ID');
             $table->unsignedBigInteger('user_id')->index()->comment('用户ID');
-            $table->string('token', 128)->unique()->comment('令牌');
+            $table->string('token', 1024)->comment('令牌');
+            $table->string('token_hash', 64)->unique()->comment('令牌哈希');
             $table->string('allowed_ips', 2000)->nullable()->comment('允许的IP');
             $table->integer('rate_limit')->default(60)->comment('速率限制');
             $table->timestamp('last_used_at')->nullable()->comment('最后使用时间');

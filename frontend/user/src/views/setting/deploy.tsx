@@ -80,7 +80,7 @@ export const useDeploy = () => {
               plain: true,
               link: true,
               onClick: () => {
-                deployValues.value.token = uuid(64);
+                deployValues.value.token = uuid(32);
               }
             },
             () => h(IconifyIconOffline, { icon: "ep/circle-plus" })
@@ -140,9 +140,7 @@ export const useDeploy = () => {
   });
 
   const deployRules: FormRules = {
-    token: [
-      { min: 32, max: 128, message: "请输入32-128个字符", trigger: "blur" }
-    ]
+    token: [{ len: 32, message: "Token 必须为32个字符", trigger: "blur" }]
   };
 
   const handleDeployUpdate = () => {
@@ -156,6 +154,7 @@ export const useDeploy = () => {
   const resetDeployToken = () => {
     deployValues.value.token = "";
     getDeployToken().then(res => {
+      deployValues.value.token = res.data?.token || "";
       deployValues.value.allowed_ips = res.data?.allowed_ips || [];
     });
   };

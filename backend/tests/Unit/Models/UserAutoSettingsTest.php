@@ -30,7 +30,7 @@ class UserAutoSettingsTest extends TestCase
 
         $this->assertIsArray($user->auto_settings);
         $this->assertFalse($user->auto_settings['auto_renew']);
-        $this->assertFalse($user->auto_settings['auto_reissue']);
+        $this->assertTrue($user->auto_settings['auto_reissue']);
     }
 
     /**
@@ -123,6 +123,6 @@ class UserAutoSettingsTest extends TestCase
         $user->refresh();
 
         $this->assertFalse($user->auto_settings['auto_renew']);
-        $this->assertFalse($user->auto_settings['auto_reissue']);
+        $this->assertTrue($user->auto_settings['auto_reissue']);
     }
 }
