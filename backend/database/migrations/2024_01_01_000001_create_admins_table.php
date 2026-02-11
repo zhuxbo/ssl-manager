@@ -35,10 +35,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::table('admin_refresh_tokens', function (Blueprint $table) {
-            $table->dropForeign(['admin_id']);
-        });
-        Schema::dropIfExists('admins');
-        Schema::dropIfExists('admin_refresh_tokens');
+        // 系统采用整体升级方式，不支持回滚操作
     }
 };

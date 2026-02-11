@@ -38,16 +38,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        if (Schema::hasColumn('orders', 'eab_used_at')) {
-            Schema::table('orders', function (Blueprint $table) {
-                $table->dropColumn('eab_used_at');
-            });
-        }
-
-        if (Schema::hasColumn('orders', 'auto_reissue')) {
-            Schema::table('orders', function (Blueprint $table) {
-                $table->dropColumn('auto_reissue');
-            });
-        }
+        // 系统采用整体升级方式，不支持回滚操作
     }
 };

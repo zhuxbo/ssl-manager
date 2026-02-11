@@ -32,6 +32,7 @@ return new class extends Migration
             $table->json('auto_settings')->nullable()->comment('自动续费和重签设置');
             $table->tinyInteger('status')->default(1)->index()->comment('状态: 0=禁用, 1=启用');
             $table->timestamps();
+            $table->index('created_at');
         });
 
         Schema::create('user_refresh_tokens', function (Blueprint $table) {
@@ -47,10 +48,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::table('user_refresh_tokens', function (Blueprint $table) {
-            $table->dropForeign(['user_id']);
-        });
-        Schema::dropIfExists('users');
-        Schema::dropIfExists('user_refresh_tokens');
+        // 系统采用整体升级方式，不支持回滚操作
     }
 };

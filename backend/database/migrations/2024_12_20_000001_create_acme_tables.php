@@ -70,9 +70,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::dropIfExists('acme_nonces');
-        Schema::dropIfExists('acme_authorizations');
-        Schema::dropIfExists('acme_orders');
-        Schema::dropIfExists('acme_accounts');
+        // 系统采用整体升级方式，不支持回滚操作
     }
 };

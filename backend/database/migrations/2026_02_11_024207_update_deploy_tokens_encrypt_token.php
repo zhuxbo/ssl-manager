@@ -42,14 +42,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        DB::table('deploy_tokens')->truncate();
-
-        Schema::table('deploy_tokens', function (Blueprint $table) {
-            $table->dropUnique(['token_hash']);
-            $table->dropColumn('token_hash');
-
-            $table->string('token', 128)->change();
-            $table->unique('token');
-        });
+        // 系统采用整体升级方式，不支持回滚操作
     }
 };

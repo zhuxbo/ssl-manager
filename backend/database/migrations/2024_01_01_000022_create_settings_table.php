@@ -40,7 +40,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::dropIfExists('settings');
-        Schema::dropIfExists('setting_groups');
+        // 系统采用整体升级方式，不支持回滚操作
     }
 };

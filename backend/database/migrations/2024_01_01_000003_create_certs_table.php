@@ -30,8 +30,8 @@ return new class extends Migration
             $table->mediumText('dcv')->nullable()->comment('验证信息');
             $table->mediumText('validation')->nullable()->comment('验证');
             $table->string('documents', 2000)->nullable()->comment('验证文档列表');
-            $table->timestamp('issued_at')->nullable()->comment('颁发时间');
-            $table->timestamp('expires_at')->nullable()->comment('过期时间');
+            $table->timestamp('issued_at')->nullable()->index()->comment('颁发时间');
+            $table->timestamp('expires_at')->nullable()->index()->comment('过期时间');
             $table->timestamp('auto_deploy_at')->nullable()->comment('自动部署时间');
             $table->char('csr_md5', 32)->nullable()->index()->comment('CSR的MD5');
             $table->mediumText('csr')->nullable()->comment('CSR');
@@ -65,6 +65,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::dropIfExists('certs');
+        // 系统采用整体升级方式，不支持回滚操作
     }
 };

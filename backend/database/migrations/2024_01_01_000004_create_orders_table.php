@@ -32,11 +32,12 @@ return new class extends Migration
             $table->boolean('auto_renew')->nullable()->comment('自动续费');
             $table->boolean('auto_reissue')->nullable()->comment('自动重签');
             $table->timestamps();
+            $table->index('created_at');
         });
     }
 
     public function down(): void
     {
-        Schema::dropIfExists('orders');
+        // 系统采用整体升级方式，不支持回滚操作
     }
 };

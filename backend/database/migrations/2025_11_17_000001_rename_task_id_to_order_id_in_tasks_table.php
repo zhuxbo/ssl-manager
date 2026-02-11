@@ -53,30 +53,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        // 回滚 tasks 表的 order_id 字段
-        if (Schema::hasColumn('tasks', 'order_id')) {
-            // 先删除 order_id 的索引
-            try {
-                Schema::table('tasks', function (Blueprint $table) {
-                    $table->dropIndex('tasks_order_id_index');
-                });
-            } catch (Throwable) {
-                // ignore missing index
-            }
-
-            // 将 order_id 重命名回 task_id
-            Schema::table('tasks', function (Blueprint $table) {
-                $table->renameColumn('order_id', 'task_id');
-            });
-
-            // 添加 task_id 的索引
-            try {
-                Schema::table('tasks', function (Blueprint $table) {
-                    $table->index('task_id');
-                });
-            } catch (Throwable) {
-                // ignore duplicated index
-            }
-        }
+        // 系统采用整体升级方式，不支持回滚操作
     }
 };
