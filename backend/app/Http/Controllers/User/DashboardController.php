@@ -93,19 +93,23 @@ class DashboardController extends Controller
         $cacheMinutes = $this->getCacheMinutes();
 
         $trends = Cache::remember($cacheKey, $cacheMinutes * 60, function () use ($userId, $days) {
+            $startDate = now()->subDays($days - 1)->startOfDay();
+
+            $rows = Order::where('user_id', $userId)
+                ->where('created_at', '>=', $startDate)
+                ->selectRaw('DATE(created_at) as date, COUNT(*) as orders, COALESCE(SUM(amount), 0) as consumption')
+                ->groupBy('date')
+                ->get()
+                ->keyBy('date');
+
             $trends = [];
             for ($i = $days - 1; $i >= 0; $i--) {
-                $date = now()->subDays($i);
-                $dateStr = $date->format('Y-m-d');
-
+                $dateStr = now()->subDays($i)->format('Y-m-d');
+                $row = $rows[$dateStr] ?? null;
                 $trends[] = [
                     'date' => $dateStr,
-                    'orders' => Order::where('user_id', $userId)
-                        ->whereDate('created_at', $date)
-                        ->count(),
-                    'consumption' => (float) Order::where('user_id', $userId)
-                        ->whereDate('created_at', $date)
-                        ->sum('amount'),
+                    'orders' => $row ? (int) $row->orders : 0,
+                    'consumption' => $row ? (float) $row->consumption : 0,
                 ];
             }
 
@@ -129,34 +133,29 @@ class DashboardController extends Controller
             $currentMonth = now()->startOfMonth();
             $lastMonth = $currentMonth->copy()->subMonth();
 
-            $currentOrders = Order::where('user_id', $userId)
-                ->whereMonth('created_at', $currentMonth->month)
-                ->whereYear('created_at', $currentMonth->year)
-                ->count();
+            $rows = Order::where('user_id', $userId)
+                ->where('created_at', '>=', $lastMonth)
+                ->selectRaw('DATE_FORMAT(created_at, "%Y-%m") as month, COUNT(*) as orders, COALESCE(SUM(amount), 0) as consumption')
+                ->groupBy('month')
+                ->get()
+                ->keyBy('month');
 
-            $currentConsumption = Order::where('user_id', $userId)
-                ->whereMonth('created_at', $currentMonth->month)
-                ->whereYear('created_at', $currentMonth->year)
-                ->sum('amount');
+            $currentKey = $currentMonth->format('Y-m');
+            $lastKey = $lastMonth->format('Y-m');
 
-            $lastOrders = Order::where('user_id', $userId)
-                ->whereMonth('created_at', $lastMonth->month)
-                ->whereYear('created_at', $lastMonth->year)
-                ->count();
-
-            $lastConsumption = Order::where('user_id', $userId)
-                ->whereMonth('created_at', $lastMonth->month)
-                ->whereYear('created_at', $lastMonth->year)
-                ->sum('amount');
+            $currentOrders = (int) ($rows[$currentKey]->orders ?? 0);
+            $currentConsumption = (float) ($rows[$currentKey]->consumption ?? 0);
+            $lastOrders = (int) ($rows[$lastKey]->orders ?? 0);
+            $lastConsumption = (float) ($rows[$lastKey]->consumption ?? 0);
 
             return [
                 'current_month' => [
                     'orders' => $currentOrders,
-                    'consumption' => (float) $currentConsumption,
+                    'consumption' => $currentConsumption,
                 ],
                 'last_month' => [
                     'orders' => $lastOrders,
-                    'consumption' => (float) $lastConsumption,
+                    'consumption' => $lastConsumption,
                 ],
                 'growth' => [
                     'orders' => $this->calculateGrowth($lastOrders, $currentOrders),
@@ -173,16 +172,10 @@ class DashboardController extends Controller
      */
     private function getAssetsData($userId): array
     {
-        $user = User::find($userId);
-
-        if (! $user) {
-            return [
-                'balance' => 0.0,
-            ];
-        }
+        $balance = User::where('id', $userId)->value('balance');
 
         return [
-            'balance' => (float) ($user->balance ?? 0),
+            'balance' => (float) ($balance ?? 0),
         ];
     }
 
@@ -191,62 +184,53 @@ class DashboardController extends Controller
      */
     private function getOrdersData($userId): array
     {
-        $totalOrders = Order::where('user_id', $userId)->count();
+        $now = now();
+        $in7Days = $now->copy()->addDays(7);
+        $in30Days = $now->copy()->addDays(30);
+        $monthStart = $now->copy()->startOfMonth();
 
-        // 有效订单：通过订单表联查latestCert，状态为active的订单
-        $activeOrders = Order::where('user_id', $userId)
+        // 单次 JOIN 查询：状态分布 + active/到期统计（条件聚合）
+        $certStats = Order::where('orders.user_id', $userId)
             ->join('certs', 'orders.latest_cert_id', '=', 'certs.id')
-            ->whereIn('certs.status', ['active'])
-            ->count();
-
-        // 7天内到期订单数
-        $expiring7Days = Order::where('user_id', $userId)
-            ->join('certs', 'orders.latest_cert_id', '=', 'certs.id')
-            ->where('certs.status', 'active')
-            ->whereBetween('certs.expires_at', [now(), now()->addDays(7)])
-            ->count();
-
-        // 30天内到期订单数
-        $expiring30Days = Order::where('user_id', $userId)
-            ->join('certs', 'orders.latest_cert_id', '=', 'certs.id')
-            ->where('certs.status', 'active')
-            ->whereBetween('certs.expires_at', [now(), now()->addDays(30)])
-            ->count();
-
-        // 使用cancelled_at字段判断取消的订单
-        $cancelledOrders = Order::where('user_id', $userId)
-            ->whereNotNull('cancelled_at')
-            ->count();
-
-        // 按latestCert状态统计订单分布
-        $statusStats = Order::where('user_id', $userId)
-            ->join('certs', 'orders.latest_cert_id', '=', 'certs.id')
-            ->select('certs.status')
-            ->selectRaw('COUNT(*) as count')
+            ->selectRaw("certs.status, COUNT(*) as count,
+                SUM(CASE WHEN certs.status = 'active' AND certs.expires_at BETWEEN ? AND ? THEN 1 ELSE 0 END) as expiring_7,
+                SUM(CASE WHEN certs.status = 'active' AND certs.expires_at BETWEEN ? AND ? THEN 1 ELSE 0 END) as expiring_30",
+                [$now, $in7Days, $now, $in30Days])
             ->groupBy('certs.status')
-            ->pluck('count', 'status')
-            ->toArray();
+            ->get();
 
-        // 本月订单和消费
-        $monthlyOrders = Order::where('user_id', $userId)
-            ->whereMonth('created_at', now()->month)
-            ->whereYear('created_at', now()->year)
-            ->count();
+        $statusDistribution = [];
+        $activeOrders = 0;
+        $expiring7Days = 0;
+        $expiring30Days = 0;
 
-        $monthlyConsumption = Order::where('user_id', $userId)
-            ->whereMonth('created_at', now()->month)
-            ->whereYear('created_at', now()->year)
-            ->sum('amount');
+        foreach ($certStats as $row) {
+            $statusDistribution[$row->status] = (int) $row->count;
+            if ($row->status === 'active') {
+                $activeOrders = (int) $row->count;
+                $expiring7Days = (int) $row->expiring_7;
+                $expiring30Days = (int) $row->expiring_30;
+            }
+        }
+
+        // 单次查询：总数 + 取消数 + 本月统计
+        $orderStats = Order::where('user_id', $userId)
+            ->selectRaw('COUNT(*) as total,
+                SUM(CASE WHEN cancelled_at IS NOT NULL THEN 1 ELSE 0 END) as cancelled,
+                SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) as monthly_orders,
+                SUM(CASE WHEN created_at >= ? THEN amount ELSE 0 END) as monthly_consumption',
+                [$monthStart, $monthStart])
+            ->first();
 
         return [
-            'total_orders' => $totalOrders,
+            'total_orders' => (int) $orderStats->total,
             'active_orders' => $activeOrders,
             'expiring_7_days' => $expiring7Days,
             'expiring_30_days' => $expiring30Days,
-            'cancelled_orders' => $cancelledOrders,
-            'status_distribution' => $statusStats,
-            'monthly_orders' => $monthlyOrders,
-            'monthly_consumption' => (float) $monthlyConsumption,
+            'cancelled_orders' => (int) $orderStats->cancelled,
+            'status_distribution' => $statusDistribution,
+            'monthly_orders' => (int) $orderStats->monthly_orders,
+            'monthly_consumption' => (float) $orderStats->monthly_consumption,
         ];
     }
 
