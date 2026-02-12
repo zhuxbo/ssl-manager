@@ -23,7 +23,19 @@
         </tr>
         <tr>
           <td class="label">金额</td>
-          <td class="content">{{ order.amount }}</td>
+          <td class="content">
+            {{ order.amount }}
+            <el-button
+              v-if="order.latest_cert?.status === 'unpaid'"
+              style="padding: 0 5px 2px; margin: 0"
+              type="primary"
+              link
+              size="small"
+              @click="updateAmount"
+            >
+              点击修改
+            </el-button>
+          </td>
         </tr>
         <tr>
           <td class="label">购买时长</td>
@@ -196,6 +208,24 @@ const updateAutoSetting = async (
   } finally {
     autoLoading.value = false;
   }
+};
+
+const updateAmount = () => {
+  ElMessageBox.prompt("请输入新的价格", "修改价格", {
+    confirmButtonText: "确定",
+    cancelButtonText: "取消",
+    inputValue: String(order.latest_cert?.amount ?? order.amount),
+    inputPattern: /^\d+(\.\d{1,2})?$/,
+    inputErrorMessage: "请输入有效的金额"
+  }).then(({ value }) => {
+    OrderApi.updateAmount(order.id, value).then(() => {
+      message("价格已更新", { type: "success" });
+      OrderApi.show(order.id).then(res => {
+        res.data.sync = buildUUID();
+        Object.assign(order, reactive(res.data));
+      });
+    });
+  });
 };
 
 const remark = () => {

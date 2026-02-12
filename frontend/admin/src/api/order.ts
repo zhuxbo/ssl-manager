@@ -268,6 +268,17 @@ export function transfer(data: any): Promise<BaseResponse> {
   return http.post<BaseResponse<null>, any>("/order/transfer", { data });
 }
 
+/** 修改未支付订单价格 */
+export function updateAmount(
+  id: number,
+  amount: number | string
+): Promise<BaseResponse> {
+  return http.patch<BaseResponse<null>, { amount: number | string }>(
+    `/order/amount/${id}`,
+    { data: { amount } }
+  );
+}
+
 /** 更新订单自动设置 */
 export function updateAutoSettings(
   id: number,

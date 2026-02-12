@@ -266,7 +266,6 @@ class Action
 
             $cert = Cert::create($latestCert);
             $order->latest_cert_id = $cert->id;
-            $order->amount = bcadd((string) $order->amount, $amount, 2);
             $order->save();
 
             DB::commit();
