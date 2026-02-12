@@ -12,7 +12,23 @@ defineOptions({
   name: "Product"
 });
 
-const { tableRef, tableColumns } = useProductTable();
+const { tableRef, tableColumns, expandedRows } = useProductTable();
+
+const handleRowClick = (row: any, _column: any, event: any) => {
+  const target = event.target as HTMLElement;
+  if (
+    target.tagName === "BUTTON" ||
+    target.closest("button") ||
+    target.closest(".el-button")
+  ) {
+    return;
+  }
+  if (expandedRows.has(row.id)) {
+    expandedRows.delete(row.id);
+  } else {
+    expandedRows.add(row.id);
+  }
+};
 
 const {
   loading,
@@ -86,6 +102,7 @@ onMounted(() => {
           }"
           @page-size-change="handleSizeChange"
           @page-current-change="handleCurrentChange"
+          @row-click="handleRowClick"
         >
           <template #operation="{ row }">
             <el-button
