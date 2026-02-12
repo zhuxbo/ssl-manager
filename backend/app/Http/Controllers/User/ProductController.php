@@ -56,6 +56,9 @@ class ProductController extends BaseController
                     ->orWhereJsonContains('alternative_name_types', $validated['name_type']);
             });
         }
+        if (! empty($validated['domains']) && $validated['domains'] === 'single') {
+            $query->whereJsonLength('alternative_name_types', 0);
+        }
 
         $total = $query->where('status', 1)->count();
         $items = $query->select(['id', 'name', 'product_type', 'brand', 'ca', 'periods', 'encryption_standard', 'validation_type',

@@ -18,6 +18,7 @@ class IndexRequest extends BaseRequest
             'encryption_alg' => 'nullable|string|in:rsa,ecdsa,sm2',
             'validation_type' => 'nullable|string|in:dv,ov,ev',
             'name_type' => 'nullable|string|in:standard,wildcard,ipv4,ipv6',
+            'domains' => 'nullable|string|in:single',
             'status' => 'nullable|integer|in:0,1',
         ];
     }
