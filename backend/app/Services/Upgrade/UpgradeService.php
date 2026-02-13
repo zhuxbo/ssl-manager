@@ -146,7 +146,7 @@ class UpgradeService
                 $steps[count($steps) - 1]['status'] = 'completed';
             }
 
-            // 步骤 4: 下载升级包（优先 Gitee，回退 GitHub）
+            // 步骤 4: 下载升级包
             $steps[] = ['step' => 'download', 'status' => 'running'];
             $packagePath = $this->packageExtractor->getDownloadPath()."/upgrade-$targetVersion.zip";
 

@@ -1,6 +1,6 @@
 # Cert Explorer Agent
 
-项目代码探索专家，用于理解 cert-manager 项目架构和代码结构。
+项目代码探索专家，用于理解 ssl-manager 项目架构和代码结构。
 
 ## 能力
 

@@ -5,9 +5,9 @@
     "min_php_version": "8.3",
     "min_node_version": "22",
     "release": {
-      "gitee": {
+      "github": {
         "owner": "zhuxbo",
-        "repo": "cert-manager"
+        "repo": "ssl-manager"
       }
     },
     "git_user": {

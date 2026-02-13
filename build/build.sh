@@ -242,14 +242,14 @@ if [ "$BUILD_MODE" = "release" ]; then
         source "$BUILD_ENV"
         if ssh-add -l >/dev/null 2>&1 && ssh-add -l 2>&1 | grep -q "no identities"; then
             CAND=()
-            if [ -n "${GITEE_SSH_KEY:-}" ]; then
-                if [[ "$GITEE_SSH_KEY" == ~* ]]; then
-                    CAND+=("${GITEE_SSH_KEY/#\~/$HOME}")
+            if [ -n "${GIT_SSH_KEY:-}" ]; then
+                if [[ "$GIT_SSH_KEY" == ~* ]]; then
+                    CAND+=("${GIT_SSH_KEY/#\~/$HOME}")
                 else
-                    CAND+=("$GITEE_SSH_KEY")
+                    CAND+=("$GIT_SSH_KEY")
                 fi
             fi
-            CAND+=("$HOME/.ssh/gitee_id_rsa" "$HOME/.ssh/id_ed25519" "$HOME/.ssh/id_rsa")
+            CAND+=("$HOME/.ssh/id_deploy" "$HOME/.ssh/id_ed25519" "$HOME/.ssh/id_rsa")
 
             for key in "${CAND[@]}"; do
                 if [ -f "$key" ] && [ -r "$key" ]; then
@@ -431,12 +431,12 @@ if [ "$NEED_SSH" = true ]; then
         DOCKER_OPTS+=( -v "$HOME/.ssh/known_hosts:/root/.ssh/known_hosts:ro" )
     fi
     # 私钥文件后备
-    EXP_KEY="${GITEE_SSH_KEY:-}"
+    EXP_KEY="${GIT_SSH_KEY:-}"
     if [ -n "$EXP_KEY" ]; then
         [[ "$EXP_KEY" == ~* ]] && EXP_KEY="${EXP_KEY/#\~/$HOME}"
         if [ -f "$EXP_KEY" ]; then
-            DOCKER_OPTS+=( -v "$EXP_KEY:/root/.ssh/id_gitee:ro" )
-            DOCKER_OPTS+=( -e GIT_SSH_COMMAND="ssh -i /root/.ssh/id_gitee -o StrictHostKeyChecking=accept-new" )
+            DOCKER_OPTS+=( -v "$EXP_KEY:/root/.ssh/id_deploy:ro" )
+            DOCKER_OPTS+=( -e GIT_SSH_COMMAND="ssh -i /root/.ssh/id_deploy -o StrictHostKeyChecking=accept-new" )
         fi
     fi
 fi

@@ -170,9 +170,7 @@ detect_install() {
     # 预设目录快速检测
     local preset_dirs=(
         "/opt/ssl-manager"
-        "/opt/cert-manager"
         "/www/wwwroot/ssl-manager"
-        "/www/wwwroot/cert-manager"
     )
 
     for dir in "${preset_dirs[@]}"; do
@@ -544,8 +542,6 @@ perform_upgrade() {
     local src_dir="$extract_dir"
     if [ -d "$extract_dir/ssl-manager" ]; then
         src_dir="$extract_dir/ssl-manager"
-    elif [ -d "$extract_dir/cert-manager" ]; then
-        src_dir="$extract_dir/cert-manager"
     elif [ -d "$extract_dir/upgrade" ]; then
         src_dir="$extract_dir/upgrade"
     elif [ -d "$extract_dir/full" ]; then

@@ -80,12 +80,12 @@ echo ""
 if [ "$BUILD_MODE" = "release" ]; then
     if [ -n "${SSH_AUTH_SOCK:-}" ] && [ -S "${SSH_AUTH_SOCK}" ]; then
         log_success "检测到 ssh-agent 转发，将使用 agent 进行认证"
-    elif [ -f "/root/.ssh/id_gitee" ]; then
+    elif [ -f "/root/.ssh/id_deploy" ]; then
         log_success "使用挂载的私钥进行认证"
         mkdir -p /root/.ssh
-        cp /root/.ssh/id_gitee /root/.ssh/id_gitee_loaded
-        chmod 600 /root/.ssh/id_gitee_loaded
-        export GIT_SSH_COMMAND="ssh -i /root/.ssh/id_gitee_loaded -o StrictHostKeyChecking=accept-new"
+        cp /root/.ssh/id_deploy /root/.ssh/id_deploy_loaded
+        chmod 600 /root/.ssh/id_deploy_loaded
+        export GIT_SSH_COMMAND="ssh -i /root/.ssh/id_deploy_loaded -o StrictHostKeyChecking=accept-new"
     else
         log_warning "发布模式需要 SSH 认证进行推送，但未检测到凭据"
     fi

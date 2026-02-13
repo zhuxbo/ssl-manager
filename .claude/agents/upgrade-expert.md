@@ -59,7 +59,7 @@
 ```
 
 - `release_url` 升级时自动保留
-- 未配置时默认使用 Gitee 源
+- 未配置时需要通过 --url 参数指定
 
 ## Docker 地址转换
 
@@ -80,7 +80,7 @@ php artisan upgrade:rollback  # 回滚
 ## 安装目录检测
 
 通过 `backend/.ssl-manager` 标记文件检测:
-1. 预设目录: /opt/ssl-manager, /opt/cert-manager, /www/wwwroot/ssl-manager
+1. 预设目录: /opt/ssl-manager, /www/wwwroot/ssl-manager
 2. 系统搜索: /opt, /www/wwwroot, /home（深度 4 层）
 
 ## 问题排查

@@ -223,7 +223,7 @@ php artisan upgrade:rollback  # 回滚
 ### 安装目录检测
 
 升级脚本通过 `backend/.ssl-manager` 标记文件检测：
-1. 预设目录：/opt/ssl-manager、/opt/cert-manager、/www/wwwroot/ssl-manager
+1. 预设目录：/opt/ssl-manager、/www/wwwroot/ssl-manager
 2. 系统搜索：/opt、/www/wwwroot、/home（深度 4 层）
 
 ---

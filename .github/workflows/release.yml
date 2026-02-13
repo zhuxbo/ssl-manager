@@ -346,6 +346,6 @@ jobs:
             | `ssl-manager-script-latest.zip` | 脚本部署包 |
 
             ---
-            查看完整版本列表请访问 [Releases](https://github.com/zhuxbo/cert-manager/releases)
+            查看完整版本列表请访问 [Releases](https://github.com/zhuxbo/ssl-manager/releases)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
