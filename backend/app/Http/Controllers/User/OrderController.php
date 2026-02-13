@@ -139,6 +139,7 @@ class OrderController extends BaseController
             'total' => $total,
             'pageSize' => $pageSize,
             'currentPage' => $currentPage,
+            'balance' => $this->guard->user()->balance,
         ]);
     }
 
@@ -167,7 +168,9 @@ class OrderController extends BaseController
             'latestCert.csr_md5',
         ]);
 
-        $this->success($order->toArray());
+        $data = $order->toArray();
+        $data['balance'] = $this->guard->user()->balance;
+        $this->success($data);
     }
 
     /**
@@ -201,7 +204,10 @@ class OrderController extends BaseController
             $this->error('订单不存在');
         }
 
-        $this->success($orders->toArray());
+        $this->success([
+            'items' => $orders,
+            'balance' => $this->guard->user()->balance,
+        ]);
     }
 
     /**

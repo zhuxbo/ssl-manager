@@ -1,5 +1,17 @@
 import { http } from "@/utils/http";
 import { downloadByData } from "@pureadmin/utils";
+import { useUserStoreHook } from "@/store/modules/user";
+
+/** 从响应中提取 balance 并同步余额 */
+function syncBalance(res: BaseResponse): BaseResponse {
+  if (res?.code === 1) {
+    const balance = res.data?.balance;
+    if (balance != null) {
+      useUserStoreHook().updateBalance(String(balance));
+    }
+  }
+  return res;
+}
 
 export interface IndexParams {
   currentPage?: number;
@@ -29,24 +41,30 @@ export const ACTION_PARAMS_DEFAULT = {
 
 /** 获取订单列表 */
 export function index(params: IndexParams): Promise<BaseResponse> {
-  return http.get<BaseResponse<null>, IndexParams>("/order", { params });
+  return http
+    .get<BaseResponse<null>, IndexParams>("/order", { params })
+    .then(syncBalance);
 }
 
 /** 获取订单详情 */
 export function show(id: number): Promise<BaseResponse> {
-  return http.get<BaseResponse<null>, { id: number }>(`/order/${id}`);
+  return http
+    .get<BaseResponse<null>, { id: number }>(`/order/${id}`)
+    .then(syncBalance);
 }
 
 /** 批量获取订单 */
 export function batchShow(
   ids: string | number | number[]
 ): Promise<BaseResponse> {
-  return http.get<BaseResponse<null>, { ids: string | number | number[] }>(
-    `/order/batch`,
-    {
-      params: { ids }
-    }
-  );
+  return http
+    .get<BaseResponse<null>, { ids: string | number | number[] }>(
+      `/order/batch`,
+      {
+        params: { ids }
+      }
+    )
+    .then(syncBalance);
 }
 
 /** 新建订单 */

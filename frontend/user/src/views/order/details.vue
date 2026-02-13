@@ -22,7 +22,7 @@ const getDetails = () => {
   const ids = router.currentRoute.value.params.ids;
   if (ids) {
     batchShow(ids.toString()).then(res => {
-      details.value = res.data;
+      details.value = res.data.items;
     });
   }
 };

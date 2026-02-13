@@ -242,7 +242,7 @@ const copy = () => {
   OrderApi.batchShow(filteredIds)
     .then(res => {
       let copied = "";
-      res.data.forEach((item: any) => {
+      res.data.items.forEach((item: any) => {
         let cert = item.latest_cert;
         if (!["unpaid", "pending", "processing"].includes(cert.status)) return;
 
