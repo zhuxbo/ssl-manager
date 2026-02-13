@@ -20,7 +20,7 @@ const renderPriceCell = (
       })
       .filter(Boolean);
     return lines.length
-      ? lines.map((line, i) => <div key={i}>{line}</div>)
+      ? <>{lines.map((line, i) => <div key={i}>{line}</div>)}</>
       : "-";
   }
   const val = formatPrice(row.price?.[field]);
