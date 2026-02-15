@@ -35,6 +35,7 @@ class AcmeApiService
             return ['code' => 0, 'msg' => 'User not found'];
         }
 
+        // TODO: 缺少 source 条件，待完善 ACME 时处理
         $product = Product::where('api_id', $productCode)
             ->where('product_type', 'acme')
             ->first();

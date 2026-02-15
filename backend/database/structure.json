@@ -1,7 +1,7 @@
 {
     "version": "1.0",
     "mysql_version": "8.0.43",
-    "generated_at": "2026-02-11 19:42:55",
+    "generated_at": "2026-02-15 20:31:07",
     "database": {
         "name": "manager",
         "charset": "utf8mb4",
@@ -4816,8 +4816,8 @@
                 "alternative_name_types": {
                     "position": 17,
                     "type": "varchar(50)",
-                    "nullable": true,
-                    "default": null,
+                    "nullable": false,
+                    "default": "[]",
                     "extra": "",
                     "comment": "备用名称类型"
                 },

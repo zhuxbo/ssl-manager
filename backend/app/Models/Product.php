@@ -9,6 +9,17 @@ class Product extends BaseModel
 {
     use HasFactory;
 
+    protected static function boot(): void
+    {
+        parent::boot();
+
+        static::creating(function (Product $product) {
+            if ($product->code && static::where('code', $product->code)->exists()) {
+                $product->code = $product->code . '_' . $product->source;
+            }
+        });
+    }
+
     const string TYPE_SSL = 'ssl';
 
     const string TYPE_CODESIGN = 'codesign';

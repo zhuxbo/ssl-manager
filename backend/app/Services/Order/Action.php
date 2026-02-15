@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Order;
 
 use App\Exceptions\ApiResponseException;
-use App\Http\Requests\Product\StoreRequest;
+use App\Http\Requests\Product\ImportCaProductRequest;
 use App\Http\Requests\Product\UpdateRequest;
 use App\Models\Callback;
 use App\Models\Cert;
@@ -83,6 +83,7 @@ class Action
                     // 使用 UpdateRequest 验证规则
                     $updateRequest = new UpdateRequest;
                     $updateRequest->setProductId($product->id);
+                    $updateRequest->skipSslDomainValidation();
 
                     // 将 $item 数据合并到请求中，以便 rules() 能正确判断产品类型
                     $updateRequest->merge($item);
@@ -109,26 +110,20 @@ class Action
                 }
             } else {
                 if ($type === 'new' || $type === 'all') {
-                    // 使用 StoreRequest 验证规则
-                    $storeRequest = new StoreRequest;
+                    $importRequest = new ImportCaProductRequest;
+                    $importRequest->merge($item);
 
-                    $item['code'] = $item['api_id'];
-
-                    // 将 $item 数据合并到请求中，以便 rules() 能正确判断产品类型
-                    $storeRequest->merge($item);
-
-                    $validator = Validator::make($item, $storeRequest->rules());
-                    $validator->after(function ($validator) use ($storeRequest) {
-                        $storeRequest->setValidator($validator);
-                        $storeRequest->withValidator($validator);
+                    $validator = Validator::make($item, $importRequest->rules());
+                    $validator->after(function ($validator) use ($importRequest) {
+                        $importRequest->setValidator($validator);
+                        $importRequest->withValidator($validator);
                     });
 
                     if ($validator->fails()) {
                         $this->error('产品数据验证失败', $validator->errors()->toArray());
                     }
 
-                    // 调用 prepareDataForCreate 方法处理默认值
-                    $item = $storeRequest->prepareDataForCreate($item);
+                    $item = $importRequest->prepareForCreate($item);
                     Product::create($item);
                 }
             }

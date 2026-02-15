@@ -10,11 +10,26 @@ class UpdateRequest extends BaseProductRequest
     private ?int $productId = null;
 
     /**
+     * 导入场景可跳过 SSL 域名数量校验
+     */
+    private bool $skipSslDomainValidation = false;
+
+    /**
      * 设置产品 ID
      */
     public function setProductId(int $productId): self
     {
         $this->productId = $productId;
+
+        return $this;
+    }
+
+    /**
+     * 设置是否跳过 SSL 域名数量校验
+     */
+    public function skipSslDomainValidation(bool $skip = true): self
+    {
+        $this->skipSslDomainValidation = $skip;
 
         return $this;
     }
@@ -42,10 +57,11 @@ class UpdateRequest extends BaseProductRequest
             'validation_type' => 'string|max:50',
             'common_name_types' => 'array',
             'common_name_types.*' => 'in:standard,wildcard,ipv4,ipv6,email,organization',
-            'alternative_name_types' => 'nullable|array',
+            'alternative_name_types' => 'array',
             'alternative_name_types.*' => 'in:standard,wildcard,ipv4,ipv6',
             'validation_methods' => 'nullable|array',
             'periods' => 'array',
+            'periods.*' => 'integer|in:1,3,6,12,24,36,48,60,72,84,96,108,120',
             'standard_min' => 'integer|min:0',
             'standard_max' => 'integer|min:0',
             'wildcard_min' => 'integer|min:0',
@@ -107,8 +123,8 @@ class UpdateRequest extends BaseProductRequest
                 }
             }
 
-            // 只对 SSL 产品检查域名数量
-            if ($this->isSSL()) {
+            // 导入更新场景可跳过 SSL 域名数量校验
+            if (! $this->skipSslDomainValidation && $this->isSSL()) {
                 $this->validateSSLProductDomains($validator, $data);
             }
         });
