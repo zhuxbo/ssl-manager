@@ -45,7 +45,7 @@ SSL证书管理系统 - 打包脚本
 
 版本号获取优先级:
   1. --version 参数
-  2. config.json 中的 version 字段
+  2. version.json 中的 version 字段
 
 通道自动判断:
   - 包含 -beta/-alpha/-rc/-dev 的版本 → dev 通道
@@ -91,9 +91,9 @@ if [ ! -d "$PRODUCTION_DIR" ]; then
     exit 1
 fi
 
-# 检查 config.json
-if [ ! -f "$PRODUCTION_DIR/config.json" ]; then
-    log_error "未找到 config.json"
+# 检查 version.json
+if [ ! -f "$PRODUCTION_DIR/version.json" ]; then
+    log_error "未找到 version.json"
     exit 1
 fi
 
@@ -176,7 +176,7 @@ EOF
 
 # 读取版本号（如果未通过参数指定）
 if [ -z "$VERSION" ]; then
-    VERSION=$(grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' "$PRODUCTION_DIR/config.json" | head -1 | sed 's/.*"\([^"]*\)"$/\1/')
+    VERSION=$(grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' "$PRODUCTION_DIR/version.json" | head -1 | sed 's/.*"\([^"]*\)"$/\1/')
     if [ -z "$VERSION" ]; then
         log_error "无法读取版本号，请使用 --version 参数指定"
         exit 1

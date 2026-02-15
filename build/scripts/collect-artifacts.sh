@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# 同步到生产仓库脚本 (Monorepo 版本)
-# 将构建产物复制到 production-code 仓库
+# 汇总构建产物脚本 (Monorepo 版本)
+# 将各模块构建产物收集到 production-code 目录
 
 set -e
 
@@ -61,61 +61,13 @@ CONFIG_FILE="${CONFIG_FILE:-/build/config.json}"
 SOURCE_DIR="${SOURCE_DIR:-/source}"
 WORKSPACE_DIR="${WORKSPACE_DIR:-/workspace}"
 PRODUCTION_DIR="${PRODUCTION_DIR:-/workspace/production-code}"
-BUILD_MODE="${BUILD_MODE:-test}"
 FORCE_BUILD="${FORCE_BUILD:-false}"
 
-log_info "开始同步到生产仓库..."
+log_info "开始同步构建产物..."
 
-# 确保生产仓库存在
-if [ ! -d "$PRODUCTION_DIR" ]; then
-    log_info "初始化生产仓库..."
-    PRODUCTION_REPO_URL=$(jq -r '.build.production_repo.url' "$CONFIG_FILE")
-
-    if ! git clone "$PRODUCTION_REPO_URL" "$PRODUCTION_DIR" 2>/dev/null; then
-        log_warning "克隆失败，创建本地仓库..."
-        mkdir -p "$PRODUCTION_DIR"
-        cd "$PRODUCTION_DIR"
-        git init --initial-branch=main
-        git remote add origin "$PRODUCTION_REPO_URL"
-    fi
-fi
-
+# 确保生产目录存在
+mkdir -p "$PRODUCTION_DIR"
 cd "$PRODUCTION_DIR"
-
-# 确保是 git 仓库
-if [ ! -d .git ]; then
-    git init --initial-branch=main
-    PRODUCTION_REPO_URL=$(jq -r '.build.production_repo.url' "$CONFIG_FILE")
-    git remote add origin "$PRODUCTION_REPO_URL" 2>/dev/null || git remote set-url origin "$PRODUCTION_REPO_URL"
-fi
-
-# 拉取最新代码
-git pull origin main >/dev/null 2>&1 || true
-
-# 确保生产仓库包含通用的 .gitignore
-if [ ! -f .gitignore ]; then
-    cat > .gitignore <<'EOF'
-# 操作系统文件
-.DS_Store
-.AppleDouble
-.LSOverride
-__MACOSX/
-.Spotlight-V100/
-.Trashes
-.fseventsd
-Thumbs.db
-ehthumbs.db
-Desktop.ini
-._*
-$RECYCLE.BIN/
-
-# 编辑器/工具
-.idea/
-.vscode/
-.history/
-*.log
-EOF
-fi
 
 # 创建目录结构
 mkdir -p backend frontend/admin frontend/user frontend/easy frontend/web nginx
@@ -249,54 +201,18 @@ if [ -d "$SOURCE_DIR/.git" ]; then
     MONOREPO_COMMIT=$(cd "$SOURCE_DIR" && git rev-parse HEAD 2>/dev/null || echo "")
 fi
 
-# 优先从 version.json 读取版本号
-VERSION=""
-VERSION_FILE="$SOURCE_DIR/version.json"
-if [ -f "$VERSION_FILE" ]; then
-    VERSION=$(jq -r '.version // ""' "$VERSION_FILE")
-    if [ -n "$VERSION" ]; then
-        log_info "从 version.json 读取版本号: $VERSION"
-    fi
-fi
-
-# 回退到 git tag
-if [ -z "$VERSION" ] && [ -d "$SOURCE_DIR/.git" ]; then
-    GIT_TAG=$(cd "$SOURCE_DIR" && git describe --tags --exact-match HEAD 2>/dev/null || echo "")
-    if [ -n "$GIT_TAG" ]; then
-        VERSION=$(echo "$GIT_TAG" | sed 's/^v//')
-        log_info "从 git tag 读取版本号: $VERSION"
-    fi
-fi
-
-# 默认版本
+# 从环境变量获取版本号
+VERSION="${BUILD_VERSION:-}"
 if [ -z "$VERSION" ]; then
-    VERSION="1.0.0"
-    log_warning "无法获取版本号，使用默认版本 $VERSION"
+    VERSION="0.0.0-dev"
+    log_warning "BUILD_VERSION 未设置，使用默认值: $VERSION"
 fi
 
-# 读取发布通道
-if [ -f "$VERSION_FILE" ]; then
-    RELEASE_CHANNEL=$(jq -r '.channel // "main"' "$VERSION_FILE")
-else
-    RELEASE_CHANNEL="main"
-fi
-
-# 生成构建信息
-BUILD_TIME=$(date -Iseconds)
-cat > "$PRODUCTION_DIR/config.json" <<EOF
-{
-  "version": "$VERSION",
-  "channel": "$RELEASE_CHANNEL",
-  "build_time": "$BUILD_TIME",
-  "build_module": "${BUILD_MODULE:-all}",
-  "php_version": "$(php -v | head -n1)",
-  "node_version": "$(node -v)",
-  "composer_version": "$(composer --version --no-ansi)",
-  "monorepo_commit": "$MONOREPO_COMMIT"
-}
-EOF
+# 通道从环境变量获取
+RELEASE_CHANNEL="${RELEASE_CHANNEL:-main}"
 
 # 生成 version.json（运行时使用）
+BUILD_TIME=$(date -Iseconds)
 cat > "$PRODUCTION_DIR/version.json" <<EOF
 {
   "version": "$VERSION",
@@ -306,8 +222,6 @@ cat > "$PRODUCTION_DIR/version.json" <<EOF
 }
 EOF
 log_success "version.json 已生成"
-
-log_success "config.json 已生成"
 log_info "版本: $VERSION"
 log_info "通道: $RELEASE_CHANNEL"
 log_info "Monorepo commit: ${MONOREPO_COMMIT:-N/A}"

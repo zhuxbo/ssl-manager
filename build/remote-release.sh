@@ -430,7 +430,7 @@ main() {
         # 1. 容器化构建（生成 production-code）
         log_step "运行容器化构建..."
         if [ -f "$BUILD_DIR/build.sh" ]; then
-            if ! $DOCKER_SUDO bash "$BUILD_DIR/build.sh"; then
+            if ! $DOCKER_SUDO bash "$BUILD_DIR/build.sh" --version "$version" --channel "$channel"; then
                 log_error "构建失败，终止发布"
                 exit 1
             fi

@@ -13,7 +13,7 @@ build/
 ├── scripts/              # 辅助脚本
 │   ├── release-common.sh       # 发布公共函数库
 │   ├── package.sh              # 打包脚本
-│   ├── sync-to-production.sh   # 同步到生产目录
+│   ├── collect-artifacts.sh    # 汇总构建产物
 │   └── container-build.sh      # 容器化构建
 ├── nginx/                # Nginx 配置模板
 ├── web/                  # Web 服务配置
@@ -58,18 +58,21 @@ build/
 ## 构建命令
 
 ```bash
-# 进入容器构建环境
+# 构建所有模块
 ./build/build.sh
 
-# 测试构建（不推送）
-./build/build.sh --test
+# 指定版本号构建
+./build/build.sh --version 1.0.0
 
-# 生产构建（推送到生产仓库）
-./build/build.sh --prod
+# 指定版本和通道
+./build/build.sh --version 0.1.7-beta --channel dev
+
+# 构建并创建安装包
+./build/build.sh --version 1.0.0 --package
 
 # 仅构建指定模块
-./build/build.sh --test admin     # 仅管理端
-./build/build.sh --test backend   # 仅后端
+./build/build.sh admin     # 仅管理端
+./build/build.sh api       # 仅后端
 ```
 
 ## 打包
@@ -97,6 +100,7 @@ build/
 
 | 场景 | 优先级 | 说明 |
 |------|--------|------|
+| **build.sh** | --version 参数 > git tag > 0.0.0-dev | 通过环境变量传入容器 |
 | **remote-release.sh** | 命令行参数 > git tag | 必须明确指定，不回退 |
 | **GitHub CI** | git tag | 由 tag push 触发 |
 | **local-release.sh** | 命令行参数 > git tag > 默认值 | 灵活，方便本地测试 |

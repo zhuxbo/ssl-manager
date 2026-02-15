@@ -153,7 +153,7 @@ main() {
         log_step "运行容器化构建..."
         if [ -f "$BUILD_DIR/build.sh" ]; then
             # 使用 sudo 运行构建脚本以访问 Docker
-            sudo bash "$BUILD_DIR/build.sh"
+            sudo bash "$BUILD_DIR/build.sh" --version "$version" --channel "$channel"
         else
             log_error "构建脚本不存在: $BUILD_DIR/build.sh"
             exit 1
