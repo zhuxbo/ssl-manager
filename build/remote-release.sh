@@ -25,6 +25,14 @@ KEEP_VERSIONS=5
 PARALLEL_UPLOAD=false
 SSH_TIMEOUT=10
 
+# 检测 Docker 是否需要 sudo（Linux 非 root 用户且不在 docker 组时需要）
+DOCKER_SUDO=""
+if ! docker info >/dev/null 2>&1; then
+    if sudo docker info >/dev/null 2>&1; then
+        DOCKER_SUDO="sudo"
+    fi
+fi
+
 # ========================================
 # 加载公共函数库
 # ========================================
@@ -422,8 +430,14 @@ main() {
         # 1. 容器化构建（生成 production-code）
         log_step "运行容器化构建..."
         if [ -f "$BUILD_DIR/build.sh" ]; then
-            # 使用 sudo 运行构建脚本以访问 Docker
-            sudo bash "$BUILD_DIR/build.sh"
+            if ! $DOCKER_SUDO bash "$BUILD_DIR/build.sh" --version "$version" --channel "$channel"; then
+                log_error "构建失败，终止发布"
+                exit 1
+            fi
+            # sudo 构建后归还 temp 目录权限，确保后续打包步骤可写
+            if [ -n "$DOCKER_SUDO" ]; then
+                sudo chown -R "$(id -u):$(id -g)" "$BUILD_DIR/temp"
+            fi
         else
             log_error "构建脚本不存在: $BUILD_DIR/build.sh"
             exit 1

@@ -959,7 +959,6 @@ trait ActionTrait
                     // 重签：必须有旧证书才能恢复
                     $last_cert || $this->error('未找到上个证书');
                     $order->latest_cert_id = $last_cert->id;
-                    $order->amount = bcsub((string) $order->amount, $cert->amount, 2);
                     $order->save();
                 } elseif ($cert->action == 'renew') {
                     // 续费：删除新订单（无论旧证书是否存在）
@@ -1010,7 +1009,6 @@ trait ActionTrait
                         'wildcard_count' => -$last_transaction->wildcard_count,
                     ];
                     Transaction::create($transaction);
-                    $order->amount = bcsub((string) $order->amount, (string) $cert->amount, 2);
                     $order->purchased_standard_count -= $last_transaction->standard_count;
                     $order->purchased_wildcard_count -= $last_transaction->wildcard_count;
                 }

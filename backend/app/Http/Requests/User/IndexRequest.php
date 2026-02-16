@@ -20,6 +20,9 @@ class IndexRequest extends BaseRequest
             'status' => 'nullable|integer|in:0,1',
             'created_at' => 'nullable|array|size:2',
             'created_at.*' => 'string|date_format:Y-m-d\TH:i:s.v\Z',
+            'balance' => 'nullable|array|size:2',
+            'balance.*' => 'nullable|numeric',
+            'credit_limit' => 'nullable|numeric|min:0',
         ];
     }
 }

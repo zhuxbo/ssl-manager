@@ -66,6 +66,13 @@ onMounted(() => {
   if (route.query.username) {
     search.value.username = route.query.username as string;
   }
+  if (route.query.balance) {
+    const parts = (route.query.balance as string).split(",");
+    search.value.balance = [parts[0] || null, parts[1] || null];
+  }
+  if (route.query.credit_limit !== undefined) {
+    search.value.credit_limit = Number(route.query.credit_limit);
+  }
   onSearch();
 });
 </script>

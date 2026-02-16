@@ -11,7 +11,7 @@ import {
   getTopProducts,
   getBrandStats,
   getUserLevelDistribution,
-  getHealthStatus,
+  getFinanceOverview,
   clearDashboardCache
 } from "@/api/dashboard";
 import PieChart from "@shared/components/Charts/PieChart.vue";
@@ -24,7 +24,7 @@ import type {
   TopProduct,
   BrandStats,
   UserLevelDistribution,
-  HealthStatus
+  FinanceOverviewData
 } from "@/types/dashboard";
 import { message } from "@shared/utils";
 
@@ -45,7 +45,18 @@ const trendsData = ref<TrendDataPoint[]>([]);
 const topProducts = ref<TopProduct[]>([]);
 const brandStats = ref<BrandStats[]>([]);
 const userLevelDistribution = ref<UserLevelDistribution[]>([]);
-const healthStatus = ref<HealthStatus>();
+const financeOverview = ref<FinanceOverviewData>();
+
+// 产品销售排行和品牌统计的周期切换
+const topProductsDays = ref(30);
+const brandStatsDays = ref(30);
+const daysOptions = [
+  { label: "7天", value: 7 },
+  { label: "30天", value: 30 },
+  { label: "90天", value: 90 }
+] as const;
+const topProductsLoading = ref(false);
+const brandStatsLoading = ref(false);
 
 // 周期切换
 type Period = "daily" | "weekly" | "monthly";
@@ -102,17 +113,35 @@ const formatLocalDate = (date: Date): string => {
   return `${year}-${month}-${day}`;
 };
 
-// 获取状态颜色
-const getStatusColor = (status: string) => {
-  switch (status) {
-    case "healthy":
-      return "success";
-    case "warning":
-      return "warning";
-    case "error":
-      return "danger";
-    default:
-      return "info";
+// 跳转到用户列表页面
+const goToUserList = (filter: Record<string, string>) => {
+  router.push({
+    path: "/user",
+    query: filter
+  });
+};
+
+// 切换产品排行周期
+const handleTopProductsDaysChange = async (days: number) => {
+  topProductsDays.value = days;
+  topProductsLoading.value = true;
+  try {
+    const res = await getTopProducts(days, 10);
+    topProducts.value = res.data;
+  } finally {
+    topProductsLoading.value = false;
+  }
+};
+
+// 切换品牌统计周期
+const handleBrandStatsDaysChange = async (days: number) => {
+  brandStatsDays.value = days;
+  brandStatsLoading.value = true;
+  try {
+    const res = await getBrandStats(days);
+    brandStats.value = res.data;
+  } finally {
+    brandStatsLoading.value = false;
   }
 };
 
@@ -278,15 +307,15 @@ const fetchDashboardData = async () => {
       productsRes,
       brandsRes,
       levelsRes,
-      healthRes
+      financeRes
     ] = await Promise.all([
       getSystemOverview(),
       getRealtimeData(),
       getTrendsData(30),
-      getTopProducts(30, 10),
-      getBrandStats(30),
+      getTopProducts(topProductsDays.value, 10),
+      getBrandStats(brandStatsDays.value),
       getUserLevelDistribution(),
-      getHealthStatus()
+      getFinanceOverview()
     ]);
 
     systemOverview.value = overviewRes.data;
@@ -295,7 +324,7 @@ const fetchDashboardData = async () => {
     topProducts.value = productsRes.data;
     brandStats.value = brandsRes.data;
     userLevelDistribution.value = levelsRes.data;
-    healthStatus.value = healthRes.data;
+    financeOverview.value = financeRes.data;
   } finally {
     chartsLoading.value = false;
   }
@@ -654,42 +683,39 @@ onMounted(async () => {
         <div class="bg-white dark:bg-[#141414] rounded-lg p-6">
           <div class="flex items-center justify-between mb-6">
             <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
-              系统健康状态
+              财务概览
             </h3>
           </div>
-          <div class="space-y-4">
+          <div class="grid grid-cols-2 gap-4">
             <div class="text-center">
-              <ElTag
-                :type="getStatusColor(healthStatus.overall_status || 'info')"
-                size="large"
+              <p class="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                总余额
+              </p>
+              <p
+                class="text-2xl font-bold text-green-600 dark:text-green-400 hover:text-green-700 cursor-pointer transition-colors duration-200"
+                title="点击查看余额大于0的用户"
+                @click="goToUserList({ balance: '0.01,' })"
               >
-                {{
-                  healthStatus.overall_status === "healthy"
-                    ? "系统正常"
-                    : healthStatus.overall_status === "warning"
-                      ? "警告"
-                      : "错误"
-                }}
-              </ElTag>
+                {{ formatCurrency(financeOverview?.total_balance || 0) }}
+              </p>
+              <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                {{ financeOverview?.positive_count || 0 }} 个用户
+              </p>
             </div>
-            <div class="grid grid-cols-2 gap-3">
-              <div
-                v-for="(component, key) in healthStatus.components"
-                :key="key"
-                class="flex items-center justify-between"
+            <div class="text-center">
+              <p class="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                总欠费
+              </p>
+              <p
+                class="text-2xl font-bold text-red-600 dark:text-red-400 hover:text-red-700 cursor-pointer transition-colors duration-200"
+                title="点击查看欠费用户"
+                @click="goToUserList({ balance: ',-0.01' })"
               >
-                <span
-                  class="text-sm text-gray-600 dark:text-gray-400 capitalize"
-                  >{{ key }}</span
-                >
-                <ElTag
-                  :title="component.message"
-                  :type="getStatusColor(component.status)"
-                  size="small"
-                >
-                  {{ component.status }}
-                </ElTag>
-              </div>
+                {{ formatCurrency(financeOverview?.total_debt || 0) }}
+              </p>
+              <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                {{ financeOverview?.negative_count || 0 }} 个用户
+              </p>
             </div>
           </div>
         </div>
@@ -724,12 +750,29 @@ onMounted(async () => {
         <!-- 产品销售排行 -->
         <div class="bg-white dark:bg-[#141414] rounded-lg p-6">
           <div class="flex items-center justify-between mb-4">
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
-              产品销售排行（Top10）
-            </h3>
+            <div class="flex items-center gap-2">
+              <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
+                产品销售排行（Top10）
+              </h3>
+              <div class="flex gap-1">
+                <span
+                  v-for="opt in daysOptions"
+                  :key="opt.value"
+                  class="text-xs px-1.5 py-0.5 rounded cursor-pointer transition-colors"
+                  :class="
+                    topProductsDays === opt.value
+                      ? 'bg-blue-100 text-blue-600 dark:bg-blue-900 dark:text-blue-400'
+                      : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
+                  "
+                  @click="handleTopProductsDaysChange(opt.value)"
+                >
+                  {{ opt.label }}
+                </span>
+              </div>
+            </div>
           </div>
           <div
-            v-if="chartsLoading"
+            v-if="chartsLoading || topProductsLoading"
             class="flex items-center justify-center h-64"
           >
             <div class="text-gray-500 dark:text-gray-400">图表加载中...</div>
@@ -748,12 +791,29 @@ onMounted(async () => {
         <!-- CA品牌统计 -->
         <div class="bg-white dark:bg-[#141414] rounded-lg p-6">
           <div class="flex items-center justify-between mb-4">
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
-              CA品牌收入分布
-            </h3>
+            <div class="flex items-center gap-2">
+              <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
+                CA品牌收入分布
+              </h3>
+              <div class="flex gap-1">
+                <span
+                  v-for="opt in daysOptions"
+                  :key="opt.value"
+                  class="text-xs px-1.5 py-0.5 rounded cursor-pointer transition-colors"
+                  :class="
+                    brandStatsDays === opt.value
+                      ? 'bg-blue-100 text-blue-600 dark:bg-blue-900 dark:text-blue-400'
+                      : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
+                  "
+                  @click="handleBrandStatsDaysChange(opt.value)"
+                >
+                  {{ opt.label }}
+                </span>
+              </div>
+            </div>
           </div>
           <div
-            v-if="chartsLoading"
+            v-if="chartsLoading || brandStatsLoading"
             class="flex items-center justify-center h-80"
           >
             <div class="text-gray-500 dark:text-gray-400">图表加载中...</div>

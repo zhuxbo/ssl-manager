@@ -54,8 +54,8 @@ export function updateNotificationPreferences(data: NotificationPreferences) {
 
 export function getDeployToken() {
   return http.get<
-    BaseResponse<{ allowed_ips: string[] }>,
-    { allowed_ips: string[] }
+    BaseResponse<{ token: string; allowed_ips: string[] }>,
+    { token: string; allowed_ips: string[] }
   >("/setting/deploy-token");
 }
 

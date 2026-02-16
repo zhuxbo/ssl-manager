@@ -155,6 +155,20 @@ class CnameDelegationServiceTest extends TestCase
         $this->assertNull($found);
     }
 
+    public function test_find_delegation_acme_prefix_does_not_normalize_www_to_root(): void
+    {
+        $user = $this->createTestUser();
+        $this->createTestDelegation($user, [
+            'zone' => 'example.com',
+            'prefix' => '_acme-challenge',
+        ]);
+
+        // 确保 www 在 _acme-challenge 场景下保持精确匹配语义
+        $found = $this->service->findDelegation($user->id, 'www.example.com', '_acme-challenge');
+
+        $this->assertNull($found);
+    }
+
     public function test_find_delegation_dnsauth_prefix_only_matches_exact_fqdn(): void
     {
         $user = $this->createTestUser();
@@ -237,6 +251,21 @@ class CnameDelegationServiceTest extends TestCase
         ]);
 
         $found = $this->service->findValidDelegation($user->id, 'example.com', '_acme-challenge');
+
+        $this->assertNull($found);
+    }
+
+    public function test_find_valid_delegation_acme_prefix_does_not_normalize_www_to_root(): void
+    {
+        $user = $this->createTestUser();
+        $this->createTestDelegation($user, [
+            'zone' => 'example.com',
+            'prefix' => '_acme-challenge',
+            'valid' => true,
+        ]);
+
+        // 确保 www 在 _acme-challenge 场景下不回落到根域
+        $found = $this->service->findValidDelegation($user->id, 'www.example.com', '_acme-challenge');
 
         $this->assertNull($found);
     }

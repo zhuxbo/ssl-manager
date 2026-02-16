@@ -1,7 +1,7 @@
 # SSL Manager
 
-[![GitHub Release](https://img.shields.io/github/v/release/zhuxbo/cert-manager?include_prereleases)](https://github.com/zhuxbo/cert-manager/releases)
-[![CI](https://github.com/zhuxbo/cert-manager/actions/workflows/ci.yml/badge.svg)](https://github.com/zhuxbo/cert-manager/actions/workflows/ci.yml)
+[![GitHub Release](https://img.shields.io/github/v/release/zhuxbo/ssl-manager?include_prereleases)](https://github.com/zhuxbo/ssl-manager/releases)
+[![CI](https://github.com/zhuxbo/ssl-manager/actions/workflows/ci.yml/badge.svg)](https://github.com/zhuxbo/ssl-manager/actions/workflows/ci.yml)
 
 SSL 证书管理系统，支持多级代理、自动续签、在线升级。
 
@@ -122,7 +122,7 @@ _acme-challenge.example.com  →  *******.your-platform.com
 
 ```bash
 # 安装部署工具
-curl -fsSL https://gitee.com/zhuxbo/cert-deploy/raw/main/deploy/install.sh | sudo bash
+curl -fsSL https://github.com/zhuxbo/cert-deploy/raw/main/deploy/install.sh | sudo bash
 
 # 扫描并生成配置
 cert-deploy -scan

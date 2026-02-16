@@ -133,45 +133,37 @@ class DashboardController extends Controller
 
         $realtimeStats = Cache::remember($cacheKey, $cacheMinutes * 60, function () {
             $today = now()->startOfDay();
+            $now = now();
 
-            // 7天内到期订单数
-            $expiring7Days = Order::join('certs', 'orders.latest_cert_id', '=', 'certs.id')
-                ->where('certs.status', 'active')
-                ->whereBetween('certs.expires_at', [now(), now()->addDays(7)])
-                ->count();
-
-            // 30天内到期订单数
-            $expiring30Days = Order::join('certs', 'orders.latest_cert_id', '=', 'certs.id')
-                ->where('certs.status', 'active')
-                ->whereBetween('certs.expires_at', [now(), now()->addDays(30)])
-                ->count();
-
-            // 7天内签发订单数
-            $issued7Days = Order::join('certs', 'orders.latest_cert_id', '=', 'certs.id')
-                ->whereNotNull('certs.issued_at')
-                ->whereBetween('certs.issued_at', [now()->subDays(7), now()])
-                ->count();
-
-            // 30天内签发订单数
-            $issued30Days = Order::join('certs', 'orders.latest_cert_id', '=', 'certs.id')
-                ->whereNotNull('certs.issued_at')
-                ->whereBetween('certs.issued_at', [now()->subDays(30), now()])
-                ->count();
+            // 单条 SQL 合并：到期、签发、处理中统计
+            $certStats = DB::selectOne("
+                SELECT
+                    COUNT(CASE WHEN c.status = 'active' AND c.expires_at BETWEEN ? AND ? THEN 1 END) as exp_7,
+                    COUNT(CASE WHEN c.status = 'active' AND c.expires_at BETWEEN ? AND ? THEN 1 END) as exp_30,
+                    COUNT(CASE WHEN c.issued_at BETWEEN ? AND ? THEN 1 END) as iss_7,
+                    COUNT(CASE WHEN c.issued_at BETWEEN ? AND ? THEN 1 END) as iss_30,
+                    COUNT(CASE WHEN c.status IN ('pending', 'processing') THEN 1 END) as processing
+                FROM orders o
+                JOIN certs c ON o.latest_cert_id = c.id
+            ", [
+                $now, $now->copy()->addDays(7),
+                $now, $now->copy()->addDays(30),
+                $now->copy()->subDays(7), $now,
+                $now->copy()->subDays(30), $now,
+            ]);
 
             return [
                 'online_users' => $this->getOnlineUsersCount(),
                 'today' => [
-                    'processing_orders' => Order::join('certs', 'orders.latest_cert_id', '=', 'certs.id')
-                        ->whereIn('certs.status', ['pending', 'processing'])
-                        ->count(),
+                    'processing_orders' => (int) $certStats->processing,
                     'new_orders' => Order::whereDate('created_at', $today)->count(),
                     'new_users' => User::whereDate('created_at', $today)->count(),
                 ],
                 'alerts' => [
-                    'expiring_7_days' => $expiring7Days,
-                    'expiring_30_days' => $expiring30Days,
-                    'issued_7_days' => $issued7Days,
-                    'issued_30_days' => $issued30Days,
+                    'expiring_7_days' => (int) $certStats->exp_7,
+                    'expiring_30_days' => (int) $certStats->exp_30,
+                    'issued_7_days' => (int) $certStats->iss_7,
+                    'issued_30_days' => (int) $certStats->iss_30,
                 ],
             ];
         });
@@ -208,8 +200,8 @@ class DashboardController extends Controller
             $financeRows = DB::select("
                 SELECT
                     DATE(created_at) as date,
-                    COALESCE(SUM(CASE WHEN type IN ('addfunds', 'refunds', 'reverse') THEN amount ELSE 0 END), 0) AS recharge,
-                    COALESCE(ABS(SUM(CASE WHEN type IN ('order', 'cancel', 'deduct') THEN amount ELSE 0 END)), 0) AS consumption
+                    COALESCE(SUM(CASE WHEN type IN ('addfunds', 'refunds') THEN amount ELSE 0 END), 0) AS recharge,
+                    COALESCE(ABS(SUM(CASE WHEN type IN ('order', 'cancel', 'deduct', 'reverse') THEN amount ELSE 0 END)), 0) AS consumption
                 FROM transactions
                 WHERE created_at >= ?
                 GROUP BY DATE(created_at)
@@ -339,28 +331,28 @@ class DashboardController extends Controller
     }
 
     /**
-     * 获取系统健康状态
+     * 获取财务概览（总余额 / 总欠费）
      */
-    public function healthStatus(): void
+    public function financeOverview(): void
     {
-        $cacheKey = 'dashboard:admin:health_status';
-        $cacheMinutes = min($this->getCacheMinutes(), 5); // 健康状态缓存时间不超过5分钟
+        $cacheKey = 'dashboard:admin:finance_overview';
+        $cacheMinutes = $this->getCacheMinutes();
 
         $data = Cache::remember($cacheKey, $cacheMinutes * 60, function () {
-            $components = [
-                'database' => $this->checkDatabaseStatus(),
-                'cache' => $this->checkCacheStatus(),
-                'queue' => $this->checkQueueStatus(),
-                'storage' => $this->checkStorageStatus(),
-            ];
-
-            $overallStatus = collect($components)->every(fn ($s) => $s['status'] === 'healthy')
-                ? 'healthy'
-                : 'warning';
+            $row = DB::selectOne('
+                SELECT
+                    COALESCE(SUM(CASE WHEN balance > 0 THEN balance ELSE 0 END), 0) as total_balance,
+                    COUNT(CASE WHEN balance > 0 THEN 1 END) as positive_count,
+                    COALESCE(SUM(CASE WHEN balance < 0 THEN ABS(balance) ELSE 0 END), 0) as total_debt,
+                    COUNT(CASE WHEN balance < 0 THEN 1 END) as negative_count
+                FROM users
+            ');
 
             return [
-                'overall_status' => $overallStatus,
-                'components' => $components,
+                'total_balance' => round((float) $row->total_balance, 2),
+                'positive_count' => (int) $row->positive_count,
+                'total_debt' => round((float) $row->total_debt, 2),
+                'negative_count' => (int) $row->negative_count,
             ];
         });
 
@@ -394,18 +386,18 @@ class DashboardController extends Controller
         // 单次扫表，用 CASE WHEN 按日期阈值分桶
         $row = DB::selectOne("
             SELECT
-                SUM(CASE WHEN created_at >= ? AND type IN ('addfunds','refunds','reverse') THEN amount ELSE 0 END) AS d_r,
-                ABS(SUM(CASE WHEN created_at >= ? AND type IN ('order','cancel','deduct') THEN amount ELSE 0 END)) AS d_c,
-                SUM(CASE WHEN created_at >= ? AND type IN ('addfunds','refunds','reverse') THEN amount ELSE 0 END) AS w_r,
-                ABS(SUM(CASE WHEN created_at >= ? AND type IN ('order','cancel','deduct') THEN amount ELSE 0 END)) AS w_c,
-                SUM(CASE WHEN created_at >= ? AND type IN ('addfunds','refunds','reverse') THEN amount ELSE 0 END) AS m_r,
-                ABS(SUM(CASE WHEN created_at >= ? AND type IN ('order','cancel','deduct') THEN amount ELSE 0 END)) AS m_c,
-                SUM(CASE WHEN created_at >= ? AND created_at < ? AND type IN ('addfunds','refunds','reverse') THEN amount ELSE 0 END) AS pd_r,
-                ABS(SUM(CASE WHEN created_at >= ? AND created_at < ? AND type IN ('order','cancel','deduct') THEN amount ELSE 0 END)) AS pd_c,
-                SUM(CASE WHEN created_at >= ? AND created_at < ? AND type IN ('addfunds','refunds','reverse') THEN amount ELSE 0 END) AS pw_r,
-                ABS(SUM(CASE WHEN created_at >= ? AND created_at < ? AND type IN ('order','cancel','deduct') THEN amount ELSE 0 END)) AS pw_c,
-                SUM(CASE WHEN created_at >= ? AND created_at < ? AND type IN ('addfunds','refunds','reverse') THEN amount ELSE 0 END) AS pm_r,
-                ABS(SUM(CASE WHEN created_at >= ? AND created_at < ? AND type IN ('order','cancel','deduct') THEN amount ELSE 0 END)) AS pm_c
+                SUM(CASE WHEN created_at >= ? AND type IN ('addfunds','refunds') THEN amount ELSE 0 END) AS d_r,
+                ABS(SUM(CASE WHEN created_at >= ? AND type IN ('order','cancel','deduct','reverse') THEN amount ELSE 0 END)) AS d_c,
+                SUM(CASE WHEN created_at >= ? AND type IN ('addfunds','refunds') THEN amount ELSE 0 END) AS w_r,
+                ABS(SUM(CASE WHEN created_at >= ? AND type IN ('order','cancel','deduct','reverse') THEN amount ELSE 0 END)) AS w_c,
+                SUM(CASE WHEN created_at >= ? AND type IN ('addfunds','refunds') THEN amount ELSE 0 END) AS m_r,
+                ABS(SUM(CASE WHEN created_at >= ? AND type IN ('order','cancel','deduct','reverse') THEN amount ELSE 0 END)) AS m_c,
+                SUM(CASE WHEN created_at >= ? AND created_at < ? AND type IN ('addfunds','refunds') THEN amount ELSE 0 END) AS pd_r,
+                ABS(SUM(CASE WHEN created_at >= ? AND created_at < ? AND type IN ('order','cancel','deduct','reverse') THEN amount ELSE 0 END)) AS pd_c,
+                SUM(CASE WHEN created_at >= ? AND created_at < ? AND type IN ('addfunds','refunds') THEN amount ELSE 0 END) AS pw_r,
+                ABS(SUM(CASE WHEN created_at >= ? AND created_at < ? AND type IN ('order','cancel','deduct','reverse') THEN amount ELSE 0 END)) AS pw_c,
+                SUM(CASE WHEN created_at >= ? AND created_at < ? AND type IN ('addfunds','refunds') THEN amount ELSE 0 END) AS pm_r,
+                ABS(SUM(CASE WHEN created_at >= ? AND created_at < ? AND type IN ('order','cancel','deduct','reverse') THEN amount ELSE 0 END)) AS pm_c
             FROM transactions
             WHERE created_at >= ?
         ", [
@@ -469,36 +461,32 @@ class DashboardController extends Controller
     {
         $today = now()->startOfDay();
 
-        // 总调用次数
-        $totalCalls = ApiLog::whereDate('created_at', $today)->count();
-        $errorCalls = ApiLog::whereDate('created_at', $today)
-            ->where('status_code', '!=', 200)
-            ->count();
-
-        $errorRate = $totalCalls > 0 ? round(($errorCalls / $totalCalls) * 100, 2) : 0;
-
-        // 按版本分组统计
-        $versionStats = ApiLog::whereDate('created_at', $today)
+        // 单条 SQL：按版本分组统计，汇总即得 total/error
+        $versionRows = ApiLog::where('created_at', '>=', $today)
             ->selectRaw('version, COUNT(*) as total_calls')
             ->selectRaw('SUM(CASE WHEN status_code = 200 THEN 1 ELSE 0 END) as success_calls')
             ->selectRaw('SUM(CASE WHEN status_code != 200 THEN 1 ELSE 0 END) as error_calls')
             ->groupBy('version')
             ->orderBy('total_calls', 'desc')
-            ->get()
-            ->map(function ($item) {
-                $successRate = $item->total_calls > 0
-                    ? round(($item->success_calls / $item->total_calls) * 100, 2)
-                    : 0;
+            ->get();
 
-                return [
-                    'version' => $item->version ?: '未知版本',
-                    'total_calls' => $item->total_calls,
-                    'success_calls' => $item->success_calls,
-                    'error_calls' => $item->error_calls,
-                    'success_rate' => $successRate,
-                ];
-            })
-            ->toArray();
+        $totalCalls = $versionRows->sum('total_calls');
+        $errorCalls = $versionRows->sum('error_calls');
+        $errorRate = $totalCalls > 0 ? round(($errorCalls / $totalCalls) * 100, 2) : 0;
+
+        $versionStats = $versionRows->map(function ($item) {
+            $successRate = $item->total_calls > 0
+                ? round(($item->success_calls / $item->total_calls) * 100, 2)
+                : 0;
+
+            return [
+                'version' => $item->version ?: '未知版本',
+                'total_calls' => $item->total_calls,
+                'success_calls' => $item->success_calls,
+                'error_calls' => $item->error_calls,
+                'success_rate' => $successRate,
+            ];
+        })->toArray();
 
         return [
             'calls' => $totalCalls,
@@ -506,141 +494,6 @@ class DashboardController extends Controller
             'error_rate' => $errorRate,
             'version_stats' => $versionStats,
         ];
-    }
-
-    /**
-     * 检查数据库状态
-     */
-    private function checkDatabaseStatus(): array
-    {
-        try {
-            DB::connection()->getPdo();
-
-            return ['status' => 'healthy', 'message' => '数据库连接正常'];
-        } catch (Exception $e) {
-            return ['status' => 'error', 'message' => '数据库连接失败: '.$e->getMessage()];
-        }
-    }
-
-    /**
-     * 检查缓存状态
-     */
-    private function checkCacheStatus(): array
-    {
-        try {
-            Cache::put('health_check', 'ok', 10);
-            $result = Cache::get('health_check');
-
-            if ($result === 'ok') {
-                return ['status' => 'healthy', 'message' => '缓存服务正常'];
-            } else {
-                return ['status' => 'warning', 'message' => '缓存服务异常'];
-            }
-        } catch (Exception $e) {
-            return ['status' => 'error', 'message' => '缓存服务失败: '.$e->getMessage()];
-        }
-    }
-
-    /**
-     * 检查队列状态
-     */
-    private function checkQueueStatus(): array
-    {
-        try {
-            $queueDriver = config('queue.default');
-
-            return match ($queueDriver) {
-                'redis' => $this->checkRedisQueueStatus(),
-                'database' => $this->checkDatabaseQueueStatus(),
-                'sync' => ['status' => 'healthy', 'message' => '队列驱动为同步模式'],
-                default => ['status' => 'warning', 'message' => "未知队列驱动: $queueDriver"],
-            };
-        } catch (Exception $e) {
-            return ['status' => 'error', 'message' => '队列服务检查失败: '.$e->getMessage()];
-        }
-    }
-
-    /**
-     * 检查Redis队列状态
-     */
-    private function checkRedisQueueStatus(): array
-    {
-        try {
-            $redis = app('redis')->connection(config('queue.connections.redis.connection', 'default'));
-            $queueName = config('queue.connections.redis.queue', 'default');
-
-            // 检查Redis连接
-            $redis->ping();
-
-            // 获取队列长度
-            $pendingJobs = $redis->llen("queues:$queueName");
-            $delayedJobs = $redis->zcard("queues:$queueName:delayed");
-            $reservedJobs = $redis->zcard("queues:$queueName:reserved");
-
-            // 检查失败任务（仍然从数据库读取）
-            $failedJobs = DB::table('failed_jobs')->count();
-
-            if ($failedJobs > 100) {
-                return [
-                    'status' => 'warning',
-                    'message' => "Redis队列正常，但有{$failedJobs}个失败任务 (待处理:$pendingJobs, 延迟:$delayedJobs, 保留:$reservedJobs)",
-                ];
-            }
-
-            return [
-                'status' => 'healthy',
-                'message' => "Redis队列正常 (待处理:$pendingJobs, 延迟:$delayedJobs, 保留:$reservedJobs, 失败:$failedJobs)",
-            ];
-
-        } catch (Exception $e) {
-            return ['status' => 'error', 'message' => 'Redis队列服务失败: '.$e->getMessage()];
-        }
-    }
-
-    /**
-     * 检查数据库队列状态
-     */
-    private function checkDatabaseQueueStatus(): array
-    {
-        try {
-            // 检查jobs表
-            $pendingJobs = DB::table('jobs')->count();
-            $failedJobs = DB::table('failed_jobs')->count();
-
-            if ($failedJobs > 100) {
-                return ['status' => 'warning', 'message' => "数据库队列正常，但有{$failedJobs}个失败任务"];
-            }
-
-            return ['status' => 'healthy', 'message' => "数据库队列正常，待处理:{$pendingJobs}，失败:$failedJobs"];
-        } catch (Exception $e) {
-            return ['status' => 'error', 'message' => '数据库队列服务失败: '.$e->getMessage()];
-        }
-    }
-
-    /**
-     * 检查存储状态
-     */
-    private function checkStorageStatus(): array
-    {
-        try {
-            $path = storage_path('logs');
-
-            if (! is_writable($path)) {
-                return ['status' => 'error', 'message' => '存储目录不可写'];
-            }
-
-            $freeBytes = disk_free_space($path);
-            $totalBytes = disk_total_space($path);
-            $usedPercent = ($totalBytes - $freeBytes) / $totalBytes * 100;
-
-            if ($usedPercent > 90) {
-                return ['status' => 'warning', 'message' => sprintf('磁盘使用率过高: %.1f%%', $usedPercent)];
-            }
-
-            return ['status' => 'healthy', 'message' => sprintf('存储正常，使用率: %.1f%%', $usedPercent)];
-        } catch (Exception $e) {
-            return ['status' => 'error', 'message' => '存储检查失败: '.$e->getMessage()];
-        }
     }
 
     /**
@@ -655,7 +508,7 @@ class DashboardController extends Controller
                 'dashboard:admin:system_overview',
                 'dashboard:admin:realtime',
                 'dashboard:admin:user_level_distribution',
-                'dashboard:admin:health_status',
+                'dashboard:admin:finance_overview',
             ];
 
             // 清除基础缓存

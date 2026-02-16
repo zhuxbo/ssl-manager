@@ -3,7 +3,11 @@
 ## 方式一：脚本部署（推荐）
 
 ```bash
-curl -fsSL https://gitee.com/zhuxbo/cert-manager/raw/main/deploy/install.sh | bash -s docker
+# 国内服务器
+curl -fsSL https://release-cn.cnssl.com/install.sh | sudo bash -s -- docker
+
+# 海外服务器
+curl -fsSL https://release-us.cnssl.com/install.sh | sudo bash -s -- docker
 ```
 
 脚本会引导您完成 7 步交互式配置。
@@ -14,7 +18,7 @@ curl -fsSL https://gitee.com/zhuxbo/cert-manager/raw/main/deploy/install.sh | ba
 
 ```bash
 # 下载最新版
-curl -LO https://github.com/zhuxbo/cert-manager/releases/latest/download/ssl-manager-full-latest.zip
+curl -LO https://github.com/zhuxbo/ssl-manager/releases/latest/download/ssl-manager-full-latest.zip
 unzip ssl-manager-full-latest.zip
 cd ssl-manager
 ```

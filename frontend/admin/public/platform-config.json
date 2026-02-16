@@ -26,6 +26,7 @@
   "MenuSearchHistory": 6,
   "BaseUrlApi": "/api/admin",
   "Brands": [
+    "cnssl",
     "certum",
     "gogetssl",
     "positive",

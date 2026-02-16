@@ -1,4 +1,5 @@
 import { ref } from "vue";
+import dayjs from "dayjs";
 import { channelOptions } from "./dictionary";
 
 const channelMap = channelOptions.reduce<Record<string, string>>((acc, cur) => {
@@ -80,7 +81,12 @@ export function useNotificationTemplateTable() {
     {
       label: "更新时间",
       prop: "updated_at",
-      minWidth: 180
+      minWidth: 180,
+      formatter: ({ updated_at }) => {
+        return updated_at
+          ? dayjs(updated_at).format("YYYY-MM-DD HH:mm:ss")
+          : "-";
+      }
     },
     {
       label: "操作",

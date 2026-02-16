@@ -58,7 +58,7 @@ export const useDeployTokenStore = (onSearch: () => void) => {
             ElButton,
             {
               onClick: () => {
-                storeValues.value.token = uuid(64);
+                storeValues.value.token = uuid(32);
               }
             },
             () => "生成"
@@ -100,7 +100,7 @@ export const useDeployTokenStore = (onSearch: () => void) => {
 
   const rules: FormRules = {
     user_id: [{ required: true, message: "请选择用户" }],
-    token: [{ max: 128, message: "Token长度不能超过128个字符" }],
+    token: [{ len: 32, message: "Token 必须为32个字符" }],
     rate_limit: [{ type: "number", min: 1, message: "频率限制必须大于0" }],
     status: [{ required: true, message: "请选择状态" }]
   };

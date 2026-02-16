@@ -31,7 +31,7 @@ class StoreRequest extends BaseProductRequest
             'validation_type' => 'required|string|max:50',
             'common_name_types' => 'nullable|array',  // SSL 产品必填，非 SSL 产品可选
             'common_name_types.*' => 'in:standard,wildcard,ipv4,ipv6,email,organization',
-            'alternative_name_types' => 'nullable|array',
+            'alternative_name_types' => 'array',
             'alternative_name_types.*' => 'in:standard,wildcard,ipv4,ipv6',
             'validation_methods' => 'nullable|array',
             'periods' => 'required|array',
@@ -165,22 +165,4 @@ class StoreRequest extends BaseProductRequest
         }
     }
 
-    /**
-     * 为导入场景准备数据，设置非 SSL/CodeSign 产品的默认值
-     * 用于 Action::importProduct() 手动验证场景
-     */
-    public function prepareDataForCreate(array $data): array
-    {
-        // 非 SSL 产品，设置默认值
-        if (! $this->isSSL()) {
-            $this->setNonSSLDefaults($data);
-        }
-
-        // 代码签名产品，设置加密/签名/重签/CSR 相关字段的默认值
-        if ($this->isCodeSign()) {
-            $this->setCodeSignDefaults($data);
-        }
-
-        return $data;
-    }
 }

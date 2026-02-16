@@ -15,7 +15,7 @@ set -e
 TEMP_DIR="/tmp/ssl-manager-install-$$"
 SCRIPT_PACKAGE="ssl-manager-script-latest.zip"
 REPO_OWNER="zhuxbo"
-REPO_NAME="cert-manager"
+REPO_NAME="ssl-manager"
 # release 服务 URL
 # - 部署到 release 服务时，__RELEASE_URL__ 会被替换为实际地址
 # - 如果未替换（本地运行），则需要通过 --url 参数指定

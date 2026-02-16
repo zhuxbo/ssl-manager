@@ -24,10 +24,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        if (Schema::hasColumn('certs', 'auto_deploy_at')) {
-            Schema::table('certs', function (Blueprint $table) {
-                $table->dropColumn('auto_deploy_at');
-            });
-        }
+        // 系统采用整体升级方式，不支持回滚操作
     }
 };

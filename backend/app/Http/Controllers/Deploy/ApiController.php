@@ -72,11 +72,11 @@ class ApiController extends Controller
             'order_id' => ['required', 'integer'],
             'csr' => ['nullable', 'string'],
             'domains' => ['nullable', 'string'], // 多域名支持，逗号分割
-            'validation_method' => ['nullable', 'in:txt,file,http,https,cname,admin,administrator,postmaster,webmaster,hostmaster'],
+            'validation_method' => ['nullable', 'in:delegation,file'],
         ]);
 
         // 通过 order_id 查找订单
-        $order = Order::with('latestCert')
+        $order = Order::with(['latestCert', 'product'])
             ->whereHas('latestCert')
             ->where('id', $params['order_id'])
             ->first();
@@ -123,7 +123,28 @@ class ApiController extends Controller
             $updateParams['domains'] = ! empty($params['domains'])
                 ? trim($params['domains'])
                 : $cert->alternative_names;
-            $updateParams['validation_method'] = $params['validation_method'] ?? 'txt';
+            $validationMethod = $params['validation_method'] ?? 'delegation';
+            $productMethods = $order->product->validation_methods ?? [];
+
+            if ($validationMethod === 'delegation') {
+                if (! in_array('delegation', $productMethods)) {
+                    $this->error('该产品不支持委托验证');
+                }
+                $updateParams['validation_method'] = 'delegation';
+            } else {
+                // file: 按 file → https → http 顺序查找产品支持的方法
+                $resolved = null;
+                foreach (['file', 'https', 'http'] as $method) {
+                    if (in_array($method, $productMethods)) {
+                        $resolved = $method;
+                        break;
+                    }
+                }
+                if (! $resolved) {
+                    $this->error('该产品不支持文件验证');
+                }
+                $updateParams['validation_method'] = $resolved;
+            }
 
             // 如果订单到期时间小于 15 天则续费，否则重签
             if ($order->period_till?->lt(now()->addDays(15))) {

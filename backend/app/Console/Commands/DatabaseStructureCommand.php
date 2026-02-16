@@ -680,10 +680,26 @@ class DatabaseStructureCommand extends Command
      */
     private function isColumnDifferent(array $standard, array $current): bool
     {
-        // 对比关键属性
-        return $standard['type'] !== $current['type'] ||
+        // MySQL 5.7 整型必须有显示宽度如 int(11)、bigint(20)，
+        // MySQL 8.0 废弃了显示宽度只显示 int、bigint，
+        // 标准化后忽略此差异避免跨版本检测时产生误报
+        $standardType = $this->normalizeIntegerType($standard['type']);
+        $currentType = $this->normalizeIntegerType($current['type']);
+
+        return $standardType !== $currentType ||
                $standard['nullable'] !== $current['nullable'] ||
                $standard['default'] !== $current['default'];
+    }
+
+    /**
+     * 标准化整型类型，去除显示宽度
+     *
+     * MySQL 5.7 显示 int(11)、bigint(20) 等，MySQL 8.0 去除了显示宽度。
+     * 标准化后统一为无宽度格式以排除版本差异。
+     */
+    private function normalizeIntegerType(string $type): string
+    {
+        return preg_replace('/^(tinyint|smallint|mediumint|int|bigint)\(\d+\)/i', '$1', $type);
     }
 
     /**
@@ -1199,7 +1215,9 @@ class DatabaseStructureCommand extends Command
     {
         $differences = [];
 
-        if ($standard['type'] !== $current['type']) {
+        $standardType = $this->normalizeIntegerType($standard['type']);
+        $currentType = $this->normalizeIntegerType($current['type']);
+        if ($standardType !== $currentType) {
             $differences[] = "类型 {$current['type']} => {$standard['type']}";
         }
 

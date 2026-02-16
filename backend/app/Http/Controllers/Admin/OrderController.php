@@ -6,6 +6,7 @@ use App\Http\Requests\Order\GetIdsRequest;
 use App\Http\Requests\Order\IndexRequest;
 use App\Models\Order;
 use App\Services\Order\Action;
+use Illuminate\Http\Request;
 use Throwable;
 
 class OrderController extends BaseController
@@ -260,6 +261,31 @@ class OrderController extends BaseController
     {
         $params = request()->post();
         $this->action->transfer($params);
+    }
+
+    /**
+     * 修改未支付订单价格
+     */
+    public function updateAmount(Request $request, int $id): void
+    {
+        $amount = $request->validate([
+            'amount' => ['required', 'numeric', 'min:0', 'max:999998', 'regex:/^\d+(\.\d{1,2})?$/'],
+        ])['amount'];
+
+        $order = Order::with('latestCert')->find($id);
+        if (! $order) {
+            $this->error('订单不存在');
+        }
+
+        $cert = $order->latestCert;
+        if (! $cert || $cert->status !== 'unpaid') {
+            $this->error('只有未支付状态的订单可以修改价格');
+        }
+
+        $cert->amount = $amount;
+        $cert->save();
+
+        $this->success();
     }
 
     /**

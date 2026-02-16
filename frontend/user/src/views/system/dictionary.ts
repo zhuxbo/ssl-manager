@@ -6,6 +6,7 @@ import { getConfig } from "@/config";
 
 // 品牌选项
 export const brandOptionsAll = [
+  { label: "Cnssl", value: "cnssl" },
   { label: "Certum", value: "certum" },
   { label: "GoGetSSL", value: "gogetssl" },
   { label: "Positive", value: "positive" },

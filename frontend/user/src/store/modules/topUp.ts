@@ -1,6 +1,6 @@
 import { defineStore } from "pinia";
 import { getProfile } from "@/api/auth";
-import { getToken, setToken, type DataInfo } from "@/utils/auth";
+import { useUserStoreHook } from "@/store/modules/user";
 
 export const topUpDialogStore = defineStore("topUpDialog", {
   state: () => ({
@@ -15,10 +15,8 @@ export const topUpDialogStore = defineStore("topUpDialog", {
     },
     updateBalance() {
       getProfile().then(res => {
-        const userInfo = getToken();
-        if (userInfo) {
-          userInfo.balance = res.data.balance;
-          setToken(userInfo as unknown as DataInfo<Date>);
+        if (res?.code === 1 && res.data?.balance != null) {
+          useUserStoreHook().updateBalance(String(res.data.balance));
         }
       });
     }

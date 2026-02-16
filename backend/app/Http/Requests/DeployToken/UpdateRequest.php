@@ -9,7 +9,7 @@ class UpdateRequest extends BaseRequest
     public function rules(): array
     {
         return [
-            'token' => 'nullable|string|alpha_num|max:128',
+            'token' => 'nullable|string|alpha_num|size:32',
             'allowed_ips' => 'nullable|array',
             'allowed_ips.*' => 'ip',
             'rate_limit' => 'nullable|integer|min:1|max:1000',

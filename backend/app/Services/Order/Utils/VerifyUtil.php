@@ -256,6 +256,68 @@ class VerifyUtil
     }
 
     /**
+     * 查询 TXT 记录，支持故障转移
+     *
+     * @param  string  $host  主机名（如 _certum.example.com）
+     * @return array TXT 记录数组
+     */
+    public static function queryTxtRecords(string $host): array
+    {
+        $urls = self::getDnsToolsUrls();
+
+        if (! empty($urls)) {
+            $client = new Client([
+                'timeout' => 3.0,
+                'verify' => false,
+            ]);
+
+            foreach ($urls as $url) {
+                try {
+                    $response = $client->post($url.'/api/dns/query', [
+                        'json' => [
+                            'domain' => $host,
+                            'type' => 'TXT',
+                        ],
+                    ]);
+
+                    $result = json_decode($response->getBody()->getContents(), true);
+
+                    if ($result === null || ($result['code'] ?? 0) !== 1) {
+                        continue;
+                    }
+
+                    $records = $result['data']['records'] ?? [];
+                    $txtValues = [];
+                    foreach ($records as $record) {
+                        if (($record['type'] ?? '') === 'TXT' && isset($record['value'])) {
+                            $txtValues[] = $record['value'];
+                        }
+                    }
+
+                    return $txtValues;
+                } catch (GuzzleException) {
+                    continue;
+                }
+            }
+        }
+
+        // 回退到本地 dns_get_record
+        $records = @dns_get_record($host, DNS_TXT);
+        if (empty($records)) {
+            return [];
+        }
+
+        $txtValues = [];
+        foreach ($records as $record) {
+            if (isset($record['txt'])) {
+                $txtValues[] = $record['txt'];
+            }
+        }
+
+        return $txtValues;
+    }
+
+    /**
      * 本地验证 CNAME 记录（使用 dns_get_record）
      *
      * @param  string  $host  主机名

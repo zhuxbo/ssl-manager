@@ -56,6 +56,9 @@ class ProductController extends BaseController
                     ->orWhereJsonContains('alternative_name_types', $validated['name_type']);
             });
         }
+        if (! empty($validated['domains']) && $validated['domains'] === 'single') {
+            $query->whereJsonLength('alternative_name_types', 0);
+        }
 
         $total = $query->where('status', 1)->count();
         $items = $query->select(['id', 'name', 'product_type', 'brand', 'ca', 'periods', 'encryption_standard', 'validation_type',
@@ -70,10 +73,16 @@ class ProductController extends BaseController
         if ($this->guard->user()->id ?? 0) {
             // 遍历查询结果并获取会员价格
             foreach ($items as $item) {
-                // 获取最小的period
-                $period = min($item->periods);
-                $price = OrderUtil::getMinPrice($this->guard->user()->id, $item->id, (int) $period);
-                $price['period'] = $period;
+                // 返回所有周期价格
+                $prices = [];
+                foreach ($item->periods as $period) {
+                    $prices[$period] = array_filter(OrderUtil::getMinPrice($this->guard->user()->id, $item->id, (int) $period));
+                }
+                $item->prices = $prices;
+                // 保留最小周期的 price 字段，兼容列表默认显示
+                $minPeriod = min($item->periods);
+                $price = $prices[$minPeriod] ?? [];
+                $price['period'] = $minPeriod;
                 $item->price = $price;
             }
         }

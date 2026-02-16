@@ -5,7 +5,7 @@
 ## 执行步骤
 
 1. **运行导出命令**
-   - `cd /www/wwwroot/dev/cert-manager/backend && sudo php artisan db:structure --export`
+   - `cd /www/wwwroot/dev/ssl-manager/backend && sudo php artisan db:structure --export`
    - 超时设置 5 分钟（命令会启动 Docker MySQL 容器，执行全部迁移后导出）
    - 如果失败，检查 Docker 容器日志：`sudo docker logs laravel-mysql-temp`
 

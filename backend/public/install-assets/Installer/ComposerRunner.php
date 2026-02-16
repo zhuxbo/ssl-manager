@@ -252,10 +252,10 @@ class ComposerRunner
             $this->output[] = '[Mirror] 已配置阿里云 Composer 镜像';
         }
 
-        // 2. 设置超时时间（180 秒，超时后使用 Gitee zip 备用下载）
+        // 2. 设置超时时间（180 秒）
         exec("cd $projectRoot && $composerCmd config process-timeout 180 2>&1");
         exec("cd $projectRoot && $composerCmd config github-protocols https 2>&1");
-        $this->output[] = '[Mirror] 已设置超时时间 180 秒（超时将自动从 Gitee 下载）';
+        $this->output[] = '[Mirror] 已设置超时时间 180 秒';
     }
 
     /**

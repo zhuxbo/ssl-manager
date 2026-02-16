@@ -45,7 +45,7 @@ SSL证书管理系统 - 打包脚本
 
 版本号获取优先级:
   1. --version 参数
-  2. config.json 中的 version 字段
+  2. version.json 中的 version 字段
 
 通道自动判断:
   - 包含 -beta/-alpha/-rc/-dev 的版本 → dev 通道
@@ -91,9 +91,9 @@ if [ ! -d "$PRODUCTION_DIR" ]; then
     exit 1
 fi
 
-# 检查 config.json
-if [ ! -f "$PRODUCTION_DIR/config.json" ]; then
-    log_error "未找到 config.json"
+# 检查 version.json
+if [ ! -f "$PRODUCTION_DIR/version.json" ]; then
+    log_error "未找到 version.json"
     exit 1
 fi
 
@@ -176,7 +176,7 @@ EOF
 
 # 读取版本号（如果未通过参数指定）
 if [ -z "$VERSION" ]; then
-    VERSION=$(grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' "$PRODUCTION_DIR/config.json" | head -1 | sed 's/.*"\([^"]*\)"$/\1/')
+    VERSION=$(grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' "$PRODUCTION_DIR/version.json" | head -1 | sed 's/.*"\([^"]*\)"$/\1/')
     if [ -z "$VERSION" ]; then
         log_error "无法读取版本号，请使用 --version 参数指定"
         exit 1
@@ -214,6 +214,14 @@ MANIFEST_FILE="manifest.json"
 # 临时工作目录
 WORK_DIR=$(mktemp -d)
 trap "rm -rf $WORK_DIR" EXIT
+
+# 清理 macOS/Windows 系统文件
+cleanup_os_files() {
+    local dir="$1"
+    find "$dir" -name '.DS_Store' -type f -delete 2>/dev/null || true
+    find "$dir" -name '__MACOSX' -type d -prune -exec rm -rf {} + 2>/dev/null || true
+    find "$dir" -name 'Thumbs.db' -type f -delete 2>/dev/null || true
+}
 
 # 阶段 1: 创建完整安装包
 log_step "阶段 1: 创建完整安装包"
@@ -292,7 +300,8 @@ cat > "$FULL_DIR/manifest.json" <<EOF
 }
 EOF
 
-# 打包
+# 清理系统文件后打包
+cleanup_os_files "$FULL_DIR"
 cd "$WORK_DIR"
 zip -rq "$OUTPUT_DIR/$FULL_PACKAGE" full -x "*/.git/*" -x "*/.git*"
 FULL_SIZE=$(du -h "$OUTPUT_DIR/$FULL_PACKAGE" | cut -f1)
@@ -403,7 +412,8 @@ cat > "$UPGRADE_DIR/UPGRADE.md" <<EOF
 
 EOF
 
-# 打包
+# 清理系统文件后打包
+cleanup_os_files "$UPGRADE_DIR"
 cd "$WORK_DIR"
 zip -rq "$OUTPUT_DIR/$UPGRADE_PACKAGE" upgrade -x "*/.git/*" -x "*/.git*"
 UPGRADE_SIZE=$(du -h "$OUTPUT_DIR/$UPGRADE_PACKAGE" | cut -d'	' -f1)
@@ -469,7 +479,8 @@ chmod +x upgrade.sh
 注意：Nginx 配置已统一打包在完整包的 nginx 目录中。
 EOF
 
-    # 打包
+    # 清理系统文件后打包
+    cleanup_os_files "$SCRIPT_PKG_DIR"
     cd "$WORK_DIR"
     zip -rq "$OUTPUT_DIR/$SCRIPT_PACKAGE" script-deploy
     SCRIPT_SIZE=$(du -h "$OUTPUT_DIR/$SCRIPT_PACKAGE" | cut -d'	' -f1)

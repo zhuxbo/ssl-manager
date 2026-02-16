@@ -17,10 +17,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        if (Schema::hasColumn('users', 'auto_settings')) {
-            Schema::table('users', function (Blueprint $table) {
-                $table->dropColumn('auto_settings');
-            });
-        }
+        // 系统采用整体升级方式，不支持回滚操作
     }
 };

@@ -57,7 +57,7 @@ Route::prefix('admin')->middleware('api.admin')->group(function () {
         Route::get('top-products', [DashboardController::class, 'topProducts']);
         Route::get('brand-stats', [DashboardController::class, 'brandStats']);
         Route::get('user-level-distribution', [DashboardController::class, 'userLevelDistribution']);
-        Route::get('health-status', [DashboardController::class, 'healthStatus']);
+        Route::get('finance-overview', [DashboardController::class, 'financeOverview']);
         Route::post('clear-cache', [DashboardController::class, 'clearCache']);
     });
 
@@ -125,6 +125,7 @@ Route::prefix('admin')->middleware('api.admin')->group(function () {
         Route::post('batch-commit-cancel', [OrderController::class, 'batchCommitCancel']);
         Route::post('batch-revoke-cancel', [OrderController::class, 'batchRevokeCancel']);
         Route::patch('auto-settings/{id}', [OrderController::class, 'updateAutoSettings'])->where('id', '[0-9]+');
+        Route::patch('amount/{id}', [OrderController::class, 'updateAmount'])->where('id', '[0-9]+');
     });
 
     // 证书路由

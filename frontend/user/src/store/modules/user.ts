@@ -3,20 +3,21 @@ import { type userType, store, routerArrays, storageLocal } from "../utils";
 import { router, resetRouter } from "@/router";
 import { login, refreshToken } from "@/api/auth";
 import { useMultiTagsStoreHook } from "./multiTags";
-import { type DataInfo, setToken, removeToken, userKey } from "@/utils/auth";
+import { type DataInfo, setToken, removeToken, getUserKey } from "@/utils/auth";
 
 export const useUserStore = defineStore("pure-user", {
   state: (): userType => ({
     // 用户名
-    username: storageLocal().getItem<DataInfo<number>>(userKey)?.username ?? "",
+    username:
+      storageLocal().getItem<DataInfo<number>>(getUserKey())?.username ?? "",
     // 余额
     balance:
-      storageLocal().getItem<DataInfo<number>>(userKey)?.balance ?? "0.00",
+      storageLocal().getItem<DataInfo<number>>(getUserKey())?.balance ?? "0.00",
     // 页面级别权限
-    roles: storageLocal().getItem<DataInfo<number>>(userKey)?.roles ?? [],
+    roles: storageLocal().getItem<DataInfo<number>>(getUserKey())?.roles ?? [],
     // 按钮级别权限
     permissions:
-      storageLocal().getItem<DataInfo<number>>(userKey)?.permissions ?? [],
+      storageLocal().getItem<DataInfo<number>>(getUserKey())?.permissions ?? [],
     // 是否勾选了登录页的免登录
     isRemembered: false,
     // 登录页的免登录存储几天，默认7天
@@ -30,6 +31,16 @@ export const useUserStore = defineStore("pure-user", {
     /** 存储余额 */
     SET_BALANCE(balance: string) {
       this.balance = balance;
+    },
+    /** 更新余额并持久化到 localStorage */
+    updateBalance(balance: string) {
+      this.balance = balance;
+      const key = getUserKey();
+      const stored = storageLocal().getItem<Record<string, any>>(key);
+      if (stored) {
+        stored.balance = balance;
+        storageLocal().setItem(key, stored);
+      }
     },
     /** 存储角色 */
     SET_ROLES(roles: Array<string>) {

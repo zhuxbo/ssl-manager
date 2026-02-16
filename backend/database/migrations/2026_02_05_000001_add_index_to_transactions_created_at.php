@@ -17,10 +17,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::table('transactions', function (Blueprint $table) {
-            if (Schema::hasIndex('transactions', 'transactions_created_at_index')) {
-                $table->dropIndex(['created_at']);
-            }
-        });
+        // 系统采用整体升级方式，不支持回滚操作
     }
 };

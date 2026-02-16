@@ -262,12 +262,20 @@ class DelegationController extends BaseController
         }
 
         $valid = $this->delegationService->checkAndUpdateValidity($delegation);
+        $warning = $this->delegationService->checkTxtConflict($delegation);
 
         if ($valid) {
             $data = $this->delegationService->withCnameGuide($delegation->fresh());
+            if ($warning) {
+                $data['warning'] = $warning;
+            }
             $this->success($data);
         } else {
-            $this->error('检查失败：'.$delegation->last_error);
+            $errorMsg = '检查失败：'.$delegation->last_error;
+            if ($warning) {
+                $errorMsg .= '；'.$warning;
+            }
+            $this->error($errorMsg);
         }
     }
 }

@@ -126,7 +126,7 @@ window.API = (function () {
   }
 
   // 委托验证 CNAME 检测
-  async function verifyCname(host, expectedTarget) {
+  async function verifyCname(domain, host, expectedTarget) {
     const endpoints = Config.getDCVEndpoints();
     let lastMsg = "";
     for (const endpoint of endpoints) {
@@ -135,13 +135,13 @@ window.API = (function () {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify([
-            { domain: host, method: "cname", host: "@", value: expectedTarget }
+            { domain, method: "cname", host, value: expectedTarget }
           ])
         });
         if (response.ok) {
           const data = await response.json();
           if (data.data?.results) {
-            const result = data.data.results[host] || {};
+            const result = data.data.results[domain] || {};
             return {
               detected_value: result.value || "",
               checked: result.matched === "true",
@@ -182,7 +182,13 @@ window.API = (function () {
         });
         if (!response.ok) continue;
         const data = await response.json();
-        if (data.code !== 1) continue;
+        if (data.code !== 1) {
+          return {
+            detected_value: "",
+            checked: false,
+            error: "未检测到 TXT 记录"
+          };
+        }
 
         const records = data.data?.records || [];
         const txtValues = records
@@ -210,12 +216,42 @@ window.API = (function () {
     return { checked: false, detected_value: "", error: "检测服务不可用" };
   }
 
+  // 查询指定 host 的 TXT 记录（用于检测 TXT 与 CNAME 冲突）
+  async function queryTxtRecords(host) {
+    const dnsToolsHosts = Config.getConfig("dnsTools") || [
+      "https://dns-tools-cn.cnssl.com",
+      "https://dns-tools-us.cnssl.com"
+    ];
+
+    for (const baseUrl of dnsToolsHosts) {
+      try {
+        const response = await fetch(`${baseUrl}/api/dns/query`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ domain: host, type: "TXT" })
+        });
+        if (!response.ok) continue;
+        const data = await response.json();
+        if (data.code !== 1) return [];
+
+        const records = data.data?.records || [];
+        return records
+          .filter(r => r.type === "TXT" && r.value)
+          .map(r => r.value.replace(/^"|"$/g, "").trim());
+      } catch (error) {
+        continue;
+      }
+    }
+    return [];
+  }
+
   return {
     request,
     apply,
     check,
     verifyDCV,
     verifyCname,
-    verifyDelegationTxt
+    verifyDelegationTxt,
+    queryTxtRecords
   };
 })();

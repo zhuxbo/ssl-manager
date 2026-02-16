@@ -125,7 +125,7 @@ const canCopy = () => {
   return getSelectedRows().some(
     row =>
       ["unpaid", "pending", "processing"].includes(row.latest_cert?.status) &&
-      row.latest_cert?.dcv?.dns
+      (row.latest_cert?.dcv?.dns || row.latest_cert?.dcv?.is_delegate)
   );
 };
 
@@ -197,6 +197,26 @@ const view = () => {
   toDetail({ ids: ids.join(",") }, "params");
 };
 
+const getDelegationPrefix = (ca?: string) => {
+  const caLower = (ca || "").toLowerCase();
+  switch (caLower) {
+    case "sectigo":
+    case "comodo":
+      return "_pki-validation";
+    case "certum":
+      return "_certum";
+    case "digicert":
+    case "geotrust":
+    case "thawte":
+    case "rapidssl":
+    case "symantec":
+    case "trustasia":
+      return "_dnsauth";
+    default:
+      return "_acme-challenge";
+  }
+};
+
 const copy = () => {
   const filteredIds: number[] = [];
 
@@ -205,7 +225,7 @@ const copy = () => {
   getSelectedRows().forEach(row => {
     if (
       ["unpaid", "pending", "processing"].includes(row.latest_cert.status) &&
-      row.latest_cert.dcv?.dns
+      (row.latest_cert.dcv?.dns || row.latest_cert.dcv?.is_delegate)
     ) {
       filteredIds.push(row.id);
       props.tableRef.toggleRowSelection(row);
@@ -222,43 +242,62 @@ const copy = () => {
   OrderApi.batchShow(filteredIds)
     .then(res => {
       let copied = "";
-      res.data.forEach((item: any) => {
+      res.data.items.forEach((item: any) => {
         let cert = item.latest_cert;
+        if (!["unpaid", "pending", "processing"].includes(cert.status)) return;
+
+        // 委托验证
+        if (cert.dcv?.is_delegate) {
+          const prefix = getDelegationPrefix(cert.dcv.ca || item.product?.ca);
+          const validation = cert.validation || [];
+          const seen = new Map();
+          const uniqueDelegations = validation.filter((v: any) => {
+            if (!v.delegation_id) return false;
+            if (seen.has(v.delegation_id)) return false;
+            seen.set(v.delegation_id, true);
+            return true;
+          });
+          uniqueDelegations.forEach((v: any) => {
+            const zone =
+              v.delegation_zone || (v.domain || "").replace(/^\*\./, "");
+            copied += `域名：${zone}\n主机记录：${prefix}\n解析类型：CNAME\n记录值：${v.delegation_target}\n\n`;
+          });
+          return;
+        }
+
+        // 普通 DNS 验证
         let validation = cert.validation[0];
-        if (
-          ["unpaid", "pending", "processing"].includes(cert.status) &&
-          validation?.host
-        ) {
-          const hasMultiHosts = () => {
-            const hostsSet = new Set();
-            for (const item of cert.validation) {
-              if (item.host) {
-                if (hostsSet.size > 0 && !hostsSet.has(item.host)) {
-                  return true;
-                }
-                hostsSet.add(item.host);
+        if (!validation?.host) return;
+
+        const hasMultiHosts = () => {
+          const hostsSet = new Set();
+          for (const item of cert.validation) {
+            if (item.host) {
+              if (hostsSet.size > 0 && !hostsSet.has(item.host)) {
+                return true;
               }
+              hostsSet.add(item.host);
             }
-            return false;
-          };
-          if (hasMultiHosts()) {
-            copied +=
-              validation.domain + "此证书多个域名解析记录不同，跳过复制\n\n";
-          } else {
-            let mult =
-              cert.validation.length > 2 ? " 此证书多个域名解析记录相同" : "";
-            copied +=
-              "域名：" +
-              validation.domain +
-              mult +
-              "\n主机记录：" +
-              validation.host +
-              "\n解析类型：" +
-              validation.method +
-              "\n记录值：" +
-              validation.value +
-              "\n\n";
           }
+          return false;
+        };
+        if (hasMultiHosts()) {
+          copied +=
+            validation.domain + "此证书多个域名解析记录不同，跳过复制\n\n";
+        } else {
+          let mult =
+            cert.validation.length > 2 ? " 此证书多个域名解析记录相同" : "";
+          copied +=
+            "域名：" +
+            validation.domain +
+            mult +
+            "\n主机记录：" +
+            validation.host +
+            "\n解析类型：" +
+            validation.method +
+            "\n记录值：" +
+            validation.value +
+            "\n\n";
         }
       });
       navigator.clipboard

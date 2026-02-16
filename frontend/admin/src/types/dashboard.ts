@@ -96,22 +96,12 @@ export interface UserLevelDistribution {
   user_count: number;
 }
 
-// 系统健康状态
-export interface HealthStatus {
-  overall_status: "healthy" | "warning" | "error";
-  components: {
-    database: ComponentStatus;
-    cache: ComponentStatus;
-    queue: ComponentStatus;
-    storage: ComponentStatus;
-  };
-  last_check: string;
-}
-
-export interface ComponentStatus {
-  status: "healthy" | "warning" | "error";
-  message: string;
-  used_percent?: number;
+// 财务概览数据
+export interface FinanceOverviewData {
+  total_balance: number;
+  positive_count: number;
+  total_debt: number;
+  negative_count: number;
 }
 
 // Dashboard总览数据

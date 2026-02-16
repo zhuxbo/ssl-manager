@@ -37,6 +37,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::dropIfExists('funds');
+        // 系统采用整体升级方式，不支持回滚操作
     }
 };

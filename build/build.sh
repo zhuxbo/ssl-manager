@@ -42,7 +42,6 @@ human_duration() {
 # 获取脚本目录和 monorepo 根目录
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MONOREPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-CONFIG_FILE="$SCRIPT_DIR/config.json"
 BUILD_ENV="$SCRIPT_DIR/build.env"
 CUSTOM_DIR="$SCRIPT_DIR/custom"
 TEMP_DIR="$SCRIPT_DIR/temp"
@@ -52,11 +51,10 @@ mkdir -p "$TEMP_DIR"/{reports,production-code,caches/pnpm-store,caches/composer-
 
 # 默认参数
 BUILD_MODULE="all"
-BUILD_MODE="local"          # 默认本地构建
-RELEASE_CHANNEL=""          # release 通道: main 或 dev
+BUILD_VERSION=""            # 构建版本号
+RELEASE_CHANNEL=""          # 发布通道: main 或 dev
 FORCE_BUILD="false"
 REBUILD_IMAGE="false"
-COMPARE="false"
 CLEAR_CACHE="false"
 CREATE_PACKAGE="false"      # 是否创建安装包
 
@@ -77,24 +75,19 @@ Monorepo 构建脚本 - 容器化构建
   web         仅更新 web 静态文件
 
 选项:
-  --release [main|dev]  发布模式，推送到远程仓库
-                        main: 正式版（main 分支）
-                        dev:  开发版（dev 分支）
-                        不指定通道则默认为 main
+  --version VER         指定构建版本号（未指定则从 git tag 获取）
+  --channel [main|dev]  指定发布通道（默认 main）
   --package             构建完成后创建安装包（完整包+升级包）
   --force-build         强制构建（即使已是最新）
   --clear-cache         构建前清空依赖缓存
   --rebuild-image       强制重建 Docker 镜像
-  --compare             构建成功后输出与远程产物差异摘要
   -h, --help            显示此帮助信息
 
 示例:
-  $0                             # 本地构建所有模块
-  $0 api                         # 本地构建后端
-  $0 --package                   # 本地构建并创建安装包
-  $0 --release                   # 发布正式版（main）
-  $0 --release dev               # 发布开发版
-  $0 --release main --package    # 发布正式版并创建安装包
+  $0                             # 构建所有模块
+  $0 api                         # 构建后端
+  $0 --version 1.0.0 --package   # 指定版本并创建安装包
+  $0 --channel dev               # 构建开发版通道
 EOF
     exit 0
 }
@@ -108,19 +101,31 @@ while [ $i -lt ${#ARGS[@]} ]; do
         -h|--help)
             show_help
             ;;
-        --release)
-            BUILD_MODE="release"
-            # 检查下一个参数是否是 release 通道
+        --version)
+            next_idx=$((i + 1))
+            if [ $next_idx -lt ${#ARGS[@]} ]; then
+                BUILD_VERSION="${ARGS[$next_idx]}"
+                i=$next_idx
+            else
+                log_error "--version 需要指定版本号"
+                exit 1
+            fi
+            ;;
+        --channel)
             next_idx=$((i + 1))
             if [ $next_idx -lt ${#ARGS[@]} ]; then
                 next_arg="${ARGS[$next_idx]}"
                 if [[ "$next_arg" =~ ^(main|dev)$ ]]; then
                     RELEASE_CHANNEL="$next_arg"
                     i=$next_idx
+                else
+                    log_error "--channel 只接受 main 或 dev"
+                    exit 1
                 fi
+            else
+                log_error "--channel 需要指定通道（main 或 dev）"
+                exit 1
             fi
-            # 默认通道为 main
-            [ -z "$RELEASE_CHANNEL" ] && RELEASE_CHANNEL="main"
             ;;
         --force-build)
             FORCE_BUILD="true"
@@ -130,9 +135,6 @@ while [ $i -lt ${#ARGS[@]} ]; do
             ;;
         --rebuild-image)
             REBUILD_IMAGE="true"
-            ;;
-        --compare)
-            COMPARE="true"
             ;;
         --package)
             CREATE_PACKAGE="true"
@@ -156,17 +158,25 @@ while [ $i -lt ${#ARGS[@]} ]; do
     i=$((i + 1))
 done
 
+# 版本号：未指定时从 git tag 获取
+if [ -z "$BUILD_VERSION" ]; then
+    BUILD_VERSION=$(cd "$MONOREPO_ROOT" && git describe --tags --exact-match HEAD 2>/dev/null | sed 's/^v//' || true)
+    if [ -z "$BUILD_VERSION" ]; then
+        BUILD_VERSION="0.0.0-dev"
+        log_warning "未指定版本号且无 git tag，使用默认值: $BUILD_VERSION"
+    else
+        log_info "从 git tag 获取版本号: $BUILD_VERSION"
+    fi
+fi
+
 # 显示构建配置
 echo ""
 log_info "============================================"
 log_info "Monorepo 构建系统"
 log_info "============================================"
+log_info "构建版本: $BUILD_VERSION"
 log_info "构建模块: $BUILD_MODULE"
-if [ "$BUILD_MODE" = "release" ]; then
-    log_info "构建模式: release ($RELEASE_CHANNEL)"
-else
-    log_info "构建模式: $BUILD_MODE"
-fi
+[ -n "$RELEASE_CHANNEL" ] && log_info "发布通道: $RELEASE_CHANNEL"
 log_info "强制构建: $FORCE_BUILD"
 log_info "重建镜像: $REBUILD_IMAGE"
 log_info "Monorepo: $MONOREPO_ROOT"
@@ -222,57 +232,6 @@ if [ "$CLEAR_CACHE" = "true" ]; then
     done
     log_success "缓存清理完成"
     echo ""
-fi
-
-# SSH 认证：仅发布模式推送时需要
-NEED_SSH=false
-USE_AGENT=false
-if [ "$BUILD_MODE" = "release" ]; then
-    NEED_SSH=true
-    # 检测 ssh-agent
-    if [ -z "${SSH_AUTH_SOCK:-}" ] || [ ! -S "${SSH_AUTH_SOCK}" ]; then
-        log_info "未检测到 ssh-agent，尝试启动..."
-        eval "$(ssh-agent -s)" >/dev/null
-    fi
-
-    if [ -n "${SSH_AUTH_SOCK:-}" ] && [ -S "${SSH_AUTH_SOCK}" ]; then
-        USE_AGENT=true
-        # 若无身份，尝试自动加载配置的私钥
-        # shellcheck disable=SC1090
-        source "$BUILD_ENV"
-        if ssh-add -l >/dev/null 2>&1 && ssh-add -l 2>&1 | grep -q "no identities"; then
-            CAND=()
-            if [ -n "${GITEE_SSH_KEY:-}" ]; then
-                if [[ "$GITEE_SSH_KEY" == ~* ]]; then
-                    CAND+=("${GITEE_SSH_KEY/#\~/$HOME}")
-                else
-                    CAND+=("$GITEE_SSH_KEY")
-                fi
-            fi
-            CAND+=("$HOME/.ssh/gitee_id_rsa" "$HOME/.ssh/id_ed25519" "$HOME/.ssh/id_rsa")
-
-            for key in "${CAND[@]}"; do
-                if [ -f "$key" ] && [ -r "$key" ]; then
-                    log_info "尝试加载私钥: $key"
-                    if ssh-add -q "$key" </dev/null >/dev/null 2>&1; then
-                        log_success "已加载私钥: $key"
-                        break
-                    fi
-                fi
-            done
-
-            if ! ssh-add -l >/dev/null 2>&1 || ssh-add -l 2>&1 | grep -q "no identities"; then
-                log_error "未能自动加载 SSH 私钥。请手动执行：ssh-add ~/.ssh/id_ed25519"
-                exit 1
-            fi
-        fi
-        log_success "SSH 认证已就绪"
-    else
-        log_error "无法启动 ssh-agent，请手动执行：eval \"\$(ssh-agent)\" && ssh-add"
-        exit 1
-    fi
-else
-    log_info "本地构建模式，不需要 SSH 认证"
 fi
 
 # 读取配置
@@ -410,7 +369,7 @@ fi
 
 # 传递构建环境变量
 DOCKER_OPTS+=( -e BUILD_MODULE="$BUILD_MODULE" )
-DOCKER_OPTS+=( -e BUILD_MODE="$BUILD_MODE" )
+DOCKER_OPTS+=( -e BUILD_VERSION="$BUILD_VERSION" )
 DOCKER_OPTS+=( -e RELEASE_CHANNEL="$RELEASE_CHANNEL" )
 DOCKER_OPTS+=( -e FORCE_BUILD="$FORCE_BUILD" )
 
@@ -419,27 +378,6 @@ DOCKER_OPTS+=( -e COMPOSER_CACHE_DIR=/composer/cache )
 DOCKER_OPTS+=( -v "$TEMP_DIR/caches/composer-cache:/composer/cache" )
 DOCKER_OPTS+=( -e PNPM_STORE_DIR=/pnpm/store )
 DOCKER_OPTS+=( -v "$TEMP_DIR/caches/pnpm-store:/pnpm/store" )
-
-# SSH：仅生产模式需要推送时
-if [ "$NEED_SSH" = true ]; then
-    if [ "$USE_AGENT" = true ]; then
-        DOCKER_OPTS+=( -e SSH_AUTH_SOCK=/ssh-agent )
-        DOCKER_OPTS+=( -v "${SSH_AUTH_SOCK}:/ssh-agent" )
-        DOCKER_OPTS+=( -e USE_SSH_AGENT=true )
-    fi
-    if [ -f "$HOME/.ssh/known_hosts" ]; then
-        DOCKER_OPTS+=( -v "$HOME/.ssh/known_hosts:/root/.ssh/known_hosts:ro" )
-    fi
-    # 私钥文件后备
-    EXP_KEY="${GITEE_SSH_KEY:-}"
-    if [ -n "$EXP_KEY" ]; then
-        [[ "$EXP_KEY" == ~* ]] && EXP_KEY="${EXP_KEY/#\~/$HOME}"
-        if [ -f "$EXP_KEY" ]; then
-            DOCKER_OPTS+=( -v "$EXP_KEY:/root/.ssh/id_gitee:ro" )
-            DOCKER_OPTS+=( -e GIT_SSH_COMMAND="ssh -i /root/.ssh/id_gitee -o StrictHostKeyChecking=accept-new" )
-        fi
-    fi
-fi
 
 # 运行容器
 log_info "容器将在构建完成后自动销毁"
@@ -455,28 +393,15 @@ if [ "$RUN_STATUS" -eq 0 ]; then
     log_info "构建报告: $BUILD_REPORT"
 
     # 显示构建摘要
-    if [ -f "$TEMP_DIR/production-code/config.json" ]; then
-        VERSION=$(awk -F '"' '/"version"/ {for(i=1;i<=NF;i++){if($i=="version"){print $(i+2); exit}}}' "$TEMP_DIR/production-code/config.json" 2>/dev/null || echo "")
-        BUILD_TIME=$(awk -F '"' '/"build_time"/ {for(i=1;i<=NF;i++){if($i=="build_time"){print $(i+2); exit}}}' "$TEMP_DIR/production-code/config.json" 2>/dev/null || echo "")
+    if [ -f "$TEMP_DIR/production-code/version.json" ]; then
+        VERSION=$(awk -F '"' '/"version"/ {for(i=1;i<=NF;i++){if($i=="version"){print $(i+2); exit}}}' "$TEMP_DIR/production-code/version.json" 2>/dev/null || echo "")
+        BUILD_TIME=$(awk -F '"' '/"build_time"/ {for(i=1;i<=NF;i++){if($i=="build_time"){print $(i+2); exit}}}' "$TEMP_DIR/production-code/version.json" 2>/dev/null || echo "")
         [ -n "$VERSION" ] && log_info "构建版本: $VERSION"
         [ -n "$BUILD_TIME" ] && log_info "构建时间: $BUILD_TIME"
         END_TIME=$(date +%s)
         ELAPSED=$(( END_TIME - SCRIPT_START_TIME ))
         log_info "构建用时: $(human_duration "$ELAPSED")"
         log_info "生产代码: $TEMP_DIR/production-code"
-    fi
-
-    # 可选：构建产物与远程差异对比
-    if [ "$COMPARE" = "true" ]; then
-        echo ""
-        log_step "产物差异对比"
-        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        if bash "$SCRIPT_DIR/scripts/compare-production.sh" --show 200; then
-            log_success "差异对比完成"
-        else
-            log_warning "差异对比执行返回非零（可能存在差异或网络问题）"
-        fi
-        echo ""
     fi
 
     # 可选：创建安装包
@@ -494,15 +419,10 @@ if [ "$RUN_STATUS" -eq 0 ]; then
         echo ""
     fi
 
-    # 本地构建模式提示
-    if [ "$BUILD_MODE" = "local" ]; then
-        echo ""
-        log_info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        log_info "本地构建完成，产物位于: $TEMP_DIR/production-code"
-        log_info "如需发布正式版: ./build.sh --release main"
-        log_info "如需发布开发版: ./build.sh --release dev"
-        log_info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    fi
+    echo ""
+    log_info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    log_info "构建完成，产物位于: $TEMP_DIR/production-code"
+    log_info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
     exit 0
 else

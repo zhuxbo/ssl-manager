@@ -11,6 +11,8 @@ export interface IndexParams {
   custom_level_code?: string;
   status?: number;
   created_at?: [string, string];
+  balance?: [string | null, string | null];
+  credit_limit?: number;
 }
 
 /** 获取用户列表 */

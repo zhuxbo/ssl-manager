@@ -45,13 +45,8 @@ return new class extends Migration
         });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
-        Schema::dropIfExists('jobs');
-        Schema::dropIfExists('job_batches');
-        Schema::dropIfExists('failed_jobs');
+        // 系统采用整体升级方式，不支持回滚操作
     }
 };

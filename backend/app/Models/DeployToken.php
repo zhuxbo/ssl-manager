@@ -3,12 +3,14 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\Crypt;
 
 class DeployToken extends BaseModel
 {
     protected $fillable = [
         'user_id',
         'token',
+        'token_hash',
         'allowed_ips',
         'rate_limit',
         'last_used_at',
@@ -17,7 +19,7 @@ class DeployToken extends BaseModel
     ];
 
     protected $hidden = [
-        'token',
+        'token_hash',
     ];
 
     protected $casts = [
@@ -52,11 +54,33 @@ class DeployToken extends BaseModel
     }
 
     /**
-     * 存储加密后的 token
+     * 存储加密后的 token，同时设置 token_hash
      */
     public function setTokenAttribute($value): void
     {
-        $this->attributes['token'] = empty($value) ? null : hash('sha256', $value);
+        if (empty($value)) {
+            $this->attributes['token'] = null;
+            $this->attributes['token_hash'] = null;
+        } else {
+            $this->attributes['token'] = Crypt::encryptString($value);
+            $this->attributes['token_hash'] = hash('sha256', $value);
+        }
+    }
+
+    /**
+     * 解密 token
+     */
+    public function getTokenAttribute($value): ?string
+    {
+        if (empty($value)) {
+            return null;
+        }
+
+        try {
+            return Crypt::decryptString($value);
+        } catch (\Exception) {
+            return null;
+        }
     }
 
     /**
@@ -64,7 +88,7 @@ class DeployToken extends BaseModel
      */
     public static function findByToken(string $token): ?self
     {
-        return self::where('token', hash('sha256', $token))->first();
+        return self::where('token_hash', hash('sha256', $token))->first();
     }
 
     /**
@@ -72,7 +96,7 @@ class DeployToken extends BaseModel
      */
     public static function deleteTokenByToken(string $token): void
     {
-        self::where('token', hash('sha256', $token))->delete();
+        self::where('token_hash', hash('sha256', $token))->delete();
     }
 
     /**

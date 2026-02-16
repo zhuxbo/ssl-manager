@@ -66,6 +66,9 @@ class ProductController extends BaseController
                     ->orWhereJsonContains('alternative_name_types', $validated['name_type']);
             });
         }
+        if (! empty($validated['domains']) && $validated['domains'] === 'single') {
+            $query->whereJsonLength('alternative_name_types', 0);
+        }
         if (isset($validated['status'])) {
             $query->where('status', $validated['status']);
         }

@@ -38,15 +38,15 @@
 ### 1. 克隆项目
 
 ```bash
-git clone git@gitee.com:zhuxbo/cert-manager-backend.git ssl-project
-cd ssl-project
+git clone git@github.com:zhuxbo/ssl-manager.git ssl-project
+cd ssl-project/backend
 ```
 
 宝塔面板先进入 wwwroot 目录 然后使用如下命令
 
 ```bash
-sudo -u www git clone git@gitee.com:zhuxbo/cert-manager-backend.git ssl-project
-cd ssl-project
+sudo -u www git clone git@github.com:zhuxbo/ssl-manager.git ssl-project
+cd ssl-project/backend
 ```
 
 ### 2. 安装依赖

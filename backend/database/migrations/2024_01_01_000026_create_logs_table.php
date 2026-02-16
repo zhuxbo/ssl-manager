@@ -89,7 +89,7 @@ return new class extends Migration
                 $table->decimal('duration')->default(0)->comment('耗时(秒)');
                 $table->string('ip', 100)->nullable()->comment('IP地址');
                 $table->string('user_agent', 500)->nullable()->comment('User Agent');
-                $table->timestamp('created_at')->nullable()->comment('创建时间');
+                $table->timestamp('created_at')->nullable()->index()->comment('创建时间');
             });
         }
 
@@ -123,12 +123,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::dropIfExists('ca_logs');
-        Schema::dropIfExists('callback_logs');
-        Schema::dropIfExists('api_logs');
-        Schema::dropIfExists('user_logs');
-        Schema::dropIfExists('admin_logs');
-        Schema::dropIfExists('error_logs');
-        Schema::dropIfExists('easy_logs');
+        // 系统采用整体升级方式，不支持回滚操作
     }
 };

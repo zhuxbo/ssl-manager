@@ -1,7 +1,7 @@
 {
     "version": "1.0",
-    "mysql_version": "8.0.45",
-    "generated_at": "2026-02-05 17:53:59",
+    "mysql_version": "8.0.43",
+    "generated_at": "2026-02-15 20:31:07",
     "database": {
         "name": "manager",
         "charset": "utf8mb4",
@@ -668,6 +668,16 @@
                     "type": "BTREE",
                     "columns": [
                         "admin_id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "admin_logs_created_at_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "created_at"
                     ],
                     "sub_parts": [
                         null
@@ -1370,6 +1380,16 @@
                 }
             },
             "indexes": {
+                "api_logs_created_at_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "created_at"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
                 "api_logs_method_index": {
                     "unique": false,
                     "type": "BTREE",
@@ -2287,6 +2307,26 @@
                         null
                     ]
                 },
+                "certs_expires_at_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "expires_at"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "certs_issued_at_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "issued_at"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
                 "certs_issuer_index": {
                     "unique": false,
                     "type": "BTREE",
@@ -2773,14 +2813,22 @@
                 },
                 "token": {
                     "position": 3,
-                    "type": "varchar(128)",
+                    "type": "varchar(1024)",
                     "nullable": false,
                     "default": null,
                     "extra": "",
                     "comment": "令牌"
                 },
-                "allowed_ips": {
+                "token_hash": {
                     "position": 4,
+                    "type": "varchar(64)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "令牌哈希"
+                },
+                "allowed_ips": {
+                    "position": 5,
                     "type": "varchar(2000)",
                     "nullable": true,
                     "default": null,
@@ -2788,7 +2836,7 @@
                     "comment": "允许的IP"
                 },
                 "rate_limit": {
-                    "position": 5,
+                    "position": 6,
                     "type": "int",
                     "nullable": false,
                     "default": "60",
@@ -2796,7 +2844,7 @@
                     "comment": "速率限制"
                 },
                 "last_used_at": {
-                    "position": 6,
+                    "position": 7,
                     "type": "timestamp",
                     "nullable": true,
                     "default": null,
@@ -2804,7 +2852,7 @@
                     "comment": "最后使用时间"
                 },
                 "last_used_ip": {
-                    "position": 7,
+                    "position": 8,
                     "type": "varchar(100)",
                     "nullable": true,
                     "default": null,
@@ -2812,7 +2860,7 @@
                     "comment": "最后使用IP"
                 },
                 "status": {
-                    "position": 8,
+                    "position": 9,
                     "type": "tinyint unsigned",
                     "nullable": false,
                     "default": "1",
@@ -2820,7 +2868,7 @@
                     "comment": "状态: 0=禁用, 1=启用"
                 },
                 "created_at": {
-                    "position": 9,
+                    "position": 10,
                     "type": "timestamp",
                     "nullable": true,
                     "default": null,
@@ -2828,7 +2876,7 @@
                     "comment": ""
                 },
                 "updated_at": {
-                    "position": 10,
+                    "position": 11,
                     "type": "timestamp",
                     "nullable": true,
                     "default": null,
@@ -2847,11 +2895,11 @@
                         null
                     ]
                 },
-                "deploy_tokens_token_unique": {
+                "deploy_tokens_token_hash_unique": {
                     "unique": true,
                     "type": "BTREE",
                     "columns": [
-                        "token"
+                        "token_hash"
                     ],
                     "sub_parts": [
                         null
@@ -4266,6 +4314,16 @@
                         null
                     ]
                 },
+                "orders_created_at_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "created_at"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
                 "orders_eab_kid_index": {
                     "unique": false,
                     "type": "BTREE",
@@ -4758,8 +4816,8 @@
                 "alternative_name_types": {
                     "position": 17,
                     "type": "varchar(50)",
-                    "nullable": true,
-                    "default": null,
+                    "nullable": false,
+                    "default": "[]",
                     "extra": "",
                     "comment": "备用名称类型"
                 },
@@ -6234,6 +6292,16 @@
                     "type": "BTREE",
                     "columns": [
                         "id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "users_created_at_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "created_at"
                     ],
                     "sub_parts": [
                         null
