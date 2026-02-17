@@ -44,9 +44,16 @@ class LogBuffer
 
             try {
                 // 添加 created_at 时间戳
-                $now = now();
+                $now = now()->toDateTimeString();
                 $itemsWithTimestamp = array_map(function ($item) use ($now) {
                     $item['created_at'] = $now;
+
+                    // 手动 JSON 序列化数组/对象值，因为 Model::insert() 走 Query Builder 不触发 Eloquent cast
+                    foreach ($item as $key => $value) {
+                        if (is_array($value) || is_object($value)) {
+                            $item[$key] = json_encode($value, JSON_UNESCAPED_UNICODE);
+                        }
+                    }
 
                     return $item;
                 }, $items);
@@ -54,15 +61,20 @@ class LogBuffer
                 $model::insert($itemsWithTimestamp);
             } catch (\Throwable $e) {
                 // 批量插入失败时，尝试逐条插入
+                \Log::warning("LogBuffer: batch insert failed, fallback to single insert", [
+                    'model' => $model,
+                    'count' => count($items),
+                    'error' => $e->getMessage(),
+                ]);
                 foreach ($items as $item) {
                     try {
                         $model::create($item);
-                    } catch (\Throwable) {
+                    } catch (\Throwable $createException) {
                         // 单条插入也失败时，记录到文件日志
                         \Log::error('LogBuffer: Failed to insert log', [
                             'model' => $model,
                             'data' => $item,
-                            'error' => $e->getMessage(),
+                            'error' => $createException->getMessage(),
                         ]);
                     }
                 }

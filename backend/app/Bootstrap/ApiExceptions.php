@@ -52,14 +52,21 @@ class ApiExceptions
      */
     public function logException(Throwable $e): void
     {
-        // CLI 环境下跳过日志记录（避免 request 不存在的问题）
-        if (app()->runningInConsole()) {
-            return;
-        }
-
         if (! $this->shouldNotLog($e)) {
-            $request = Request::instance();
-            $url = substr($request->url(), 0, 500);
+            if (app()->runningInConsole()) {
+                $method = 'CLI';
+                $url = implode(' ', $_SERVER['argv'] ?? ['unknown']);
+                $ip = '127.0.0.1';
+            } else {
+                $request = Request::instance();
+                $method = $request->method();
+                $url = $request->fullUrl();
+                $ip = $request->ip();
+            }
+
+            if (strlen($url) > 2000) {
+                $url = substr($url, 0, 1997).'...';
+            }
 
             // 截断过长的错误信息，防止数据库字段溢出
             $message = $e->getMessage();
@@ -68,13 +75,13 @@ class ApiExceptions
             }
 
             LogBuffer::add(ErrorLog::class, [
-                'method' => $request->method(),
+                'method' => $method,
                 'url' => $url,
                 'exception' => class_basename($e),
                 'message' => $message,
                 'trace' => $this->sanitizeResponse($e->getTrace()),
                 'status_code' => $this->getExceptionStatusCode($e),
-                'ip' => $request->ip(),
+                'ip' => $ip,
             ]);
         }
     }
