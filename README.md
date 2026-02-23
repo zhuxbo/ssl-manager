@@ -118,30 +118,48 @@ _acme-challenge.example.com  →  *******.your-platform.com
 
 ### 自动部署工具
 
-配合 [cert-deploy](https://github.com/zhuxbo/cert-deploy) 工具实现全自动化：
+配合 [sslctl](https://github.com/zhuxbo/sslctl) 工具实现全自动化：
 
 ```bash
 # 安装部署工具
-curl -fsSL https://github.com/zhuxbo/cert-deploy/raw/main/deploy/install.sh | sudo bash
+curl -fsSL https://release.cnssl.com/sslctl/install.sh | sudo bash
 
-# 扫描并生成配置
-cert-deploy -scan
-cert-deploy -init -url https://your-platform.com/api/auto/cert -refer_id <id>
+# 一键部署（推荐）
+sslctl setup --url https://your-platform.com --token <deploy_token> --order <order_id>
 
-# 部署证书
-cert-deploy -site example.com
+# 或手动扫描并部署
+sslctl scan
+sslctl deploy --cert order-12345
 ```
 
-### Auto API
+### Deploy API
 
-通过 `refer_id` 认证：
+通过 Deploy Token 认证：
 
 ```http
-GET  /api/auto/cert      # 获取证书
-POST /api/auto/callback  # 部署回调
+GET  /api/deploy?order_id=xxx  # 按订单查询证书
+GET  /api/deploy?domain=xxx    # 按域名查询证书
+POST /api/deploy               # 更新/续费证书
+POST /api/deploy/callback      # 部署结果回调
 
-Authorization: Bearer <refer_id>
+Authorization: Bearer <deploy_token>
 ```
+
+### ACME 协议
+
+支持标准 ACME (RFC 8555) 协议，兼容 certbot、acme.sh 等客户端：
+
+```bash
+# 获取 EAB 凭据（通过 Deploy Token）
+curl -H "Authorization: Bearer <deploy-token>" https://your-platform.com/api/deploy/acme/eab
+
+# certbot 注册
+certbot certonly --server https://your-platform.com/acme/directory \
+  --eab-kid <EAB_KID> --eab-hmac-key <EAB_HMAC> \
+  -d example.com --preferred-challenges dns-01
+```
+
+配合 CNAME 委托，ACME 证书申请时自动完成 DNS-01 验证。
 
 ## 文档
 

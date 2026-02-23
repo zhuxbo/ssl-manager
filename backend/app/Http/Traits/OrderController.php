@@ -6,6 +6,7 @@ use App\Http\Requests\Order\GetIdsRequest;
 use App\Models\DomainValidationRecord;
 use App\Models\Order;
 use App\Models\User;
+use App\Services\Acme\OrderService as AcmeOrderService;
 use App\Services\Notification\DTOs\NotificationIntent;
 use App\Services\Notification\NotificationCenter;
 use App\Services\Order\Action;
@@ -43,6 +44,14 @@ trait OrderController
      */
     public function revalidate(int $id): void
     {
+        $order = Order::with('latestCert')->find($id);
+        if ($order?->latestCert?->channel === 'acme') {
+            app(AcmeOrderService::class)->acmeRevalidate($order->latestCert);
+            $this->success();
+
+            return;
+        }
+
         // 重置域名验证记录，重新开始验证计时
         DomainValidationRecord::where('order_id', $id)->delete();
 
@@ -57,6 +66,15 @@ trait OrderController
      */
     public function updateDCV(int $id): void
     {
+        $order = Order::with('latestCert')->find($id);
+        if ($order?->latestCert?->channel === 'acme') {
+            $method = request()->string('method', '')->trim() ?: null;
+            app(AcmeOrderService::class)->acmeUpdateDCV($order->latestCert, $method);
+            $this->success();
+
+            return;
+        }
+
         // 重置域名验证记录，重新开始验证计时
         DomainValidationRecord::where('order_id', $id)->delete();
 

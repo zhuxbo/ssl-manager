@@ -521,7 +521,7 @@ trait ActionTrait
                 // 查找或创建委托记录
                 if ($delegationService) {
                     // 根据 CA 确定委托前缀（不同 CA 使用不同的验证前缀）
-                    $prefix = $this->getDelegationPrefixForCa($dcv['ca'] ?? '');
+                    $prefix = $this->getDelegationPrefixForCa($dcv['ca'] ?? '', $dcv['channel'] ?? '');
 
                     // 判断是否精确匹配前缀（ACME/DigiCert 需要每个子域单独委托）
                     $isExactMatch = in_array($prefix, ['_acme-challenge', '_dnsauth']);
@@ -682,10 +682,14 @@ trait ActionTrait
      * - Sectigo: _pki-validation
      * - Certum: _certum
      * - DigiCert/GeoTrust/Thawte/RapidSSL/TrustAsia: _dnsauth
-     * - ACME (Let's Encrypt 等): _acme-challenge
+     * - ACME 渠道统一: _acme-challenge
      */
-    protected function getDelegationPrefixForCa(string $ca): string
+    protected function getDelegationPrefixForCa(string $ca, string $channel = ''): string
     {
+        if ($channel === 'acme') {
+            return '_acme-challenge';
+        }
+
         return match (strtolower($ca)) {
             'sectigo', 'comodo' => '_pki-validation',
             'certum' => '_certum',

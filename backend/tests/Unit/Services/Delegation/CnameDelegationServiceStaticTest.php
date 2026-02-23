@@ -38,4 +38,23 @@ class CnameDelegationServiceStaticTest extends TestCase
             '未知CA' => ['Unknown', '_acme-challenge'],
         ];
     }
+
+    /**
+     * ACME 渠道：无论 CA 是什么，都返回 _acme-challenge
+     */
+    #[DataProvider('acmeChannelProvider')]
+    public function test_acme_channel_always_returns_acme_challenge(string $ca, string $channel): void
+    {
+        $this->assertEquals('_acme-challenge', CnameDelegationService::getDelegationPrefixForCa($ca, $channel));
+    }
+
+    public static function acmeChannelProvider(): array
+    {
+        return [
+            'Certum+acme' => ['Certum', 'acme'],
+            'Sectigo+acme' => ['Sectigo', 'acme'],
+            'DigiCert+acme' => ['DigiCert', 'acme'],
+            '空CA+acme' => ['', 'acme'],
+        ];
+    }
 }

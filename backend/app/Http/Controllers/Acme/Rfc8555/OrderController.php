@@ -48,12 +48,13 @@ class OrderController extends Controller
             return $this->acmeError($result['error'], $result['detail'], 403);
         }
 
-        $order = $result['order'];
+        $cert = $result['order'];
         $nonce = $this->nonceService->generate();
-        $orderUrl = $this->orderService->getOrderUrl($order);
+        $orderUrl = $this->orderService->getOrderUrl($cert);
+        $orderResponse = $this->orderService->formatOrderResponse($cert);
 
         return response()->json(
-            $this->orderService->formatOrderResponse($order),
+            $orderResponse,
             201,
             [
                 'Replay-Nonce' => $nonce,
@@ -64,21 +65,30 @@ class OrderController extends Controller
     }
 
     /**
-     * POST /acme/order/{token}
+     * POST /acme/order/{referId}
      * 获取订单详情
      */
-    public function getOrder(Request $request, string $token): JsonResponse
+    public function getOrder(Request $request, string $referId): JsonResponse
     {
-        $order = $this->orderService->get($token);
+        $cert = $this->orderService->get($referId);
 
-        if (! $order) {
+        if (! $cert) {
             return $this->acmeError('malformed', 'Order not found', 404);
         }
 
+        // processing 状态主动检查上游证书是否已签发
+        $acmeStatus = $this->orderService->getAcmeStatus($cert);
+        if ($acmeStatus === 'processing') {
+            if ($this->orderService->tryCompletePendingFinalize($cert)) {
+                $cert->refresh();
+            }
+        }
+
         $nonce = $this->nonceService->generate();
+        $response = $this->orderService->formatOrderResponse($cert);
 
         return response()->json(
-            $this->orderService->formatOrderResponse($order),
+            $response,
             200,
             [
                 'Replay-Nonce' => $nonce,
@@ -88,14 +98,14 @@ class OrderController extends Controller
     }
 
     /**
-     * POST /acme/order/{token}/finalize
+     * POST /acme/order/{referId}/finalize
      * 完成订单
      */
-    public function finalizeOrder(Request $request, string $token): JsonResponse
+    public function finalizeOrder(Request $request, string $referId): JsonResponse
     {
-        $order = $this->orderService->get($token);
+        $cert = $this->orderService->get($referId);
 
-        if (! $order) {
+        if (! $cert) {
             return $this->acmeError('malformed', 'Order not found', 404);
         }
 
@@ -107,18 +117,19 @@ class OrderController extends Controller
             return $this->acmeError('badCSR', 'CSR is required', 400);
         }
 
-        $result = $this->orderService->finalize($order, $csr);
+        $result = $this->orderService->finalize($cert, $csr);
 
         if (isset($result['error'])) {
             return $this->acmeError($result['error'], $result['detail'], 403);
         }
 
-        $order = $result['order'];
+        $cert = $result['order'];
         $nonce = $this->nonceService->generate();
-        $orderUrl = $this->orderService->getOrderUrl($order);
+        $orderUrl = $this->orderService->getOrderUrl($cert);
+        $response = $this->orderService->formatOrderResponse($cert);
 
         return response()->json(
-            $this->orderService->formatOrderResponse($order),
+            $response,
             200,
             [
                 'Replay-Nonce' => $nonce,

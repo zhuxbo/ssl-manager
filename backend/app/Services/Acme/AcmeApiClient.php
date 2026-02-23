@@ -8,7 +8,7 @@ use App\Models\CaLog;
 use App\Services\LogBuffer;
 use Illuminate\Support\Facades\Http;
 
-class UpstreamClient
+class AcmeApiClient
 {
     private string $baseUrl;
 
@@ -16,16 +16,36 @@ class UpstreamClient
 
     public function __construct()
     {
-        $this->baseUrl = rtrim(config('acme.api.base_url', ''), '/');
-        $this->apiKey = config('acme.api.api_key', '');
+        $this->baseUrl = $this->resolveBaseUrl();
+        $this->apiKey = get_system_setting('ca', 'acmeToken')
+            ?? get_system_setting('ca', 'token')
+            ?? '';
+    }
+
+    /**
+     * 解析 ACME API 地址：优先 acmeUrl，回落 url 并替换路径
+     */
+    private function resolveBaseUrl(): string
+    {
+        $acmeUrl = get_system_setting('ca', 'acmeUrl');
+        if ($acmeUrl) {
+            return rtrim($acmeUrl, '/');
+        }
+
+        $url = get_system_setting('ca', 'url') ?? '';
+        if ($url === '') {
+            return '';
+        }
+
+        return rtrim(preg_replace('#/api/v\w+#', '/api/acme', $url), '/');
     }
 
     /**
      * 创建账户
      */
-    public function createAccount(string $customer, int $productCode): array
+    public function createAccount(string $customer, string $productCode): array
     {
-        return $this->request('POST', '/acme/accounts', [
+        return $this->request('POST', '/accounts', [
             'customer' => $customer,
             'product_code' => $productCode,
         ]);
@@ -36,7 +56,7 @@ class UpstreamClient
      */
     public function getAccount(int $accountId): array
     {
-        return $this->request('GET', "/acme/accounts/$accountId");
+        return $this->request('GET', "/accounts/$accountId");
     }
 
     /**
@@ -44,7 +64,7 @@ class UpstreamClient
      */
     public function createOrder(int $accountId, array $domains, string $productCode): array
     {
-        return $this->request('POST', '/acme/orders', [
+        return $this->request('POST', '/orders', [
             'account_id' => $accountId,
             'domains' => $domains,
             'product_code' => $productCode,
@@ -56,7 +76,7 @@ class UpstreamClient
      */
     public function getOrder(int $orderId): array
     {
-        return $this->request('GET', "/acme/orders/$orderId");
+        return $this->request('GET', "/orders/$orderId");
     }
 
     /**
@@ -64,7 +84,7 @@ class UpstreamClient
      */
     public function getOrderAuthorizations(int $orderId): array
     {
-        return $this->request('GET', "/acme/orders/$orderId/authorizations");
+        return $this->request('GET', "/orders/$orderId/authorizations");
     }
 
     /**
@@ -72,7 +92,7 @@ class UpstreamClient
      */
     public function respondToChallenge(int $challengeId): array
     {
-        return $this->request('POST', "/acme/challenges/$challengeId/respond");
+        return $this->request('POST', "/challenges/$challengeId/respond");
     }
 
     /**
@@ -80,7 +100,7 @@ class UpstreamClient
      */
     public function finalizeOrder(int $orderId, string $csr): array
     {
-        return $this->request('POST', "/acme/orders/$orderId/finalize", [
+        return $this->request('POST', "/orders/$orderId/finalize", [
             'csr' => $csr,
         ]);
     }
@@ -90,17 +110,26 @@ class UpstreamClient
      */
     public function getCertificate(int $orderId): array
     {
-        return $this->request('GET', "/acme/orders/$orderId/certificate");
+        return $this->request('GET', "/orders/$orderId/certificate");
     }
 
     /**
      * 吊销证书
      */
-    public function revokeCertificate(int $certificateId, string $reason = 'UNSPECIFIED'): array
+    public function revokeCertificate(string $serialNumber, string $reason = 'UNSPECIFIED'): array
     {
-        return $this->request('POST', "/acme/certificates/$certificateId/revoke", [
+        return $this->request('POST', '/certificates/revoke', [
+            'serial_number' => $serialNumber,
             'reason' => $reason,
         ]);
+    }
+
+    /**
+     * 是否已配置
+     */
+    public function isConfigured(): bool
+    {
+        return $this->baseUrl !== '' && $this->apiKey !== '';
     }
 
     /**
@@ -108,7 +137,7 @@ class UpstreamClient
      */
     private function request(string $method, string $endpoint, array $data = []): array
     {
-        if (! $this->baseUrl || ! $this->apiKey) {
+        if (! $this->isConfigured()) {
             return ['code' => 0, 'msg' => 'Upstream API not configured'];
         }
 

@@ -141,7 +141,8 @@ class AutoRenewCommand extends Command
 
         // 检查委托有效性，无有效委托则跳过
         $ca = strtolower($product->ca ?? '');
-        if (! $this->checkDelegationValidity($user->id, $cert->alternative_names, $ca)) {
+        $channel = $cert->channel ?? '';
+        if (! $this->checkDelegationValidity($user->id, $cert->alternative_names, $ca, $channel)) {
             $this->warn("订单 #{$order->id} 跳过：无有效委托记录");
 
             return;
@@ -250,8 +251,8 @@ class AutoRenewCommand extends Command
     /**
      * 检查所有域名是否都有有效委托记录（即时验证）
      */
-    private function checkDelegationValidity(int $userId, string $domains, string $ca): bool
+    private function checkDelegationValidity(int $userId, string $domains, string $ca, string $channel = ''): bool
     {
-        return app(AutoRenewService::class)->checkDelegationValidity($userId, $domains, $ca);
+        return app(AutoRenewService::class)->checkDelegationValidity($userId, $domains, $ca, $channel);
     }
 }

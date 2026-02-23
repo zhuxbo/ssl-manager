@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\User\AcmeController;
 use App\Http\Controllers\User\AuthController;
 use App\Http\Controllers\User\CertController;
 use App\Http\Controllers\User\ContactController;
@@ -148,6 +149,12 @@ Route::middleware('api.user')->group(function () {
         Route::get('get-bank-account', [TopUpController::class, 'getBankAccount']);
         // 清除支付配置缓存
         Route::get('clear-pay-config', [TopUpController::class, 'clearConfigCache']);
+    });
+
+    // ACME 路由
+    Route::prefix('acme')->group(function () {
+        Route::get('eab', [AcmeController::class, 'getEab']);
+        Route::post('order', [AcmeController::class, 'createOrder']);
     });
 
     // CNAME 委托管理路由

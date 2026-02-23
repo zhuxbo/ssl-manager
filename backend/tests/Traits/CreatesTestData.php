@@ -28,6 +28,7 @@ trait CreatesTestData
                 'password' => 'password',
                 'join_at' => now(),
                 'balance' => '100.00',
+                'level_code' => 'standard',
                 'auto_settings' => ['auto_renew' => false, 'auto_reissue' => false],
             ], $overrides)
         );

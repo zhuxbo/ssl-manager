@@ -15,7 +15,7 @@ class Product extends BaseModel
 
         static::creating(function (Product $product) {
             if ($product->code && static::where('code', $product->code)->exists()) {
-                $product->code = $product->code . '_' . $product->source;
+                $product->code = $product->code.'_'.$product->source;
             }
         });
     }
@@ -59,6 +59,7 @@ class Product extends BaseModel
         'renew',
         'reuse_csr',
         'gift_root_domain',
+        'support_acme',
         'refund_period',
         'remark',
         'weight',
@@ -80,6 +81,7 @@ class Product extends BaseModel
         'renew' => 'integer',
         'reuse_csr' => 'integer',
         'gift_root_domain' => 'integer',
+        'support_acme' => 'integer',
         'refund_period' => 'integer',
         'cost' => 'array',
         'status' => 'integer',

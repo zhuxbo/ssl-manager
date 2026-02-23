@@ -29,7 +29,7 @@ class AccountController extends Controller
         $protected = $jws['protected'];
 
         // 验证 URL
-        $expectedUrl = rtrim(config('app.url'), '/').'/acme/new-acct';
+        $expectedUrl = rtrim(request()->getSchemeAndHttpHost(), '/').'/acme/new-acct';
         if (($protected['url'] ?? '') !== $expectedUrl) {
             return $this->acmeError('malformed', 'URL mismatch', 400);
         }
@@ -65,30 +65,21 @@ class AccountController extends Controller
             return $this->acmeError('malformed', 'Invalid EAB kid', 400);
         }
 
-        // 原子更新：检查 EAB 未使用并标记为已使用（防止竞态条件）
-        $updated = Order::where('eab_kid', $eabKid)
-            ->whereNull('eab_used_at')
-            ->update(['eab_used_at' => now()]);
-
-        if ($updated === 0) {
-            // 检查是订单不存在还是已被使用
-            $exists = Order::where('eab_kid', $eabKid)->exists();
-            if (! $exists) {
-                return $this->acmeError('unauthorized', 'Invalid EAB credentials', 401);
-            }
-
-            return $this->acmeError('unauthorized', 'EAB credentials already used', 401);
-        }
-
-        // 获取订单用于签名验证
+        // 查找 EAB 对应的订单（EAB 可复用，不拒绝已使用的 EAB）
         $order = Order::where('eab_kid', $eabKid)->first();
+
+        if (! $order) {
+            return $this->acmeError('unauthorized', 'Invalid EAB credentials', 401);
+        }
 
         // 验证 EAB HMAC 签名
         if (! $this->verifyEabSignature($eab, $order->eab_hmac)) {
-            // 签名验证失败，回滚标记
-            $order->update(['eab_used_at' => null]);
-
             return $this->acmeError('unauthorized', 'Invalid EAB signature', 401);
+        }
+
+        // 首次使用时标记 eab_used_at（已有值则不覆盖）
+        if (! $order->eab_used_at) {
+            $order->update(['eab_used_at' => now()]);
         }
 
         // 提取 JWK 和联系方式

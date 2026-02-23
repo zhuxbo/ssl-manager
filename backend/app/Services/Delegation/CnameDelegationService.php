@@ -294,9 +294,15 @@ class CnameDelegationService
 
     /**
      * 根据 CA 获取委托验证前缀
+     *
+     * ACME 渠道统一使用 _acme-challenge 前缀，与具体 CA 无关
      */
-    public static function getDelegationPrefixForCa(string $ca): string
+    public static function getDelegationPrefixForCa(string $ca, string $channel = ''): string
     {
+        if ($channel === 'acme') {
+            return '_acme-challenge';
+        }
+
         return match (strtolower($ca)) {
             'sectigo', 'comodo' => '_pki-validation',
             'certum' => '_certum',

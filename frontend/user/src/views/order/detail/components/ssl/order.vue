@@ -17,6 +17,12 @@
           <td class="label">产品</td>
           <td class="content">{{ order.product.name }}</td>
         </tr>
+        <tr v-if="isAcme">
+          <td class="label">签发方式</td>
+          <td class="content">
+            <el-tag size="small" type="success">ACME</el-tag>
+          </td>
+        </tr>
         <tr>
           <td class="label">金额</td>
           <td class="content">{{ order.amount }}</td>
@@ -45,7 +51,7 @@
             }}
           </td>
         </tr>
-        <tr>
+        <tr v-if="!isAcme">
           <td class="label">已购</td>
           <td class="content">
             {{
@@ -115,7 +121,7 @@
             </el-select>
           </td>
         </tr>
-        <tr>
+        <tr v-if="!isAcme">
           <td class="label">自动重签</td>
           <td class="content">
             <el-select
@@ -145,6 +151,7 @@ import { periodLabels } from "@/views/system/dictionary";
 import dayjs from "dayjs";
 
 const order = inject("order") as any;
+const isAcme = inject("isAcme", ref(false)) as any;
 
 const autoLoading = ref(false);
 

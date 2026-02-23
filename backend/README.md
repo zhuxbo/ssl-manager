@@ -226,6 +226,12 @@ php artisan test
 - 操作审计日志
 - 资金账户管理
 
+### ACME 多级代理
+
+- 支持 certbot → Manager A → Manager B → ... → CA 多级链路
+- 每级独立 ID 体系，通过映射字段关联上游（accountId、orderId、challengeId）
+- AcmeApiService 统一处理「查本级 → 映射 ID → 调上游」流程
+
 ### 系统集成
 
 - 多 CA 品牌适配器模式

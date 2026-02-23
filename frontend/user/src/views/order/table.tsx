@@ -13,7 +13,8 @@ import {
 import { periodLabels } from "@/views/system/dictionary";
 
 // 获取委托验证前缀
-const getDelegationPrefix = (ca?: string) => {
+const getDelegationPrefix = (ca?: string, channel?: string) => {
+  if (channel === "acme") return "_acme-challenge";
   const caLower = (ca || "").toLowerCase();
   switch (caLower) {
     case "sectigo":
@@ -56,7 +57,7 @@ export function useOrderTable() {
 
     // 委托验证
     if (dcv?.is_delegate) {
-      const prefix = getDelegationPrefix(dcv.ca || row.product?.ca);
+      const prefix = getDelegationPrefix(dcv.ca || row.product?.ca, cert.channel);
       const validation = cert.validation || [];
       // 按 delegation_id 去重
       const seen = new Map();

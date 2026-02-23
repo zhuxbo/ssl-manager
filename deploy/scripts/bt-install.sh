@@ -333,8 +333,7 @@ show_nginx_tips() {
     echo
     echo "1. 创建网站（如果尚未创建）"
     echo "   - 域名: 您的域名"
-    echo "   - 网站目录: $INSTALL_DIR/backend"
-    echo "   - 运行目录: /public"
+    echo "   - 网站目录: $INSTALL_DIR"
     echo "   - PHP版本: 8.${PHP_VERSION: -1}"
     echo
     echo "2. 在网站配置中添加以下内容（配置文件 → 自定义配置）:"

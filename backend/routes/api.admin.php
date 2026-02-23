@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\AcmeController;
 use App\Http\Controllers\Admin\AdminController;
 use App\Http\Controllers\Admin\AgisoController;
 use App\Http\Controllers\Admin\ApiTokenController;
@@ -188,6 +189,12 @@ Route::prefix('admin')->middleware('api.admin')->group(function () {
         Route::get('easy', [LogsController::class, 'easy']);
         Route::get('ca', [LogsController::class, 'ca']);
         Route::get('error', [LogsController::class, 'errors']);
+    });
+
+    // ACME 路由
+    Route::prefix('acme')->group(function () {
+        Route::post('order', [AcmeController::class, 'createOrder']);
+        Route::get('eab/{orderId}', [AcmeController::class, 'getEab'])->where('orderId', '[0-9]+');
     });
 
     // CNAME 委托管理路由

@@ -74,6 +74,7 @@ class UpdateRequest extends BaseProductRequest
             'renew' => 'boolean',
             'reuse_csr' => 'boolean',
             'gift_root_domain' => 'boolean',
+            'support_acme' => 'boolean',
             'refund_period' => 'integer|min:0',
             'remark' => 'nullable|string|max:255',
             'weight' => 'integer|min:0',

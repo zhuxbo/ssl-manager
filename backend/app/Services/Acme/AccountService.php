@@ -46,8 +46,13 @@ class AccountService
             ];
         }
 
+        // 从 Order 获取上游账户 ID
+        $acmeAccountId = $order->acme_account_id ?? null;
+
         $account = AcmeAccount::create([
             'user_id' => $user->id,
+            'order_id' => $order->id,
+            'acme_account_id' => $acmeAccountId,
             'key_id' => $keyId,
             'public_key' => $jwk,
             'contact' => $contact,
@@ -101,7 +106,7 @@ class AccountService
      */
     public function getAccountUrl(AcmeAccount $account): string
     {
-        $baseUrl = rtrim(config('app.url'), '/');
+        $baseUrl = rtrim(request()->getSchemeAndHttpHost(), '/');
 
         return "$baseUrl/acme/acct/$account->key_id";
     }
@@ -123,7 +128,7 @@ class AccountService
      */
     private function getOrdersUrl(AcmeAccount $account): string
     {
-        $baseUrl = rtrim(config('app.url'), '/');
+        $baseUrl = rtrim(request()->getSchemeAndHttpHost(), '/');
 
         return "$baseUrl/acme/acct/$account->key_id/orders";
     }

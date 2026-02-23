@@ -76,8 +76,9 @@ certbot → Manager (ACME 服务) → Gateway/上级 Manager (REST API) → Cert
 | POST | `/acme/new-order` | 创建订单 |
 | POST | `/acme/authz/{token}` | 获取授权 |
 | POST | `/acme/chall/{token}` | 响应验证 |
-| POST | `/acme/order/{token}/finalize` | 完成订单 |
-| POST | `/acme/cert/{token}` | 下载证书 |
+| POST | `/acme/order/{referId}/finalize` | 完成订单（cert.refer_id） |
+| POST | `/acme/cert/{referId}` | 下载证书（cert.refer_id） |
+| POST | `/acme/revoke-cert` | 吊销证书 |
 
 ### REST API 端点 (`/api/acme/*`)
 
@@ -86,8 +87,11 @@ certbot → Manager (ACME 服务) → Gateway/上级 Manager (REST API) → Cert
 - `POST /api/acme/accounts` - 创建账户
 - `POST /api/acme/orders` - 创建订单
 - `GET /api/acme/orders/{id}` - 获取订单
+- `GET /api/acme/orders/{id}/authorizations` - 获取授权列表
 - `POST /api/acme/orders/{id}/finalize` - 完成订单
 - `GET /api/acme/orders/{id}/certificate` - 下载证书
+- `POST /api/acme/challenges/{id}/respond` - 响应验证
+- `POST /api/acme/certificates/revoke` - 吊销证书（by serial_number）
 
 ### 关键服务
 
@@ -96,17 +100,29 @@ certbot → Manager (ACME 服务) → Gateway/上级 Manager (REST API) → Cert
 | `JwsService` | JWS 解析和验证 |
 | `NonceService` | Nonce 管理（Redis Cache::pull 原子操作） |
 | `AccountService` | 账户管理 |
-| `OrderService` | 订单管理 |
-| `BillingService` | 计费逻辑 |
-| `UpstreamClient` | 上级 API 调用 |
+| `OrderService` | 订单管理（操作 Cert 代替 AcmeOrder） |
+| `AcmeApiService` | 账户创建 + 标准扣费 |
+| `BillingService` | 计费逻辑（标准 Transaction 流程） |
+| `AcmeApiClient` | 连接的 ACME REST API 调用（原 UpstreamClient） |
+
+### 数据模型
+
+- **去掉 `acme_orders` 表**，订单/证书使用系统 `orders` + `certs` 表
+- `products.support_acme = 1` 标识 ACME 产品
+- `certs.api_id` 存储连接的 ACME 服务的订单 ID
+- `certs.refer_id` 随机唯一字符串用于 ACME URL
+- `acme_authorizations.cert_id` FK → certs.id
+- `acme_authorizations.acme_challenge_id` 连接的服务 challenge ID
+- `acme_accounts.acme_account_id` 连接的服务账户 ID
+- ACME 状态从 cert.status + acme_authorizations 推导，不存储；有 CSR 无证书 → processing
+- `OrderService::tryCompletePendingFinalize()` — processing 状态时向上游查询证书是否已签发
 
 ### 配置
 
-```bash
-# .env
-ACME_GATEWAY_URL=https://gateway.example.com/api
-ACME_GATEWAY_KEY=xxx
-ACME_DEFAULT_PRODUCT_ID=xxx
+```
+# system_settings ca 组（优先使用专用配置，未设置时回落到通用配置）
+acmeUrl  = ACME REST API 地址      ← 回落: url（路径 /api/v\w+ 替换为 /api/acme）
+acmeToken = ACME API 认证 Token    ← 回落: token
 ```
 
 ### 安全机制
@@ -116,6 +132,37 @@ ACME_DEFAULT_PRODUCT_ID=xxx
 - **Nonce 防重放** - `Cache::pull()` 原子操作
 - **EAB 强制要求** - 必须提供有效凭证
 - **时序攻击防护** - HMAC 使用 `hash_equals()`
+
+### 多级代理架构
+
+```
+certbot → Manager A (ACME 服务端) → Manager B / 上级系统 (REST API) → ... → CA
+```
+
+每一级都使用系统 `orders` + `certs` 表，不使用独立的 acme_orders 表。连接的 ACME 服务返回的订单 ID 存入 `certs.api_id`。
+
+### 数据流
+
+```
+1. certbot register  → Manager /acme/new-acct  → 验证 EAB + JWS → 创建 AcmeAccount
+2. certbot certonly  → Manager /acme/new-order → AcmeApiService.createOrder → 上级 REST API
+3. Manager 返回 DNS challenge → 用户添加 _acme-challenge TXT 记录
+4. certbot 通知验证  → Manager /acme/chall     → OrderService.respondToChallenge → 上级触发验证
+5. 验证通过          → Manager /acme/order/.../finalize → OrderService.finalize → 上级签发（可能返回 processing）
+5a. 如果 processing  → certbot 轮询 /acme/order/{referId} → OrderController.getOrder → tryCompletePendingFinalize 检查上游
+6. certbot 下载证书  → Manager /acme/cert      → 返回证书 + 中间证书
+```
+
+### E2E 测试
+
+完整链路：certbot (Docker) → Manager → 上级系统 → CA
+
+验证要点：
+- Manager `certs` 表出现 `channel='acme'` 记录
+- 上级系统 `certs` 表出现对应记录
+- 完整流程：EAB → 注册 → 创建订单 → DNS 验证 → Finalize → 下载证书
+
+详细操作步骤见根目录 `ACME.md`。
 
 ---
 

@@ -3,9 +3,9 @@
 namespace App\Models\Acme;
 
 use App\Models\BaseModel;
+use App\Models\Order;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class AcmeAccount extends BaseModel
 {
@@ -13,6 +13,8 @@ class AcmeAccount extends BaseModel
 
     protected $fillable = [
         'user_id',
+        'order_id',
+        'acme_account_id',
         'key_id',
         'public_key',
         'contact',
@@ -32,8 +34,8 @@ class AcmeAccount extends BaseModel
         return $this->belongsTo(User::class);
     }
 
-    public function orders(): HasMany
+    public function order(): BelongsTo
     {
-        return $this->hasMany(AcmeOrder::class, 'acme_account_id');
+        return $this->belongsTo(Order::class);
     }
 }

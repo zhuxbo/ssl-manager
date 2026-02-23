@@ -21,7 +21,10 @@ class AcmeJwsMiddleware
     {
         // 跳过 GET/HEAD 请求（如 directory、new-nonce）
         if (in_array($request->method(), ['GET', 'HEAD'])) {
-            return $next($request);
+            $response = $next($request);
+            \Log::info('ACME', ['method' => $request->method(), 'url' => $request->fullUrl(), 'status' => $response->getStatusCode()]);
+
+            return $response;
         }
 
         // 解析 JWS
@@ -86,7 +89,10 @@ class AcmeJwsMiddleware
         $request->attributes->set('acme_account', $account);
         $request->attributes->set('acme_jwk', $jwk);
 
-        return $next($request);
+        $response = $next($request);
+        \Log::info('ACME', ['method' => 'POST', 'url' => $request->fullUrl(), 'status' => $response->getStatusCode()]);
+
+        return $response;
     }
 
     private function acmeError(string $type, string $detail, int $status): Response

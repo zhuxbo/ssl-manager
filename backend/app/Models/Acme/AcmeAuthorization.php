@@ -3,6 +3,7 @@
 namespace App\Models\Acme;
 
 use App\Models\BaseModel;
+use App\Models\Cert;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class AcmeAuthorization extends BaseModel
@@ -10,7 +11,7 @@ class AcmeAuthorization extends BaseModel
     protected $table = 'acme_authorizations';
 
     protected $fillable = [
-        'acme_order_id',
+        'cert_id',
         'token',
         'identifier_type',
         'identifier_value',
@@ -19,6 +20,8 @@ class AcmeAuthorization extends BaseModel
         'expires',
         'challenge_type',
         'challenge_token',
+        'acme_challenge_id',
+        'key_authorization',
         'challenge_status',
         'challenge_validated',
     ];
@@ -32,8 +35,8 @@ class AcmeAuthorization extends BaseModel
         ];
     }
 
-    public function order(): BelongsTo
+    public function cert(): BelongsTo
     {
-        return $this->belongsTo(AcmeOrder::class, 'acme_order_id');
+        return $this->belongsTo(Cert::class);
     }
 }

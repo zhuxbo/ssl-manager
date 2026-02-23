@@ -40,6 +40,7 @@ return new class extends Migration
             $table->unsignedTinyInteger('renew')->default(0)->comment('续费证书: 0=否, 1=是');
             $table->unsignedTinyInteger('reuse_csr')->default(0)->comment('重用CSR: 0=否, 1=是');
             $table->unsignedTinyInteger('gift_root_domain')->default(0)->comment('赠送根域名: 0=否, 1=是');
+            $table->tinyInteger('support_acme')->unsigned()->default(0)->comment('支持ACME: 0=否, 1=是');
             $table->unsignedTinyInteger('refund_period')->default(30)->comment('退款期限');
             $table->string('remark', 500)->nullable()->comment('备注');
             $table->integer('weight')->default(0)->index()->comment('权重');

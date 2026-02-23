@@ -125,6 +125,11 @@ class ApiExceptions
      */
     protected function handleApiException(Throwable $e): JsonResponse
     {
+        // ACME 路由返回 RFC 7807 格式
+        if ($this->isAcmeRequest()) {
+            return $this->handleAcmeException($e);
+        }
+
         if ($e instanceof ApiResponseException) {
             return new JsonResponse($e->getApiResponse());
         }
@@ -162,5 +167,47 @@ class ApiExceptions
         }
 
         return new JsonResponse($response, $status);
+    }
+
+    /**
+     * 判断是否 ACME 路由请求
+     */
+    protected function isAcmeRequest(): bool
+    {
+        try {
+            return Request::instance()->is('acme/*');
+        } catch (Throwable) {
+            return false;
+        }
+    }
+
+    /**
+     * ACME 路由异常处理 — 返回 RFC 7807 格式
+     */
+    protected function handleAcmeException(Throwable $e): JsonResponse
+    {
+        $debug = config('app.debug', false);
+        $detail = $debug ? $e->getMessage() : 'Internal server error';
+
+        \Log::error('ACME exception', [
+            'exception' => get_class($e),
+            'message' => $e->getMessage(),
+            'file' => $e->getFile().':'.$e->getLine(),
+        ]);
+
+        $status = match (true) {
+            $e instanceof NotFoundHttpException => 404,
+            $e instanceof ThrottleRequestsException => 429,
+            $e instanceof HttpException => $e->getStatusCode(),
+            default => 500,
+        };
+
+        return new JsonResponse([
+            'type' => 'urn:ietf:params:acme:error:serverInternal',
+            'detail' => $detail,
+            'status' => $status,
+        ], $status, [
+            'Content-Type' => 'application/problem+json',
+        ]);
     }
 }

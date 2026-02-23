@@ -1,5 +1,9 @@
 <template>
-  <el-card shadow="never" :style="{ border: 'none' }">
+  <el-card
+    v-if="!(isAcme && cert?.status === 'pending')"
+    shadow="never"
+    :style="{ border: 'none' }"
+  >
     <h2 class="title">
       <span style="margin-right: 12px">订单状态</span>
       <el-button
@@ -23,7 +27,7 @@
           </td>
           <td class="content">提交订单</td>
         </tr>
-        <tr v-if="order.product.validation_type !== 'dv'">
+        <tr v-if="!isAcme && order.product.validation_type !== 'dv'">
           <td class="label">
             <el-icon :size="16" class="icon" :color="orgValidationColor">
               <Select />
@@ -33,6 +37,7 @@
         </tr>
         <tr
           v-if="
+            !isAcme &&
             order.product.validation_type !== 'dv' &&
             order.brand?.toLowerCase() === 'certum' &&
             hasDocuments
@@ -53,7 +58,7 @@
           <td class="label" />
           <td class="content"><Validation /></td>
         </tr>
-        <tr>
+        <tr v-if="!isAcme">
           <td class="label">
             <el-icon :size="16" class="icon" :color="issuedColor">
               <Select />
@@ -61,13 +66,14 @@
           </td>
           <td class="content">下载证书</td>
         </tr>
-        <tr>
+        <tr v-if="!isAcme">
           <td class="label" />
           <td class="content"><Install /></td>
         </tr>
       </tbody>
     </table>
   </el-card>
+  <AcmeEab v-if="isAcme" />
 </template>
 <script setup lang="ts">
 import { computed, inject, onMounted, ref } from "vue";
@@ -75,6 +81,7 @@ import { statusType, status } from "@/views/order/dictionary";
 import Operate from "./operate.vue";
 import Validation from "./validation.vue";
 import Install from "./install.vue";
+import AcmeEab from "./eab.vue";
 import Documents from "../documents.vue";
 import { ElButton } from "element-plus";
 import { Select } from "@element-plus/icons-vue";
@@ -82,6 +89,7 @@ import dayjs from "dayjs";
 
 const order = inject("order") as any;
 const cert = inject("cert") as any;
+const isAcme = inject("isAcme", ref(false)) as any;
 
 // 检查是否有文档
 const hasDocuments = computed(() => {
@@ -90,15 +98,18 @@ const hasDocuments = computed(() => {
   return Array.isArray(docs) ? docs.length > 0 : true;
 });
 
-const getStatusColor = (status: string) => {
+const getStatusColor = (statusField: string) => {
   return computed(() => {
     if (cert.value.status === "active") {
       return "var(--el-color-success)";
     }
     if (cert.value.status == "processing") {
-      return cert.value[status] == 2
+      return cert.value[statusField] == 2
         ? "var(--el-color-success)"
         : "var(--el-text-color-regular)";
+    }
+    if (isAcme.value && cert.value.status === "pending" && statusField === "cert_apply_status") {
+      return "var(--el-color-success)";
     }
     return "var(--el-text-color-regular)";
   });

@@ -27,5 +27,5 @@ Route::prefix('acme')->middleware('api.v2')->group(function () {
     Route::post('challenges/{id}/respond', [AcmeApiController::class, 'respondToChallenge']);
 
     // 证书管理
-    Route::post('certificates/{id}/revoke', [AcmeApiController::class, 'revokeCertificate']);
+    Route::post('certificates/revoke', [AcmeApiController::class, 'revokeCertificate']);
 });

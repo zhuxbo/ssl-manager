@@ -18,7 +18,7 @@ class DirectoryController extends Controller
      */
     public function index(): JsonResponse
     {
-        $baseUrl = rtrim(config('app.url'), '/');
+        $baseUrl = rtrim(request()->getSchemeAndHttpHost(), '/');
 
         return response()->json([
             'newNonce' => "$baseUrl/acme/new-nonce",

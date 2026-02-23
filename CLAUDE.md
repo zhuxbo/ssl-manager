@@ -51,6 +51,37 @@ skills/         # 开发规范（详细文档）
 - 产品同步时保留本地的 `delegation` 验证方法
 - 详见 `skills/backend-dev/SKILL.md` 委托验证章节
 
+### ACME 多级代理
+
+- **架构**：certbot → Manager A → Manager B → ... → CA，每级都有系统 orders/certs 记录
+- **去掉 acme_orders 表**：订单/证书全部使用系统 `orders` + `certs` 表
+- **产品标识**：`products.support_acme = 1` 标识 ACME 产品（不新增 product_type）
+- **ID 映射**：每级独立 ID，通过映射字段关联上游（accountId→`orders.acme_account_id`、orderId→`certs.api_id`、challengeId→`acme_authorizations.acme_challenge_id`）
+- **AcmeAccount 精确关联**：`acme_accounts.order_id` 直接关联 Order，避免通过 user_id 查找错误（兼容旧数据回落到 user_id 查询）
+- **AcmeApiService 核心原则**：所有方法「查本级 → 映射 ID → 调上游」，不能透传下游 ID 给上游
+- **EAB 可复用**：同一 EAB 可多次注册 ACME 账户（Certum 订单级认证），`eab_used_at` 仅记录首次使用时间
+- **createAccount 复用**：有有效 Order 时不重复扣费，统一返回现有 EAB
+- **续费联动**：`BillingService::tryAutoRenew` 创建新 Order 后自动迁移 `AcmeAccount.order_id`，并通知上游创建新订单（best-effort）
+- **DNS 委托自动化**：创建 ACME Order 时自动尝试通过委托写 TXT 记录（best-effort，不阻塞）
+- **URL 标识**：使用 `cert.refer_id`（随机唯一字符串）替代 token
+- **ACME 状态推导**：不存储状态字段，从 cert.status + acme_authorizations 推导
+- **标准扣费**：`OrderUtil::getOrderTransaction()` + `Transaction::create()`（boot 事件自动更新余额）
+- **SAN 验证**：`ValidatorUtil::validateSansMaxCount()` + purchased count 追踪
+- **不自动补齐根域名**：ACME 产品不调用 `DomainUtil::addGiftDomain()`
+- **配置**：优先 `ca.acmeUrl`/`ca.acmeToken`，未设置时回落到 `ca.url`（路径替换为 `/api/acme`）/`ca.token`
+- **AcmeApiClient**（原 UpstreamClient）：连接上级 ACME REST API
+- **EAB 获取方式**：支持 Deploy Token（`GET /api/deploy/acme/eab`）和用户端 API（`GET /api/user/acme/eab`）
+- **Web 端 ACME 订阅**：`BillingService::createSubscription()` 供 Web 表单创建 ACME 订单，复用有效 Order 逻辑
+- **ACME 订单创建路由**：User `POST /api/user/acme/order`、Admin `POST /api/admin/acme/order` + `GET /api/admin/acme/eab/{orderId}`
+- **前端签发方式**：action.vue 增加"手工签发/ACME签发"选择器，ACME 模式精简表单（仅产品+有效期）
+- **ACME 详情页**：通过 `order.latest_cert.channel === 'acme'` 判断，显示专用标签页（订单详情/EAB凭据/委托认证/颁发记录）
+- **Server URL 统一**：使用 `get_system_setting('site', 'url')` 替代 `config('app.url')`
+- **不支持 EAB 重置**：上游 gateway 不支持，已移除 `resetEab` 方法和路由
+- **RFC 8555 路由兼容**：order/authz/cert 路由同时支持 GET 和 POST（certbot finalize 后用 GET 轮询 order）
+- **ACME 异常处理**：`ApiExceptions` 对 ACME 路由返回 RFC 7807 格式（`urn:ietf:params:acme:error:*`），避免通用 `{"code":0}` 格式
+- **ACME 日志排除**：`LogOperation` 排除 `acme/*` 路由，避免非标准请求格式干扰
+- **E2E 测试**：Docker certbot → Manager → 上级系统 → CA，详见 `ACME.md`
+
 ### 自动续费/重签
 
 - `orders.auto_renew`: 订单级自动续费开关（null 时回落到用户设置）

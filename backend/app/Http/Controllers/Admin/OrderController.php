@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Requests\Order\GetIdsRequest;
 use App\Http\Requests\Order\IndexRequest;
 use App\Models\Order;
+use App\Services\Acme\OrderService as AcmeOrderService;
 use App\Services\Order\Action;
 use Illuminate\Http\Request;
 use Throwable;
@@ -165,7 +166,7 @@ class OrderController extends BaseController
             'user' => function ($query) {
                 $query->select(['id', 'username', 'email', 'mobile']);
             }, 'product' => function ($query) {
-                $query->select(['id', 'name', 'product_type', 'ca', 'refund_period', 'validation_methods', 'validation_type', 'common_name_types', 'alternative_name_types']);
+                $query->select(['id', 'name', 'product_type', 'ca', 'refund_period', 'validation_methods', 'validation_type', 'common_name_types', 'alternative_name_types', 'support_acme']);
             }, 'latestCert',
         ])->find($id);
 
@@ -173,7 +174,32 @@ class OrderController extends BaseController
             $this->error('订单不存在');
         }
 
-        $this->success($order->toArray());
+        $data = $order->toArray();
+
+        // ACME 订单附加信息
+        if ($order->latestCert && $order->latestCert->channel === 'acme') {
+            // 懒补充 dcv/validation 数据（兼容旧数据）
+            if (empty($order->latestCert->dcv)) {
+                app(AcmeOrderService::class)->populateDcvAndValidation($order->latestCert);
+                $order->latestCert->refresh();
+            }
+
+            $order->load('latestCert.acmeAuthorizations');
+            $data['latest_cert'] = $order->latestCert->toArray();
+            $data['is_acme'] = true;
+            $data['eab_kid'] = $order->eab_kid;
+            $data['eab_hmac'] = $order->eab_hmac;
+            $data['eab_used'] = $order->eab_used_at !== null;
+            $serverUrl = rtrim(get_system_setting('site', 'url', config('app.url')), '/').'/acme/directory';
+            $data['server_url'] = $serverUrl;
+            $data['certbot_command'] = "certbot certonly --server $serverUrl --eab-kid $order->eab_kid"
+                ." --eab-hmac-key $order->eab_hmac"
+                .' -d example.com --preferred-challenges dns-01';
+            $data['acmesh_command'] = "acme.sh --register-account --server $serverUrl --eab-kid $order->eab_kid"
+                ." --eab-hmac-key $order->eab_hmac";
+        }
+
+        $this->success($data);
     }
 
     /**
@@ -188,7 +214,7 @@ class OrderController extends BaseController
                 'user' => function ($query) {
                     $query->select(['id', 'username', 'email', 'mobile']);
                 }, 'product' => function ($query) {
-                    $query->select(['id', 'name', 'product_type', 'ca', 'refund_period', 'validation_methods', 'validation_type', 'common_name_types', 'alternative_name_types']);
+                    $query->select(['id', 'name', 'product_type', 'ca', 'refund_period', 'validation_methods', 'validation_type', 'common_name_types', 'alternative_name_types', 'support_acme']);
                 }, 'latestCert',
             ])
             ->get();
@@ -196,7 +222,27 @@ class OrderController extends BaseController
             $this->error('订单不存在');
         }
 
-        $this->success($orders->toArray());
+        $result = $orders->map(function ($order) {
+            $data = $order->toArray();
+
+            if ($order->latestCert && $order->latestCert->channel === 'acme') {
+                $data['is_acme'] = true;
+                $data['eab_kid'] = $order->eab_kid;
+                $data['eab_hmac'] = $order->eab_hmac;
+                $data['eab_used'] = $order->eab_used_at !== null;
+                $serverUrl = rtrim(get_system_setting('site', 'url', config('app.url')), '/').'/acme/directory';
+                $data['server_url'] = $serverUrl;
+                $data['certbot_command'] = "certbot certonly --server $serverUrl --eab-kid $order->eab_kid"
+                    ." --eab-hmac-key $order->eab_hmac"
+                    .' -d example.com --preferred-challenges dns-01';
+                $data['acmesh_command'] = "acme.sh --register-account --server $serverUrl --eab-kid $order->eab_kid"
+                    ." --eab-hmac-key $order->eab_hmac";
+            }
+
+            return $data;
+        });
+
+        $this->success($result->toArray());
     }
 
     /**

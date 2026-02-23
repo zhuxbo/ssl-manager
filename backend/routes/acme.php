@@ -31,17 +31,17 @@ Route::prefix('acme')->group(function () {
 
         // 订单
         Route::post('new-order', [OrderController::class, 'newOrder']);
-        Route::post('order/{token}', [OrderController::class, 'getOrder']);
-        Route::post('order/{token}/finalize', [OrderController::class, 'finalizeOrder']);
+        Route::match(['get', 'post'], 'order/{referId}', [OrderController::class, 'getOrder']);
+        Route::post('order/{referId}/finalize', [OrderController::class, 'finalizeOrder']);
 
         // 授权
-        Route::post('authz/{token}', [AuthorizationController::class, 'getAuthorization']);
+        Route::match(['get', 'post'], 'authz/{token}', [AuthorizationController::class, 'getAuthorization']);
 
         // 验证
         Route::post('chall/{token}', [ChallengeController::class, 'respondToChallenge']);
 
         // 证书
-        Route::post('cert/{token}', [CertificateController::class, 'getCertificate']);
+        Route::match(['get', 'post'], 'cert/{referId}', [CertificateController::class, 'getCertificate']);
         Route::post('revoke-cert', [CertificateController::class, 'revokeCertificate']);
     });
 });

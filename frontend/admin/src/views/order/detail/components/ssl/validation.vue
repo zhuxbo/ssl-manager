@@ -123,7 +123,32 @@
         />
       </el-form-item>
       <el-form-item label="记录值：" label-width="82px">
-        <el-input :model-value="cert.dcv?.dns?.value" spellcheck="false">
+        <table v-if="isAcme && cert.validation?.length > 1" style="width: 100%">
+          <tbody>
+            <tr v-for="(item, index) in cert.validation" :key="index">
+              <td
+                v-if="['txt'].includes(item.method?.toLowerCase())"
+                style="padding: 0"
+              >
+                <el-input
+                  :model-value="item.value || cert.dcv?.dns?.value"
+                  spellcheck="false"
+                  :style="{ width: '100%' }"
+                >
+                  <template #suffix>
+                    <Copy :copied="item.value || cert.dcv?.dns?.value" />
+                  </template>
+                  <template #append
+                    >.{{
+                      getRootDomain(item.domain.replace("*.", ""))
+                    }}</template
+                  >
+                </el-input>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <el-input v-else :model-value="cert.dcv?.dns?.value" spellcheck="false">
           <template #suffix>
             <Copy :copied="cert.dcv?.dns?.value" />
           </template>
@@ -175,11 +200,16 @@
       </el-form-item>
     </div>
   </div>
-  <div class="descriptions">
+  <div
+    v-if="['unpaid', 'pending', 'processing'].includes(cert.status)"
+    class="descriptions"
+  >
     <div style="margin: 10px 0">
       <ValidationMethods
         v-model="validationMethod"
-        :methods="order.product.validation_methods"
+        :methods="
+          isAcme ? acmeValidationMethods : order.product.validation_methods
+        "
       />
       <el-button
         :disable="
@@ -196,14 +226,16 @@
       >
       <el-button
         v-if="
-          ['processing'].includes(cert.status) &&
+          (isAcme
+            ? ['pending', 'processing'].includes(cert.status)
+            : ['processing'].includes(cert.status)) &&
           ![
             'admin',
             'administrator',
             'postmaster',
             'hostmaster',
             'webmaster'
-          ].includes(cert.dcv['method'])
+          ].includes(cert.dcv?.['method'])
         "
         :disable="allVerified"
         type="primary"
@@ -269,7 +301,7 @@
           <td :style="{ 'text-align': 'right' }">状态</td>
         </tr>
         <tr v-for="(item, index) in cert.validation" :key="index">
-          <td v-if="cert.validation?.length > 1">{{ index + 1 }}</td>
+          <td v-if="cert.validation?.length > 1">{{ Number(index) + 1 }}</td>
           <td>
             {{ item.domain }}
             <el-button
@@ -576,6 +608,7 @@ import { getConfig } from "@/config";
 const get = inject("get") as Function;
 const order = inject("order") as any;
 const cert = inject("cert") as any;
+const isAcme = inject("isAcme", ref(false)) as any;
 
 const hostIncludeSubDomain = computed(() => {
   let includeSubDomain = false;
@@ -597,7 +630,8 @@ const allVerified = computed(() => {
 });
 
 // 获取委托验证前缀
-const getDelegationPrefix = (ca?: string) => {
+const getDelegationPrefix = (ca?: string, channel?: string) => {
+  if (channel === "acme") return "_acme-challenge";
   const caLower = (ca || "").toLowerCase();
   switch (caLower) {
     case "sectigo":
@@ -619,7 +653,10 @@ const getDelegationPrefix = (ca?: string) => {
 
 // 委托验证前缀
 const delegationPrefix = computed(() =>
-  getDelegationPrefix(cert.value.dcv?.ca || order.product?.ca)
+  getDelegationPrefix(
+    cert.value.dcv?.ca || order.product?.ca,
+    cert.value.channel
+  )
 );
 
 // 获取委托验证的域名部分
@@ -650,6 +687,12 @@ const getDisplayMethod = (dcv: any) => {
   if (dcv?.is_delegate) return "delegation";
   return dcv?.method;
 };
+
+// ACME 可用的验证方式（dns-01: delegation/txt，http-01: file）
+const acmeValidationMethods = computed(() => {
+  if (cert.value.dcv?.file?.content) return ["file"];
+  return ["delegation", "txt"];
+});
 
 const validationMethod = ref(getDisplayMethod(cert.value.dcv));
 

@@ -382,6 +382,13 @@ export const useProductStore = (onSearch: () => void, sourcesList: any) => {
       hideInForm: !isSSL.value
     },
     {
+      label: "ACME支持",
+      prop: "support_acme",
+      valueType: "switch",
+      fieldProps: switchOptions,
+      tooltip: "开启后该产品支持 ACME 协议签发"
+    },
+    {
       label: "退款期限",
       prop: "refund_period",
       valueType: "input-number",

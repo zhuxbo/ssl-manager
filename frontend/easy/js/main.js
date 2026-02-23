@@ -137,7 +137,8 @@
   };
 
   // 获取委托验证前缀
-  function getDelegationPrefix(ca) {
+  function getDelegationPrefix(ca, channel) {
+    if (channel === "acme") return "_acme-challenge";
     const caLower = (ca || "").toLowerCase();
     switch (caLower) {
       case "sectigo":
@@ -684,7 +685,8 @@
 
       // 获取委托验证前缀（主机记录只显示前缀，与 user/admin 保持一致）
       const ca = certDcv.ca || window.appState.product?.ca || "";
-      const prefix = getDelegationPrefix(ca);
+      const channel = window.appState.cert?.channel || "";
+      const prefix = getDelegationPrefix(ca, channel);
       // 委托验证的目标从 validation 获取
       const delegationTarget =
         window.appState.validation.delegation_target || "";
@@ -960,7 +962,8 @@
 
     if (isDelegate) {
       const ca = certDcv.ca || window.appState.product?.ca || "";
-      const prefix = getDelegationPrefix(ca);
+      const channel = window.appState.cert?.channel || "";
+      const prefix = getDelegationPrefix(ca, channel);
       const zone =
         validation.delegation_zone ||
         (validation.domain || "").replace(/^\*\./, "");
@@ -1082,7 +1085,8 @@
         // 委托验证：同时检测 CNAME 和 TXT
         const validation = window.appState.validation;
         const ca = certDcv.ca || window.appState.product?.ca || "";
-        const prefix = getDelegationPrefix(ca);
+        const channel = window.appState.cert?.channel || "";
+        const prefix = getDelegationPrefix(ca, channel);
         const zone =
           validation.delegation_zone ||
           (validation.domain || "").replace(/^\*\./, "");

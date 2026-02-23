@@ -20,12 +20,12 @@ class AcmeApiController extends Controller
     {
         $request->validate([
             'customer' => 'required|email|max:200',
-            'product_code' => 'required|integer',
+            'product_code' => 'required|string|max:50',
         ]);
 
         $result = $this->apiService->createAccount(
             $request->input('customer'),
-            $request->integer('product_code')
+            $request->input('product_code')
         );
 
         if ($result['code'] === 1) {
@@ -157,16 +157,17 @@ class AcmeApiController extends Controller
 
     /**
      * 吊销证书
-     * POST /api/acme/certificates/{id}/revoke
+     * POST /api/acme/certificates/revoke
      */
-    public function revokeCertificate(Request $request, int $id): void
+    public function revokeCertificate(Request $request): void
     {
         $request->validate([
+            'serial_number' => 'required|string',
             'reason' => 'nullable|string|in:UNSPECIFIED,KEY_COMPROMISE,AFFILIATION_CHANGED,CESSATION_OF_OPERATION,SUPERSEDED',
         ]);
 
         $result = $this->apiService->revokeCertificate(
-            $id,
+            $request->input('serial_number'),
             $request->input('reason', 'UNSPECIFIED')
         );
 

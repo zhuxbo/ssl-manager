@@ -47,7 +47,8 @@ class CertExpireSmsNotificationBuilder implements NotificationBuilderInterface
             if ($willAutoRenew || $willAutoReissue) {
                 $ca = strtolower($order->product->ca ?? '');
                 $domains = $order->latestCert->alternative_names;
-                $delegationValid = $this->autoRenewService->checkDelegationValidity($notifiable->id, $domains, $ca);
+                $channel = $order->latestCert->channel ?? '';
+                $delegationValid = $this->autoRenewService->checkDelegationValidity($notifiable->id, $domains, $ca, $channel);
 
                 if ($delegationValid) {
                     // 委托有效，完全跳过该证书（不发通知）

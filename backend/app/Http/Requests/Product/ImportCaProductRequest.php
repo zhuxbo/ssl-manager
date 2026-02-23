@@ -44,14 +44,14 @@ class ImportCaProductRequest extends UpdateRequest
     public function prepareForCreate(array $data): array
     {
         $data['code'] = $data['api_id'];
-        $data['name'] = $data['name'] ?? $data['ca'] . '_' . $data['api_id'];
+        $data['name'] = $data['name'] ?? $data['ca'].'_'.$data['api_id'];
         $data['encryption_alg'] = $data['encryption_alg'] ?? ['rsa'];
         $data['signature_digest_alg'] = $data['signature_digest_alg'] ?? ['sha256'];
         $data['common_name_types'] = $data['common_name_types'] ?? [];
         $data['validation_methods'] = $data['validation_methods'] ?? [];
 
         $productType = $data['product_type'] ?? 'ssl';
-        if ($productType !== 'ssl' && !empty($productType)) {
+        if ($productType !== 'ssl' && ! empty($productType)) {
             $this->setNonSSLDefaults($data);
         }
         if ($productType === 'codesign') {

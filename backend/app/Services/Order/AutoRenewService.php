@@ -112,11 +112,12 @@ class AutoRenewService
      * @param  int  $userId  用户ID
      * @param  string  $domains  域名列表（逗号分隔）
      * @param  string  $ca  CA名称
+     * @param  string  $channel  渠道（acme 时统一使用 _acme-challenge）
      * @return bool 是否所有域名都有有效委托
      */
-    public function checkDelegationValidity(int $userId, string $domains, string $ca): bool
+    public function checkDelegationValidity(int $userId, string $domains, string $ca, string $channel = ''): bool
     {
-        $prefix = CnameDelegationService::getDelegationPrefixForCa($ca);
+        $prefix = CnameDelegationService::getDelegationPrefixForCa($ca, $channel);
         $domainList = explode(',', trim($domains, ','));
 
         foreach ($domainList as $domain) {

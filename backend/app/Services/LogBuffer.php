@@ -61,7 +61,7 @@ class LogBuffer
                 $model::insert($itemsWithTimestamp);
             } catch (\Throwable $e) {
                 // 批量插入失败时，尝试逐条插入
-                \Log::warning("LogBuffer: batch insert failed, fallback to single insert", [
+                \Log::warning('LogBuffer: batch insert failed, fallback to single insert', [
                     'model' => $model,
                     'count' => count($items),
                     'error' => $e->getMessage(),
