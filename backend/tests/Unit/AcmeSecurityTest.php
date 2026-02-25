@@ -193,29 +193,6 @@ class AcmeSecurityTest extends TestCase
         $this->assertEquals($testData, $decoded);
     }
 
-    /**
-     * 测试 EAB HMAC 验证使用时序安全比较
-     */
-    public function test_eab_verification_timing_safe(): void
-    {
-        // 这个测试验证 verifyEab 方法使用 hash_equals
-        // 由于无法直接测试时序，我们只验证方法存在且可调用
-
-        $outerJws = [
-            'payload' => [
-                'externalAccountBinding' => [
-                    'protected' => base64_encode('{"kid":"test_kid","alg":"HS256"}'),
-                    'payload' => base64_encode('test'),
-                    'signature' => base64_encode('invalid'),
-                ],
-            ],
-        ];
-
-        // 无效的 EAB 应该返回 false
-        $result = $this->jwsService->verifyEab($outerJws, 'wrong_kid', 'wrong_hmac');
-        $this->assertFalse($result);
-    }
-
     protected function tearDown(): void
     {
         parent::tearDown();

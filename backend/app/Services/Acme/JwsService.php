@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Acme;
 
-use App\Models\Acme\AcmeAccount;
+use App\Models\Acme\Account;
 
 class JwsService
 {
@@ -63,6 +63,11 @@ class JwsService
 
         if (! $publicKeyResource) {
             return false;
+        }
+
+        // EC 密钥签名需要从 JWS 的 R||S 格式转换为 OpenSSL 要求的 DER 格式
+        if ($kty === 'EC') {
+            $signature = $this->convertEcSignatureToDer($signature, $alg);
         }
 
         return openssl_verify($signingInput, $signature, $publicKeyResource, $algorithm) === 1;
@@ -139,41 +144,13 @@ class JwsService
     }
 
     /**
-     * 验证 EAB（外部账户绑定）
-     */
-    public function verifyEab(array $outerJws, string $eabKid, string $eabHmac): bool
-    {
-        $payload = $outerJws['payload'] ?? [];
-        $eab = $payload['externalAccountBinding'] ?? null;
-
-        if (! $eab) {
-            return false;
-        }
-
-        // 解析内部 JWS
-        $innerProtected = json_decode($this->base64UrlDecode($eab['protected']), true);
-
-        // 验证 kid 匹配
-        if (($innerProtected['kid'] ?? '') !== $eabKid) {
-            return false;
-        }
-
-        // 验证 HMAC 签名
-        $signingInput = $eab['protected'].'.'.$eab['payload'];
-        $hmacKey = $this->base64UrlDecode($eabHmac);
-        $expectedSignature = hash_hmac('sha256', $signingInput, $hmacKey, true);
-
-        return hash_equals($this->base64UrlDecode($eab['signature']), $expectedSignature);
-    }
-
-    /**
      * 根据账户 URL 查找账户
      */
-    public function findAccountByKid(string $kid): ?AcmeAccount
+    public function findAccountByKid(string $kid): ?Account
     {
         // kid 格式: https://manager.example.com/acme/acct/{key_id}
         if (preg_match('/\/acme\/acct\/([^\/]+)$/', $kid, $matches)) {
-            return AcmeAccount::where('key_id', $matches[1])->first();
+            return Account::where('key_id', $matches[1])->first();
         }
 
         return null;
@@ -198,7 +175,7 @@ class JwsService
     /**
      * JWK 转 PEM 格式公钥
      */
-    private function jwkToPem(array $jwk): ?string
+    public function jwkToPem(array $jwk): ?string
     {
         if ($jwk['kty'] === 'RSA') {
             return $this->rsaJwkToPem($jwk);
@@ -248,7 +225,7 @@ class JwsService
             'P-256' => hex2bin('2a8648ce3d030107'),
             'P-384' => hex2bin('2b81040022'),
             'P-521' => hex2bin('2b81040023'),
-            default => hex2bin('2a8648ce3d030107'),
+            default => throw new \InvalidArgumentException("Unsupported EC curve: $jwk[crv]"),
         };
 
         $point = chr(0x04).$x.$y;
@@ -264,6 +241,40 @@ class JwsService
         $der = chr(0x30).$this->encodeAsn1Length(strlen($algorithmIdentifier) + strlen($bitString)).$algorithmIdentifier.$bitString;
 
         return "-----BEGIN PUBLIC KEY-----\n".chunk_split(base64_encode($der), 64, "\n").'-----END PUBLIC KEY-----';
+    }
+
+    /**
+     * 将 EC 签名从 JWS 的 R||S 拼接格式转换为 OpenSSL 要求的 DER 编码格式
+     */
+    private function convertEcSignatureToDer(string $signature, string $alg): string
+    {
+        $segmentLength = match ($alg) {
+            'ES256' => 32,
+            'ES384' => 48,
+            'ES512' => 66,
+            default => (int) (strlen($signature) / 2),
+        };
+
+        $r = substr($signature, 0, $segmentLength);
+        $s = substr($signature, $segmentLength);
+
+        // 去前导零
+        $r = ltrim($r, "\x00");
+        $s = ltrim($s, "\x00");
+
+        // R/S 为空时表示 0
+        if ($r === '') {
+            $r = "\x00";
+        }
+        if ($s === '') {
+            $s = "\x00";
+        }
+
+        $rDer = $this->encodeAsn1Integer($r);
+        $sDer = $this->encodeAsn1Integer($s);
+
+        // SEQUENCE 包装
+        return chr(0x30).$this->encodeAsn1Length(strlen($rDer) + strlen($sDer)).$rDer.$sDer;
     }
 
     /**

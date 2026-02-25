@@ -48,7 +48,6 @@ export const useDeployTokenStore = (onSearch: () => void) => {
       label: "Token",
       prop: "token",
       valueType: "input",
-      hideInForm: computed(() => storeId.value > 0),
       fieldProps: {
         placeholder: "请输入Token"
       },

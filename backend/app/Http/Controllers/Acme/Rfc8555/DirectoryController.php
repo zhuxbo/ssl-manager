@@ -3,22 +3,17 @@
 namespace App\Http\Controllers\Acme\Rfc8555;
 
 use App\Http\Controllers\Controller;
-use App\Services\Acme\NonceService;
 use Illuminate\Http\JsonResponse;
 
 class DirectoryController extends Controller
 {
-    public function __construct(
-        private NonceService $nonceService
-    ) {}
-
     /**
      * GET /acme/directory
      * ACME 目录端点
      */
     public function index(): JsonResponse
     {
-        $baseUrl = rtrim(request()->getSchemeAndHttpHost(), '/');
+        $baseUrl = rtrim(url('/'), '/');
 
         return response()->json([
             'newNonce' => "$baseUrl/acme/new-nonce",

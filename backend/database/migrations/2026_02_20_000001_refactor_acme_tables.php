@@ -70,6 +70,39 @@ return new class extends Migration
 
         // 7. 删除旧表
         Schema::dropIfExists('acme_orders');
+        Schema::dropIfExists('acme_nonces');
+
+        // 8. acme_authorizations.expires → expires_at
+        if (Schema::hasColumn('acme_authorizations', 'expires')) {
+            Schema::table('acme_authorizations', function (Blueprint $table) {
+                $table->renameColumn('expires', 'expires_at');
+            });
+        }
+
+        // 9. acme_accounts.order_id 添加外键约束
+        $fkOrderExists = collect(DB::select("SELECT CONSTRAINT_NAME FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'acme_accounts' AND CONSTRAINT_NAME = 'acme_accounts_order_id_foreign'"))->isNotEmpty();
+
+        if (! $fkOrderExists && Schema::hasColumn('acme_accounts', 'order_id')) {
+            Schema::table('acme_accounts', function (Blueprint $table) {
+                $table->foreign('order_id')->references('id')->on('orders')->onDelete('set null');
+            });
+        }
+
+        // 10. orders.acme_account_id 添加索引
+        $indexExists = collect(DB::select("SELECT INDEX_NAME FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'orders' AND INDEX_NAME = 'orders_acme_account_id_index'"))->isNotEmpty();
+
+        if (! $indexExists && Schema::hasColumn('orders', 'acme_account_id')) {
+            Schema::table('orders', function (Blueprint $table) {
+                $table->index('acme_account_id');
+            });
+        }
+
+        // 11. acme_accounts.public_key 从 string 改为 text
+        if (Schema::hasColumn('acme_accounts', 'public_key')) {
+            Schema::table('acme_accounts', function (Blueprint $table) {
+                $table->text('public_key')->comment('JWK 公钥')->change();
+            });
+        }
     }
 
     public function down(): void

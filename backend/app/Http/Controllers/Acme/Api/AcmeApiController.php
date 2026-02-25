@@ -3,13 +3,13 @@
 namespace App\Http\Controllers\Acme\Api;
 
 use App\Http\Controllers\Controller;
-use App\Services\Acme\AcmeApiService;
+use App\Services\Acme\ApiService;
 use Illuminate\Http\Request;
 
 class AcmeApiController extends Controller
 {
     public function __construct(
-        private AcmeApiService $apiService
+        private ApiService $apiService
     ) {}
 
     /**
@@ -71,6 +71,21 @@ class AcmeApiController extends Controller
 
         if ($result['code'] === 1) {
             $this->success($result['data']);
+        } else {
+            $this->error($result['msg']);
+        }
+    }
+
+    /**
+     * 取消订单
+     * DELETE /api/acme/orders/{id}
+     */
+    public function cancelOrder(int $id): void
+    {
+        $result = $this->apiService->cancelOrder($id);
+
+        if ($result['code'] === 1) {
+            $this->success();
         } else {
             $this->error($result['msg']);
         }

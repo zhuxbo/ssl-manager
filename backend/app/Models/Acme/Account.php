@@ -7,7 +7,7 @@ use App\Models\Order;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class AcmeAccount extends BaseModel
+class Account extends BaseModel
 {
     protected $table = 'acme_accounts';
 

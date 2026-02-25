@@ -2,13 +2,13 @@
 
 namespace Tests\Unit\Services\Acme;
 
-use App\Models\Acme\AcmeAuthorization;
+use App\Models\Acme\Authorization;
 use App\Models\Cert;
 use App\Models\Order;
 use App\Models\ProductPrice;
 use App\Models\Transaction;
-use App\Services\Acme\AcmeApiClient;
-use App\Services\Acme\AcmeApiService;
+use App\Services\Acme\ApiClient;
+use App\Services\Acme\ApiService;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Mockery;
@@ -20,7 +20,7 @@ use Tests\Traits\CreatesTestData;
  * AcmeApiService 测试（需要数据库）
  */
 #[Group('database')]
-class AcmeApiServiceTest extends TestCase
+class ApiServiceTest extends TestCase
 {
     use CreatesTestData, RefreshDatabase;
 
@@ -28,7 +28,7 @@ class AcmeApiServiceTest extends TestCase
 
     protected string $seeder = DatabaseSeeder::class;
 
-    private AcmeApiService $service;
+    private ApiService $service;
 
     private $mockApiClient;
 
@@ -36,12 +36,12 @@ class AcmeApiServiceTest extends TestCase
     {
         parent::setUp();
 
-        $this->mockApiClient = Mockery::mock(AcmeApiClient::class);
+        $this->mockApiClient = Mockery::mock(ApiClient::class);
         $this->mockApiClient->shouldReceive('isConfigured')->andReturn(false)->byDefault();
         $this->mockApiClient->shouldReceive('createAccount')->andReturn(['code' => 1])->byDefault();
 
-        $this->app->instance(AcmeApiClient::class, $this->mockApiClient);
-        $this->service = app(AcmeApiService::class);
+        $this->app->instance(ApiClient::class, $this->mockApiClient);
+        $this->service = app(ApiService::class);
     }
 
     protected function tearDown(): void
@@ -279,14 +279,14 @@ class AcmeApiServiceTest extends TestCase
         $order = $this->createTestOrder($user, $product);
         $cert = $this->createTestCert($order, ['channel' => 'acme']);
 
-        $authorization = AcmeAuthorization::create([
+        $authorization = Authorization::create([
             'cert_id' => $cert->id,
             'token' => 'test-token-map',
             'identifier_type' => 'dns',
             'identifier_value' => 'example.com',
             'wildcard' => false,
             'status' => 'pending',
-            'expires' => now()->addDays(7),
+            'expires_at' => now()->addDays(7),
             'challenge_type' => 'dns-01',
             'challenge_token' => 'chall-token',
             'acme_challenge_id' => 555,
@@ -322,14 +322,14 @@ class AcmeApiServiceTest extends TestCase
         $cert->update(['api_id' => 999, 'csr' => null, 'cert' => null]);
 
         // 创建已验证的授权（ACME 状态为 ready）
-        AcmeAuthorization::create([
+        Authorization::create([
             'cert_id' => $cert->id,
             'token' => 'finalize-token',
             'identifier_type' => 'dns',
             'identifier_value' => 'example.com',
             'wildcard' => false,
             'status' => 'valid',
-            'expires' => now()->addDays(7),
+            'expires_at' => now()->addDays(7),
             'challenge_type' => 'dns-01',
             'challenge_token' => 'chall-token',
             'acme_challenge_id' => 555,

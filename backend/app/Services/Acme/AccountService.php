@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Acme;
 
-use App\Models\Acme\AcmeAccount;
+use App\Models\Acme\Account;
 use App\Models\Order;
 use App\Models\User;
 
@@ -21,7 +21,7 @@ class AccountService
     {
         $keyId = $this->jwsService->computeKeyId($jwk);
 
-        $account = AcmeAccount::where('key_id', $keyId)->first();
+        $account = Account::where('key_id', $keyId)->first();
 
         if ($account) {
             return [
@@ -46,45 +46,53 @@ class AccountService
             ];
         }
 
-        // 从 Order 获取上游账户 ID
-        $acmeAccountId = $order->acme_account_id ?? null;
+        try {
+            $account = Account::create([
+                'user_id' => $user->id,
+                'order_id' => $order->id,
+                'key_id' => $keyId,
+                'public_key' => $jwk,
+                'contact' => $contact,
+                'status' => 'valid',
+            ]);
 
-        $account = AcmeAccount::create([
-            'user_id' => $user->id,
-            'order_id' => $order->id,
-            'acme_account_id' => $acmeAccountId,
-            'key_id' => $keyId,
-            'public_key' => $jwk,
-            'contact' => $contact,
-            'status' => 'valid',
-        ]);
-
-        return [
-            'account' => $account,
-            'created' => true,
-        ];
+            return [
+                'account' => $account,
+                'created' => true,
+            ];
+        } catch (\Illuminate\Database\QueryException $e) {
+            // M6: 竞态条件 — unique 约束冲突时 fallback 查询
+            $account = Account::where('key_id', $keyId)->first();
+            if ($account) {
+                return [
+                    'account' => $account,
+                    'created' => false,
+                ];
+            }
+            throw $e;
+        }
     }
 
     /**
      * 通过 key_id 查找账户
      */
-    public function findByKeyId(string $keyId): ?AcmeAccount
+    public function findByKeyId(string $keyId): ?Account
     {
-        return AcmeAccount::where('key_id', $keyId)->first();
+        return Account::where('key_id', $keyId)->first();
     }
 
     /**
      * 通过用户 ID 查找账户
      */
-    public function findByUserId(int $userId): ?AcmeAccount
+    public function findByUserId(int $userId): ?Account
     {
-        return AcmeAccount::where('user_id', $userId)->first();
+        return Account::where('user_id', $userId)->first();
     }
 
     /**
      * 更新账户联系方式
      */
-    public function updateContact(AcmeAccount $account, array $contact): AcmeAccount
+    public function updateContact(Account $account, array $contact): Account
     {
         $account->update(['contact' => $contact]);
 
@@ -94,7 +102,7 @@ class AccountService
     /**
      * 停用账户
      */
-    public function deactivate(AcmeAccount $account): AcmeAccount
+    public function deactivate(Account $account): Account
     {
         $account->update(['status' => 'deactivated']);
 
@@ -104,17 +112,15 @@ class AccountService
     /**
      * 生成账户 URL
      */
-    public function getAccountUrl(AcmeAccount $account): string
+    public function getAccountUrl(Account $account): string
     {
-        $baseUrl = rtrim(request()->getSchemeAndHttpHost(), '/');
-
-        return "$baseUrl/acme/acct/$account->key_id";
+        return url("/acme/acct/$account->key_id");
     }
 
     /**
      * 格式化账户响应
      */
-    public function formatResponse(AcmeAccount $account): array
+    public function formatResponse(Account $account): array
     {
         return [
             'status' => $account->status,
@@ -126,10 +132,8 @@ class AccountService
     /**
      * 生成订单列表 URL
      */
-    private function getOrdersUrl(AcmeAccount $account): string
+    private function getOrdersUrl(Account $account): string
     {
-        $baseUrl = rtrim(request()->getSchemeAndHttpHost(), '/');
-
-        return "$baseUrl/acme/acct/$account->key_id/orders";
+        return url("/acme/acct/$account->key_id/orders");
     }
 }

@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Services\Acme;
 
-use App\Models\Acme\AcmeAccount;
-use App\Models\Acme\AcmeAuthorization;
+use App\Models\Acme\Account;
+use App\Models\Acme\Authorization;
 use App\Models\Cert;
 use App\Models\Order;
 use App\Models\Transaction;
@@ -21,7 +21,7 @@ class OrderService
 {
     public function __construct(
         private BillingService $billingService,
-        private AcmeApiClient $apiClient,
+        private ApiClient $apiClient,
         private CnameDelegationService $cnameDelegationService,
         private DelegationDnsService $delegationDnsService
     ) {}
@@ -29,7 +29,7 @@ class OrderService
     /**
      * 创建 ACME 订单 — SAN 验证 + 获取真实 challenge
      */
-    public function create(AcmeAccount $account, array $identifiers): array
+    public function create(Account $account, array $identifiers): array
     {
         // 1. 查找有效 Order + Product + 当前 latestCert
         // 优先通过 order_id 精确定位，为空时回落到 user_id 查询（兼容旧数据）
@@ -79,86 +79,14 @@ class OrderService
             return ['error' => 'rejectedIdentifier', 'detail' => implode('; ', array_values($sanErrors))];
         }
 
-        // SAN 计数（gift_root_domain 仅影响计费）
-        $sans = OrderUtil::getSansFromDomains($domainsString, $product->gift_root_domain);
-        $standardCount = $sans['standard_count'];
-        $wildcardCount = $sans['wildcard_count'];
-
-        // 3. 判断是否复用已有 pending cert（无 api_id 表示上次失败未到达上游）
-        $canReuse = $currentLatestCert->status === 'pending'
-            && empty($currentLatestCert->api_id)
-            && empty($currentLatestCert->cert);
-
-        if ($canReuse) {
-            $cert = $currentLatestCert;
-        } else {
-            // 新建 cert，更新 order.latest_cert_id
-            $cert = Cert::create([
-                'order_id' => $order->id,
-                'last_cert_id' => $currentLatestCert->id,
-                'action' => 'reissue',
-                'channel' => 'acme',
-                'common_name' => $domains[0] ?? '',
-                'email' => $user->email,
-                'standard_count' => $standardCount,
-                'wildcard_count' => $wildcardCount,
-                'status' => 'pending',
-            ]);
-
-            $order->latest_cert_id = $cert->id;
-            $order->save();
+        // 3. prepareAndCharge：cert 复用/创建 + 扣费（事务内）
+        try {
+            $cert = $this->prepareAndCharge($order, $domains);
+        } catch (\Exception $e) {
+            return ['error' => 'orderNotReady', 'detail' => $e->getMessage()];
         }
 
-        // 4. 幂等扣费：通过 purchased count 判断是否需要增购
-        $needCharge = $standardCount > ($order->purchased_standard_count ?? 0)
-            || $wildcardCount > ($order->purchased_wildcard_count ?? 0);
-
-        if ($needCharge) {
-            try {
-                DB::transaction(function () use ($order, $cert, $product, $user, $standardCount, $wildcardCount) {
-                    // 更新 cert 的 SAN 数量以便计算金额
-                    $cert->update([
-                        'standard_count' => $standardCount,
-                        'wildcard_count' => $wildcardCount,
-                        'status' => 'unpaid',
-                    ]);
-
-                    $amount = OrderUtil::getLatestCertAmount($order->fresh(['latestCert'])->toArray());
-
-                    $cert->update(['amount' => $amount]);
-
-                    if (bccomp($amount, '0.00', 2) !== 0) {
-                        $transaction = OrderUtil::getOrderTransaction($order->fresh(['latestCert'])->toArray());
-
-                        $balanceAfter = bcadd((string) $user->balance, (string) $transaction['amount'], 2);
-                        if (bccomp($balanceAfter, (string) ($user->credit_limit ?? '0'), 2) === -1) {
-                            throw new \Exception('Insufficient balance for additional SANs');
-                        }
-
-                        Transaction::create($transaction);
-                    }
-
-                    // 扣费成功，立即更新 purchased 计数
-                    $order->purchased_standard_count = max(
-                        $order->purchased_standard_count ?? 0,
-                        $standardCount,
-                        $product->standard_min
-                    );
-                    $order->purchased_wildcard_count = max(
-                        $order->purchased_wildcard_count ?? 0,
-                        $wildcardCount,
-                        $product->wildcard_min
-                    );
-                    $order->save();
-
-                    $cert->update(['status' => 'pending']);
-                });
-            } catch (\Exception $e) {
-                return ['error' => 'orderNotReady', 'detail' => $e->getMessage()];
-            }
-        }
-
-        // 5. 调用上游 API
+        // 4. 调用上游 API
         if ($this->apiClient->isConfigured()) {
             $acmeAccountId = $account->acme_account_id;
 
@@ -178,61 +106,35 @@ class OrderService
                 }
             }
 
-            $apiResult = $this->apiClient->createOrder(
-                $acmeAccountId,
-                $domains,
-                (string) $product->api_id
-            );
+            $upstreamResult = $this->submitToUpstream($cert, $domains, $order, $acmeAccountId);
 
-            if ($apiResult['code'] !== 1) {
-                // 失败 → cert 无 api_id，下次重试步骤 3 会复用它
-                return ['error' => 'serverInternal', 'detail' => $apiResult['msg'] ?? 'Upstream order creation failed'];
+            if (isset($upstreamResult['error'])) {
+                return ['error' => 'serverInternal', 'detail' => $upstreamResult['error']];
             }
 
-            $apiData = $apiResult['data'];
-
-            // 6. 成功 → 更新 cert（api_id、域名）
-            $cert->update([
-                'common_name' => $domains[0] ?? '',
-                'alternative_names' => $domainsString,
-                'standard_count' => $standardCount,
-                'wildcard_count' => $wildcardCount,
-                'api_id' => $apiData['id'],
-            ]);
-
-            // 7. 创建 AcmeAuthorizations
-            if (isset($apiData['authorizations'])) {
-                foreach ($apiData['authorizations'] as $authzData) {
-                    $identifier = $authzData['identifier'] ?? [];
-                    $challenge = $authzData['challenges'][0] ?? [];
-
-                    AcmeAuthorization::create([
-                        'cert_id' => $cert->id,
-                        'token' => Str::random(32),
-                        'identifier_type' => $identifier['type'] ?? 'dns',
-                        'identifier_value' => $identifier['value'] ?? '',
-                        'wildcard' => str_starts_with($identifier['value'] ?? '', '*.'),
-                        'status' => $authzData['status'] ?? 'pending',
-                        'expires' => now()->addDays(7),
-                        'challenge_type' => $challenge['type'] ?? 'dns-01',
-                        'challenge_token' => $challenge['token'] ?? '',
-                        'acme_challenge_id' => $challenge['id'] ?? null,
-                        'key_authorization' => $challenge['key_authorization'] ?? null,
-                        'challenge_status' => $challenge['status'] ?? 'pending',
-                    ]);
-                }
-            }
-
-            // 8. 委托写 TXT（best-effort）
-            $this->writeDelegationTxtForAuthorizations($cert->fresh('acmeAuthorizations'));
-
-            // 9. 生成标准 dcv/validation 数据
-            $this->populateDcvAndValidation($cert->fresh('acmeAuthorizations'));
+            $cert = $upstreamResult['cert'];
         } else {
             return ['error' => 'serverInternal', 'detail' => 'Upstream gateway not configured'];
         }
 
-        return ['order' => $cert->fresh('acmeAuthorizations')];
+        return ['order' => $cert];
+    }
+
+    /**
+     * 验证资源归属：cert 所属 order 的 user_id 是否与 account 的 user_id 一致
+     */
+    public function verifyOwnership(Cert $cert, ?Account $account): bool
+    {
+        if (! $account) {
+            return false;
+        }
+
+        $order = $cert->order;
+        if (! $order) {
+            return false;
+        }
+
+        return $order->user_id === $account->user_id;
     }
 
     /**
@@ -249,15 +151,15 @@ class OrderService
     /**
      * 获取授权
      */
-    public function getAuthorization(string $token): ?AcmeAuthorization
+    public function getAuthorization(string $token): ?Authorization
     {
-        return AcmeAuthorization::where('token', $token)->first();
+        return Authorization::where('token', $token)->first();
     }
 
     /**
      * 响应验证挑战 — 调用连接服务验证
      */
-    public function respondToChallenge(AcmeAuthorization $authorization): array
+    public function respondToChallenge(Authorization $authorization): array
     {
         if ($this->apiClient->isConfigured() && $authorization->acme_challenge_id) {
             try {
@@ -322,6 +224,34 @@ class OrderService
             .chunk_split(base64_encode($csrDer), 64, "\n")
             .'-----END CERTIFICATE REQUEST-----';
 
+        // CSR 域名验证：CSR 中的域名必须是已授权域名的子集
+        // RFC 8555: wildcard authz 的 identifier 不带 *. 前缀，CSR 中带 *.
+        $csrDomains = $this->extractDomainsFromCsr($csrPem);
+        $authorizations = $cert->acmeAuthorizations;
+
+        foreach ($csrDomains as $csrDomain) {
+            $csrLower = strtolower($csrDomain);
+            $authorized = $authorizations->contains(function ($auth) use ($csrLower) {
+                $authDomain = strtolower($auth->identifier_value);
+                if ($csrLower === $authDomain) {
+                    return true;
+                }
+                // *.example.com 匹配 authz identifier example.com
+                if (str_starts_with($csrLower, '*.') && substr($csrLower, 2) === $authDomain) {
+                    return true;
+                }
+
+                return false;
+            });
+
+            if (! $authorized) {
+                return [
+                    'error' => 'badCSR',
+                    'detail' => "CSR contains unauthorized domain: $csrDomain",
+                ];
+            }
+        }
+
         if (! $this->apiClient->isConfigured() || ! $cert->api_id) {
             return ['error' => 'serverInternal', 'detail' => 'Upstream gateway not configured or no api_id'];
         }
@@ -331,15 +261,20 @@ class OrderService
 
         if ($finalizeResult['code'] !== 1) {
             $msg = $finalizeResult['msg'] ?? 'Upstream finalization failed';
+            $retryable = $finalizeResult['retryable'] ?? false;
 
-            // badCSR 不标记为 failed
-            if (! str_contains($msg, 'badCSR')) {
+            // 上游标记 retryable 的错误（badCSR 等）不改状态，允许重试
+            if (! $retryable) {
                 $cert->update(['status' => 'failed']);
             }
 
             $errorType = str_contains($msg, 'badCSR') ? 'badCSR' : 'serverInternal';
+            $result = ['error' => $errorType, 'detail' => $msg];
+            if ($retryable) {
+                $result['retryable'] = true;
+            }
 
-            return ['error' => $errorType, 'detail' => $msg];
+            return $result;
         }
 
         // Gateway 返回 processing 表示 CA 仍在处理中
@@ -367,12 +302,25 @@ class OrderService
     /**
      * 保存上游返回的证书数据到 cert
      */
-    private function saveCertificateFromUpstream(Cert $cert, string $csrPem, array $certData): void
+    public function saveCertificateFromUpstream(Cert $cert, string $csrPem, array $certData): void
     {
         $certificate = $certData['certificate'] ?? '';
         $chain = $certData['chain'] ?? '';
 
+        // M8: 空证书防御
+        if (empty($certificate)) {
+            Log::warning('saveCertificateFromUpstream: empty certificate', ['cert_id' => $cert->id]);
+
+            return;
+        }
+
         $certParsed = openssl_x509_parse($certificate);
+
+        if ($certParsed === false) {
+            Log::warning('saveCertificateFromUpstream: failed to parse certificate', ['cert_id' => $cert->id]);
+
+            return;
+        }
         $serialNumber = $certParsed['serialNumberHex'] ?? null;
         $issuerCn = $certParsed['issuer']['CN'] ?? null;
 
@@ -386,7 +334,7 @@ class OrderService
         $encryption = $certParsed['signatureTypeSN'] ?? '';
         $encryption = explode('-', $encryption);
         $pubKeyId = openssl_pkey_get_public($certificate);
-        $keyDetails = openssl_pkey_get_details($pubKeyId);
+        $keyDetails = $pubKeyId ? openssl_pkey_get_details($pubKeyId) : false;
 
         $cert->csr = $csrPem;
         $cert->csr_md5 = md5($csrPem);
@@ -466,9 +414,7 @@ class OrderService
      */
     public function getOrderUrl(Cert $cert): string
     {
-        $baseUrl = rtrim(request()->getSchemeAndHttpHost(), '/');
-
-        return "$baseUrl/acme/order/$cert->refer_id";
+        return url("/acme/order/$cert->refer_id");
     }
 
     /**
@@ -476,9 +422,7 @@ class OrderService
      */
     public function getFinalizeUrl(Cert $cert): string
     {
-        $baseUrl = rtrim(request()->getSchemeAndHttpHost(), '/');
-
-        return "$baseUrl/acme/order/$cert->refer_id/finalize";
+        return url("/acme/order/$cert->refer_id/finalize");
     }
 
     /**
@@ -486,29 +430,23 @@ class OrderService
      */
     public function getCertificateUrl(Cert $cert): string
     {
-        $baseUrl = rtrim(request()->getSchemeAndHttpHost(), '/');
-
-        return "$baseUrl/acme/cert/$cert->refer_id";
+        return url("/acme/cert/$cert->refer_id");
     }
 
     /**
      * 生成授权 URL
      */
-    public function getAuthorizationUrl(AcmeAuthorization $authorization): string
+    public function getAuthorizationUrl(Authorization $authorization): string
     {
-        $baseUrl = rtrim(request()->getSchemeAndHttpHost(), '/');
-
-        return "$baseUrl/acme/authz/$authorization->token";
+        return url("/acme/authz/$authorization->token");
     }
 
     /**
      * 生成挑战 URL
      */
-    public function getChallengeUrl(AcmeAuthorization $authorization): string
+    public function getChallengeUrl(Authorization $authorization): string
     {
-        $baseUrl = rtrim(request()->getSchemeAndHttpHost(), '/');
-
-        return "$baseUrl/acme/chall/$authorization->token";
+        return url("/acme/chall/$authorization->token");
     }
 
     /**
@@ -547,7 +485,7 @@ class OrderService
     /**
      * 格式化授权响应
      */
-    public function formatAuthorizationResponse(AcmeAuthorization $authorization): array
+    public function formatAuthorizationResponse(Authorization $authorization): array
     {
         return [
             'identifier' => [
@@ -571,7 +509,7 @@ class OrderService
     /**
      * 格式化挑战响应
      */
-    public function formatChallengeResponse(AcmeAuthorization $authorization): array
+    public function formatChallengeResponse(Authorization $authorization): array
     {
         $response = [
             'type' => $authorization->challenge_type,
@@ -719,6 +657,205 @@ class OrderService
     public function acmeUpdateDCV(Cert $cert, ?string $method = null): void
     {
         $this->populateDcvAndValidation($cert, $method);
+    }
+
+    /**
+     * 事务内完成 cert 复用/创建 + 扣费
+     * 返回 ['cert' => Cert] 或抛出异常
+     */
+    public function prepareAndCharge(Order $order, array $domains): Cert
+    {
+        $product = $order->product;
+        $user = $order->user;
+        $currentLatestCert = $order->latestCert;
+
+        if (! $currentLatestCert || ! $product) {
+            throw new \Exception('Order has no valid cert or product');
+        }
+
+        $domainsString = implode(',', $domains);
+        $sans = OrderUtil::getSansFromDomains($domainsString, $product->gift_root_domain);
+        $standardCount = $sans['standard_count'];
+        $wildcardCount = $sans['wildcard_count'];
+
+        // 清理 stuck cert
+        if ($currentLatestCert->status === 'processing' && empty($currentLatestCert->cert)) {
+            $currentLatestCert->update(['status' => 'failed']);
+            $currentLatestCert->refresh();
+        }
+
+        return DB::transaction(function () use ($order, $currentLatestCert, $product, $user, $domains, $standardCount, $wildcardCount) {
+            $order = Order::lockForUpdate()->find($order->id);
+
+            $hasIssuedCert = Cert::where('order_id', $order->id)
+                ->whereNotNull('cert')
+                ->where('cert', '!=', '')
+                ->exists();
+            $isFirstOrder = ! $hasIssuedCert;
+
+            if (! $isFirstOrder && ! $product->reissue) {
+                throw new \Exception('Product does not support reissue');
+            }
+
+            $canReuse = $currentLatestCert->status === 'pending'
+                && empty($currentLatestCert->api_id)
+                && empty($currentLatestCert->cert);
+
+            if ($canReuse) {
+                $cert = $currentLatestCert;
+                $cert->acmeAuthorizations()->delete();
+
+                $action = $isFirstOrder ? 'new' : 'reissue';
+                if ($cert->action !== $action) {
+                    $cert->update(['action' => $action]);
+                }
+            } else {
+                $action = $isFirstOrder ? 'new' : 'reissue';
+
+                $cert = Cert::create([
+                    'order_id' => $order->id,
+                    'last_cert_id' => $currentLatestCert->id,
+                    'action' => $action,
+                    'channel' => 'acme',
+                    'common_name' => $domains[0] ?? '',
+                    'email' => $user->email,
+                    'standard_count' => $standardCount,
+                    'wildcard_count' => $wildcardCount,
+                    'status' => 'pending',
+                ]);
+
+                $order->latest_cert_id = $cert->id;
+                $order->save();
+            }
+
+            // 幂等扣费
+            $needCharge = $standardCount > ($order->purchased_standard_count ?? 0)
+                || $wildcardCount > ($order->purchased_wildcard_count ?? 0);
+
+            if ($needCharge) {
+                $cert->update([
+                    'standard_count' => $standardCount,
+                    'wildcard_count' => $wildcardCount,
+                    'status' => 'unpaid',
+                ]);
+
+                $amount = OrderUtil::getLatestCertAmount($order->fresh(['latestCert'])->toArray());
+                $cert->update(['amount' => $amount]);
+
+                if (bccomp($amount, '0.00', 2) !== 0) {
+                    $transaction = OrderUtil::getOrderTransaction($order->fresh(['latestCert'])->toArray());
+
+                    $balanceAfter = bcadd((string) $user->balance, (string) $transaction['amount'], 2);
+                    if (bccomp($balanceAfter, (string) ($user->credit_limit ?? '0'), 2) === -1) {
+                        throw new \Exception('Insufficient balance for additional SANs');
+                    }
+
+                    Transaction::create($transaction);
+                }
+
+                $order->purchased_standard_count = max(
+                    $order->purchased_standard_count ?? 0,
+                    $standardCount,
+                    $product->standard_min
+                );
+                $order->purchased_wildcard_count = max(
+                    $order->purchased_wildcard_count ?? 0,
+                    $wildcardCount,
+                    $product->wildcard_min
+                );
+                $order->save();
+
+                $cert->update(['status' => 'pending']);
+            }
+
+            return $cert;
+        });
+    }
+
+    /**
+     * 调上游 + 创建 authorization
+     * 返回 Cert（已更新）或 null（失败，错误信息在 $error 中）
+     */
+    public function submitToUpstream(Cert $cert, array $domains, Order $order, ?int $acmeAccountId): array
+    {
+        $domainsString = implode(',', $domains);
+        $sans = OrderUtil::getSansFromDomains($domainsString, $order->product->gift_root_domain ?? false);
+
+        $apiResult = $this->apiClient->createOrder(
+            $acmeAccountId,
+            $domains,
+            (string) $order->product->api_id
+        );
+
+        if ($apiResult['code'] !== 1) {
+            return ['error' => $apiResult['msg'] ?? 'Upstream order creation failed'];
+        }
+
+        $apiData = $apiResult['data'];
+
+        $cert->update([
+            'common_name' => $domains[0] ?? '',
+            'alternative_names' => $domainsString,
+            'standard_count' => $sans['standard_count'],
+            'wildcard_count' => $sans['wildcard_count'],
+            'api_id' => $apiData['id'],
+            'status' => 'processing',
+        ]);
+
+        if (isset($apiData['authorizations'])) {
+            foreach ($apiData['authorizations'] as $authzData) {
+                $identifier = $authzData['identifier'] ?? [];
+                $challenge = $authzData['challenges'][0] ?? [];
+
+                Authorization::create([
+                    'cert_id' => $cert->id,
+                    'token' => Str::random(32),
+                    'identifier_type' => $identifier['type'] ?? 'dns',
+                    'identifier_value' => $identifier['value'] ?? '',
+                    'wildcard' => str_starts_with($identifier['value'] ?? '', '*.') || in_array('*.'.($identifier['value'] ?? ''), $domains),
+                    'status' => $authzData['status'] ?? 'pending',
+                    'expires_at' => now()->addDays(7),
+                    'challenge_type' => $challenge['type'] ?? 'dns-01',
+                    'challenge_token' => $challenge['token'] ?? '',
+                    'acme_challenge_id' => $challenge['id'] ?? null,
+                    'key_authorization' => $challenge['key_authorization'] ?? null,
+                    'challenge_status' => $challenge['status'] ?? 'pending',
+                ]);
+            }
+        }
+
+        $this->writeDelegationTxtForAuthorizations($cert->fresh('acmeAuthorizations'));
+        $this->populateDcvAndValidation($cert->fresh('acmeAuthorizations'));
+
+        return ['cert' => $cert->fresh('acmeAuthorizations')];
+    }
+
+    /**
+     * 从 CSR PEM 中提取域名（CN + SAN DNS 条目）
+     */
+    private function extractDomainsFromCsr(string $csrPem): array
+    {
+        $domains = [];
+
+        $output = [];
+        exec('echo '.escapeshellarg($csrPem).' | openssl req -noout -text 2>/dev/null', $output);
+        $text = implode("\n", $output);
+
+        // 提取 CN
+        if (preg_match('/Subject:.*?CN\s*=\s*([^\s,\/]+)/', $text, $matches)) {
+            $domains[] = $matches[1];
+        }
+
+        // 提取 SAN DNS 条目
+        if (preg_match('/DNS:([^\n]+)/', $text, $matches)) {
+            $sanLine = $matches[0];
+            preg_match_all('/DNS:([^\s,]+)/', $sanLine, $dnsMatches);
+            if (! empty($dnsMatches[1])) {
+                $domains = array_merge($domains, $dnsMatches[1]);
+            }
+        }
+
+        return array_unique(array_map('strtolower', $domains));
     }
 
     /**

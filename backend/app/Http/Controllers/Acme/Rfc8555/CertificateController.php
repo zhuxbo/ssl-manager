@@ -4,7 +4,8 @@ namespace App\Http\Controllers\Acme\Rfc8555;
 
 use App\Http\Controllers\Controller;
 use App\Models\Cert;
-use App\Services\Acme\AcmeApiClient;
+use App\Services\Acme\ApiClient;
+use App\Services\Acme\JwsService;
 use App\Services\Acme\NonceService;
 use App\Services\Acme\OrderService;
 use Illuminate\Http\JsonResponse;
@@ -16,7 +17,8 @@ class CertificateController extends Controller
     public function __construct(
         private OrderService $orderService,
         private NonceService $nonceService,
-        private AcmeApiClient $apiClient
+        private ApiClient $apiClient,
+        private JwsService $jwsService
     ) {}
 
     /**
@@ -28,11 +30,24 @@ class CertificateController extends Controller
         $cert = $this->orderService->get($referId);
 
         if (! $cert) {
-            return $this->acmeError('malformed', 'Certificate not found', 404);
+            return $this->acmeError('about:blank', 'Certificate not found', 404);
+        }
+
+        // POST 请求有 JWS 认证，验证归属；GET 请求依赖 referId 不可猜测性
+        $account = $request->attributes->get('acme_account');
+        if ($request->isMethod('POST') && ! $this->orderService->verifyOwnership($cert, $account)) {
+            return $this->acmeError('unauthorized', 'Certificate does not belong to this account', 403);
         }
 
         if (! $cert->cert) {
-            return $this->acmeError('orderNotReady', 'Certificate not ready', 403);
+            // processing 状态且有 CSR，尝试从上游获取证书
+            if ($cert->csr && $this->orderService->tryCompletePendingFinalize($cert)) {
+                $cert->refresh();
+            }
+
+            if (! $cert->cert) {
+                return $this->acmeError('orderNotReady', 'Certificate not ready', 403);
+            }
         }
 
         $nonce = $this->nonceService->generate();
@@ -53,7 +68,7 @@ class CertificateController extends Controller
      * POST /acme/revoke-cert
      * 吊销证书
      */
-    public function revokeCertificate(Request $request): JsonResponse
+    public function revokeCertificate(Request $request): Response|JsonResponse
     {
         $jws = $request->attributes->get('acme_jws');
         $payload = $jws['payload'];
@@ -84,7 +99,38 @@ class CertificateController extends Controller
             ->first();
 
         if (! $cert) {
-            return $this->acmeError('malformed', 'Certificate not found', 404);
+            return $this->acmeError('about:blank', 'Certificate not found', 404);
+        }
+
+        // 验证证书归属
+        $account = $request->attributes->get('acme_account');
+        if ($account) {
+            // KID 模式：校验账户归属
+            if ($cert->order && $cert->order->user_id !== $account->user_id) {
+                return $this->acmeError('unauthorized', 'Certificate does not belong to this account', 403);
+            }
+        } else {
+            // JWK 模式：比对 JWK 公钥与证书公钥
+            $jwk = $request->attributes->get('acme_jwk');
+            if ($jwk) {
+                $jwkPem = $this->jwsService->jwkToPem($jwk);
+                if (! $jwkPem) {
+                    return $this->acmeError('unauthorized', 'Invalid JWK', 403);
+                }
+
+                $certPubKey = openssl_pkey_get_public($certPem);
+                if (! $certPubKey) {
+                    return $this->acmeError('unauthorized', 'Cannot extract public key from certificate', 403);
+                }
+
+                $certPubKeyDetails = openssl_pkey_get_details($certPubKey);
+                $jwkPubKey = openssl_pkey_get_public($jwkPem);
+                $jwkPubKeyDetails = $jwkPubKey ? openssl_pkey_get_details($jwkPubKey) : null;
+
+                if (! $jwkPubKeyDetails || ($certPubKeyDetails['key'] ?? '') !== ($jwkPubKeyDetails['key'] ?? '')) {
+                    return $this->acmeError('unauthorized', 'JWK does not match certificate public key', 403);
+                }
+            }
         }
 
         // 调用连接的 ACME 服务吊销
@@ -92,7 +138,11 @@ class CertificateController extends Controller
             $result = $this->apiClient->revokeCertificate($cert->serial_number);
 
             if ($result['code'] !== 1) {
-                return $this->acmeError('serverInternal', $result['msg'] ?? 'Revocation failed', 500);
+                $msg = $result['msg'] ?? 'Revocation failed';
+                // "already revoked" 视为成功
+                if (! str_contains(strtolower($msg), 'already revoked')) {
+                    return $this->acmeError('serverInternal', $msg, 500);
+                }
             }
         }
 
@@ -101,7 +151,7 @@ class CertificateController extends Controller
 
         $nonce = $this->nonceService->generate();
 
-        return response()->json(null, 200, [
+        return response('', 200, [
             'Replay-Nonce' => $nonce,
         ]);
     }
@@ -114,7 +164,7 @@ class CertificateController extends Controller
         $nonce = $this->nonceService->generate();
 
         return response()->json([
-            'type' => "urn:ietf:params:acme:error:$type",
+            'type' => $type === 'about:blank' ? 'about:blank' : "urn:ietf:params:acme:error:$type",
             'detail' => $detail,
             'status' => $status,
         ], $status, [

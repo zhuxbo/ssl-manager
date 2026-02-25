@@ -4,13 +4,11 @@ declare(strict_types=1);
 
 namespace App\Services\Acme;
 
-use App\Models\Acme\AcmeAccount;
+use App\Models\Acme\Account;
 use App\Models\Cert;
 use App\Models\Order;
 use App\Models\Product;
-use App\Models\Transaction;
 use App\Models\User;
-use App\Services\Order\Utils\OrderUtil;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -18,13 +16,13 @@ use Illuminate\Support\Str;
 class BillingService
 {
     public function __construct(
-        private AcmeApiClient $apiClient
+        private ApiClient $apiClient
     ) {}
 
     /**
      * 检查用户是否可以签发证书
      */
-    public function canIssueCertificate(AcmeAccount $account): array
+    public function canIssueCertificate(Account $account): array
     {
         $user = $account->user;
 
@@ -112,16 +110,27 @@ class BillingService
             return ['code' => 0, 'msg' => '请先设置用户邮箱，ACME 账户注册需要邮箱地址'];
         }
 
-        // 预检余额
-        $minPrice = OrderUtil::getMinPrice($user->id, $product->id, $period);
+        // 幂等检查：查找用户已有的同产品有效 ACME 订单
+        $existingOrder = Order::where('user_id', $user->id)
+            ->where('product_id', $product->id)
+            ->where('period_till', '>', now())
+            ->whereNull('cancelled_at')
+            ->whereNotNull('eab_kid')
+            ->lockForUpdate()
+            ->first();
 
-        if (empty($minPrice['price'])) {
-            return ['code' => 0, 'msg' => '该产品暂无可用价格'];
-        }
+        if ($existingOrder) {
+            $serverUrl = rtrim(get_system_setting('site', 'url', config('app.url')), '/').'/acme/directory';
 
-        $balanceAfter = bcsub((string) $user->balance, $minPrice['price'], 2);
-        if (bccomp($balanceAfter, (string) ($user->credit_limit ?? '0'), 2) === -1) {
-            return ['code' => 0, 'msg' => '余额不足'];
+            return [
+                'code' => 1,
+                'data' => [
+                    'order' => $existingOrder,
+                    'eab_kid' => $existingOrder->eab_kid,
+                    'eab_hmac' => $existingOrder->eab_hmac,
+                    'server_url' => $serverUrl,
+                ],
+            ];
         }
 
         try {
@@ -145,44 +154,15 @@ class BillingService
                     'email' => $user->email,
                     'standard_count' => $product->standard_min,
                     'wildcard_count' => $product->wildcard_min,
-                    'status' => 'unpaid',
+                    'amount' => '0.00',
+                    'status' => 'pending',
                 ]);
 
                 $order->latest_cert_id = $cert->id;
+                $order->amount = '0.00';
+                $order->purchased_standard_count = 0;
+                $order->purchased_wildcard_count = 0;
                 $order->save();
-
-                $amount = OrderUtil::getLatestCertAmount($order->toArray(), $cert->toArray(), $product->toArray());
-
-                $cert->amount = $amount;
-                $cert->save();
-
-                $order->amount = $amount;
-                $order->save();
-
-                if (bccomp($amount, '0.00', 2) !== 0) {
-                    $transaction = OrderUtil::getOrderTransaction($order->fresh(['latestCert'])->toArray());
-
-                    $balanceAfter = bcadd((string) $user->balance, (string) $transaction['amount'], 2);
-                    if (bccomp($balanceAfter, (string) ($user->credit_limit ?? '0'), 2) === -1) {
-                        throw new \Exception('余额不足');
-                    }
-
-                    Transaction::create($transaction);
-                }
-
-                $order->purchased_standard_count = max(
-                    $order->purchased_standard_count ?? 0,
-                    $cert->standard_count,
-                    $product->standard_min
-                );
-                $order->purchased_wildcard_count = max(
-                    $order->purchased_wildcard_count ?? 0,
-                    $cert->wildcard_count,
-                    $product->wildcard_min
-                );
-                $order->save();
-
-                $cert->update(['status' => 'pending']);
 
                 $order->eab_kid = Str::uuid()->toString();
                 $order->eab_hmac = rtrim(strtr(base64_encode(random_bytes(32)), '+/', '-_'), '=');
@@ -244,23 +224,22 @@ class BillingService
 
         $period = $lastOrder->period;
 
-        // 使用标准价格获取方法
-        $minPrice = OrderUtil::getMinPrice($user->id, $product->id, $period);
-
-        if (empty($minPrice['price'])) {
-            return ['code' => 0, 'msg' => 'Price not available'];
-        }
-
-        $price = $minPrice['price'];
-
-        // 检查用户余额
-        $balanceAfter = bcsub((string) $user->balance, $price, 2);
-        if (bccomp($balanceAfter, (string) ($user->credit_limit ?? '0'), 2) === -1) {
-            return ['code' => 0, 'msg' => 'Insufficient balance'];
-        }
-
         try {
             $newOrder = DB::transaction(function () use ($user, $product, $period, $lastOrder) {
+                // M7: 锁定 lastOrder 防止并发续费
+                $locked = Order::where('id', $lastOrder->id)->lockForUpdate()->first();
+
+                // 检查是否已有新续费 Order（period_till > lastOrder.period_till）
+                $existingRenewal = Order::where('user_id', $user->id)
+                    ->whereHas('product', fn ($q) => $q->where('support_acme', 1))
+                    ->where('period_till', '>', $locked->period_till)
+                    ->whereNull('cancelled_at')
+                    ->first();
+
+                if ($existingRenewal) {
+                    return $existingRenewal;
+                }
+
                 // 创建 Order
                 $order = Order::create([
                     'user_id' => $user->id,
@@ -282,49 +261,23 @@ class BillingService
                     'email' => $user->email,
                     'standard_count' => $product->standard_min,
                     'wildcard_count' => $product->wildcard_min,
-                    'status' => 'unpaid',
+                    'amount' => '0.00',
+                    'status' => 'pending',
                 ]);
 
                 $order->latest_cert_id = $cert->id;
+                $order->amount = '0.00';
+                $order->purchased_standard_count = 0;
+                $order->purchased_wildcard_count = 0;
                 $order->save();
-
-                // 计算金额
-                $amount = OrderUtil::getLatestCertAmount($order->toArray(), $cert->toArray(), $product->toArray());
-
-                $cert->amount = $amount;
-                $cert->save();
-
-                $order->amount = $amount;
-                $order->save();
-
-                // 标准扣费
-                if (bccomp($amount, '0.00', 2) !== 0) {
-                    $transaction = OrderUtil::getOrderTransaction($order->fresh(['latestCert'])->toArray());
-                    Transaction::create($transaction);
-                }
-
-                // 更新已购域名数量
-                $order->purchased_standard_count = max(
-                    $order->purchased_standard_count ?? 0,
-                    $cert->standard_count,
-                    $product->standard_min
-                );
-                $order->purchased_wildcard_count = max(
-                    $order->purchased_wildcard_count ?? 0,
-                    $cert->wildcard_count,
-                    $product->wildcard_min
-                );
-                $order->save();
-
-                $cert->update(['status' => 'pending']);
 
                 // 生成 EAB
                 $order->eab_kid = Str::uuid()->toString();
                 $order->eab_hmac = rtrim(strtr(base64_encode(random_bytes(32)), '+/', '-_'), '=');
                 $order->save();
 
-                // 迁移 AcmeAccount 关联到新 Order
-                AcmeAccount::where('order_id', $lastOrder->id)
+                // 迁移 Account 关联到新 Order
+                Account::where('order_id', $lastOrder->id)
                     ->update(['order_id' => $order->id]);
 
                 return $order;

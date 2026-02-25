@@ -2,7 +2,7 @@
 
 namespace App\Models;
 
-use App\Models\Acme\AcmeAuthorization;
+use App\Models\Acme\Authorization;
 use App\Models\Traits\HasSnowflakeId;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -119,7 +119,7 @@ class Cert extends BaseModel
      */
     public function acmeAuthorizations(): HasMany
     {
-        return $this->hasMany(AcmeAuthorization::class, 'cert_id');
+        return $this->hasMany(Authorization::class, 'cert_id');
     }
 
     /**

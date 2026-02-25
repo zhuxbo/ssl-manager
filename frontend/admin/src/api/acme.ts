@@ -6,10 +6,10 @@ export function createOrder(data: {
   product_id: number;
   period: number;
 }): Promise<BaseResponse> {
-  return http.post<BaseResponse<null>, any>("/acme/order", { data });
+  return http.post<BaseResponse, any>("/acme/order", { data });
 }
 
 /** 获取订单 EAB 信息 */
 export function getEab(orderId: number): Promise<BaseResponse> {
-  return http.get<BaseResponse<null>, any>(`/acme/eab/${orderId}`);
+  return http.get<BaseResponse, any>(`/acme/eab/${orderId}`);
 }

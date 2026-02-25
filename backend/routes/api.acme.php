@@ -19,6 +19,7 @@ Route::prefix('acme')->middleware('api.v2')->group(function () {
     // 订单管理
     Route::post('orders', [AcmeApiController::class, 'createOrder']);
     Route::get('orders/{id}', [AcmeApiController::class, 'getOrder']);
+    Route::delete('orders/{id}', [AcmeApiController::class, 'cancelOrder']);
     Route::get('orders/{id}/authorizations', [AcmeApiController::class, 'getOrderAuthorizations']);
     Route::post('orders/{id}/finalize', [AcmeApiController::class, 'finalizeOrder']);
     Route::get('orders/{id}/certificate', [AcmeApiController::class, 'getCertificate']);

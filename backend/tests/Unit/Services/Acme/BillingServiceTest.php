@@ -2,7 +2,7 @@
 
 namespace Tests\Unit\Services\Acme;
 
-use App\Models\Acme\AcmeAccount;
+use App\Models\Acme\Account;
 use App\Models\Order;
 use App\Models\ProductPrice;
 use App\Models\Transaction;
@@ -42,7 +42,7 @@ class BillingServiceTest extends TestCase
         ]);
         $this->createTestCert($order, ['channel' => 'acme']);
 
-        $account = AcmeAccount::create([
+        $account = Account::create([
             'user_id' => $user->id,
             'key_id' => 'test_key_'.uniqid(),
             'public_key' => ['kty' => 'RSA'],
@@ -65,7 +65,7 @@ class BillingServiceTest extends TestCase
         ]);
         $this->createTestCert($order, ['channel' => 'acme']);
 
-        $account = AcmeAccount::create([
+        $account = Account::create([
             'user_id' => $user->id,
             'key_id' => 'test_key_'.uniqid(),
             'public_key' => ['kty' => 'RSA'],

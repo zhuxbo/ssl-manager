@@ -8,7 +8,7 @@ use App\Models\CaLog;
 use App\Services\LogBuffer;
 use Illuminate\Support\Facades\Http;
 
-class AcmeApiClient
+class ApiClient
 {
     private string $baseUrl;
 
@@ -111,6 +111,14 @@ class AcmeApiClient
     public function getCertificate(int $orderId): array
     {
         return $this->request('GET', "/orders/$orderId/certificate");
+    }
+
+    /**
+     * 取消订单
+     */
+    public function cancelOrder(int $orderId): array
+    {
+        return $this->request('DELETE', "/orders/$orderId");
     }
 
     /**

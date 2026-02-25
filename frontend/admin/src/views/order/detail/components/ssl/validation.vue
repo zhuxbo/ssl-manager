@@ -212,7 +212,7 @@
         "
       />
       <el-button
-        :disable="
+        :disabled="
           !['unpaid', 'pending', 'processing'].includes(cert.status) ||
           allVerified
         "
@@ -237,7 +237,7 @@
             'webmaster'
           ].includes(cert.dcv?.['method'])
         "
-        :disable="allVerified"
+        :disabled="allVerified"
         type="primary"
         style="margin-left: 16px"
         @click="revalidate()"

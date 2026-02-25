@@ -2,11 +2,11 @@
 
 namespace Tests\Unit\Services\Acme;
 
-use App\Models\Acme\AcmeAccount;
-use App\Models\Acme\AcmeAuthorization;
+use App\Models\Acme\Account;
+use App\Models\Acme\Authorization;
 use App\Models\Cert;
 use App\Models\ProductPrice;
-use App\Services\Acme\AcmeApiClient;
+use App\Services\Acme\ApiClient;
 use App\Services\Acme\BillingService;
 use App\Services\Acme\OrderService;
 use App\Services\Delegation\CnameDelegationService;
@@ -42,7 +42,7 @@ class OrderServiceTest extends TestCase
     {
         parent::setUp();
 
-        $this->mockApiClient = Mockery::mock(AcmeApiClient::class);
+        $this->mockApiClient = Mockery::mock(ApiClient::class);
         $this->mockApiClient->shouldReceive('isConfigured')->andReturn(true)->byDefault();
 
         $this->mockCnameDelegationService = Mockery::mock(CnameDelegationService::class);
@@ -81,7 +81,7 @@ class OrderServiceTest extends TestCase
         ]);
         $cert = $this->createTestCert($order, ['channel' => 'acme']);
 
-        $account = AcmeAccount::create([
+        $account = Account::create([
             'user_id' => $user->id,
             'key_id' => 'test_key_'.uniqid(),
             'public_key' => ['kty' => 'RSA'],
@@ -125,7 +125,7 @@ class OrderServiceTest extends TestCase
             'api_id' => 100,
         ]);
 
-        $account = AcmeAccount::create([
+        $account = Account::create([
             'user_id' => $user->id,
             'key_id' => 'test_key_'.uniqid(),
             'public_key' => ['kty' => 'RSA'],
@@ -195,7 +195,7 @@ class OrderServiceTest extends TestCase
         ]);
         $cert = $this->createTestCert($order, ['channel' => 'acme']);
 
-        $account = AcmeAccount::create([
+        $account = Account::create([
             'user_id' => $user->id,
             'key_id' => 'test_key_'.uniqid(),
             'public_key' => ['kty' => 'RSA'],
@@ -239,7 +239,7 @@ class OrderServiceTest extends TestCase
         ]);
         $cert = $this->createTestCert($order, ['channel' => 'acme']);
 
-        $account = AcmeAccount::create([
+        $account = Account::create([
             'user_id' => $user->id,
             'key_id' => 'test_key_'.uniqid(),
             'public_key' => ['kty' => 'RSA'],
@@ -308,7 +308,7 @@ class OrderServiceTest extends TestCase
             'common_name' => 'test.com',
             'status' => 'pending',
         ]);
-        AcmeAuthorization::create([
+        Authorization::create([
             'cert_id' => $cert4->id,
             'token' => 'auth_token_'.uniqid(),
             'identifier_type' => 'dns',
@@ -327,7 +327,7 @@ class OrderServiceTest extends TestCase
             'common_name' => 'test.com',
             'status' => 'pending',
         ]);
-        AcmeAuthorization::create([
+        Authorization::create([
             'cert_id' => $cert5->id,
             'token' => 'auth_token_'.uniqid(),
             'identifier_type' => 'dns',
@@ -336,7 +336,7 @@ class OrderServiceTest extends TestCase
             'challenge_type' => 'dns-01',
             'challenge_status' => 'valid',
         ]);
-        AcmeAuthorization::create([
+        Authorization::create([
             'cert_id' => $cert5->id,
             'token' => 'auth_token_'.uniqid(),
             'identifier_type' => 'dns',
@@ -390,7 +390,7 @@ class OrderServiceTest extends TestCase
         $cert2 = $this->createTestCert($order2, ['channel' => 'acme']);
 
         // AcmeAccount 绑定 order2
-        $account = AcmeAccount::create([
+        $account = Account::create([
             'user_id' => $user->id,
             'order_id' => $order2->id,
             'key_id' => 'test_key_'.uniqid(),
@@ -432,7 +432,7 @@ class OrderServiceTest extends TestCase
         ]);
         $cert = $this->createTestCert($order, ['channel' => 'acme']);
 
-        $account = AcmeAccount::create([
+        $account = Account::create([
             'user_id' => $user->id,
             'order_id' => $order->id,
             'key_id' => 'test_key_'.uniqid(),

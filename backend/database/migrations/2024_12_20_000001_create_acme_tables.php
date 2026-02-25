@@ -15,8 +15,8 @@ return new class extends Migration
             $table->unsignedBigInteger('order_id')->nullable()->index()->comment('关联的订单ID');
             $table->unsignedBigInteger('acme_account_id')->nullable()->comment('连接的 ACME 服务的账户 ID');
             $table->string('key_id', 200)->unique()->comment('公钥指纹(kid)');
-            $table->json('public_key')->comment('JWK 公钥');
-            $table->json('contact')->nullable()->comment('联系方式');
+            $table->text('public_key')->comment('JWK 公钥');
+            $table->string('contact', 500)->nullable()->comment('联系方式');
             $table->enum('status', ['valid', 'deactivated', 'revoked'])->default('valid')->comment('状态');
             $table->timestamps();
 
@@ -32,7 +32,7 @@ return new class extends Migration
             $table->string('identifier_value', 255)->comment('标识符值');
             $table->boolean('wildcard')->default(false)->comment('是否通配符');
             $table->enum('status', ['pending', 'valid', 'invalid', 'deactivated', 'expired', 'revoked'])->default('pending')->comment('状态');
-            $table->timestamp('expires')->nullable()->comment('过期时间');
+            $table->timestamp('expires_at')->nullable()->comment('过期时间');
 
             // 验证信息
             $table->string('challenge_type', 30)->nullable()->comment('验证类型: http-01, dns-01');
@@ -46,11 +46,6 @@ return new class extends Migration
             $table->foreign('cert_id')->references('id')->on('certs')->onDelete('cascade');
         });
 
-        // ACME Nonce 表 - 用于防重放攻击
-        Schema::create('acme_nonces', function (Blueprint $table) {
-            $table->string('nonce', 64)->primary()->comment('Nonce 值');
-            $table->timestamp('expires_at')->index()->comment('过期时间');
-        });
     }
 
     public function down(): void

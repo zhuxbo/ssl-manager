@@ -11,6 +11,7 @@ Route::prefix('deploy')->middleware('api.deploy')->group(function () {
     Route::post('/', [ApiController::class, 'update']);      // 更新/续费证书
     Route::post('callback', [ApiController::class, 'callback']); // 部署回调
 
-    // ACME EAB
-    Route::get('acme/eab', [AcmeController::class, 'getEab']);
+    // ACME
+    Route::post('acme/order', [AcmeController::class, 'createOrder']);
+    Route::get('acme/eab/{orderId}', [AcmeController::class, 'getEab']);
 });

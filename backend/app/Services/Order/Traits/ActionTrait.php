@@ -1046,6 +1046,16 @@ trait ActionTrait
                 $cert->delete();
                 $order->delete();
             } else {
+                // ACME pending cert（未提交域名、未扣费）：快速清理
+                if ($cert->channel === 'acme' && empty($cert->api_id)) {
+                    $cert->acmeAuthorizations()->delete();
+                    $cert->update(['status' => 'cancelled']);
+                    DB::commit();
+                    $this->deleteTask($order_id, 'commit');
+
+                    return;
+                }
+
                 // 获取交易信息
                 $transaction = OrderUtil::getCancelTransaction($order->toArray());
 

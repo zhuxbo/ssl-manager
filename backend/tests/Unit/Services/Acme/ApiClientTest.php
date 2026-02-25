@@ -2,14 +2,14 @@
 
 namespace Tests\Unit\Services\Acme;
 
-use App\Services\Acme\AcmeApiClient;
+use App\Services\Acme\ApiClient;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 /**
- * AcmeApiClient 纯单元测试（Mock HTTP）
+ * ApiClient 纯单元测试（Mock HTTP）
  */
-class AcmeApiClientTest extends TestCase
+class ApiClientTest extends TestCase
 {
     protected function setUp(): void
     {
@@ -25,7 +25,7 @@ class AcmeApiClientTest extends TestCase
             'gateway.test/api/*' => Http::response(['code' => 1, 'data' => ['id' => 1]], 200),
         ]);
 
-        $client = app(AcmeApiClient::class);
+        $client = app(ApiClient::class);
         $result = $client->getAccount(1);
 
         $this->assertEquals(1, $result['code']);
@@ -44,7 +44,7 @@ class AcmeApiClientTest extends TestCase
             'gateway.test/api/*' => Http::response(['code' => 1, 'data' => ['id' => 99]], 200),
         ]);
 
-        $client = app(AcmeApiClient::class);
+        $client = app(ApiClient::class);
         $result = $client->createOrder(1, ['example.com', '*.example.com'], 'DV_SSL');
 
         $this->assertEquals(1, $result['code']);
@@ -67,7 +67,7 @@ class AcmeApiClientTest extends TestCase
             'gateway.test/api/*' => Http::response(['code' => 1, 'data' => ['status' => 'valid']], 200),
         ]);
 
-        $client = app(AcmeApiClient::class);
+        $client = app(ApiClient::class);
         $result = $client->respondToChallenge(42);
 
         Http::assertSent(function ($request) {
@@ -83,7 +83,7 @@ class AcmeApiClientTest extends TestCase
             'gateway.test/api/*' => Http::response(['code' => 1, 'data' => ['status' => 'valid']], 200),
         ]);
 
-        $client = app(AcmeApiClient::class);
+        $client = app(ApiClient::class);
         $result = $client->finalizeOrder(10, 'test-csr-pem');
 
         Http::assertSent(function ($request) {
@@ -96,7 +96,7 @@ class AcmeApiClientTest extends TestCase
     {
         $this->mockSystemSettings('', '');
 
-        $client = app(AcmeApiClient::class);
+        $client = app(ApiClient::class);
         $this->assertFalse($client->isConfigured());
     }
 
@@ -104,7 +104,7 @@ class AcmeApiClientTest extends TestCase
     {
         $this->mockSystemSettings('https://gateway.test/api', 'key');
 
-        $client = app(AcmeApiClient::class);
+        $client = app(ApiClient::class);
         $this->assertTrue($client->isConfigured());
     }
 
@@ -112,7 +112,7 @@ class AcmeApiClientTest extends TestCase
     {
         $this->mockSystemSettings('', '');
 
-        $client = app(AcmeApiClient::class);
+        $client = app(ApiClient::class);
         $result = $client->getAccount(1);
 
         $this->assertEquals(0, $result['code']);
@@ -127,7 +127,7 @@ class AcmeApiClientTest extends TestCase
             'gateway.test/api/*' => Http::response(['code' => 1], 200),
         ]);
 
-        $client = app(AcmeApiClient::class);
+        $client = app(ApiClient::class);
         $result = $client->revokeCertificate('ABCD1234');
 
         Http::assertSent(function ($request) {
@@ -142,10 +142,10 @@ class AcmeApiClientTest extends TestCase
      */
     private function mockSystemSettings(string $url, string $key): void
     {
-        // 因为 AcmeApiClient 构造函数中直接调用 get_system_setting，
+        // 因为 ApiClient 构造函数中直接调用 get_system_setting，
         // 我们需要在容器中重新绑定
-        $this->app->bind(AcmeApiClient::class, function () use ($url, $key) {
-            $client = new AcmeApiClient;
+        $this->app->bind(ApiClient::class, function () use ($url, $key) {
+            $client = new ApiClient;
 
             // 使用反射设置私有属性
             $ref = new \ReflectionClass($client);

@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Services\Acme;
 
-use App\Models\Acme\AcmeNonce;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 
@@ -41,13 +40,5 @@ class NonceService
         // 使用 pull() 原子操作，避免竞态条件
         // pull() 会同时获取并删除缓存，返回 null 表示不存在
         return Cache::pull($key) !== null;
-    }
-
-    /**
-     * 清理过期的 Nonce（用于数据库存储方式）
-     */
-    public function cleanup(): int
-    {
-        return AcmeNonce::where('expires_at', '<', now())->delete();
     }
 }

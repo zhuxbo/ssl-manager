@@ -35,6 +35,7 @@ skills/         # 开发规范（详细文档）
 | `skills/frontend-dev/` | Vue 3、Monorepo、共享组件 |
 | `skills/deploy-ops/` | Docker、宝塔、环境配置 |
 | `skills/build-release/` | 版本发布、打包、CI/CD |
+| `skills/acme-e2e-test/` | Docker certbot 端到端测试（Manager + Gateway） |
 
 ## 知识积累
 
@@ -56,7 +57,7 @@ skills/         # 开发规范（详细文档）
 - **架构**：certbot → Manager A → Manager B → ... → CA，每级都有系统 orders/certs 记录
 - **去掉 acme_orders 表**：订单/证书全部使用系统 `orders` + `certs` 表
 - **产品标识**：`products.support_acme = 1` 标识 ACME 产品（不新增 product_type）
-- **ID 映射**：每级独立 ID，通过映射字段关联上游（accountId→`orders.acme_account_id`、orderId→`certs.api_id`、challengeId→`acme_authorizations.acme_challenge_id`）
+- **ID 映射**：每级独立 ID，通过映射字段关联上游（accountId→`orders.acme_account_id`、orderId→`certs.api_id`、challengeId→`acme_authorizations.acme_challenge_id`）。对外 REST API 统一使用 order.id（通过 `findCertByOrderId()` 查找 latestCert），与 Gateway 保持一致
 - **AcmeAccount 精确关联**：`acme_accounts.order_id` 直接关联 Order，避免通过 user_id 查找错误（兼容旧数据回落到 user_id 查询）
 - **AcmeApiService 核心原则**：所有方法「查本级 → 映射 ID → 调上游」，不能透传下游 ID 给上游
 - **EAB 可复用**：同一 EAB 可多次注册 ACME 账户（Certum 订单级认证），`eab_used_at` 仅记录首次使用时间
@@ -65,14 +66,15 @@ skills/         # 开发规范（详细文档）
 - **DNS 委托自动化**：创建 ACME Order 时自动尝试通过委托写 TXT 记录（best-effort，不阻塞）
 - **URL 标识**：使用 `cert.refer_id`（随机唯一字符串）替代 token
 - **ACME 状态推导**：不存储状态字段，从 cert.status + acme_authorizations 推导
-- **标准扣费**：`OrderUtil::getOrderTransaction()` + `Transaction::create()`（boot 事件自动更新余额）
+- **延迟扣费**：创建订阅时不扣费（cert.amount=0，purchased_count=0），推迟到 `new-order` 提交域名后按实际域名精确计费。`OrderUtil::getOrderTransaction()` + `Transaction::create()`（boot 事件自动更新余额）
+- **ACME 取消**：cancel 端点（`DELETE /orders/{id}`）支持三种场景：pending（未扣费，快速清理）、processing（已扣费，通知上游+退费）、active（退费周期内通知上游+退费）。`Action::cancel()` 对 ACME cert 使用 `AcmeApiClient::cancelOrder` 替代 `api->cancel`
 - **SAN 验证**：`ValidatorUtil::validateSansMaxCount()` + purchased count 追踪
 - **不自动补齐根域名**：ACME 产品不调用 `DomainUtil::addGiftDomain()`
 - **配置**：优先 `ca.acmeUrl`/`ca.acmeToken`，未设置时回落到 `ca.url`（路径替换为 `/api/acme`）/`ca.token`
 - **AcmeApiClient**（原 UpstreamClient）：连接上级 ACME REST API
-- **EAB 获取方式**：支持 Deploy Token（`GET /api/deploy/acme/eab`）和用户端 API（`GET /api/user/acme/eab`）
+- **EAB 获取方式**：Deploy Token（`GET /api/deploy/acme/eab/{orderId}`）、用户端 API（`GET /api/user/acme/eab`）
 - **Web 端 ACME 订阅**：`BillingService::createSubscription()` 供 Web 表单创建 ACME 订单，复用有效 Order 逻辑
-- **ACME 订单创建路由**：User `POST /api/user/acme/order`、Admin `POST /api/admin/acme/order` + `GET /api/admin/acme/eab/{orderId}`
+- **ACME 订单创建路由**：Deploy `POST /api/deploy/acme/order`、User `POST /api/user/acme/order`、Admin `POST /api/admin/acme/order` + `GET /api/admin/acme/eab/{orderId}`
 - **前端签发方式**：action.vue 增加"手工签发/ACME签发"选择器，ACME 模式精简表单（仅产品+有效期）
 - **ACME 详情页**：通过 `order.latest_cert.channel === 'acme'` 判断，显示专用标签页（订单详情/EAB凭据/委托认证/颁发记录）
 - **Server URL 统一**：使用 `get_system_setting('site', 'url')` 替代 `config('app.url')`

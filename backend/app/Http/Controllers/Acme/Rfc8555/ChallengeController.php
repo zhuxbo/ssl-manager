@@ -24,7 +24,12 @@ class ChallengeController extends Controller
         $authorization = $this->orderService->getAuthorization($token);
 
         if (! $authorization) {
-            return $this->acmeError('malformed', 'Challenge not found', 404);
+            return $this->acmeError('about:blank', 'Challenge not found', 404);
+        }
+
+        $account = $request->attributes->get('acme_account');
+        if ($authorization->cert && ! $this->orderService->verifyOwnership($authorization->cert, $account)) {
+            return $this->acmeError('unauthorized', 'Challenge does not belong to this account', 403);
         }
 
         $result = $this->orderService->respondToChallenge($authorization);
@@ -51,7 +56,7 @@ class ChallengeController extends Controller
         $nonce = $this->nonceService->generate();
 
         return response()->json([
-            'type' => "urn:ietf:params:acme:error:$type",
+            'type' => $type === 'about:blank' ? 'about:blank' : "urn:ietf:params:acme:error:$type",
             'detail' => $detail,
             'status' => $status,
         ], $status, [

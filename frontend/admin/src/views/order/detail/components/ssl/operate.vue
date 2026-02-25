@@ -128,7 +128,7 @@ const allowCancel = computed(() => {
   }
   return (
     ["processing", "approving", "active"].includes(order.latest_cert.status) &&
-    Math.floor(Date.now() / 1000) - new Date(order.created_at).getTime() <
+    dayjs().diff(dayjs(order.created_at), "seconds") <
       86400 * order.product.refund_period
   );
 });

@@ -864,7 +864,7 @@ const loadOrderInfo = (id: number) => {
     }
 
     // 如果 alternative_name_types.length = 0，则 domains = data.latest_cert.common_name
-    if (data.product?.alternative_name_types.length === 0) {
+    if (data.product?.alternative_name_types?.length === 0) {
       formData.domains = data.latest_cert.common_name;
     }
 

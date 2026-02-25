@@ -4,22 +4,19 @@ declare(strict_types=1);
 
 namespace App\Services\Acme;
 
-use App\Models\Acme\AcmeAuthorization;
 use App\Models\Cert;
 use App\Models\Order;
 use App\Models\Product;
-use App\Models\Transaction;
 use App\Models\User;
-use App\Services\Order\Utils\OrderUtil;
 use App\Services\Order\Utils\ValidatorUtil;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
-class AcmeApiService
+class ApiService
 {
     public function __construct(
-        private AcmeApiClient $apiClient,
+        private ApiClient $apiClient,
         private OrderService $orderService
     ) {}
 
@@ -83,7 +80,7 @@ class AcmeApiService
                     'auto_renew' => true,
                 ]);
 
-                // b. 创建 Cert
+                // b. 创建 Cert（不扣费，推迟到 new-order 提交域名后）
                 $cert = Cert::create([
                     'order_id' => $order->id,
                     'action' => 'new',
@@ -92,51 +89,15 @@ class AcmeApiService
                     'email' => $user->email,
                     'standard_count' => $product->standard_min,
                     'wildcard_count' => $product->wildcard_min,
-                    'status' => 'unpaid',
+                    'amount' => '0.00',
+                    'status' => 'pending',
                 ]);
 
-                // c. 计算金额
                 $order->latest_cert_id = $cert->id;
+                $order->amount = '0.00';
+                $order->purchased_standard_count = 0;
+                $order->purchased_wildcard_count = 0;
                 $order->save();
-
-                $amount = OrderUtil::getLatestCertAmount($order->toArray(), $cert->toArray(), $product->toArray());
-
-                // d. 更新金额
-                $cert->amount = $amount;
-                $cert->save();
-
-                $order->amount = $amount;
-                $order->save();
-
-                // e. 扣费（参考 ActionTrait::charge）
-                if (bccomp($amount, '0.00', 2) !== 0) {
-                    $transaction = OrderUtil::getOrderTransaction($order->fresh(['latestCert'])->toArray());
-
-                    // 验证余额
-                    $balanceAfter = bcadd((string) $user->balance, (string) $transaction['amount'], 2);
-                    if (bccomp($balanceAfter, (string) ($user->credit_limit ?? '0'), 2) === -1) {
-                        throw new \Exception('Insufficient balance');
-                    }
-
-                    // Transaction::create 的 boot 事件自动扣余额
-                    Transaction::create($transaction);
-                }
-
-                // 更新已购域名数量
-                $order->purchased_standard_count = max(
-                    $order->purchased_standard_count ?? 0,
-                    $cert->standard_count,
-                    $product->standard_min
-                );
-                $order->purchased_wildcard_count = max(
-                    $order->purchased_wildcard_count ?? 0,
-                    $cert->wildcard_count,
-                    $product->wildcard_min
-                );
-                $order->save();
-
-                // 更新 cert 状态
-                $cert->update(['status' => 'pending']);
 
                 // f. 生成 EAB
                 $eabKid = Str::uuid()->toString();
@@ -233,136 +194,64 @@ class AcmeApiService
             return ['code' => 0, 'msg' => implode('; ', array_values($sanErrors))];
         }
 
-        $sans = OrderUtil::getSansFromDomains($domainsString, $product->gift_root_domain);
-        $standardCount = $sans['standard_count'];
-        $wildcardCount = $sans['wildcard_count'];
-
-        // 4. 复用或创建 Cert
-        $canReuse = $currentLatestCert->status === 'pending'
-            && empty($currentLatestCert->api_id)
-            && empty($currentLatestCert->cert);
-
-        if ($canReuse) {
-            $cert = $currentLatestCert;
-        } else {
-            $cert = Cert::create([
-                'order_id' => $order->id,
-                'last_cert_id' => $currentLatestCert->id,
-                'action' => 'reissue',
-                'channel' => 'acme',
-                'common_name' => $domains[0] ?? '',
-                'email' => $order->user->email ?? '',
-                'standard_count' => $standardCount,
-                'wildcard_count' => $wildcardCount,
-                'status' => 'pending',
-            ]);
-
-            $order->latest_cert_id = $cert->id;
-            $order->save();
+        // 4. prepareAndCharge：cert 复用/创建 + 扣费（事务内）
+        try {
+            $cert = $this->orderService->prepareAndCharge($order, $domains);
+        } catch (\Exception $e) {
+            return ['code' => 0, 'msg' => $e->getMessage()];
         }
 
-        // 5. 幂等扣费
-        $needCharge = $standardCount > ($order->purchased_standard_count ?? 0)
-            || $wildcardCount > ($order->purchased_wildcard_count ?? 0);
-
-        if ($needCharge) {
-            try {
-                $user = $order->user;
-                DB::transaction(function () use ($order, $cert, $product, $user, $standardCount, $wildcardCount) {
-                    $cert->update([
-                        'standard_count' => $standardCount,
-                        'wildcard_count' => $wildcardCount,
-                        'status' => 'unpaid',
-                    ]);
-
-                    $amount = OrderUtil::getLatestCertAmount($order->fresh(['latestCert'])->toArray());
-                    $cert->update(['amount' => $amount]);
-
-                    if (bccomp($amount, '0.00', 2) !== 0) {
-                        $transaction = OrderUtil::getOrderTransaction($order->fresh(['latestCert'])->toArray());
-                        $balanceAfter = bcadd((string) $user->balance, (string) $transaction['amount'], 2);
-                        if (bccomp($balanceAfter, (string) ($user->credit_limit ?? '0'), 2) === -1) {
-                            throw new \Exception('Insufficient balance for additional SANs');
-                        }
-                        Transaction::create($transaction);
-                    }
-
-                    $order->purchased_standard_count = max(
-                        $order->purchased_standard_count ?? 0,
-                        $standardCount,
-                        $product->standard_min
-                    );
-                    $order->purchased_wildcard_count = max(
-                        $order->purchased_wildcard_count ?? 0,
-                        $wildcardCount,
-                        $product->wildcard_min
-                    );
-                    $order->save();
-
-                    $cert->update(['status' => 'pending']);
-                });
-            } catch (\Exception $e) {
-                return ['code' => 0, 'msg' => $e->getMessage()];
-            }
-        }
-
-        // 6. 调上游（使用映射后的 ID）
+        // 5. 调上游（使用映射后的 ID）
         if ($this->apiClient->isConfigured()) {
-            $apiResult = $this->apiClient->createOrder(
-                (int) $order->acme_account_id,
+            $upstreamResult = $this->orderService->submitToUpstream(
+                $cert,
                 $domains,
-                (string) $product->api_id
+                $order,
+                (int) $order->acme_account_id
             );
 
-            if ($apiResult['code'] !== 1) {
-                return ['code' => 0, 'msg' => $apiResult['msg'] ?? 'Upstream order creation failed'];
+            if (isset($upstreamResult['error'])) {
+                return ['code' => 0, 'msg' => $upstreamResult['error']];
             }
 
-            $apiData = $apiResult['data'];
-
-            // 7. 存映射：cert.api_id = upstream.data.id
-            $cert->update([
-                'common_name' => $domains[0] ?? '',
-                'alternative_names' => $domainsString,
-                'standard_count' => $standardCount,
-                'wildcard_count' => $wildcardCount,
-                'api_id' => $apiData['id'],
-            ]);
-
-            // 8. 创建 AcmeAuthorization，存 acme_challenge_id
-            if (isset($apiData['authorizations'])) {
-                foreach ($apiData['authorizations'] as $authzData) {
-                    $identifier = $authzData['identifier'] ?? [];
-                    $challenge = $authzData['challenges'][0] ?? [];
-
-                    AcmeAuthorization::create([
-                        'cert_id' => $cert->id,
-                        'token' => Str::random(32),
-                        'identifier_type' => $identifier['type'] ?? 'dns',
-                        'identifier_value' => $identifier['value'] ?? '',
-                        'wildcard' => str_starts_with($identifier['value'] ?? '', '*.'),
-                        'status' => $authzData['status'] ?? 'pending',
-                        'expires' => now()->addDays(7),
-                        'challenge_type' => $challenge['type'] ?? 'dns-01',
-                        'challenge_token' => $challenge['token'] ?? '',
-                        'acme_challenge_id' => $challenge['id'] ?? null,
-                        'key_authorization' => $challenge['key_authorization'] ?? null,
-                        'challenge_status' => $challenge['status'] ?? 'pending',
-                    ]);
-                }
-            }
-
-            // 9. 委托写 TXT（best-effort）
-            $this->orderService->writeDelegationTxtForAuthorizations($cert->fresh('acmeAuthorizations'));
+            $cert = $upstreamResult['cert'];
         } else {
             return ['code' => 0, 'msg' => 'Upstream gateway not configured'];
         }
 
-        // 9. 返回 formatOrder，id = cert.id
         return [
             'code' => 1,
-            'data' => $this->formatOrder($cert->fresh('acmeAuthorizations')),
+            'data' => $this->formatOrder($cert),
         ];
+    }
+
+    /**
+     * 取消订单
+     */
+    public function cancelOrder(int $orderId): array
+    {
+        $cert = $this->findCertByOrderId($orderId);
+
+        if (! $cert) {
+            return ['code' => 0, 'msg' => 'Order not found'];
+        }
+
+        // 如果有 api_id 且上游已配置，转发取消请求（best-effort）
+        if ($cert->api_id && $this->apiClient->isConfigured()) {
+            try {
+                $this->apiClient->cancelOrder((int) $cert->api_id);
+            } catch (\Exception $e) {
+                // best-effort，不阻断本地清理
+            }
+        }
+
+        // 标记 cert 为 cancelled
+        $cert->update(['status' => 'cancelled']);
+
+        // 清理 acme_authorizations
+        $cert->acmeAuthorizations()->delete();
+
+        return ['code' => 1];
     }
 
     /**
@@ -370,10 +259,10 @@ class AcmeApiService
      */
     public function getOrder(int $orderId): array
     {
-        $cert = Cert::where('id', $orderId)
-            ->where('channel', 'acme')
-            ->with('acmeAuthorizations')
-            ->first();
+        $cert = $this->findCertByOrderId($orderId);
+        if ($cert) {
+            $cert->load('acmeAuthorizations');
+        }
 
         if (! $cert) {
             return ['code' => 0, 'msg' => 'Order not found'];
@@ -390,10 +279,10 @@ class AcmeApiService
      */
     public function getOrderAuthorizations(int $orderId): array
     {
-        $cert = Cert::where('id', $orderId)
-            ->where('channel', 'acme')
-            ->with('acmeAuthorizations')
-            ->first();
+        $cert = $this->findCertByOrderId($orderId);
+        if ($cert) {
+            $cert->load('acmeAuthorizations');
+        }
 
         if (! $cert) {
             return ['code' => 0, 'msg' => 'Order not found'];
@@ -426,7 +315,7 @@ class AcmeApiService
      */
     public function respondToChallenge(int $challengeId): array
     {
-        $authorization = AcmeAuthorization::find($challengeId);
+        $authorization = Authorization::find($challengeId);
 
         if (! $authorization) {
             return ['code' => 0, 'msg' => 'Challenge not found'];
@@ -445,9 +334,7 @@ class AcmeApiService
      */
     public function finalizeOrder(int $orderId, string $csr): array
     {
-        $cert = Cert::where('id', $orderId)
-            ->where('channel', 'acme')
-            ->first();
+        $cert = $this->findCertByOrderId($orderId);
 
         if (! $cert) {
             return ['code' => 0, 'msg' => 'Order not found'];
@@ -456,7 +343,12 @@ class AcmeApiService
         $result = $this->orderService->finalize($cert, $csr);
 
         if (isset($result['error'])) {
-            return ['code' => 0, 'msg' => $result['detail']];
+            $response = ['code' => 0, 'msg' => $result['detail']];
+            if (! empty($result['retryable'])) {
+                $response['retryable'] = true;
+            }
+
+            return $response;
         }
 
         return [
@@ -470,9 +362,7 @@ class AcmeApiService
      */
     public function getCertificate(int $orderId): array
     {
-        $cert = Cert::where('id', $orderId)
-            ->where('channel', 'acme')
-            ->first();
+        $cert = $this->findCertByOrderId($orderId);
 
         if (! $cert) {
             return ['code' => 0, 'msg' => 'Order not found'];
@@ -494,10 +384,7 @@ class AcmeApiService
             $result = $this->apiClient->getCertificate((int) $cert->api_id);
             if ($result['code'] === 1) {
                 $certData = $result['data'];
-                $cert->update([
-                    'cert' => $certData['certificate'] ?? '',
-                    'intermediate_cert' => $certData['chain'] ?? '',
-                ]);
+                $this->orderService->saveCertificateFromUpstream($cert, $cert->csr ?? '', $certData);
 
                 return [
                     'code' => 1,
@@ -543,12 +430,28 @@ class AcmeApiService
     }
 
     /**
+     * 通过 order.id 查找最新的 ACME cert
+     */
+    private function findCertByOrderId(int $orderId): ?Cert
+    {
+        $order = Order::find($orderId);
+        if (! $order || ! $order->latest_cert_id) {
+            return null;
+        }
+
+        return Cert::where('id', $order->latest_cert_id)
+            ->where('channel', 'acme')
+            ->first();
+    }
+
+    /**
      * 格式化订单数据（接收 Cert）
      */
     private function formatOrder(Cert $cert): array
     {
         $data = [
-            'id' => $cert->id,
+            'id' => $cert->order_id,
+            'cert_id' => $cert->id,
             'identifiers' => [],
             'status' => $this->orderService->getAcmeStatus($cert),
             'created_at' => $cert->created_at->toIso8601String(),

@@ -53,6 +53,18 @@ class AcmeJwsMiddleware
         $jwk = $this->jwsService->extractPublicKey($protected);
         $kid = $this->jwsService->extractKid($protected);
 
+        // S4: RFC 8555 §6.2 — JWK 和 KID 互斥
+        if ($jwk && $kid) {
+            return $this->acmeError('malformed', 'JWK and KID are mutually exclusive', 400);
+        }
+
+        // S1: 非 new-acct 和 revoke-cert 路由强制要求 KID
+        $path = $request->path();
+        $allowJwk = str_ends_with($path, '/new-acct') || str_ends_with($path, '/revoke-cert');
+        if (! $kid && ! $allowJwk) {
+            return $this->acmeError('malformed', 'KID is required for this endpoint', 400);
+        }
+
         $account = null;
 
         if ($kid) {
@@ -60,7 +72,7 @@ class AcmeJwsMiddleware
             $account = $this->jwsService->findAccountByKid($kid);
 
             if (! $account) {
-                return $this->acmeError('accountDoesNotExist', 'Account not found', 400);
+                return $this->acmeError('accountDoesNotExist', 'Account not found', 404);
             }
 
             // 检查账户状态

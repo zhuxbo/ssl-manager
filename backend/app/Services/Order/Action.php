@@ -106,6 +106,14 @@ class Action
                         }
                     }
 
+                    // 保留本地已有的名称和备注，不被导入数据覆盖
+                    if (! empty($product->name)) {
+                        unset($item['name']);
+                    }
+                    if (! empty($product->remark)) {
+                        unset($item['remark']);
+                    }
+
                     $product->update($item);
                 }
             } else {
@@ -785,12 +793,23 @@ class Action
             $order->latestCert->status === 'cancelled' && $this->error('订单已取消');
             $order->latestCert->status != 'cancelling' && $this->error('订单状态不是取消中');
 
-            try {
-                $this->api->cancel($orderId);
-            } catch (ApiResponseException $e) {
-                $errors = $e->getApiResponse()['errors'] ?? null;
-                $msg = $e->getApiResponse()['msg'] ?: 'CA取消失败';
-                $this->error($msg, $errors);
+            // ACME 订单通过 AcmeApiClient 取消
+            if ($order->latestCert->channel === 'acme' && $order->latestCert->api_id) {
+                $acmeApiClient = app(\App\Services\Acme\ApiClient::class);
+                if ($acmeApiClient->isConfigured()) {
+                    $result = $acmeApiClient->cancelOrder((int) $order->latestCert->api_id);
+                    if ($result['code'] !== 1) {
+                        $this->error($result['msg'] ?? '上游取消失败');
+                    }
+                }
+            } else {
+                try {
+                    $this->api->cancel($orderId);
+                } catch (ApiResponseException $e) {
+                    $errors = $e->getApiResponse()['errors'] ?? null;
+                    $msg = $e->getApiResponse()['msg'] ?: 'CA取消失败';
+                    $this->error($msg, $errors);
+                }
             }
 
             // 获取交易信息
@@ -801,6 +820,11 @@ class Action
 
             // 更新订单状态
             $order->latestCert->update(['status' => 'cancelled']);
+
+            // 清理 ACME authorizations
+            if ($order->latestCert->channel === 'acme') {
+                $order->latestCert->acmeAuthorizations()->delete();
+            }
 
             // 保存取消时间
             $order->update(['cancelled_at' => now()]);

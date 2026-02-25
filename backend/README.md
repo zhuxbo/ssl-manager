@@ -231,6 +231,8 @@ php artisan test
 - 支持 certbot → Manager A → Manager B → ... → CA 多级链路
 - 每级独立 ID 体系，通过映射字段关联上游（accountId、orderId、challengeId）
 - AcmeApiService 统一处理「查本级 → 映射 ID → 调上游」流程
+- 延迟扣费：创建订阅时不扣费，推迟到 new-order 提交域名后按实际域名精确计费
+- 订单取消：支持 pending（快速清理）、processing/active（通知上游+退费）三种场景
 
 ### 系统集成
 

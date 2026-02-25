@@ -6,7 +6,7 @@ use App\Models\BaseModel;
 use App\Models\Cert;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class AcmeAuthorization extends BaseModel
+class Authorization extends BaseModel
 {
     protected $table = 'acme_authorizations';
 
@@ -17,7 +17,7 @@ class AcmeAuthorization extends BaseModel
         'identifier_value',
         'wildcard',
         'status',
-        'expires',
+        'expires_at',
         'challenge_type',
         'challenge_token',
         'acme_challenge_id',
@@ -30,7 +30,7 @@ class AcmeAuthorization extends BaseModel
     {
         return [
             'wildcard' => 'boolean',
-            'expires' => 'datetime',
+            'expires_at' => 'datetime',
             'challenge_validated' => 'datetime',
         ];
     }
