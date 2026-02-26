@@ -158,6 +158,11 @@ pnpm typecheck        # 类型检查
 - Pinia 按模块划分
 - 支持持久化存储
 
+### 字典显示
+
+- 表格中用 `options.find()?.label` 渲染字典值时，必须用 `?? row.xxx` 回落显示原值，防止插件卸载后字典不全导致空白
+- 插件通过 `dictionaries` 机制（`mergePluginDictionaries`）在运行时追加 options 和 map
+
 ### 样式
 
 - Sass 预处理器

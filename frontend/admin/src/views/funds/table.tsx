@@ -66,10 +66,8 @@ export function useFundsTable() {
           type={fundPayMethodMap[row.pay_method]}
           effect="plain"
         >
-          {
-            fundPayMethodOptions.find(item => item.value === row.pay_method)
-              ?.label
-          }
+          {fundPayMethodOptions.find(item => item.value === row.pay_method)
+            ?.label ?? row.pay_method}
         </el-tag>
       )
     },

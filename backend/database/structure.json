@@ -1,7 +1,7 @@
 {
     "version": "1.0",
     "mysql_version": "8.0.43",
-    "generated_at": "2026-02-26 11:16:57",
+    "generated_at": "2026-02-26 22:22:20",
     "database": {
         "name": "manager",
         "charset": "utf8mb4",
@@ -2702,7 +2702,7 @@
                 },
                 "pay_method": {
                     "position": 5,
-                    "type": "enum('wechat','alipay','credit','taobao','pinduoduo','jingdong','douyin','gift','other')",
+                    "type": "varchar(32)",
                     "nullable": false,
                     "default": "other",
                     "extra": "",

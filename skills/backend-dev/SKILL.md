@@ -322,6 +322,12 @@ php artisan queue:work --queue Task  # 队列
 - 兼容 MySQL 5.7，不使用 `json` 字段类型
 - 数组类型字段使用 `string` 存储，由 Laravel 模型 `'array'` cast 自动 JSON 序列化
 
+## 迁移规范
+
+- **不用 enum**：需要插件扩展的字段使用 `string` 而非 `enum`，方便插件写入自定义值
+- **幂等检查**：修改表结构的迁移必须先检查当前状态（表是否存在、字段类型是否已符合预期），避免重复执行报错
+- **structure.json 不手动改**：迁移变动后发布前通过 `php artisan db:structure --export` 重新导出
+
 ---
 
 ## 自动续费/重签
