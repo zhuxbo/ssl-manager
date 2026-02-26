@@ -33,12 +33,6 @@ export interface CallbackLogsParams extends BaseLogsParams {
   ip?: string;
 }
 
-// Easy日志查询参数
-export interface EasyLogsParams extends BaseLogsParams {
-  url?: string;
-  ip?: string;
-}
-
 // CA日志查询参数
 export interface CaLogsParams extends BaseLogsParams {
   method?: string;
@@ -82,11 +76,6 @@ export function getCallbackLogs(
   return http.get("/logs/callback", { params });
 }
 
-// Easy日志
-export function getEasyLogs(params: EasyLogsParams): Promise<BaseResponse> {
-  return http.get("/logs/easy", { params });
-}
-
 // CA日志
 export function getCaLogs(params: CaLogsParams): Promise<BaseResponse> {
   return http.get("/logs/ca", { params });
@@ -98,7 +87,7 @@ export function getErrorLogs(params: ErrorLogsParams): Promise<BaseResponse> {
 }
 
 // 日志详情
-type LogType = "admin" | "user" | "api" | "callback" | "easy" | "ca" | "error";
+type LogType = "admin" | "user" | "api" | "callback" | "ca" | "error";
 
 export function getLogDetail(type: LogType, id: number): Promise<BaseResponse> {
   return http.get(`/logs/${type}/${id}`);

@@ -7,7 +7,6 @@ use App\Models\AdminLog;
 use App\Models\ApiLog;
 use App\Models\CallbackLog;
 use App\Models\CaLog;
-use App\Models\EasyLog;
 use App\Models\ErrorLog;
 use App\Models\Fund;
 use App\Models\Order;
@@ -76,14 +75,6 @@ class PurgeCommand extends Command
         $result = CallbackLog::where('created_at', '<', now()->subDays(180))->delete();
         $this->info("Purged $result callback logs");
 
-        // 清理超过180天的简易申请日志
-        $result = EasyLog::where('created_at', '<', now()->subDays(180))->delete();
-        $this->info("Purged $result easy logs");
-
-        // 清理超过30天的GET方法简易申请日志
-        $result = EasyLog::where('created_at', '<', now()->subDays(30))->whereIn('method', ['GET', 'OPTIONS'])->delete();
-        $this->info("Purged $result GET easy logs");
-
         // 清理超过180天的CA日志
         $result = CaLog::where('created_at', '<', now()->subDays(180))->delete();
         $this->info("Purged $result ca logs");
@@ -91,6 +82,25 @@ class PurgeCommand extends Command
         // 清理超过90天的错误日志
         $result = ErrorLog::where('created_at', '<', now()->subDays(90))->delete();
         $this->info("Purged $result error logs");
+
+        // 动态清理其他 _logs 后缀表（插件日志表等）
+        $knownLogTables = ['api_logs', 'admin_logs', 'user_logs', 'callback_logs', 'ca_logs', 'error_logs'];
+        try {
+            $rows = \Illuminate\Support\Facades\DB::select("SHOW TABLES LIKE '%\\_logs'");
+            foreach ($rows as $row) {
+                $tableName = current((array) $row);
+                if (! preg_match('/^[a-zA-Z0-9_]+$/', $tableName)) {
+                    continue;
+                }
+                if (in_array($tableName, $knownLogTables)) {
+                    continue;
+                }
+                $result = \Illuminate\Support\Facades\DB::table($tableName)->where('created_at', '<', now()->subDays(180))->delete();
+                $this->info("Purged $result $tableName");
+            }
+        } catch (\Throwable $e) {
+            $this->warn("Dynamic log cleanup failed: ".$e->getMessage());
+        }
 
         // 预同步：距退款期限2-4天的处理中订单，24小时内无同步则创建sync任务
         $preSyncOrders = Order::with(['latestCert'])

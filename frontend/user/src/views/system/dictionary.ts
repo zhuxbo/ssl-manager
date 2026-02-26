@@ -24,6 +24,11 @@ export const brandOptionsAll = [
   { label: "CFCA", value: "cfca" }
 ];
 
+// 品牌标签映射（小写 → 显示名）
+export const brandLabels: { [key: string]: string } = Object.fromEntries(
+  brandOptionsAll.map(b => [b.value, b.label])
+);
+
 // 品牌配置 默认配置
 const brandConfig = (getConfig("Brands") as string[]) || ["certum"];
 

@@ -11,6 +11,7 @@ frontend/
 ├── user/       # 用户端应用
 └── base/       # 上游框架（只读）
 backend/        # Laravel 11 后端
+plugins/        # 插件目录（独立功能模块）
 build/          # 构建系统
 deploy/         # 部署脚本
 develop/        # 开发环境
@@ -35,6 +36,7 @@ skills/         # 开发规范（详细文档）
 | `skills/frontend-dev/` | Vue 3、Monorepo、共享组件 |
 | `skills/deploy-ops/` | Docker、宝塔、环境配置 |
 | `skills/build-release/` | 版本发布、打包、CI/CD |
+| `skills/plugin-dev/` | 插件系统、IIFE 打包、安装/更新/卸载 |
 | `skills/acme-e2e-test/` | Docker certbot 端到端测试（Manager + Gateway） |
 
 ## 知识积累
@@ -51,6 +53,19 @@ skills/         # 开发规范（详细文档）
 - `delegation` 提交到 CA 时转换为 `txt`，通过 `dcv.is_delegate` 标记区分
 - 产品同步时保留本地的 `delegation` 验证方法
 - 详见 `skills/backend-dev/SKILL.md` 委托验证章节
+
+### 插件系统
+
+- **插件目录**：`plugins/` 下按名称组织，每个插件包含 `plugin.json`
+- **动态加载**：`PluginServiceProvider` 自动扫描、注册命名空间和 ServiceProvider
+- **安全机制**：autoload 使用 `realpath()` 防路径遍历；公共端点仅返回 bundle/css 路径
+- **前端加载**：公共 `GET /api/plugins` 返回 bundle 路径，管理端返回完整信息；`plugin-loader.ts`（`@shared/utils/plugin-loader`）统一加载，校验 URL 必须以 `/` 开头
+- **共享依赖**：`exposeSharedDeps()` 暴露 Vue/Router/ElementPlus/Pinia + `getAccessToken()`
+- **解耦原则**：主系统不硬引用插件代码/表，通过动态扫描（`_logs` 后缀表、`user_id` 字段）兼容插件数据
+- **插件打包**：`plugins/{name}/build.sh` + `release.json` 独立打包
+- **插件管理**：`PluginManager` 提供安装/更新/卸载/检查更新，管理端 `/plugin` 页面操作
+- **更新地址优先级**：`plugin.json.release_url`（第三方）→ `{主系统 release_url}/plugins/{name}`（官方）
+- **插件 API**：`GET /api/admin/plugin/installed`、`GET /api/admin/plugin/check-updates`、`POST /api/admin/plugin/install`、`POST /api/admin/plugin/update`、`POST /api/admin/plugin/uninstall`
 
 ### ACME 多级代理
 

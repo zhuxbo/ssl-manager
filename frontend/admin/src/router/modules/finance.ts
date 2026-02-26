@@ -47,16 +47,6 @@ export default {
         title: "发票额度",
         keepAlive: true
       }
-    },
-    {
-      path: "/agiso",
-      name: "Agiso",
-      component: () => import("@/views/agiso/index.vue"),
-      meta: {
-        icon: "ri:store-line",
-        title: "电商平台",
-        keepAlive: true
-      }
     }
   ]
 } satisfies RouteConfigsTable;

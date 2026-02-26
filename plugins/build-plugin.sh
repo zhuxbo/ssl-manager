@@ -1,0 +1,464 @@
+#!/bin/bash
+
+# 通用插件构建与发布脚本
+# 发布到 {RELEASE_DIR}/plugins/{name}/
+#
+# 配置文件查找优先级:
+#   1. plugins/local-release.conf 或 plugins/remote-release.conf（插件专用）
+#   2. build/local-release.conf 或 build/remote-release.conf（主系统回落）
+#
+# 用法:
+#   ./plugins/build-plugin.sh easy                    # 构建+发布
+#   ./plugins/build-plugin.sh easy --build-only       # 仅构建，不发布
+#   ./plugins/build-plugin.sh easy --publish-only     # 仅发布已有的 zip
+#   ./plugins/build-plugin.sh easy --local            # 使用本地 release 配置
+#   ./plugins/build-plugin.sh easy --remote           # 使用远程 release 配置（默认）
+#   ./plugins/build-plugin.sh easy --remote --server cn  # 只发布到指定远程服务器
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+BUILD_DIR="$PROJECT_ROOT/build"
+
+# ========================================
+# 颜色和日志
+# ========================================
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+NC='\033[0m'
+
+log_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
+log_success() { echo -e "${GREEN}[OK]${NC} $1"; }
+log_error() { echo -e "${RED}[ERROR]${NC} $1" >&2; }
+log_warning() { echo -e "${YELLOW}[WARN]${NC} $1"; }
+log_step() { echo -e "${CYAN}[STEP]${NC} $1"; }
+
+# ========================================
+# 帮助
+# ========================================
+show_help() {
+    cat << EOF
+用法: $0 <插件名或目录> [选项]
+
+选项:
+  --version VERSION   指定版本号（自动写入 plugin.json）
+  --build-only        仅构建打包，不发布
+  --publish-only      仅发布已有的 zip，跳过构建
+  --local             使用本地 release 配置
+  --remote            使用远程 release 配置（默认）
+  --server NAME       远程发布时只发布到指定服务器
+  -h, --help          显示帮助
+
+配置文件查找优先级:
+  1. plugins/local-release.conf 或 plugins/remote-release.conf
+  2. build/local-release.conf 或 build/remote-release.conf（回落）
+
+示例:
+  $0 easy                              构建并远程发布
+  $0 easy --build-only                 仅构建
+  $0 easy --local                      构建并本地发布
+  $0 easy --publish-only --local       仅本地发布已有包
+  $0 easy --remote --server cn         仅远程发布到 cn 服务器
+EOF
+}
+
+# ========================================
+# 解析参数
+# ========================================
+PLUGIN_INPUT=""
+BUILD_ONLY=false
+PUBLISH_ONLY=false
+RELEASE_MODE="remote"
+TARGET_SERVER=""
+INPUT_VERSION=""
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --version)      INPUT_VERSION="$2"; shift 2 ;;
+        --build-only)   BUILD_ONLY=true; shift ;;
+        --publish-only) PUBLISH_ONLY=true; shift ;;
+        --local)        RELEASE_MODE="local"; shift ;;
+        --remote)       RELEASE_MODE="remote"; shift ;;
+        --server)       TARGET_SERVER="$2"; shift 2 ;;
+        -h|--help)      show_help; exit 0 ;;
+        -*)             log_error "未知选项: $1"; show_help; exit 1 ;;
+        *)              PLUGIN_INPUT="$1"; shift ;;
+    esac
+done
+
+if [ -z "$PLUGIN_INPUT" ]; then
+    log_error "请指定插件名或目录"
+    show_help
+    exit 1
+fi
+
+# 解析插件目录
+if [ -d "$PLUGIN_INPUT" ]; then
+    PLUGIN_DIR="$(cd "$PLUGIN_INPUT" && pwd)"
+elif [ -d "$SCRIPT_DIR/$PLUGIN_INPUT" ]; then
+    PLUGIN_DIR="$SCRIPT_DIR/$PLUGIN_INPUT"
+else
+    log_error "插件目录不存在: $PLUGIN_INPUT"
+    exit 1
+fi
+
+cd "$PLUGIN_DIR"
+
+# 验证 plugin.json
+if [ ! -f "plugin.json" ]; then
+    log_error "plugin.json 不存在"
+    exit 1
+fi
+
+# 读取插件名和版本号
+NAME=$(grep -o '"name"[[:space:]]*:[[:space:]]*"[^"]*"' plugin.json | head -1 | cut -d'"' -f4)
+VERSION=$(grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' plugin.json | head -1 | cut -d'"' -f4)
+
+if [ -z "$NAME" ]; then
+    log_error "无法从 plugin.json 读取插件名"
+    exit 1
+fi
+if [ -z "$VERSION" ]; then
+    log_error "无法从 plugin.json 读取版本号"
+    exit 1
+fi
+
+# 如果指定了版本号，写入 plugin.json
+if [ -n "$INPUT_VERSION" ]; then
+    INPUT_VERSION="${INPUT_VERSION#v}"
+    sed -i.bak "s/\"version\"[[:space:]]*:[[:space:]]*\"[^\"]*\"/\"version\": \"$INPUT_VERSION\"/" plugin.json
+    rm -f plugin.json.bak
+    VERSION="$INPUT_VERSION"
+    log_info "版本号已更新为: $VERSION"
+fi
+
+OUTPUT_DIR="$SCRIPT_DIR/temp"
+mkdir -p "$OUTPUT_DIR"
+OUTPUT_FILE="$NAME-plugin-$VERSION.zip"
+OUTPUT="$OUTPUT_DIR/$OUTPUT_FILE"
+
+echo ""
+echo -e "${CYAN}╔═══════════════════════════════════════════════════════════╗${NC}"
+echo -e "${CYAN}║${NC}           ${GREEN}插件构建与发布: $NAME v$VERSION${NC}"
+echo -e "${CYAN}╚═══════════════════════════════════════════════════════════╝${NC}"
+echo ""
+
+# ========================================
+# 查找配置文件（plugins/ 优先，build/ 回落）
+# ========================================
+find_config() {
+    local filename="$1"
+    local plugin_conf="$SCRIPT_DIR/$filename"
+    local build_conf="$BUILD_DIR/$filename"
+
+    if [ -f "$plugin_conf" ]; then
+        log_info "使用插件配置: $plugin_conf" >&2
+        echo "$plugin_conf"
+    elif [ -f "$build_conf" ]; then
+        log_info "使用主系统配置: $build_conf" >&2
+        echo "$build_conf"
+    else
+        echo ""
+    fi
+}
+
+# ========================================
+# 构建阶段
+# ========================================
+build_plugin() {
+    # 构建 admin 端
+    if [ -d "admin" ] && [ -f "admin/package.json" ]; then
+        log_step "构建 admin 端..."
+        cd admin
+        pnpm install
+        pnpm build
+        cd "$PLUGIN_DIR"
+        log_success "admin 端构建完成"
+    fi
+
+    # 构建 user 端
+    if [ -d "user" ] && [ -f "user/package.json" ]; then
+        log_step "构建 user 端..."
+        cd user
+        pnpm install
+        pnpm build
+        cd "$PLUGIN_DIR"
+        log_success "user 端构建完成"
+    fi
+
+    # 提升 dist 产物到上级目录（打包时去掉 dist/ 层级）
+    for side in admin user; do
+        if [ -d "$side/dist" ]; then
+            cp -f "$side/dist/"* "$side/" 2>/dev/null || true
+        fi
+    done
+
+    # 读取 build.json 打包配置
+    if [ ! -f "build.json" ]; then
+        log_error "build.json 不存在"
+        exit 1
+    fi
+
+    WORK_DIR=$(mktemp -d)
+    PACK_DIR="$WORK_DIR/$NAME"
+    mkdir -p "$PACK_DIR"
+
+    log_step "打包产物..."
+
+    # 从 build.json 读取 include 列表并复制
+    while IFS= read -r item; do
+        item=$(echo "$item" | tr -d '",' | xargs)
+        [ -z "$item" ] && continue
+        if [ -e "$PLUGIN_DIR/$item" ]; then
+            mkdir -p "$PACK_DIR/$(dirname "$item")"
+            cp -r "$PLUGIN_DIR/$item" "$PACK_DIR/$item"
+        fi
+    done < <(grep -A 100 '"include"' build.json | grep '"' | grep -v 'include\|exclude\|\[' | head -20)
+
+    # 清理排除项
+    while IFS= read -r item; do
+        item=$(echo "$item" | tr -d '",' | xargs)
+        [ -z "$item" ] && continue
+        find "$PACK_DIR" -name "$item" -exec rm -rf {} + 2>/dev/null || true
+    done < <(grep -A 100 '"exclude"' build.json | grep '"' | grep -v 'exclude\|\[' | head -20)
+
+    # 打包
+    cd "$WORK_DIR"
+    zip -rq "$OUTPUT" "$NAME"
+    rm -rf "$WORK_DIR"
+
+    local package_size=$(du -h "$OUTPUT" | cut -f1)
+    log_success "打包完成: $OUTPUT ($package_size)"
+}
+
+# ========================================
+# 生成 releases.json 更新的 Python 脚本
+# ========================================
+generate_plugin_releases_update() {
+    local releases_file="$1"
+    local version="$2"
+    local zip_path="$3"
+    local rel_download_url="$4"
+
+    local created_at=$(date -Iseconds)
+    local zip_size=$(stat -f%z "$zip_path" 2>/dev/null || stat -c%s "$zip_path" 2>/dev/null || echo 0)
+
+    cat << PYEOF
+import json
+
+releases_file = '$releases_file'
+version = '$version'
+created_at = '$created_at'
+
+new_release = {
+    'tag_name': f'v{version}',
+    'name': f'v{version}',
+    'body': '',
+    'prerelease': False,
+    'created_at': created_at,
+    'published_at': created_at,
+    'assets': [{
+        'name': '$(basename "$zip_path")',
+        'size': $zip_size,
+        'browser_download_url': '$rel_download_url'
+    }]
+}
+
+try:
+    with open(releases_file, 'r') as f:
+        data = json.load(f)
+except:
+    data = {'releases': []}
+
+# 移除同版本旧条目
+data['releases'] = [r for r in data.get('releases', []) if r.get('tag_name') != f'v{version}']
+data['releases'].insert(0, new_release)
+data['releases'].sort(key=lambda x: x.get('published_at', ''), reverse=True)
+
+with open(releases_file, 'w') as f:
+    json.dump(data, f, indent=2, ensure_ascii=False)
+
+print(f'releases.json 已更新: v{version}')
+PYEOF
+}
+
+# ========================================
+# 本地发布
+# ========================================
+publish_local() {
+    local config_file=$(find_config "local-release.conf")
+    if [ -z "$config_file" ]; then
+        log_error "未找到本地发布配置"
+        log_info "请创建以下任一配置文件:"
+        log_info "  plugins/local-release.conf（插件专用）"
+        log_info "  build/local-release.conf（主系统共享）"
+        exit 1
+    fi
+    source "$config_file"
+
+    if [ -z "$RELEASE_DIR" ] || [ -z "$RELEASE_URL" ]; then
+        log_error "配置缺失 RELEASE_DIR 或 RELEASE_URL"
+        exit 1
+    fi
+
+    local plugin_release_dir="$RELEASE_DIR/plugins/$NAME"
+    local version_dir="$plugin_release_dir/v$VERSION"
+    local releases_file="$plugin_release_dir/releases.json"
+    local rel_url="v$VERSION/$OUTPUT_FILE"
+
+    log_step "本地发布到 $plugin_release_dir ..."
+
+    # 创建目录 & 复制 zip
+    sudo mkdir -p "$version_dir"
+    sudo cp "$OUTPUT" "$version_dir/"
+    log_info "已复制: $OUTPUT_FILE → $version_dir/"
+
+    # 更新 releases.json
+    log_step "更新 releases.json ..."
+    # 确保文件存在且可写
+    sudo touch "$releases_file"
+    sudo chmod 666 "$releases_file"
+    generate_plugin_releases_update "$releases_file" "$VERSION" "$OUTPUT" "$rel_url" | python3
+    sudo chmod 644 "$releases_file"
+
+    # 设置权限
+    local web_user="www-data"
+    if [ -d "/www/server/panel" ] && id -u www &>/dev/null; then
+        web_user="www"
+    fi
+    sudo chown -R "$web_user:$web_user" "$plugin_release_dir"
+
+    log_success "本地发布完成"
+    echo ""
+    log_info "验证: curl $RELEASE_URL/plugins/$NAME/releases.json | jq ."
+}
+
+# ========================================
+# 远程发布
+# ========================================
+publish_remote() {
+    local config_file=$(find_config "remote-release.conf")
+    if [ -z "$config_file" ]; then
+        log_error "未找到远程发布配置"
+        log_info "请创建以下任一配置文件:"
+        log_info "  plugins/remote-release.conf（插件专用）"
+        log_info "  build/remote-release.conf（主系统共享）"
+        exit 1
+    fi
+    source "$config_file"
+
+    if [ ${#SERVERS[@]} -eq 0 ] || [ -z "$SSH_USER" ] || [ -z "$SSH_KEY" ]; then
+        log_error "远程配置不完整，请检查 SERVERS/SSH_USER/SSH_KEY"
+        exit 1
+    fi
+
+    SSH_KEY="${SSH_KEY/#\~/$HOME}"
+    if [ ! -f "$SSH_KEY" ]; then
+        log_error "SSH 密钥不存在: $SSH_KEY"
+        exit 1
+    fi
+
+    local ssh_timeout="${SSH_TIMEOUT:-10}"
+
+    for server_str in "${SERVERS[@]}"; do
+        IFS=',' read -r srv_name srv_host srv_port srv_dir srv_url <<< "$server_str"
+        srv_port=${srv_port:-22}
+
+        # 过滤指定服务器
+        if [ -n "$TARGET_SERVER" ] && [ "$srv_name" != "$TARGET_SERVER" ]; then
+            continue
+        fi
+
+        log_step "发布到 $srv_name ($srv_host) ..."
+
+        local remote_plugin_dir="$srv_dir/plugins/$NAME"
+        local remote_version_dir="$remote_plugin_dir/v$VERSION"
+        local rel_url="v$VERSION/$OUTPUT_FILE"
+
+        # 创建远程目录 & 上传
+        ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no -o ConnectTimeout=$ssh_timeout \
+            -p "$srv_port" "$SSH_USER@$srv_host" "mkdir -p $remote_version_dir"
+
+        rsync -avz --progress -e "ssh -i $SSH_KEY -o StrictHostKeyChecking=no -p $srv_port" \
+            "$OUTPUT" "$SSH_USER@$srv_host:$remote_version_dir/"
+        log_info "已上传: $OUTPUT_FILE"
+
+        # 远程更新 releases.json
+        log_info "更新 releases.json ..."
+        local remote_releases_file="$remote_plugin_dir/releases.json"
+        local zip_size=$(stat -f%z "$OUTPUT" 2>/dev/null || stat -c%s "$OUTPUT" 2>/dev/null || echo 0)
+
+        ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no -o ConnectTimeout=$ssh_timeout \
+            -p "$srv_port" "$SSH_USER@$srv_host" "python3 << 'PYEOF'
+import json, os
+from datetime import datetime
+
+releases_file = '$remote_releases_file'
+version = '$VERSION'
+created_at = '$(date -Iseconds)'
+
+new_release = {
+    'tag_name': f'v{version}',
+    'name': f'v{version}',
+    'body': '',
+    'prerelease': False,
+    'created_at': created_at,
+    'published_at': created_at,
+    'assets': [{
+        'name': '$OUTPUT_FILE',
+        'size': $zip_size,
+        'browser_download_url': '$rel_url'
+    }]
+}
+
+try:
+    with open(releases_file, 'r') as f:
+        data = json.load(f)
+except:
+    data = {'releases': []}
+
+data['releases'] = [r for r in data.get('releases', []) if r.get('tag_name') != f'v{version}']
+data['releases'].insert(0, new_release)
+data['releases'].sort(key=lambda x: x.get('published_at', ''), reverse=True)
+
+with open(releases_file, 'w') as f:
+    json.dump(data, f, indent=2, ensure_ascii=False)
+
+print(f'releases.json 已更新: v{version}')
+PYEOF"
+
+        log_success "$srv_name: 发布完成"
+        log_info "验证: curl $srv_url/plugins/$NAME/releases.json | jq ."
+    done
+}
+
+# ========================================
+# 主流程
+# ========================================
+
+# 构建
+if [ "$PUBLISH_ONLY" = false ]; then
+    build_plugin
+fi
+
+# 检查 zip 是否存在（发布需要）
+if [ "$BUILD_ONLY" = false ]; then
+    if [ ! -f "$OUTPUT" ]; then
+        log_error "插件包不存在: $OUTPUT，请先构建"
+        exit 1
+    fi
+
+    # 发布
+    if [ "$RELEASE_MODE" = "local" ]; then
+        publish_local
+    else
+        publish_remote
+    fi
+fi
+
+echo ""
+log_success "完成！"

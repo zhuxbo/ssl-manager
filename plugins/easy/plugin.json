@@ -1,0 +1,9 @@
+{
+  "name": "easy",
+  "version": "0.0.3",
+  "description": "Easy 简易证书申请插件",
+  "provider": "EasyServiceProvider",
+  "admin_bundle": "admin/easy-plugin.iife.js",
+  "admin_css": "admin/easy-plugin-admin.css",
+  "user_bundle": "user/easy-plugin.iife.js"
+}

@@ -1,4 +1,4 @@
-export const fundPayMethodOptions = [
+export const fundPayMethodOptions: { label: string; value: string }[] = [
   {
     label: "支付宝",
     value: "alipay"
@@ -10,22 +10,6 @@ export const fundPayMethodOptions = [
   {
     label: "银行卡",
     value: "credit"
-  },
-  {
-    label: "淘宝",
-    value: "taobao"
-  },
-  {
-    label: "拼多多",
-    value: "pinduoduo"
-  },
-  {
-    label: "京东",
-    value: "jingdong"
-  },
-  {
-    label: "抖音",
-    value: "douyin"
   },
   {
     label: "赠送",
@@ -82,14 +66,10 @@ export const fundStatusOptions = [
   }
 ];
 
-export const fundPayMethodMap = {
+export const fundPayMethodMap: Record<string, string> = {
   alipay: "success",
   wechat: "success",
   credit: "success",
-  taobao: "primary",
-  pinduoduo: "primary",
-  jingdong: "primary",
-  douyin: "primary",
   gift: "info",
   other: "warning"
 };

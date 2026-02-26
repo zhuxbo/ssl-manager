@@ -122,12 +122,6 @@ class PackageExtractor
                 $this->applyFrontendUpgrade($frontendUserDir, 'user');
             }
 
-            // 应用前端更新（简易申请端）
-            $frontendEasyDir = $this->findFrontendDir($extractedPath, 'easy');
-            if ($frontendEasyDir) {
-                $this->applyFrontendUpgrade($frontendEasyDir, 'easy');
-            }
-
             // 应用 nginx 配置更新
             $nginxDir = $this->findNginxDir($extractedPath);
             if ($nginxDir) {
@@ -201,7 +195,6 @@ class PackageExtractor
     protected array $protectedFrontendFiles = [
         'admin' => ['logo.svg', 'platform-config.json'],
         'user' => ['logo.svg', 'platform-config.json', 'qrcode.png'],
-        'easy' => ['config.json'],
     ];
 
     /**

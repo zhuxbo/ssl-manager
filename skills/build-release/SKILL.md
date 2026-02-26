@@ -60,19 +60,31 @@ build/
 ## 构建命令
 
 ```bash
-# 进入容器构建环境
-./build/build.sh
+# 构建所有模块（默认）
+bash build/build.sh
 
-# 测试构建（不推送）
-./build/build.sh --test
+# 指定版本构建
+bash build/build.sh --version 0.2.1-beta
 
-# 生产构建
-./build/build.sh --prod
+# 构建并打包
+bash build/build.sh --version 0.2.1-beta --package
 
 # 仅构建指定模块
-./build/build.sh --test admin
-./build/build.sh --test backend
+bash build/build.sh api
+bash build/build.sh admin
+bash build/build.sh user
+
+# 指定发布通道
+bash build/build.sh --channel dev
+
+# 强制重建（忽略缓存）
+bash build/build.sh --force-build
+
+# 清空依赖缓存后构建
+bash build/build.sh --clear-cache
 ```
+
+> **注意**：`remote-release.sh` 内部会自动调用 `build.sh` 构建打包，无需手动先执行 `build.sh`。
 
 ---
 
@@ -191,21 +203,20 @@ KEEP_VERSIONS=5
 ### 发布命令
 
 ```bash
-# 发布到所有服务器
-./build/remote-release.sh
-
-# 发布指定版本
-./build/remote-release.sh 0.1.0
+# 发布到所有服务器（自动构建+打包+上传+更新 releases.json）
+bash build/remote-release.sh <版本号>
 
 # 只发布到指定服务器
-./build/remote-release.sh --server cn
+bash build/remote-release.sh <版本号> --server cn
 
-# 只上传
-./build/remote-release.sh --upload-only
+# 只上传（不重新构建）
+bash build/remote-release.sh --upload-only
 
 # 测试连接
-./build/remote-release.sh --test
+bash build/remote-release.sh --test
 ```
+
+> `remote-release.sh` 完整流程：测试 SSH 连接 → 调用 `build.sh` 构建打包 → 上传 zip → 更新 `releases.json` → 部署 install.sh/upgrade.sh → 创建符号链接 → 清理旧版本
 
 ---
 
@@ -291,9 +302,25 @@ git tag -d v版本号 && git push origin :refs/tags/v版本号 && git tag v版�
 
 ---
 
+## 数据库结构导出
+
+`structure.json` 是主系统数据库标准结构，升级时用于校验和修复。
+
+```bash
+# 使用 Docker 容器导出（推荐，环境干净）
+cd backend && php artisan db:structure --export
+
+# 使用本地 MySQL 导出（需要数据库连接）
+cd backend && php artisan db:structure --export --use-local
+```
+
+- 导出命令自动排除插件迁移（`--path=database/migrations` 限制）
+- 插件表由插件自身管理，不纳入主系统 `structure.json`
+- 发布前确保 `structure.json` 是最新的
+
 ## 注意事项
 
 - **不要并行执行多个构建任务**：同时运行多个 `build.sh` 会导致资源竞争和卡死
-- **构建需要 sudo**：Docker 命令需要 sudo 权限，使用 `sudo ./build.sh`
 - **内存限制**：容器限制 2GB 内存，前端构建可能因 OOM 被 kill
 - **构建顺序**：后端 → 管理端 → 用户端（串行，不可并行）
+- **Worktree 无 git tag**：在 worktree 中构建需显式指定 `--version`，否则版本号为 `0.0.0-dev`

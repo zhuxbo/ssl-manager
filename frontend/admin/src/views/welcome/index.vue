@@ -27,6 +27,7 @@ import type {
   FinanceOverviewData
 } from "@/types/dashboard";
 import { message } from "@shared/utils";
+import { brandLabels } from "@/views/system/dictionary";
 
 defineOptions({
   name: "AdminDashboard"
@@ -246,7 +247,7 @@ const brandStatsChartData = computed(() => {
   if (!brandStats.value.length) return [];
 
   return brandStats.value.map((brand, index) => ({
-    name: brand.brand,
+    name: brandLabels[brand.brand?.toLowerCase()] || brand.brand,
     value: brand.revenue,
     itemStyle: {
       color: ["#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#EC4899"][

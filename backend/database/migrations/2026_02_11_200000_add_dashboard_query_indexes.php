@@ -29,11 +29,13 @@ return new class extends Migration
             }
         });
 
-        Schema::table('api_logs', function (Blueprint $table) {
-            if (! Schema::hasIndex('api_logs', 'api_logs_created_at_index')) {
-                $table->index('created_at');
-            }
-        });
+        if (Schema::hasTable('api_logs')) {
+            Schema::table('api_logs', function (Blueprint $table) {
+                if (! Schema::hasIndex('api_logs', 'api_logs_created_at_index')) {
+                    $table->index('created_at');
+                }
+            });
+        }
     }
 
     public function down(): void

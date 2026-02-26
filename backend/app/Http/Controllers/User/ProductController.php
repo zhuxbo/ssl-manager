@@ -59,6 +59,9 @@ class ProductController extends BaseController
         if (! empty($validated['domains']) && $validated['domains'] === 'single') {
             $query->whereJsonLength('alternative_name_types', 0);
         }
+        if (isset($validated['support_acme'])) {
+            $query->where('support_acme', $validated['support_acme']);
+        }
 
         $total = $query->where('status', 1)->count();
         $items = $query->select(['id', 'name', 'product_type', 'brand', 'ca', 'periods', 'encryption_standard', 'validation_type',

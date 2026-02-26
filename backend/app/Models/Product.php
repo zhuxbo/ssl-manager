@@ -18,6 +18,12 @@ class Product extends BaseModel
                 $product->code = $product->code.'_'.$product->source;
             }
         });
+
+        static::saving(function (Product $product) {
+            if ($product->brand) {
+                $product->brand = strtolower($product->brand);
+            }
+        });
     }
 
     const string TYPE_SSL = 'ssl';

@@ -49,6 +49,16 @@ export default {
       }
     },
     {
+      path: "/plugin",
+      name: "Plugin",
+      component: () => import("@/views/plugin/index.vue"),
+      meta: {
+        icon: "ri:plug-line",
+        title: "插件管理",
+        keepAlive: true
+      }
+    },
+    {
       path: "/upgrade",
       name: "Upgrade",
       component: () => import("@/views/upgrade/index.vue"),

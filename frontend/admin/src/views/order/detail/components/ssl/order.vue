@@ -15,7 +15,7 @@
         </tr>
         <tr>
           <td class="label">品牌</td>
-          <td class="content">{{ order.brand }}</td>
+          <td class="content">{{ brandLabels[order.brand?.toLowerCase()] || order.brand }}</td>
         </tr>
         <tr>
           <td class="label">产品</td>
@@ -169,7 +169,7 @@ import { buildUUID } from "@pureadmin/utils";
 import { ElMessageBox } from "element-plus";
 import * as OrderApi from "@/api/order";
 import { message } from "@shared/utils";
-import { periodLabels } from "@/views/system/dictionary";
+import { brandLabels, periodLabels } from "@/views/system/dictionary";
 import dayjs from "dayjs";
 
 const order = inject("order") as any;

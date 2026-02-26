@@ -10,6 +10,7 @@
 | 前端开发 | `frontend-dev/` | Vue 3、Monorepo、共享组件 |
 | 部署运维 | `deploy-ops/` | Docker、宝塔、环境配置 |
 | 构建发布 | `build-release/` | 版本发布、打包、CI/CD |
+| 插件开发 | `plugin-dev/` | 插件系统、IIFE 打包、安装/更新/卸载 |
 | ACME E2E 测试 | `acme-e2e-test/` | Docker certbot 端到端测试（Manager + Gateway） |
 
 ## 使用方式

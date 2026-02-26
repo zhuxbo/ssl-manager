@@ -414,7 +414,6 @@ class DatabaseStructureService
     protected function hasDifferences(array $diff): bool
     {
         return ! empty($diff['missing_tables']) ||
-               ! empty($diff['extra_tables']) ||
                ! empty($diff['table_differences']);
     }
 

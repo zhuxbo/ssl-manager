@@ -188,9 +188,6 @@ class PurgeUserCommand extends Command
             ['通知', $user->notifications()->count()],
         ];
 
-        // 添加其他表的统计（没有模型关联的表）
-        $stats[] = ['第三方订单', DB::table('agisos')->where('user_id', $user->id)->count()];
-
         // 任务表（订单任务）
         $taskCount = DB::table('tasks')
             ->whereIn('order_id', function ($subQuery) use ($user) {
@@ -208,6 +205,29 @@ class PurgeUserCommand extends Command
 
         if (DB::getSchemaBuilder()->hasTable('api_logs')) {
             $stats[] = ['API日志', DB::table('api_logs')->where('user_id', $user->id)->count()];
+        }
+
+        // 动态扫描其他含 user_id 字段的表（插件表等）
+        $knownTables = [
+            'orders', 'contacts', 'organizations', 'api_tokens', 'funds', 'transactions',
+            'invoices', 'invoice_limits', 'cname_delegations', 'callbacks', 'user_logs',
+            'api_logs', 'user_refresh_tokens', 'notifications', 'tasks', 'users', 'certs',
+        ];
+        try {
+            $database = DB::getDatabaseName();
+            $tables = DB::select(
+                'SELECT TABLE_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = ? AND COLUMN_NAME = ? AND TABLE_NAME NOT IN ('.implode(',', array_fill(0, count($knownTables), '?')).')',
+                array_merge([$database, 'user_id'], $knownTables)
+            );
+            foreach ($tables as $table) {
+                $tableName = $table->TABLE_NAME;
+                $count = DB::table($tableName)->where('user_id', $user->id)->count();
+                if ($count > 0) {
+                    $stats[] = [$tableName, $count];
+                }
+            }
+        } catch (\Throwable) {
+            // ignore
         }
 
         return $stats;
@@ -256,21 +276,37 @@ class PurgeUserCommand extends Command
         // 12. 删除回调配置（直接使用 SQL）
         $this->deleteTableDataInChunks('callbacks', $user->id, '回调配置', $chunkSize);
 
-        // 13. 删除第三方订单（agisos）
-        $this->deleteTableDataInChunks('agisos', $user->id, '阿奇索订单', $chunkSize);
-
-        // 14. 删除任务（通过用户ID和订单IDs）
+        // 13. 删除任务（通过用户ID和订单IDs）
         $this->deleteUserTasks($user, $chunkSize);
 
-        // 15. 删除用户日志（直接通过数据库删除）
+        // 14. 删除用户日志（直接通过数据库删除）
         $this->deleteTableDataInChunks('user_logs', $user->id, '用户日志', $chunkSize);
 
-        // 16. 删除 API 日志
+        // 15. 删除 API 日志
         $this->deleteTableDataInChunks('api_logs', $user->id, 'API日志', $chunkSize);
 
-        // 17. 清理 JWT 刷新令牌表（如果存在）
+        // 16. 清理 JWT 刷新令牌表（如果存在）
         if (DB::getSchemaBuilder()->hasTable('user_refresh_tokens')) {
             $this->deleteTableDataInChunks('user_refresh_tokens', $user->id, 'JWT刷新令牌', $chunkSize);
+        }
+
+        // 17. 动态清理其他含 user_id 字段的表（插件表等）
+        $knownTables = [
+            'orders', 'contacts', 'organizations', 'api_tokens', 'funds', 'transactions',
+            'invoices', 'invoice_limits', 'cname_delegations', 'callbacks', 'user_logs',
+            'api_logs', 'user_refresh_tokens', 'notifications', 'tasks', 'users', 'certs',
+        ];
+        try {
+            $database = DB::getDatabaseName();
+            $tables = DB::select(
+                'SELECT TABLE_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = ? AND COLUMN_NAME = ? AND TABLE_NAME NOT IN ('.implode(',', array_fill(0, count($knownTables), '?')).')',
+                array_merge([$database, 'user_id'], $knownTables)
+            );
+            foreach ($tables as $table) {
+                $this->deleteTableDataInChunks($table->TABLE_NAME, $user->id, $table->TABLE_NAME, $chunkSize);
+            }
+        } catch (\Throwable $e) {
+            $this->warn("动态表清理失败：{$e->getMessage()}");
         }
     }
 

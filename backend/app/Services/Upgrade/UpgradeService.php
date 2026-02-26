@@ -241,8 +241,12 @@ class UpgradeService
                 Log::info('[Upgrade] config:cache done, output: '.Artisan::output());
 
                 Log::info('[Upgrade] Starting route:cache');
-                Artisan::call('route:cache');
-                Log::info('[Upgrade] route:cache done, output: '.Artisan::output());
+                try {
+                    Artisan::call('route:cache');
+                    Log::info('[Upgrade] route:cache done, output: '.Artisan::output());
+                } catch (\Exception $e) {
+                    Log::warning("[Upgrade] route:cache 失败（不影响升级）: {$e->getMessage()}");
+                }
 
                 // 验证路由缓存文件
                 $routeCacheFile = base_path('bootstrap/cache/routes-v7.php');
@@ -437,7 +441,14 @@ class UpgradeService
                 $statusManager->startStep('clear_cache');
                 Artisan::call('optimize:clear', ['--except' => 'view']);
                 Artisan::call('config:cache');
-                Artisan::call('route:cache');
+
+                // route:cache 可能因插件闭包路由等原因失败，不应阻断升级
+                try {
+                    Artisan::call('route:cache');
+                } catch (\Exception $e) {
+                    Log::warning("[Upgrade] route:cache 失败（不影响升级）: {$e->getMessage()}");
+                }
+
                 $statusManager->completeStep('clear_cache');
             }
 
@@ -524,7 +535,12 @@ class UpgradeService
             // 清理并重建缓存
             Artisan::call('optimize:clear', ['--except' => 'view']);
             Artisan::call('config:cache');
-            Artisan::call('route:cache');
+
+            try {
+                Artisan::call('route:cache');
+            } catch (\Exception $e) {
+                Log::warning("[Rollback] route:cache 失败: {$e->getMessage()}");
+            }
 
             // 最终清理 opcache
             if (function_exists('opcache_reset')) {

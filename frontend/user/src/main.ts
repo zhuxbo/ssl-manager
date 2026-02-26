@@ -1,5 +1,5 @@
 import App from "./App.vue";
-import router from "./router";
+import router, { constantMenus } from "./router";
 import { setupStore } from "@/store";
 import { getPlatformConfig } from "./config";
 import { MotionPlugin } from "@vueuse/motion";
@@ -8,9 +8,18 @@ import { createApp, type Directive } from "vue";
 import { useElementPlus } from "@/plugins/elementPlus";
 import { injectResponsiveStorage } from "@shared/utils";
 import { routerArrays } from "@/layout/types";
+import {
+  initPluginSystem,
+  exposeSharedDeps,
+  loadPlugins,
+  mergePluginDictionaries
+} from "@shared/utils/plugin-loader";
 
 import Table from "@pureadmin/table";
 // import PureDescriptions from "@pureadmin/descriptions";
+
+// 初始化插件系统
+initPluginSystem();
 
 // 引入重置样式
 import "./style/reset.scss";
@@ -57,11 +66,32 @@ getPlatformConfig(app).then(async config => {
   // 初始化 shared 模块（auth 和 http）
   const { setupSharedModules } = await import("@/utils/setup");
   setupSharedModules();
+  await exposeSharedDeps();
+  // 加载插件（在 router 安装之前，确保菜单数据就绪）
+  await loadPlugins(router, "user", constantMenus);
   app.use(router);
   await router.isReady();
   injectResponsiveStorage(app, config, { routerArrays });
   app.use(MotionPlugin).use(useElementPlus).use(Table);
   // .use(PureDescriptions)
   // .use(useEcharts);
+
+  // 合并插件字典
+  const [fundsDict, transactionDict, orderDict, systemDict, invoiceLimitDict] =
+    await Promise.all([
+      import("@/views/funds/dictionary"),
+      import("@/views/transaction/dictionary"),
+      import("@/views/order/dictionary"),
+      import("@/views/system/dictionary"),
+      import("@/views/invoiceLimit/dictionary")
+    ]);
+  mergePluginDictionaries({
+    funds: fundsDict,
+    transaction: transactionDict,
+    order: orderDict,
+    system: systemDict,
+    invoiceLimit: invoiceLimitDict
+  });
+
   app.mount("#app");
 });

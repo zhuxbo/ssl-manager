@@ -21,12 +21,18 @@ return new class extends Migration
         }
 
         // 2. acme_authorizations：acme_order_id → cert_id
+        //    必须先删外键+索引，再重命名列（MySQL 不允许删除被外键引用的索引）
         if (Schema::hasColumn('acme_authorizations', 'acme_order_id')) {
             DB::table('acme_authorizations')->truncate();
 
             Schema::table('acme_authorizations', function (Blueprint $table) {
                 $table->dropForeign(['acme_order_id']);
+                $table->dropIndex('acme_authorizations_acme_order_id_index');
+            });
+
+            Schema::table('acme_authorizations', function (Blueprint $table) {
                 $table->renameColumn('acme_order_id', 'cert_id');
+                $table->index('cert_id');
             });
         }
 
@@ -101,6 +107,13 @@ return new class extends Migration
         if (Schema::hasColumn('acme_accounts', 'public_key')) {
             Schema::table('acme_accounts', function (Blueprint $table) {
                 $table->text('public_key')->comment('JWK 公钥')->change();
+            });
+        }
+
+        // 12. acme_accounts.contact：json → varchar（兼容 MySQL 5.7）
+        if (Schema::hasColumn('acme_accounts', 'contact')) {
+            Schema::table('acme_accounts', function (Blueprint $table) {
+                $table->string('contact', 500)->nullable()->comment('联系方式')->change();
             });
         }
     }

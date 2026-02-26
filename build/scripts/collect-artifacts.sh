@@ -70,7 +70,7 @@ mkdir -p "$PRODUCTION_DIR"
 cd "$PRODUCTION_DIR"
 
 # 创建目录结构
-mkdir -p backend frontend/admin frontend/user frontend/easy frontend/web nginx
+mkdir -p backend frontend/admin frontend/user frontend/web nginx
 
 # 复制后端文件
 if [ "${BUILD_BACKEND:-false}" = "true" ]; then
@@ -145,27 +145,6 @@ if [ "${BUILD_USER:-false}" = "true" ]; then
         log_success "用户端前端复制完成"
     else
         log_error "用户端 dist 目录不存在: $USER_DIST"
-    fi
-fi
-
-# 复制简易端（直接从源目录复制，无需构建）
-if [ "${BUILD_EASY:-false}" = "true" ]; then
-    EASY_SOURCE="$SOURCE_DIR/frontend/easy"
-    if [ -d "$EASY_SOURCE" ]; then
-        log_info "复制简易端前端文件（源码）..."
-        mkdir -p "$PRODUCTION_DIR/frontend/easy"
-        run_rsync_with_stats "easy" -a --delete \
-            --exclude='.git' \
-            --exclude='.gitignore' \
-            --exclude='.gitattributes' \
-            --exclude='.editorconfig' \
-            --exclude='*.md' \
-            --exclude='README*' \
-            --exclude='LICENSE*' \
-            "$EASY_SOURCE/" "$PRODUCTION_DIR/frontend/easy/"
-        log_success "简易端前端复制完成"
-    else
-        log_warning "简易端目录不存在: $EASY_SOURCE"
     fi
 fi
 

@@ -137,17 +137,17 @@ build_component() {
     # 释放内存：清理 pnpm 缓存和临时文件
     { sync && echo 3 > /proc/sys/vm/drop_caches; } 2>/dev/null || true
 
-    # 低内存构建策略：
+    # 构建策略：
     # - 跳过类型检查（vue-tsc 需要大量内存）
-    # - 限制 Node.js 堆内存为 1280MB（为 2GB 容器预留更多系统空间）
+    # - 限制 Node.js 堆内存为 2048MB（容器需 4GB）
     # - 设置 UV_THREADPOOL_SIZE=2 减少 I/O 线程
     # - 禁用 sourcemap 减少内存占用
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     set +e
     UV_THREADPOOL_SIZE=2 \
-    NODE_OPTIONS="--max-old-space-size=1280" \
+    NODE_OPTIONS="--max-old-space-size=2048" \
     GENERATE_SOURCEMAP=false \
-    pnpm --filter "$filter" exec vite build
+    pnpm --filter "$filter" exec -- vite build
     BUILD_EXIT_CODE=$?
     set -e
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -158,7 +158,7 @@ build_component() {
         if [ "$BUILD_EXIT_CODE" -eq 129 ] || [ "$BUILD_EXIT_CODE" -eq 137 ] || [ "$BUILD_EXIT_CODE" -eq 139 ]; then
             log_error "[$component] 构建进程被系统终止 (退出码: $BUILD_EXIT_CODE)"
             log_warning "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            log_warning "可能是内存不足导致，当前容器限制 2G"
+            log_warning "可能是内存不足导致，当前容器限制 4G"
             log_warning "如果构建持续失败，请检查 build.sh 中的 --memory 参数"
             log_warning "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         fi

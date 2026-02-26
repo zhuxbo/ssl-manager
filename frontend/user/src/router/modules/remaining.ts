@@ -32,28 +32,6 @@ export default [
     }
   },
   {
-    path: "/tb",
-    name: "TaoBao",
-    redirect: (() => {
-      return `/register?source=taobao`;
-    }) as any,
-    meta: {
-      title: "淘宝",
-      showLink: false
-    }
-  },
-  {
-    path: "/pdd",
-    name: "Pinduoduo",
-    redirect: (() => {
-      return `/register?source=pinduoduo`;
-    }) as any,
-    meta: {
-      title: "拼多多",
-      showLink: false
-    }
-  },
-  {
     path: "/redirect",
     component: Layout,
     meta: {

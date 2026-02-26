@@ -2,7 +2,6 @@
 
 use App\Http\Controllers\Admin\AcmeController;
 use App\Http\Controllers\Admin\AdminController;
-use App\Http\Controllers\Admin\AgisoController;
 use App\Http\Controllers\Admin\ApiTokenController;
 use App\Http\Controllers\Admin\AuthController;
 use App\Http\Controllers\Admin\CallbackController;
@@ -20,6 +19,7 @@ use App\Http\Controllers\Admin\NotificationController;
 use App\Http\Controllers\Admin\NotificationTemplateController;
 use App\Http\Controllers\Admin\OrderController;
 use App\Http\Controllers\Admin\OrganizationController;
+use App\Http\Controllers\Admin\PluginController;
 use App\Http\Controllers\Admin\ProductController;
 use App\Http\Controllers\Admin\ProductPriceController;
 use App\Http\Controllers\Admin\SettingController;
@@ -158,14 +158,6 @@ Route::prefix('admin')->middleware('api.admin')->group(function () {
     Route::get('transaction', [TransactionController::class, 'index']);
     Route::get('invoice-limit', [InvoiceLimitController::class, 'index']);
 
-    // 阿奇索路由
-    Route::prefix('agiso')->group(function () {
-        Route::get('/', [AgisoController::class, 'index']);
-        Route::get('{id}', [AgisoController::class, 'show'])->where('id', '[0-9]+');
-        Route::delete('{id}', [AgisoController::class, 'destroy'])->where('id', '[0-9]+');
-        Route::delete('/', [AgisoController::class, 'batchDestroy']);
-    });
-
     // 设置组和设置项路由
     RouteHelper::registerResourceRoutes('setting-group', SettingGroupController::class);
     RouteHelper::registerResourceRoutes('setting', SettingController::class);
@@ -180,13 +172,12 @@ Route::prefix('admin')->middleware('api.admin')->group(function () {
     // 日志路由
     Route::prefix('logs')->group(function () {
         Route::get('{type}/{id}', [LogsController::class, 'get'])
-            ->where('type', 'admin|user|api|callback|easy|ca|error')
+            ->where('type', 'admin|user|api|callback|ca|error')
             ->where('id', '[0-9]+');
         Route::get('admin', [LogsController::class, 'admin']);
         Route::get('user', [LogsController::class, 'user']);
         Route::get('api', [LogsController::class, 'api']);
         Route::get('callback', [LogsController::class, 'callback']);
-        Route::get('easy', [LogsController::class, 'easy']);
         Route::get('ca', [LogsController::class, 'ca']);
         Route::get('error', [LogsController::class, 'errors']);
     });
@@ -210,6 +201,15 @@ Route::prefix('admin')->middleware('api.admin')->group(function () {
         Route::get('{id}', [NotificationController::class, 'show'])->where('id', '[0-9]+');
         Route::post('test-send', [NotificationController::class, 'sendTest']);
         Route::post('{id}/resend', [NotificationController::class, 'resend'])->where('id', '[0-9]+');
+    });
+
+    // 插件管理
+    Route::prefix('plugin')->group(function () {
+        Route::get('installed', [PluginController::class, 'installed']);
+        Route::get('check-updates', [PluginController::class, 'checkUpdates']);
+        Route::post('install', [PluginController::class, 'install']);
+        Route::post('update', [PluginController::class, 'update']);
+        Route::post('uninstall', [PluginController::class, 'uninstall']);
     });
 
     // 系统升级管理

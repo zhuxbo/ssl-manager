@@ -29,21 +29,21 @@
         <!-- CSR 选项：所有产品类型都可以选择（ACME 模式隐藏） -->
         <el-form-item
           v-if="needCSR && !isAcmeMode"
-          label=" "
+          label="CSR"
           prop="csr_generate"
         >
           <el-radio-group
             v-model="formData.csr_generate"
             :disabled="isBatchApply"
           >
-            <el-radio :value="1">{{ "自动生成CSR" }}</el-radio>
+            <el-radio :value="1">{{ "自动生成" }}</el-radio>
             <el-radio :value="0">{{ "已有CSR" }}</el-radio>
           </el-radio-group>
         </el-form-item>
 
         <el-form-item
           v-if="needCSR && !isAcmeMode && !parseInt(formData.csr_generate)"
-          label="CSR"
+          label=" "
           prop="csr"
           :rules="rules.csr"
         >

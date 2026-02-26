@@ -106,19 +106,6 @@ return new class extends Migration
                 $table->timestamp('created_at')->nullable()->comment('创建时间');
             });
         }
-
-        if (! Schema::hasTable('easy_logs')) {
-            Schema::create('easy_logs', function (Blueprint $table) {
-                $table->id();
-                $table->string('method', 10)->index()->comment('请求方法');
-                $table->string('url', 2000)->comment('请求URL');
-                $table->mediumtext('params')->comment('请求参数');
-                $table->mediumtext('response')->nullable()->comment('响应内容');
-                $table->string('ip', 100)->nullable()->comment('IP地址');
-                $table->tinyInteger('status')->default(0)->index()->comment('状态: 0=失败, 1=成功');
-                $table->timestamp('created_at')->nullable()->comment('创建时间');
-            });
-        }
     }
 
     public function down(): void

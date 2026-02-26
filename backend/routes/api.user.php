@@ -107,7 +107,6 @@ Route::middleware('api.user')->group(function () {
     Route::prefix('fund')->group(function () {
         Route::get('/', [FundController::class, 'index']);
         Route::post('check/{id}', [FundController::class, 'check'])->where('id', '[0-9]+');
-        Route::post('platform-recharge', [FundController::class, 'platformRecharge']);
     });
 
     // 发票路由

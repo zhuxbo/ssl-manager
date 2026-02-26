@@ -89,8 +89,7 @@ docker compose exec php php artisan route:cache
 │   └── .env               # 应用环境变量
 ├── frontend/               # 前端构建产物
 │   ├── admin/
-│   ├── user/
-│   └── easy/
+│   └── user/
 ├── config/                 # 配置文件
 │   ├── nginx.conf
 │   ├── site.conf
