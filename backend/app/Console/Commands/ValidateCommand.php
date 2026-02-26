@@ -101,7 +101,7 @@ class ValidateCommand extends Command
                     }
 
                     // 创建 delegation 任务处理 TXT 记录写入
-                    if ($cert->dcv['method'] === 'txt') {
+                    if ($cert->dcv['method'] === 'txt' && ($cert->dcv['is_delegate'] ?? false)) {
                         // 检测 validation 是否为空
                         $isEmpty = empty($cert->validation) || ! is_array($cert->validation);
 
