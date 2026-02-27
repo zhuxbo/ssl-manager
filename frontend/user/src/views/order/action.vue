@@ -15,9 +15,11 @@
         :label-position="dialogSize == '90%' ? 'top' : 'right'"
         label-width="90px"
       >
-        <!-- 签发方式选择：仅申请/批量申请时显示 -->
+        <!-- 签发方式选择：仅申请/批量申请时且 AcmeIssueMode 开启时显示 -->
         <el-form-item
-          v-if="['apply', 'batchApply'].includes(actionType)"
+          v-if="
+            acmeIssueModeEnabled && ['apply', 'batchApply'].includes(actionType)
+          "
           label="签发方式"
         >
           <el-radio-group v-model="issueMode" @change="handleIssueModeChange">
@@ -37,7 +39,7 @@
             :disabled="isBatchApply"
           >
             <el-radio :value="1">{{ "自动生成" }}</el-radio>
-            <el-radio :value="0">{{ "已有CSR" }}</el-radio>
+            <el-radio :value="0">{{ "已有" }}</el-radio>
           </el-radio-group>
         </el-form-item>
 
@@ -138,6 +140,19 @@
                   :value="option.value"
                 />
               </el-select>
+            </el-form-item>
+            <!-- 数量：ACME + 批量申请时显示 -->
+            <el-form-item
+              v-if="isAcmeMode && isBatchApply"
+              label="数量"
+              prop="quantity"
+            >
+              <el-input-number
+                v-model="formData.quantity"
+                :min="1"
+                :max="100"
+                style="width: 100%"
+              />
             </el-form-item>
             <!-- 验证方式：只有 SSL 需要（ACME 模式隐藏） -->
             <el-form-item
@@ -330,8 +345,7 @@ import type { FormInstance, FormRules } from "element-plus";
 import { useDialogSize } from "@/views/system/dialog";
 import { useRenderIcon } from "@shared/components/ReIcon/src/hooks";
 import { ElMessageBox } from "element-plus";
-import { useClipboard } from "@vueuse/core";
-
+import { getConfig } from "@/config";
 const props = defineProps({
   visible: {
     type: Boolean,
@@ -358,6 +372,10 @@ const formRef = ref<FormInstance>();
 const productSelectRef = ref();
 // 加载状态
 const loading = ref(false);
+// ACME 签发模式开关
+const acmeIssueModeEnabled = computed(
+  () => getConfig()?.AcmeIssueMode === true
+);
 // 签发方式
 const issueMode = ref<"manual" | "acme">("manual");
 // 是否 ACME 模式
@@ -370,14 +388,13 @@ const isAcmeMode = computed(
 const productRefreshKey = ref(0);
 // ACME 产品查询参数
 const productQueryParams = computed(() => {
-  const params: any = {
+  if (isAcmeMode.value) {
+    return { support_acme: 1, status: 1 };
+  }
+  return {
     domains: isBatchApply.value ? "single" : "",
     product_type: isBatchApply.value ? "ssl" : ""
   };
-  if (isAcmeMode.value) {
-    params.support_acme = 1;
-  }
-  return params;
 });
 // 禁用字段列表
 const disabledFields = ref<string[]>([]);
@@ -498,45 +515,6 @@ const handleIssueModeChange = () => {
       productRefreshKey.value++;
       formRef.value?.clearValidate();
     });
-  });
-};
-
-// 复制工具
-const { copy } = useClipboard();
-
-// EAB 弹窗
-const showEabDialog = (data: any) => {
-  const content = `<div style="line-height: 2">
-    <p><b>EAB Kid：</b>${data.eab_kid}</p>
-    <p><b>EAB HMAC Key：</b>${data.eab_hmac}</p>
-    <p><b>Server URL：</b>${data.server_url}</p>
-    <hr style="margin: 10px 0"/>
-    <p><b>Certbot 注册命令：</b></p>
-    <pre style="background: #f5f5f5; padding: 8px; border-radius: 4px; white-space: pre-wrap; word-break: break-all; font-size: 12px;">${data.certbot_command}</pre>
-    <p><b>acme.sh 注册命令：</b></p>
-    <pre style="background: #f5f5f5; padding: 8px; border-radius: 4px; white-space: pre-wrap; word-break: break-all; font-size: 12px;">${data.acmesh_command}</pre>
-  </div>`;
-
-  ElMessageBox.alert(content, "ACME 订阅创建成功", {
-    dangerouslyUseHTMLString: true,
-    confirmButtonText: "复制凭据",
-    showCancelButton: true,
-    cancelButtonText: "关闭",
-    customStyle: { maxWidth: "600px" },
-    callback: (action: string) => {
-      if (action === "confirm") {
-        const text = [
-          `EAB Kid: ${data.eab_kid}`,
-          `EAB HMAC Key: ${data.eab_hmac}`,
-          `Server URL: ${data.server_url}`,
-          "",
-          `Certbot: ${data.certbot_command}`,
-          `acme.sh: ${data.acmesh_command}`
-        ].join("\n");
-        copy(text);
-        message("已复制到剪贴板", { type: "success" });
-      }
-    }
   });
 };
 
@@ -956,12 +934,23 @@ const handleSubmit = async () => {
 
     // ACME 模式提交
     if (isAcmeMode.value) {
-      const res = await acmeCreateOrder({
+      const params: any = {
         product_id: formData.product_id,
         period: formData.period
-      });
+      };
+      if (isBatchApply.value && formData.quantity > 1) {
+        params.quantity = formData.quantity;
+      }
+      const res = await acmeCreateOrder(params);
       if (res.code === 1) {
-        showEabDialog(res.data);
+        const created = res.data?.created ?? 1;
+        if (params.quantity && created < params.quantity) {
+          message(`部分成功：已创建 ${created}/${params.quantity} 个订单`, {
+            type: "warning"
+          });
+        } else {
+          message("提交成功", { type: "success" });
+        }
         emit("success");
         emit("update:visible", false);
       }
@@ -1021,6 +1010,9 @@ const initFormData = () => {
       formData[key] = value;
     }
   });
+
+  // 批量数量默认值
+  formData.quantity = 1;
 
   // 重置其他相关状态
   issueMode.value = "manual";

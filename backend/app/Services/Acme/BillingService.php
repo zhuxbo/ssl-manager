@@ -8,28 +8,23 @@ use App\Models\Acme\Account;
 use App\Models\Cert;
 use App\Models\Order;
 use App\Models\Product;
+use App\Models\Transaction;
 use App\Models\User;
+use App\Services\Order\Utils\OrderUtil;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class BillingService
 {
-    public function __construct(
-        private ApiClient $apiClient
-    ) {}
-
     /**
-     * 检查用户是否可以签发证书
+     * 检查 ACME 账户是否可以签发证书（通过 account->order 精确匹配）
      */
     public function canIssueCertificate(Account $account): array
     {
-        $user = $account->user;
+        $order = $account->order;
 
-        // 查找用户的有效 ACME 订单
-        $order = $this->findValidOrder($user);
-
-        if ($order) {
+        // 精确匹配：检查关联订单是否有效
+        if ($order && $order->period_till > now() && $order->cancelled_at === null) {
             return [
                 'allowed' => true,
                 'order' => $order,
@@ -37,11 +32,20 @@ class BillingService
             ];
         }
 
-        // 检查是否可以自动续费
-        $lastOrder = $this->findLastOrder($user);
+        // 关联订单已过期，检查续费开关（订单级 → 用户级回落）
+        if ($order) {
+            $user = $account->user;
+            $autoRenewEnabled = $order->auto_renew ?? ($user->auto_settings['auto_renew'] ?? false);
 
-        if ($lastOrder && $lastOrder->auto_renew) {
-            $renewResult = $this->tryAutoRenew($user, $lastOrder);
+            if (! $autoRenewEnabled) {
+                return [
+                    'allowed' => false,
+                    'error' => 'orderNotReady',
+                    'detail' => 'Auto-renew is disabled for this order',
+                ];
+            }
+
+            $renewResult = $this->tryAutoRenew($user, $order);
 
             if ($renewResult['code'] === 1) {
                 return [
@@ -61,32 +65,68 @@ class BillingService
         return [
             'allowed' => false,
             'error' => 'orderNotReady',
-            'detail' => 'No valid order and auto-renew not enabled',
+            'detail' => 'No valid order associated with this ACME account',
         ];
     }
 
     /**
-     * 查找用户的有效 ACME 订单
+     * 取消 ACME 订单（清理 ACME 特有数据，由 cancelPending 调用）
      */
-    public function findValidOrder(User $user): ?Order
+    public function cancelOrder(Order $order): void
     {
-        return Order::where('user_id', $user->id)
-            ->whereHas('product', fn ($q) => $q->where('support_acme', 1))
-            ->where('period_till', '>', now())
-            ->whereNull('cancelled_at')
-            ->orderBy('period_till', 'desc')
-            ->first();
+        $cert = $order->latestCert;
+        if ($cert) {
+            $cert->acmeAuthorizations()->delete();
+        }
+        Account::where('order_id', $order->id)->delete();
     }
 
     /**
-     * 查找用户的最后一个 ACME 订单
+     * 执行 ACME 订单取消（通知上级 + 退费 + 清理）
+     *
+     * 由 Action::cancel()（task 执行）和 ApiService::cancelOrder()（协议端点）调用
      */
-    public function findLastOrder(User $user): ?Order
+    /**
+     * 执行 ACME 订单取消（通知上级 + 退费 + 清理）
+     *
+     * 由 Action::cancel()（task 执行）和 ApiService::cancelOrder()（协议端点）调用
+     * latestCert 必须存在，这是系统约束——不存在时应报错而非静默处理
+     */
+    public function executeCancel(Order $order): void
     {
-        return Order::where('user_id', $user->id)
-            ->whereHas('product', fn ($q) => $q->where('support_acme', 1))
-            ->orderBy('created_at', 'desc')
-            ->first();
+        $cert = $order->latestCert;
+
+        // 先设为 cancelling，与传统 API 取消流程对齐
+        $cert->update(['status' => 'cancelling']);
+
+        // 通知上级取消（best-effort，事务外执行避免 CA 成功但本地回滚的不一致）
+        $apiClient = app(ApiClient::class);
+        if ($cert->api_id && $apiClient->isConfigured()) {
+            try {
+                $apiClient->cancelOrder((int) $cert->api_id);
+            } catch (\Exception $e) {
+                // best-effort，不阻断本地清理
+            }
+        }
+
+        // 本地 DB 更新包在事务内保证原子性
+        DB::transaction(function () use ($order, $cert) {
+            // 创建取消交易退费
+            $transaction = OrderUtil::getCancelTransaction($order->toArray());
+            Transaction::create($transaction);
+
+            // 标记 cert 为 cancelled
+            $cert->update(['status' => 'cancelled']);
+
+            // 清理 ACME authorizations
+            $cert->acmeAuthorizations()->delete();
+
+            // 清理 ACME account 关联
+            Account::where('order_id', $order->id)->delete();
+
+            // 保存取消时间
+            $order->update(['cancelled_at' => now()]);
+        });
     }
 
     /**
@@ -108,29 +148,6 @@ class BillingService
 
         if (empty($user->email)) {
             return ['code' => 0, 'msg' => '请先设置用户邮箱，ACME 账户注册需要邮箱地址'];
-        }
-
-        // 幂等检查：查找用户已有的同产品有效 ACME 订单
-        $existingOrder = Order::where('user_id', $user->id)
-            ->where('product_id', $product->id)
-            ->where('period_till', '>', now())
-            ->whereNull('cancelled_at')
-            ->whereNotNull('eab_kid')
-            ->lockForUpdate()
-            ->first();
-
-        if ($existingOrder) {
-            $serverUrl = rtrim(get_system_setting('site', 'url', config('app.url')), '/').'/acme/directory';
-
-            return [
-                'code' => 1,
-                'data' => [
-                    'order' => $existingOrder,
-                    'eab_kid' => $existingOrder->eab_kid,
-                    'eab_hmac' => $existingOrder->eab_hmac,
-                    'server_url' => $serverUrl,
-                ],
-            ];
         }
 
         try {
@@ -171,26 +188,6 @@ class BillingService
                 return $order;
             });
 
-            // 通知上游（best-effort）
-            if ($this->apiClient->isConfigured()) {
-                try {
-                    $upstreamResult = $this->apiClient->createAccount($user->email, (string) $product->api_id);
-                    if ($upstreamResult['code'] === 1 && isset($upstreamResult['data']['id'])) {
-                        $result->update(['acme_account_id' => $upstreamResult['data']['id']]);
-                    } else {
-                        Log::warning('createSubscription upstream failed', [
-                            'order_id' => $result->id,
-                            'msg' => $upstreamResult['msg'] ?? 'Unknown error',
-                        ]);
-                    }
-                } catch (\Exception $e) {
-                    Log::warning('createSubscription upstream exception', [
-                        'order_id' => $result->id,
-                        'error' => $e->getMessage(),
-                    ]);
-                }
-            }
-
             $serverUrl = rtrim(get_system_setting('site', 'url', config('app.url')), '/').'/acme/directory';
 
             return [
@@ -229,15 +226,18 @@ class BillingService
                 // M7: 锁定 lastOrder 防止并发续费
                 $locked = Order::where('id', $lastOrder->id)->lockForUpdate()->first();
 
-                // 检查是否已有新续费 Order（period_till > lastOrder.period_till）
-                $existingRenewal = Order::where('user_id', $user->id)
-                    ->whereHas('product', fn ($q) => $q->where('support_acme', 1))
-                    ->where('period_till', '>', $locked->period_till)
-                    ->whereNull('cancelled_at')
-                    ->first();
-
-                if ($existingRenewal) {
-                    return $existingRenewal;
+                // 检查该 Account 是否已迁移到新 Order（说明已续费过）
+                $account = Account::where('order_id', $lastOrder->id)->lockForUpdate()->first();
+                if (! $account) {
+                    // Account 已不关联此 Order，说明已续费迁移
+                    $migratedOrder = Account::where('order_id', '!=', $lastOrder->id)
+                        ->whereHas('order', fn ($q) => $q->where('user_id', $user->id)
+                            ->where('period_till', '>', $locked->period_till)
+                            ->whereNull('cancelled_at'))
+                        ->first()?->order;
+                    if ($migratedOrder) {
+                        return $migratedOrder;
+                    }
                 }
 
                 // 创建 Order
@@ -282,26 +282,6 @@ class BillingService
 
                 return $order;
             });
-
-            // 通知上游创建新 Certum 订单（best-effort）
-            if ($this->apiClient->isConfigured()) {
-                try {
-                    $upstreamResult = $this->apiClient->createAccount($user->email, (string) $product->api_id);
-                    if ($upstreamResult['code'] === 1 && isset($upstreamResult['data']['id'])) {
-                        $newOrder->update(['acme_account_id' => $upstreamResult['data']['id']]);
-                    } else {
-                        Log::warning('Auto-renew upstream createAccount failed', [
-                            'order_id' => $newOrder->id,
-                            'msg' => $upstreamResult['msg'] ?? 'Unknown error',
-                        ]);
-                    }
-                } catch (\Exception $e) {
-                    Log::warning('Auto-renew upstream createAccount exception', [
-                        'order_id' => $newOrder->id,
-                        'error' => $e->getMessage(),
-                    ]);
-                }
-            }
 
             return ['code' => 1, 'data' => ['order' => $newOrder]];
         } catch (\Exception $e) {

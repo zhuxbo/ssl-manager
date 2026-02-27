@@ -10,7 +10,6 @@ use App\Models\Product;
 use App\Models\User;
 use App\Services\Order\Utils\ValidatorUtil;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class ApiService
@@ -21,12 +20,11 @@ class ApiService
     ) {}
 
     /**
-     * 创建账户 — 复用已有 Order 或标准扣费流程
+     * 创建订单 — 查找/创建 Order + 扣费 + 调上游新建
      */
-    public function createAccount(string $customer, string $productCode): array
+    public function createOrder(string $customer, string $productCode, array $domains, ?string $referId = null): array
     {
         $user = User::where('email', $customer)->first();
-
         if (! $user) {
             return ['code' => 0, 'msg' => 'User not found'];
         }
@@ -34,194 +32,93 @@ class ApiService
         $product = Product::where('api_id', $productCode)
             ->where('support_acme', 1)
             ->first();
-
         if (! $product) {
             return ['code' => 0, 'msg' => 'Product not found'];
         }
 
-        // 复用已有 Order：查找用户的有效 ACME Order（同产品、未过期、未取消）
-        $existingOrder = Order::where('user_id', $user->id)
-            ->where('product_id', $product->id)
-            ->where('period_till', '>', now())
-            ->whereNull('cancelled_at')
-            ->whereNotNull('eab_kid')
-            ->orderBy('period_till', 'desc')
-            ->first();
-
-        if ($existingOrder) {
-            // EAB 可复用，统一返回现有 EAB（无需区分已用/未用）
-            return [
-                'code' => 1,
-                'data' => [
-                    'id' => $existingOrder->id,
-                    'email' => $customer,
-                    'customer_id' => $user->id,
-                    'eab_kid' => $existingOrder->eab_kid,
-                    'eab_hmac' => $existingOrder->eab_hmac,
-                    'status' => 'valid',
-                ],
-            ];
-        }
-
-        // 无有效 Order，走原有创建 + 扣费流程
-        try {
-            $result = DB::transaction(function () use ($user, $product) {
-                $period = $product->periods[0] ?? 12;
-
-                // a. 创建 Order
-                $order = Order::create([
-                    'user_id' => $user->id,
-                    'product_id' => $product->id,
-                    'brand' => $product->brand,
-                    'period' => $period,
-                    'amount' => 0,
-                    'period_from' => now(),
-                    'period_till' => now()->addMonths($period),
-                    'auto_renew' => true,
-                ]);
-
-                // b. 创建 Cert（不扣费，推迟到 new-order 提交域名后）
-                $cert = Cert::create([
-                    'order_id' => $order->id,
-                    'action' => 'new',
-                    'channel' => 'acme',
-                    'common_name' => '',
-                    'email' => $user->email,
-                    'standard_count' => $product->standard_min,
-                    'wildcard_count' => $product->wildcard_min,
-                    'amount' => '0.00',
-                    'status' => 'pending',
-                ]);
-
-                $order->latest_cert_id = $cert->id;
-                $order->amount = '0.00';
-                $order->purchased_standard_count = 0;
-                $order->purchased_wildcard_count = 0;
-                $order->save();
-
-                // f. 生成 EAB
-                $eabKid = Str::uuid()->toString();
-                $eabHmac = rtrim(strtr(base64_encode(random_bytes(32)), '+/', '-_'), '=');
-
-                // g. 写入 order EAB
-                $order->eab_kid = $eabKid;
-                $order->eab_hmac = $eabHmac;
-                $order->save();
-
-                return [
-                    'order' => $order,
-                    'cert' => $cert,
-                    'eab_kid' => $eabKid,
-                    'eab_hmac' => $eabHmac,
-                ];
-            });
-
-            // 如配置了 acmeApiUrl：调用连接的服务创建账户（best-effort，不阻断本地流程）
-            if ($this->apiClient->isConfigured()) {
-                try {
-                    $upstreamResult = $this->apiClient->createAccount($customer, $productCode);
-                    if ($upstreamResult['code'] === 1 && isset($upstreamResult['data']['id'])) {
-                        $result['order']->update(['acme_account_id' => $upstreamResult['data']['id']]);
-                    } else {
-                        Log::warning('createAccount upstream failed', ['msg' => $upstreamResult['msg'] ?? '']);
-                    }
-                } catch (\Exception $e) {
-                    Log::warning('createAccount upstream exception', ['error' => $e->getMessage()]);
-                }
-            }
-
-            return [
-                'code' => 1,
-                'data' => [
-                    'id' => $result['order']->id,
-                    'email' => $customer,
-                    'customer_id' => $user->id,
-                    'eab_kid' => $result['eab_kid'],
-                    'eab_hmac' => $result['eab_hmac'],
-                    'status' => 'valid',
-                ],
-            ];
-        } catch (\Exception $e) {
-            return ['code' => 0, 'msg' => $e->getMessage()];
-        }
-    }
-
-    /**
-     * 获取账户信息
-     */
-    public function getAccount(int $accountId): array
-    {
-        $order = Order::find($accountId);
-
-        if (! $order) {
-            return ['code' => 0, 'msg' => 'Account not found'];
-        }
-
-        return [
-            'code' => 1,
-            'data' => [
-                'id' => $order->id,
-                'email' => $order->user->email ?? '',
-                'status' => 'valid',
-                'created_at' => $order->created_at->toIso8601String(),
-            ],
-        ];
-    }
-
-    /**
-     * 创建订单 — SAN 验证 + 扣费 + 调上游 + 存映射
-     */
-    public function createOrder(int $accountId, array $domains, string $productCode): array
-    {
-        // 1. 查找本级 Order
-        $order = Order::find($accountId);
-        if (! $order) {
-            return ['code' => 0, 'msg' => 'Account not found'];
-        }
-
-        // 2. 获取 product + latestCert
-        $product = $order->product;
-        $currentLatestCert = $order->latestCert;
-
-        if (! $product || ! $currentLatestCert) {
-            return ['code' => 0, 'msg' => 'Order has no valid cert or product'];
-        }
-
-        // 3. SAN 验证
+        // SAN 验证
         $domainsString = implode(',', $domains);
         $sanErrors = ValidatorUtil::validateSansMaxCount($product->toArray(), $domainsString);
         if (! empty($sanErrors)) {
             return ['code' => 0, 'msg' => implode('; ', array_values($sanErrors))];
         }
 
-        // 4. prepareAndCharge：cert 复用/创建 + 扣费（事务内）
+        // 复用已有 Order 或创建新 Order
+        $order = $this->findOrCreateOrder($user, $product, $referId);
+
+        // prepareAndCharge：cert 复用/创建 + 扣费
         try {
             $cert = $this->orderService->prepareAndCharge($order, $domains);
         } catch (\Exception $e) {
             return ['code' => 0, 'msg' => $e->getMessage()];
         }
 
-        // 5. 调上游（使用映射后的 ID）
-        if ($this->apiClient->isConfigured()) {
-            $upstreamResult = $this->orderService->submitToUpstream(
-                $cert,
-                $domains,
-                $order,
-                (int) $order->acme_account_id
-            );
-
-            if (isset($upstreamResult['error'])) {
-                return ['code' => 0, 'msg' => $upstreamResult['error']];
-            }
-
-            $cert = $upstreamResult['cert'];
-        } else {
+        // 调上游（始终新建，不判断）
+        if (! $this->apiClient->isConfigured()) {
             return ['code' => 0, 'msg' => 'Upstream gateway not configured'];
+        }
+
+        $upstreamResult = $this->orderService->submitNewOrder($cert, $domains, $order);
+
+        if (isset($upstreamResult['error'])) {
+            return ['code' => 0, 'msg' => $upstreamResult['error']];
         }
 
         return [
             'code' => 1,
-            'data' => $this->formatOrder($cert),
+            'data' => $this->formatOrder($upstreamResult['cert']),
+        ];
+    }
+
+    /**
+     * 重签订单 — 在已有订单上创建新 Cert + 调上游重签
+     */
+    public function reissueOrder(int $orderId, array $domains, ?string $referId = null): array
+    {
+        $order = Order::find($orderId);
+        if (! $order) {
+            return ['code' => 0, 'msg' => 'Order not found'];
+        }
+
+        $product = $order->product;
+        if (! $product) {
+            return ['code' => 0, 'msg' => 'Product not found'];
+        }
+
+        // SAN 验证
+        $domainsString = implode(',', $domains);
+        $sanErrors = ValidatorUtil::validateSansMaxCount($product->toArray(), $domainsString);
+        if (! empty($sanErrors)) {
+            return ['code' => 0, 'msg' => implode('; ', array_values($sanErrors))];
+        }
+
+        // 在 prepareAndCharge 之前保存上游 ID（prepareAndCharge 可能创建新 cert 导致 latestCert 变化）
+        $upstreamOrderId = $order->latestCert?->api_id;
+
+        // prepareAndCharge
+        try {
+            $cert = $this->orderService->prepareAndCharge($order, $domains);
+        } catch (\Exception $e) {
+            return ['code' => 0, 'msg' => $e->getMessage()];
+        }
+        if (! $upstreamOrderId) {
+            return ['code' => 0, 'msg' => 'No upstream order ID found'];
+        }
+
+        if (! $this->apiClient->isConfigured()) {
+            return ['code' => 0, 'msg' => 'Upstream gateway not configured'];
+        }
+
+        // 调上游（始终重签，不判断）
+        $upstreamResult = $this->orderService->submitReissue($cert, $domains, $order, (int) $upstreamOrderId);
+
+        if (isset($upstreamResult['error'])) {
+            return ['code' => 0, 'msg' => $upstreamResult['error']];
+        }
+
+        return [
+            'code' => 1,
+            'data' => $this->formatOrder($upstreamResult['cert']),
         ];
     }
 
@@ -236,20 +133,12 @@ class ApiService
             return ['code' => 0, 'msg' => 'Order not found'];
         }
 
-        // 如果有 api_id 且上游已配置，转发取消请求（best-effort）
-        if ($cert->api_id && $this->apiClient->isConfigured()) {
-            try {
-                $this->apiClient->cancelOrder((int) $cert->api_id);
-            } catch (\Exception $e) {
-                // best-effort，不阻断本地清理
-            }
+        $order = Order::find($cert->order_id);
+        if (! $order) {
+            return ['code' => 0, 'msg' => 'Order not found'];
         }
 
-        // 标记 cert 为 cancelled
-        $cert->update(['status' => 'cancelled']);
-
-        // 清理 acme_authorizations
-        $cert->acmeAuthorizations()->delete();
+        app(BillingService::class)->executeCancel($order);
 
         return ['code' => 1];
     }
@@ -315,7 +204,7 @@ class ApiService
      */
     public function respondToChallenge(int $challengeId): array
     {
-        $authorization = Authorization::find($challengeId);
+        $authorization = \App\Models\Acme\Authorization::find($challengeId);
 
         if (! $authorization) {
             return ['code' => 0, 'msg' => 'Challenge not found'];
@@ -430,6 +319,61 @@ class ApiService
     }
 
     /**
+     * 查找或创建 Order（复用已有 ACME 订阅或创建新订阅）
+     */
+    private function findOrCreateOrder(User $user, Product $product, ?string $referId = null): Order
+    {
+        // 复用已有 Order：同产品、未过期、未取消
+        $existingOrder = Order::where('user_id', $user->id)
+            ->where('product_id', $product->id)
+            ->where('period_till', '>', now())
+            ->whereNull('cancelled_at')
+            ->orderBy('period_till', 'desc')
+            ->first();
+
+        if ($existingOrder) {
+            return $existingOrder;
+        }
+
+        // 创建新 Order
+        return DB::transaction(function () use ($user, $product, $referId) {
+            $period = $product->periods[0] ?? 12;
+
+            $order = Order::create([
+                'user_id' => $user->id,
+                'product_id' => $product->id,
+                'brand' => $product->brand,
+                'period' => $period,
+                'amount' => 0,
+                'period_from' => now(),
+                'period_till' => now()->addMonths($period),
+                'auto_renew' => true,
+            ]);
+
+            $cert = Cert::create([
+                'order_id' => $order->id,
+                'action' => 'new',
+                'channel' => 'acme',
+                'common_name' => '',
+                'refer_id' => $referId ?? str_replace('-', '', Str::uuid()->toString()),
+                'email' => $user->email,
+                'standard_count' => $product->standard_min,
+                'wildcard_count' => $product->wildcard_min,
+                'amount' => '0.00',
+                'status' => 'pending',
+            ]);
+
+            $order->latest_cert_id = $cert->id;
+            $order->amount = '0.00';
+            $order->purchased_standard_count = 0;
+            $order->purchased_wildcard_count = 0;
+            $order->save();
+
+            return $order;
+        });
+    }
+
+    /**
      * 通过 order.id 查找最新的 ACME cert
      */
     private function findCertByOrderId(int $orderId): ?Cert
@@ -445,7 +389,7 @@ class ApiService
     }
 
     /**
-     * 格式化订单数据（接收 Cert）
+     * 格式化订单数据
      */
     private function formatOrder(Cert $cert): array
     {

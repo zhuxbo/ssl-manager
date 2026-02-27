@@ -37,38 +37,39 @@ class ApiClient
             return '';
         }
 
-        return rtrim(preg_replace('#/api/v\w+#', '/api/acme', $url), '/');
+        return rtrim(preg_replace('#/api/v\d+#', '/api/acme', $url), '/');
     }
 
     /**
-     * 创建账户
+     * 创建订单（合并原 createAccount + createOrder）
      */
-    public function createAccount(string $customer, string $productCode): array
+    public function createOrder(string $customer, string $productCode, array $domains, ?string $referId = null): array
     {
-        return $this->request('POST', '/accounts', [
+        $data = [
             'customer' => $customer,
             'product_code' => $productCode,
-        ]);
-    }
-
-    /**
-     * 获取账户信息
-     */
-    public function getAccount(int $accountId): array
-    {
-        return $this->request('GET', "/accounts/$accountId");
-    }
-
-    /**
-     * 创建订单
-     */
-    public function createOrder(int $accountId, array $domains, string $productCode): array
-    {
-        return $this->request('POST', '/orders', [
-            'account_id' => $accountId,
             'domains' => $domains,
-            'product_code' => $productCode,
-        ]);
+        ];
+        if ($referId) {
+            $data['refer_id'] = $referId;
+        }
+
+        return $this->request('POST', '/orders', $data);
+    }
+
+    /**
+     * 重签订单
+     */
+    public function reissueOrder(int $orderId, array $domains, ?string $referId = null): array
+    {
+        $data = [
+            'domains' => $domains,
+        ];
+        if ($referId) {
+            $data['refer_id'] = $referId;
+        }
+
+        return $this->request('POST', "/orders/reissue/$orderId", $data);
     }
 
     /**
@@ -84,7 +85,7 @@ class ApiClient
      */
     public function getOrderAuthorizations(int $orderId): array
     {
-        return $this->request('GET', "/orders/$orderId/authorizations");
+        return $this->request('GET', "/orders/authorizations/$orderId");
     }
 
     /**
@@ -92,7 +93,7 @@ class ApiClient
      */
     public function respondToChallenge(int $challengeId): array
     {
-        return $this->request('POST', "/challenges/$challengeId/respond");
+        return $this->request('POST', "/challenges/respond/$challengeId");
     }
 
     /**
@@ -100,7 +101,7 @@ class ApiClient
      */
     public function finalizeOrder(int $orderId, string $csr): array
     {
-        return $this->request('POST', "/orders/$orderId/finalize", [
+        return $this->request('POST', "/orders/finalize/$orderId", [
             'csr' => $csr,
         ]);
     }
@@ -110,7 +111,7 @@ class ApiClient
      */
     public function getCertificate(int $orderId): array
     {
-        return $this->request('GET', "/orders/$orderId/certificate");
+        return $this->request('GET', "/orders/certificate/$orderId");
     }
 
     /**

@@ -67,13 +67,6 @@ return new class extends Migration
             });
         }
 
-        // 6. orders 添加 acme_account_id
-        if (! Schema::hasColumn('orders', 'acme_account_id')) {
-            Schema::table('orders', function (Blueprint $table) {
-                $table->unsignedBigInteger('acme_account_id')->nullable()->after('eab_hmac')->comment('连接的 ACME 服务的账户 ID');
-            });
-        }
-
         // 7. 删除旧表
         Schema::dropIfExists('acme_orders');
         Schema::dropIfExists('acme_nonces');
@@ -94,16 +87,7 @@ return new class extends Migration
             });
         }
 
-        // 10. orders.acme_account_id 添加索引
-        $indexExists = collect(DB::select("SELECT INDEX_NAME FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'orders' AND INDEX_NAME = 'orders_acme_account_id_index'"))->isNotEmpty();
-
-        if (! $indexExists && Schema::hasColumn('orders', 'acme_account_id')) {
-            Schema::table('orders', function (Blueprint $table) {
-                $table->index('acme_account_id');
-            });
-        }
-
-        // 11. acme_accounts.public_key 从 string 改为 text
+        // 10. acme_accounts.public_key 从 string 改为 text
         if (Schema::hasColumn('acme_accounts', 'public_key')) {
             Schema::table('acme_accounts', function (Blueprint $table) {
                 $table->text('public_key')->comment('JWK 公钥')->change();
@@ -114,6 +98,26 @@ return new class extends Migration
         if (Schema::hasColumn('acme_accounts', 'contact')) {
             Schema::table('acme_accounts', function (Blueprint $table) {
                 $table->string('contact', 500)->nullable()->comment('联系方式')->change();
+            });
+        }
+
+        // 13. 删除 orders.acme_account_id 列（不再暴露 account 概念）
+        if (Schema::hasColumn('orders', 'acme_account_id')) {
+            $indexExists = collect(DB::select("SELECT INDEX_NAME FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'orders' AND INDEX_NAME = 'orders_acme_account_id_index'"))->isNotEmpty();
+            if ($indexExists) {
+                Schema::table('orders', function (Blueprint $table) {
+                    $table->dropIndex('orders_acme_account_id_index');
+                });
+            }
+            Schema::table('orders', function (Blueprint $table) {
+                $table->dropColumn('acme_account_id');
+            });
+        }
+
+        // 14. 删除 acme_accounts.acme_account_id 列
+        if (Schema::hasColumn('acme_accounts', 'acme_account_id')) {
+            Schema::table('acme_accounts', function (Blueprint $table) {
+                $table->dropColumn('acme_account_id');
             });
         }
     }

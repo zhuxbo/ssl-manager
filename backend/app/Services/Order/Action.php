@@ -772,6 +772,10 @@ class Action
      */
     public function cancel(int $orderId): void
     {
+        // 先在事务内完成校验
+        $order = null;
+        $isAcme = false;
+
         DB::beginTransaction();
         try {
             // 事务查询不锁定产品
@@ -793,15 +797,11 @@ class Action
             $order->latestCert->status === 'cancelled' && $this->error('订单已取消');
             $order->latestCert->status != 'cancelling' && $this->error('订单状态不是取消中');
 
-            // ACME 订单通过 AcmeApiClient 取消
-            if ($order->latestCert->channel === 'acme' && $order->latestCert->api_id) {
-                $acmeApiClient = app(\App\Services\Acme\ApiClient::class);
-                if ($acmeApiClient->isConfigured()) {
-                    $result = $acmeApiClient->cancelOrder((int) $order->latestCert->api_id);
-                    if ($result['code'] !== 1) {
-                        $this->error($result['msg'] ?? '上游取消失败');
-                    }
-                }
+            $isAcme = $order->latestCert->channel === 'acme';
+
+            if ($isAcme) {
+                // ACME 分支：校验通过后先提交事务，executeCancel 内部管理自己的事务和 cancelled_at
+                DB::commit();
             } else {
                 try {
                     $this->api->cancel($orderId);
@@ -810,29 +810,29 @@ class Action
                     $msg = $e->getApiResponse()['msg'] ?: 'CA取消失败';
                     $this->error($msg, $errors);
                 }
+
+                // 获取交易信息
+                $transaction = OrderUtil::getCancelTransaction($order->toArray());
+
+                // 创建交易记录并退款
+                Transaction::create($transaction);
+
+                // 更新订单状态
+                $order->latestCert->update(['status' => 'cancelled']);
+
+                // 保存取消时间
+                $order->update(['cancelled_at' => now()]);
+
+                DB::commit();
             }
-
-            // 获取交易信息
-            $transaction = OrderUtil::getCancelTransaction($order->toArray());
-
-            // 创建交易记录并退款
-            Transaction::create($transaction);
-
-            // 更新订单状态
-            $order->latestCert->update(['status' => 'cancelled']);
-
-            // 清理 ACME authorizations
-            if ($order->latestCert->channel === 'acme') {
-                $order->latestCert->acmeAuthorizations()->delete();
-            }
-
-            // 保存取消时间
-            $order->update(['cancelled_at' => now()]);
-
-            DB::commit();
         } catch (Throwable $e) {
             DB::rollback();
             throw $e;
+        }
+
+        // ACME 分支：CA 调用和本地清理在外层事务外执行
+        if ($isAcme) {
+            app(\App\Services\Acme\BillingService::class)->executeCancel($order);
         }
 
         $this->success();
