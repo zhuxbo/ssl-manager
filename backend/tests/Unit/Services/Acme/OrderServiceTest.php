@@ -132,7 +132,7 @@ class OrderServiceTest extends TestCase
             'status' => 'valid',
         ]);
 
-        // Mock API 返回成功
+        // Mock API 返回成功（新签名：customer, productCode, domains, referId）
         $this->mockApiClient->shouldReceive('createOrder')->once()->andReturn([
             'code' => 1,
             'data' => [

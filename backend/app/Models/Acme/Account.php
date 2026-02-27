@@ -14,7 +14,6 @@ class Account extends BaseModel
     protected $fillable = [
         'user_id',
         'order_id',
-        'acme_account_id',
         'key_id',
         'public_key',
         'contact',

@@ -152,7 +152,7 @@ Route::middleware('api.user')->group(function () {
 
     // ACME 路由
     Route::prefix('acme')->group(function () {
-        Route::get('eab', [AcmeController::class, 'getEab']);
+        Route::get('eab/{orderId}', [AcmeController::class, 'getEab'])->where('orderId', '[0-9]+');
         Route::post('order', [AcmeController::class, 'createOrder']);
     });
 

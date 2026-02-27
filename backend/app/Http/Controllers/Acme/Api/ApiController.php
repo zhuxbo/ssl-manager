@@ -6,26 +6,31 @@ use App\Http\Controllers\Controller;
 use App\Services\Acme\ApiService;
 use Illuminate\Http\Request;
 
-class AcmeApiController extends Controller
+class ApiController extends Controller
 {
     public function __construct(
         private ApiService $apiService
     ) {}
 
     /**
-     * 创建账户
-     * POST /api/acme/accounts
+     * 创建订单
+     * POST /api/acme/orders
      */
-    public function createAccount(Request $request): void
+    public function createOrder(Request $request): void
     {
         $request->validate([
             'customer' => 'required|email|max:200',
             'product_code' => 'required|string|max:50',
+            'domains' => 'required|array|min:1',
+            'domains.*' => 'required|string|max:255',
+            'refer_id' => 'sometimes|string|max:64',
         ]);
 
-        $result = $this->apiService->createAccount(
+        $result = $this->apiService->createOrder(
             $request->input('customer'),
-            $request->input('product_code')
+            $request->input('product_code'),
+            $request->input('domains'),
+            $request->input('refer_id')
         );
 
         if ($result['code'] === 1) {
@@ -36,37 +41,21 @@ class AcmeApiController extends Controller
     }
 
     /**
-     * 获取账户信息
-     * GET /api/acme/accounts/{id}
+     * 重签订单
+     * POST /api/acme/orders/reissue/{id}
      */
-    public function getAccount(int $id): void
-    {
-        $result = $this->apiService->getAccount($id);
-
-        if ($result['code'] === 1) {
-            $this->success($result['data']);
-        } else {
-            $this->error($result['msg']);
-        }
-    }
-
-    /**
-     * 创建订单
-     * POST /api/acme/orders
-     */
-    public function createOrder(Request $request): void
+    public function reissueOrder(Request $request, int $id): void
     {
         $request->validate([
-            'account_id' => 'required|integer',
             'domains' => 'required|array|min:1',
             'domains.*' => 'required|string|max:255',
-            'product_code' => 'required|string|max:50',
+            'refer_id' => 'sometimes|string|max:64',
         ]);
 
-        $result = $this->apiService->createOrder(
-            $request->integer('account_id'),
+        $result = $this->apiService->reissueOrder(
+            $id,
             $request->input('domains'),
-            $request->input('product_code')
+            $request->input('refer_id')
         );
 
         if ($result['code'] === 1) {
@@ -108,7 +97,7 @@ class AcmeApiController extends Controller
 
     /**
      * 获取订单的授权列表
-     * GET /api/acme/orders/{id}/authorizations
+     * GET /api/acme/orders/authorizations/{id}
      */
     public function getOrderAuthorizations(int $id): void
     {
@@ -123,7 +112,7 @@ class AcmeApiController extends Controller
 
     /**
      * 完成订单（提交 CSR）
-     * POST /api/acme/orders/{id}/finalize
+     * POST /api/acme/orders/finalize/{id}
      */
     public function finalizeOrder(Request $request, int $id): void
     {
@@ -142,7 +131,7 @@ class AcmeApiController extends Controller
 
     /**
      * 下载证书
-     * GET /api/acme/orders/{id}/certificate
+     * GET /api/acme/orders/certificate/{id}
      */
     public function getCertificate(int $id): void
     {
@@ -157,7 +146,7 @@ class AcmeApiController extends Controller
 
     /**
      * 响应验证挑战
-     * POST /api/acme/challenges/{id}/respond
+     * POST /api/acme/challenges/respond/{id}
      */
     public function respondToChallenge(int $id): void
     {

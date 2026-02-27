@@ -82,16 +82,16 @@ certbot → Manager (ACME 服务) → Gateway/上级 Manager (REST API) → Cert
 
 ### REST API 端点 (`/api/acme/*`)
 
-供下级 Manager 调用：
+供下级 Manager 调用，无 account 概念，路由风格 id 放后面：
 
-- `POST /api/acme/accounts` - 创建账户
-- `POST /api/acme/orders` - 创建订单
+- `POST /api/acme/orders` - 创建订单（参数：customer, product_code, domains, refer_id）
+- `POST /api/acme/orders/reissue/{id}` - 重签订单（参数：domains, refer_id）
 - `GET /api/acme/orders/{id}` - 获取订单
-- `GET /api/acme/orders/{id}/authorizations` - 获取授权列表
-- `POST /api/acme/orders/{id}/finalize` - 完成订单
-- `GET /api/acme/orders/{id}/certificate` - 下载证书
-- `POST /api/acme/challenges/{id}/respond` - 响应验证
 - `DELETE /api/acme/orders/{id}` - 取消订单
+- `GET /api/acme/orders/authorizations/{id}` - 获取授权列表
+- `POST /api/acme/orders/finalize/{id}` - 完成订单
+- `GET /api/acme/orders/certificate/{id}` - 下载证书
+- `POST /api/acme/challenges/respond/{id}` - 响应验证
 - `POST /api/acme/certificates/revoke` - 吊销证书（by serial_number）
 
 ### 关键服务
@@ -102,9 +102,9 @@ certbot → Manager (ACME 服务) → Gateway/上级 Manager (REST API) → Cert
 | `NonceService` | Nonce 管理（Redis Cache::pull 原子操作） |
 | `AccountService` | 账户管理 |
 | `OrderService` | 订单管理（操作 Cert 代替 AcmeOrder） |
-| `AcmeApiService` | 账户创建 + 订单管理 + 取消 |
+| `ApiService` | 订单创建 + 重签 + 取消（REST API 端点逻辑） |
 | `BillingService` | 订阅创建（延迟扣费）、自动续费 |
-| `AcmeApiClient` | 连接的 ACME REST API 调用（原 UpstreamClient） |
+| `ApiClient` | 连接的 ACME REST API 调用 |
 
 ### 数据模型
 
@@ -114,23 +114,22 @@ certbot → Manager (ACME 服务) → Gateway/上级 Manager (REST API) → Cert
 - `certs.refer_id` 随机唯一字符串用于 ACME URL
 - `acme_authorizations.cert_id` FK → certs.id
 - `acme_authorizations.acme_challenge_id` 连接的服务 challenge ID
-- `acme_accounts.acme_account_id` 连接的服务账户 ID
 - ACME 状态从 cert.status + acme_authorizations 推导，不存储；有 CSR 无证书 → processing
 - `cert.status = 'processing'` 由 createOrder 上游成功后设置（区别于 ACME 协议状态推导，用于 commitCancel 区分取消场景）
 - `OrderService::tryCompletePendingFinalize()` — processing 状态时向上游查询证书是否已签发
 
 ### 扣费时机
 
-- **延迟扣费**：创建订阅（BillingService::createSubscription / tryAutoRenew / AcmeApiService::createAccount）时不扣费，cert.amount='0.00'，purchased_count=0
-- **首次扣费**：new-order 提交域名时按实际域名精确计费（OrderService::create / AcmeApiService::createOrder）
+- **延迟扣费**：创建订阅（BillingService::createSubscription / tryAutoRenew / ApiService::createOrder）时不扣费，cert.amount='0.00'，purchased_count=0
+- **首次扣费**：new-order 提交域名时按实际域名精确计费（OrderService::create / ApiService::createOrder）
 - **action 判断**：purchased_standard_count==0 && purchased_wildcard_count==0 → action='new'（含基础价格），否则 → action='reissue'（只计增购）
 - **幂等扣费**：通过 purchased count 判断是否需要增购，避免重复扣费
 
 ### 订单取消
 
-- **cancel 端点**：`DELETE /api/acme/orders/{id}`（AcmeApiService::cancelOrder / AcmeApiClient::cancelOrder）
+- **cancel 端点**：`DELETE /api/acme/orders/{id}`（ApiService::cancelOrder / ApiClient::cancelOrder）
 - **pending 取消**（未提交域名、未扣费）：ActionTrait::cancelPending() ACME 快速清理分支，清理 acme_authorizations + 标记 cancelled
-- **processing/active 取消**（已提交、已扣费）：Action::cancel() 对 ACME cert 使用 AcmeApiClient::cancelOrder 通知上游 + getCancelTransaction 退费
+- **processing/active 取消**（已提交、已扣费）：Action::cancel() 对 ACME cert 使用 ApiClient::cancelOrder 通知上游 + getCancelTransaction 退费
 - **best-effort**：上游取消失败不阻断本地流程
 
 ### 配置
@@ -178,7 +177,7 @@ certbot → Manager A (ACME 服务端) → Manager B / 上级系统 (REST API) �
 - 上级系统 `certs` 表出现对应记录
 - 完整流程：EAB → 注册 → 创建订单 → DNS 验证 → Finalize → 下载证书
 
-详细操作步骤见根目录 `ACME.md`。
+详细操作步骤见 `skills/acme-e2e-test/SKILL.md`。
 
 ---
 

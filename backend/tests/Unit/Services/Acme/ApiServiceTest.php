@@ -6,7 +6,6 @@ use App\Models\Acme\Authorization;
 use App\Models\Cert;
 use App\Models\Order;
 use App\Models\ProductPrice;
-use App\Models\Transaction;
 use App\Services\Acme\ApiClient;
 use App\Services\Acme\ApiService;
 use Database\Seeders\DatabaseSeeder;
@@ -17,7 +16,7 @@ use Tests\TestCase;
 use Tests\Traits\CreatesTestData;
 
 /**
- * AcmeApiService 测试（需要数据库）
+ * ApiService 测试（需要数据库）
  */
 #[Group('database')]
 class ApiServiceTest extends TestCase
@@ -38,7 +37,6 @@ class ApiServiceTest extends TestCase
 
         $this->mockApiClient = Mockery::mock(ApiClient::class);
         $this->mockApiClient->shouldReceive('isConfigured')->andReturn(false)->byDefault();
-        $this->mockApiClient->shouldReceive('createAccount')->andReturn(['code' => 1])->byDefault();
 
         $this->app->instance(ApiClient::class, $this->mockApiClient);
         $this->service = app(ApiService::class);
@@ -50,7 +48,7 @@ class ApiServiceTest extends TestCase
         parent::tearDown();
     }
 
-    public function test_create_account_creates_order_and_cert_with_transaction(): void
+    public function test_create_order_creates_order_and_cert(): void
     {
         $user = $this->createTestUser(['balance' => '500.00', 'email' => 'acme_test@example.com']);
         $product = $this->createTestProduct([
@@ -62,150 +60,109 @@ class ApiServiceTest extends TestCase
         ]);
         $this->createProductPrice($product->id, $user);
 
-        $result = $this->service->createAccount('acme_test@example.com', 12345);
+        // 配置上游
+        $this->mockApiClient->shouldReceive('isConfigured')->andReturn(true);
+        $this->mockApiClient->shouldReceive('createOrder')
+            ->once()
+            ->withArgs(function ($customer, $productCode, $domains, $referId) {
+                return $customer === 'acme_test@example.com'
+                    && $productCode === '12345'
+                    && $domains === ['example.com'];
+            })
+            ->andReturn([
+                'code' => 1,
+                'data' => [
+                    'id' => 777,
+                    'authorizations' => [
+                        [
+                            'identifier' => ['type' => 'dns', 'value' => 'example.com'],
+                            'status' => 'pending',
+                            'challenges' => [
+                                ['id' => 888, 'type' => 'dns-01', 'token' => 'test-token', 'key_authorization' => 'test-key-auth', 'status' => 'pending'],
+                            ],
+                        ],
+                    ],
+                ],
+            ]);
+
+        $result = $this->service->createOrder('acme_test@example.com', '12345', ['example.com']);
 
         $this->assertEquals(1, $result['code']);
         $this->assertArrayHasKey('data', $result);
-        $this->assertArrayHasKey('eab_kid', $result['data']);
-        $this->assertArrayHasKey('eab_hmac', $result['data']);
 
         // 验证 Order 创建
         $order = Order::where('user_id', $user->id)->latest()->first();
         $this->assertNotNull($order);
-        $this->assertNotNull($order->eab_kid);
-        $this->assertNotNull($order->eab_hmac);
 
         // 验证 Cert 创建
-        $cert = Cert::where('order_id', $order->id)->first();
+        $cert = Cert::where('order_id', $order->id)->where('channel', 'acme')->latest()->first();
         $this->assertNotNull($cert);
         $this->assertEquals('acme', $cert->channel);
-        $this->assertEquals('pending', $cert->status);
-
-        // 验证 Transaction 创建
-        $transaction = Transaction::where('transaction_id', $order->id)
-            ->where('type', 'order')
-            ->first();
-        $this->assertNotNull($transaction);
     }
 
-    public function test_create_account_generates_valid_eab_credentials(): void
+    public function test_create_order_fails_when_user_not_found(): void
     {
-        $user = $this->createTestUser(['balance' => '500.00', 'email' => 'eab_test@example.com']);
-        $product = $this->createTestProduct([
-            'support_acme' => 1,
-            'api_id' => 67890,
-        ]);
-        $this->createProductPrice($product->id, $user);
-
-        $result = $this->service->createAccount('eab_test@example.com', 67890);
-
-        $this->assertEquals(1, $result['code']);
-
-        // eab_kid 是 UUID
-        $this->assertMatchesRegularExpression(
-            '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/',
-            $result['data']['eab_kid']
-        );
-
-        // eab_hmac 是 base64url 编码
-        $this->assertMatchesRegularExpression(
-            '/^[A-Za-z0-9_-]+$/',
-            $result['data']['eab_hmac']
-        );
-    }
-
-    public function test_create_account_fails_when_user_not_found(): void
-    {
-        $product = $this->createTestProduct([
-            'support_acme' => 1,
-            'api_id' => 11111,
-        ]);
-
-        $result = $this->service->createAccount('nonexistent@example.com', 11111);
+        $result = $this->service->createOrder('nonexistent@example.com', '11111', ['example.com']);
 
         $this->assertEquals(0, $result['code']);
         $this->assertStringContainsString('User not found', $result['msg']);
     }
 
-    public function test_create_account_fails_when_product_not_found(): void
+    public function test_create_order_fails_when_product_not_found(): void
     {
         $this->createTestUser(['email' => 'product_test@example.com']);
 
-        $result = $this->service->createAccount('product_test@example.com', 99999);
+        $result = $this->service->createOrder('product_test@example.com', '99999', ['example.com']);
 
         $this->assertEquals(0, $result['code']);
         $this->assertStringContainsString('Product not found', $result['msg']);
     }
 
-    public function test_create_account_reuses_existing_order_with_unused_eab(): void
+    public function test_create_order_reuses_existing_order(): void
     {
-        $user = $this->createTestUser(['balance' => '500.00', 'email' => 'reuse_eab@example.com']);
+        $user = $this->createTestUser(['balance' => '500.00', 'email' => 'reuse@example.com']);
         $product = $this->createTestProduct([
             'support_acme' => 1,
             'api_id' => 33333,
+            'standard_min' => 1,
+            'wildcard_min' => 0,
+            'total_min' => 1,
         ]);
         $this->createProductPrice($product->id, $user);
 
-        // 先创建一次（生成 Order + EAB）
-        $result1 = $this->service->createAccount('reuse_eab@example.com', 33333);
-        $this->assertEquals(1, $result1['code']);
-
-        $initialBalance = $user->fresh()->balance;
-
-        // 再次调用应返回同一 EAB，不扣费
-        $result2 = $this->service->createAccount('reuse_eab@example.com', 33333);
-        $this->assertEquals(1, $result2['code']);
-        $this->assertEquals($result1['data']['eab_kid'], $result2['data']['eab_kid']);
-        $this->assertEquals($result1['data']['eab_hmac'], $result2['data']['eab_hmac']);
-
-        // 余额不变
-        $this->assertEquals($initialBalance, $user->fresh()->balance);
-    }
-
-    public function test_create_account_reuses_existing_eab_even_when_used(): void
-    {
-        $user = $this->createTestUser(['balance' => '500.00', 'email' => 'recover_eab@example.com']);
-        $product = $this->createTestProduct([
-            'support_acme' => 1,
-            'api_id' => 44444,
+        // 创建已有 Order
+        $existingOrder = $this->createTestOrder($user, $product, [
+            'period_till' => now()->addYear(),
+            'purchased_standard_count' => 1,
+            'purchased_wildcard_count' => 0,
         ]);
-        $this->createProductPrice($product->id, $user);
+        $existingCert = $this->createTestCert($existingOrder, ['channel' => 'acme']);
 
-        // 创建 Order + EAB
-        $result1 = $this->service->createAccount('recover_eab@example.com', 44444);
-        $this->assertEquals(1, $result1['code']);
+        $this->mockApiClient->shouldReceive('isConfigured')->andReturn(true);
+        $this->mockApiClient->shouldReceive('createOrder')
+            ->once()
+            ->andReturn([
+                'code' => 1,
+                'data' => [
+                    'id' => 777,
+                    'authorizations' => [
+                        [
+                            'identifier' => ['type' => 'dns', 'value' => 'example.com'],
+                            'status' => 'pending',
+                            'challenges' => [
+                                ['id' => 888, 'type' => 'dns-01', 'token' => 'test-token', 'key_authorization' => 'ka', 'status' => 'pending'],
+                            ],
+                        ],
+                    ],
+                ],
+            ]);
 
-        // 模拟 EAB 已使用
-        $order = Order::find($result1['data']['id']);
-        $order->eab_used_at = now();
-        $order->save();
+        $result = $this->service->createOrder('reuse@example.com', '33333', ['example.com']);
+        $this->assertEquals(1, $result['code']);
 
-        $initialBalance = $user->fresh()->balance;
-
-        // 再次调用应返回同一 EAB（EAB 可复用），不扣费
-        $result2 = $this->service->createAccount('recover_eab@example.com', 44444);
-        $this->assertEquals(1, $result2['code']);
-        $this->assertEquals($result1['data']['eab_kid'], $result2['data']['eab_kid']);
-        $this->assertEquals($result1['data']['eab_hmac'], $result2['data']['eab_hmac']);
-        $this->assertEquals($result1['data']['id'], $result2['data']['id']);
-
-        // 余额不变
-        $this->assertEquals($initialBalance, $user->fresh()->balance);
-    }
-
-    public function test_create_account_fails_when_insufficient_balance(): void
-    {
-        $user = $this->createTestUser(['balance' => '0.00', 'email' => 'broke@example.com']);
-        $product = $this->createTestProduct([
-            'support_acme' => 1,
-            'api_id' => 22222,
-        ]);
-        $this->createProductPrice($product->id, $user, '999.00');
-
-        $result = $this->service->createAccount('broke@example.com', 22222);
-
-        $this->assertEquals(0, $result['code']);
-        $this->assertStringContainsString('balance', strtolower($result['msg']));
+        // 应该复用已有 Order，不创建新的
+        $orderCount = Order::where('user_id', $user->id)->where('product_id', $product->id)->count();
+        $this->assertEquals(1, $orderCount);
     }
 
     public function test_create_order_with_upstream_maps_ids(): void
@@ -219,7 +176,6 @@ class ApiServiceTest extends TestCase
             'total_min' => 1,
         ]);
         $order = $this->createTestOrder($user, $product, [
-            'acme_account_id' => 42,
             'purchased_standard_count' => 10,
             'purchased_wildcard_count' => 10,
         ]);
@@ -229,11 +185,15 @@ class ApiServiceTest extends TestCase
         ]);
         $cert->update(['api_id' => null, 'cert' => null]);
 
-        // 上游应收到 order.acme_account_id (42) 和 product.api_id (55555)
+        // 上游应收到 email + product.api_id + domains
         $this->mockApiClient->shouldReceive('isConfigured')->andReturn(true);
         $this->mockApiClient->shouldReceive('createOrder')
             ->once()
-            ->with(42, ['example.com'], '55555')
+            ->withArgs(function ($customer, $productCode, $domains, $referId) {
+                return $customer === 'upstream_order@example.com'
+                    && $productCode === '55555'
+                    && $domains === ['example.com'];
+            })
             ->andReturn([
                 'code' => 1,
                 'data' => [
@@ -256,20 +216,104 @@ class ApiServiceTest extends TestCase
                 ],
             ]);
 
-        $result = $this->service->createOrder($order->id, ['example.com'], '55555');
+        $result = $this->service->createOrder('upstream_order@example.com', '55555', ['example.com']);
 
         $this->assertEquals(1, $result['code']);
-        // 返回本级 cert.id，不是上游 777
+        // 返回本级 order.id，不是上游 777
         $this->assertNotEquals(777, $result['data']['id']);
 
         // cert.api_id 存储了上游 ID
-        $updatedCert = Cert::find($result['data']['id']);
+        $updatedOrder = Order::find($result['data']['id']);
+        $updatedCert = Cert::find($updatedOrder->latest_cert_id);
         $this->assertEquals(777, $updatedCert->api_id);
 
         // AcmeAuthorization.acme_challenge_id 存储了上游 challenge ID
         $authorization = $updatedCert->acmeAuthorizations->first();
         $this->assertNotNull($authorization);
         $this->assertEquals(888, $authorization->acme_challenge_id);
+    }
+
+    public function test_reissue_order_calls_upstream_reissue(): void
+    {
+        $user = $this->createTestUser(['balance' => '500.00', 'email' => 'reissue@example.com']);
+        $product = $this->createTestProduct([
+            'support_acme' => 1,
+            'api_id' => 66666,
+            'standard_min' => 1,
+            'wildcard_min' => 0,
+            'total_min' => 1,
+            'reissue' => 1,
+        ]);
+        $this->createProductPrice($product->id, $user);
+
+        $order = $this->createTestOrder($user, $product, [
+            'period_till' => now()->addYear(),
+            'purchased_standard_count' => 3,
+            'purchased_wildcard_count' => 0,
+        ]);
+        // 已签发的 cert（有 api_id）
+        $cert = $this->createTestCert($order, [
+            'channel' => 'acme',
+            'status' => 'active',
+        ]);
+        $cert->update(['api_id' => 999]);
+
+        $this->mockApiClient->shouldReceive('isConfigured')->andReturn(true);
+        $this->mockApiClient->shouldReceive('reissueOrder')
+            ->once()
+            ->withArgs(function ($orderId, $domains, $referId) {
+                return $orderId === 999
+                    && $domains === ['new.example.com'];
+            })
+            ->andReturn([
+                'code' => 1,
+                'data' => [
+                    'id' => 1001,
+                    'authorizations' => [
+                        [
+                            'identifier' => ['type' => 'dns', 'value' => 'new.example.com'],
+                            'status' => 'pending',
+                            'challenges' => [
+                                ['id' => 2001, 'type' => 'dns-01', 'token' => 'reissue-token', 'key_authorization' => 'ka', 'status' => 'pending'],
+                            ],
+                        ],
+                    ],
+                ],
+            ]);
+
+        $result = $this->service->reissueOrder($order->id, ['new.example.com']);
+
+        $this->assertEquals(1, $result['code']);
+        $this->assertEquals($order->id, $result['data']['id']);
+    }
+
+    public function test_reissue_order_fails_when_no_upstream_id(): void
+    {
+        $user = $this->createTestUser(['balance' => '500.00', 'email' => 'noid@example.com']);
+        $product = $this->createTestProduct([
+            'support_acme' => 1,
+            'api_id' => 77777,
+            'reissue' => 1,
+        ]);
+        $this->createProductPrice($product->id, $user);
+
+        $order = $this->createTestOrder($user, $product, [
+            'period_till' => now()->addYear(),
+            'purchased_standard_count' => 1,
+        ]);
+        // cert 没有 api_id
+        $cert = $this->createTestCert($order, [
+            'channel' => 'acme',
+            'status' => 'pending',
+        ]);
+        $cert->update(['api_id' => null]);
+
+        $this->mockApiClient->shouldReceive('isConfigured')->andReturn(true);
+
+        $result = $this->service->reissueOrder($order->id, ['example.com']);
+
+        $this->assertEquals(0, $result['code']);
+        $this->assertStringContainsString('No upstream order ID', $result['msg']);
     }
 
     public function test_respond_to_challenge_with_upstream_maps_challenge_id(): void
@@ -373,7 +417,7 @@ class ApiServiceTest extends TestCase
         ]);
         $cert->update(['api_id' => 777]);
 
-        // getOrder 内部调用 formatOrder，应返回 cert.id 而非 api_id
+        // getOrder 内部调用 formatOrder，应返回 order.id 而非 api_id
         $result = $this->service->getOrder($cert->id);
 
         $this->assertEquals(1, $result['code']);

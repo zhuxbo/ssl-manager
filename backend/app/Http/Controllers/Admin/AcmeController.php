@@ -18,33 +18,26 @@ class AcmeController extends BaseController
             'user_id' => 'required|integer',
             'product_id' => 'required|integer',
             'period' => 'required|integer',
+            'quantity' => 'sometimes|integer|min:1|max:100',
         ]);
 
         $user = User::findOrFail($request->input('user_id'));
         $billingService = app(BillingService::class);
+        $quantity = (int) $request->input('quantity', 1);
 
-        $result = $billingService->createSubscription($user, $request->input('product_id'), $request->input('period'));
-
-        if ($result['code'] !== 1) {
-            $this->error($result['msg']);
+        $created = 0;
+        for ($i = 0; $i < $quantity; $i++) {
+            $result = $billingService->createSubscription($user, $request->input('product_id'), $request->input('period'));
+            if ($result['code'] !== 1) {
+                if ($created === 0) {
+                    $this->error($result['msg']);
+                }
+                break;
+            }
+            $created++;
         }
 
-        $order = $result['data']['order'];
-        $serverUrl = $result['data']['server_url'];
-        $eabKid = $result['data']['eab_kid'];
-        $eabHmac = $result['data']['eab_hmac'];
-
-        $this->success([
-            'order_id' => $order->id,
-            'eab_kid' => $eabKid,
-            'eab_hmac' => $eabHmac,
-            'server_url' => $serverUrl,
-            'certbot_command' => "certbot certonly --server $serverUrl --eab-kid $eabKid"
-                ." --eab-hmac-key $eabHmac"
-                .' -d example.com --preferred-challenges dns-01',
-            'acmesh_command' => "acme.sh --register-account --server $serverUrl --eab-kid $eabKid"
-                ." --eab-hmac-key $eabHmac",
-        ]);
+        $this->success(['created' => $created]);
     }
 
     /**
@@ -54,13 +47,11 @@ class AcmeController extends BaseController
     {
         $order = Order::where('id', $orderId)
             ->whereNotNull('eab_kid')
-            ->first();
-
-        if (! $order) {
-            $this->error('订单不存在或无 EAB 凭据');
-        }
+            ->firstOrFail();
 
         $serverUrl = rtrim(get_system_setting('site', 'url', config('app.url')), '/').'/acme/directory';
+        $configDir = "/etc/letsencrypt/$order->eab_kid";
+        $configHome = "~/.acme.sh/$order->eab_kid";
 
         $this->success([
             'order_id' => $order->id,
@@ -68,10 +59,10 @@ class AcmeController extends BaseController
             'eab_hmac' => $order->eab_hmac,
             'eab_used' => $order->eab_used_at !== null,
             'server_url' => $serverUrl,
-            'certbot_command' => "certbot certonly --server $serverUrl --eab-kid $order->eab_kid"
+            'certbot_command' => "certbot certonly --config-dir $configDir --server $serverUrl --eab-kid $order->eab_kid"
                 ." --eab-hmac-key $order->eab_hmac"
                 .' -d example.com --preferred-challenges dns-01',
-            'acmesh_command' => "acme.sh --register-account --server $serverUrl --eab-kid $order->eab_kid"
+            'acmesh_command' => "acme.sh --register-account --config-home $configHome --server $serverUrl --eab-kid $order->eab_kid"
                 ." --eab-hmac-key $order->eab_hmac",
         ]);
     }

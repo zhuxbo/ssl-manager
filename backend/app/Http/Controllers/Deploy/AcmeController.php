@@ -75,11 +75,18 @@ class AcmeController extends Controller
         }
 
         $serverUrl = rtrim(get_system_setting('site', 'url', config('app.url')), '/').'/acme/directory';
+        $configDir = "/etc/letsencrypt/$order->eab_kid";
+        $configHome = "~/.acme.sh/$order->eab_kid";
 
         $this->success([
             'eab_kid' => $order->eab_kid,
             'eab_hmac' => $order->eab_hmac,
             'server_url' => $serverUrl,
+            'certbot_command' => "certbot certonly --config-dir $configDir --server $serverUrl --eab-kid $order->eab_kid"
+                ." --eab-hmac-key $order->eab_hmac"
+                .' -d example.com --preferred-challenges dns-01',
+            'acmesh_command' => "acme.sh --register-account --config-home $configHome --server $serverUrl --eab-kid $order->eab_kid"
+                ." --eab-hmac-key $order->eab_hmac",
         ]);
     }
 }

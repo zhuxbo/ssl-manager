@@ -16,55 +16,41 @@ class AcmeController extends BaseController
         $request->validate([
             'product_id' => 'required|integer',
             'period' => 'required|integer',
+            'quantity' => 'sometimes|integer|min:1|max:100',
         ]);
 
         $user = $this->guard->user();
         $billingService = app(BillingService::class);
+        $quantity = (int) $request->input('quantity', 1);
 
-        $result = $billingService->createSubscription($user, $request->input('product_id'), $request->input('period'));
-
-        if ($result['code'] !== 1) {
-            $this->error($result['msg']);
+        $created = 0;
+        for ($i = 0; $i < $quantity; $i++) {
+            $result = $billingService->createSubscription($user, $request->input('product_id'), $request->input('period'));
+            if ($result['code'] !== 1) {
+                if ($created === 0) {
+                    $this->error($result['msg']);
+                }
+                break;
+            }
+            $created++;
         }
 
-        $order = $result['data']['order'];
-        $serverUrl = $result['data']['server_url'];
-        $eabKid = $result['data']['eab_kid'];
-        $eabHmac = $result['data']['eab_hmac'];
-
-        $this->success([
-            'order_id' => $order->id,
-            'eab_kid' => $eabKid,
-            'eab_hmac' => $eabHmac,
-            'server_url' => $serverUrl,
-            'certbot_command' => "certbot certonly --server $serverUrl --eab-kid $eabKid"
-                ." --eab-hmac-key $eabHmac"
-                .' -d example.com --preferred-challenges dns-01',
-            'acmesh_command' => "acme.sh --register-account --server $serverUrl --eab-kid $eabKid"
-                ." --eab-hmac-key $eabHmac",
-        ]);
+        $this->success(['created' => $created]);
     }
 
     /**
-     * 查询 EAB 状态
+     * 查询 EAB 状态（按 orderId 精确查询）
      */
-    public function getEab(Request $request): void
+    public function getEab(Request $request, int $orderId): void
     {
-        $userId = $this->guard->id();
-
-        $order = Order::where('user_id', $userId)
-            ->whereHas('product', fn ($q) => $q->where('support_acme', 1))
-            ->where('period_till', '>', now())
-            ->whereNull('cancelled_at')
+        $order = Order::where('id', $orderId)
+            ->where('user_id', $this->guard->id())
             ->whereNotNull('eab_kid')
-            ->orderBy('period_till', 'desc')
-            ->first();
-
-        if (! $order) {
-            $this->error('No ACME subscription found');
-        }
+            ->firstOrFail();
 
         $serverUrl = rtrim(get_system_setting('site', 'url', config('app.url')), '/').'/acme/directory';
+        $configDir = "/etc/letsencrypt/$order->eab_kid";
+        $configHome = "~/.acme.sh/$order->eab_kid";
 
         $data = [
             'eab_kid' => $order->eab_kid,
@@ -73,12 +59,11 @@ class AcmeController extends BaseController
             'server_url' => $serverUrl,
         ];
 
-        // 附加一键命令
-        $data['certbot_command'] = "certbot certonly --server $serverUrl --eab-kid $order->eab_kid"
+        $data['certbot_command'] = "certbot certonly --config-dir $configDir --server $serverUrl --eab-kid $order->eab_kid"
             ." --eab-hmac-key $order->eab_hmac"
             .' -d example.com --preferred-challenges dns-01';
 
-        $data['acmesh_command'] = "acme.sh --register-account --server $serverUrl --eab-kid $order->eab_kid"
+        $data['acmesh_command'] = "acme.sh --register-account --config-home $configHome --server $serverUrl --eab-kid $order->eab_kid"
             ." --eab-hmac-key $order->eab_hmac";
 
         $this->success($data);

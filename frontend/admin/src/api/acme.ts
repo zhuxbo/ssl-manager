@@ -5,6 +5,7 @@ export function createOrder(data: {
   user_id: number;
   product_id: number;
   period: number;
+  quantity?: number;
 }): Promise<BaseResponse> {
   return http.post<BaseResponse, any>("/acme/order", { data });
 }

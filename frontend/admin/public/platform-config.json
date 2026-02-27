@@ -39,5 +39,6 @@
   "DnsTools": [
     "https://dns-tools-cn.cnssl.com",
     "https://dns-tools-us.cnssl.com"
-  ]
+  ],
+  "AcmeIssueMode": true
 }

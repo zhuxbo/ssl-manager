@@ -168,14 +168,17 @@ const domainFlags = computed(() => {
     .join(" ");
 });
 
+const configDir = computed(() => `/etc/letsencrypt/${order.eab_kid}`);
+const configHome = computed(() => `~/.acme.sh/${order.eab_kid}`);
+
 const certbotCommand = computed(() => {
   const challengeMethod =
     method.value === "dns-01" ? "--manual" : "--standalone";
-  return `certbot certonly --server ${order.server_url} --eab-kid ${order.eab_kid} --eab-hmac-key ${order.eab_hmac} --preferred-challenges ${method.value} ${challengeMethod} ${domainFlags.value}`;
+  return `certbot certonly --config-dir ${configDir.value} --server ${order.server_url} --eab-kid ${order.eab_kid} --eab-hmac-key ${order.eab_hmac} --preferred-challenges ${method.value} ${challengeMethod} ${domainFlags.value}`;
 });
 
 const acmeRegisterCommand = computed(() => {
-  return `acme.sh --register-account --server ${order.server_url} --eab-kid ${order.eab_kid} --eab-hmac-key ${order.eab_hmac}`;
+  return `acme.sh --register-account --config-home ${configHome.value} --server ${order.server_url} --eab-kid ${order.eab_kid} --eab-hmac-key ${order.eab_hmac}`;
 });
 
 const acmeIssueCommand = computed(() => {
@@ -183,7 +186,7 @@ const acmeIssueCommand = computed(() => {
     method.value === "dns-01"
       ? "--dns --yes-I-know-dns-manual-mode-enough-go-ahead-please"
       : "-w /var/www/html";
-  return `acme.sh --issue --server ${order.server_url} ${issueMethod} ${domainFlags.value}`;
+  return `acme.sh --issue --config-home ${configHome.value} --server ${order.server_url} ${issueMethod} ${domainFlags.value}`;
 });
 
 const handleCopy = (text: string) => {

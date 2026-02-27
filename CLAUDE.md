@@ -69,24 +69,26 @@ skills/         # 开发规范（详细文档）
 
 ### ACME 多级代理
 
-- **架构**：certbot → Manager A → Manager B → ... → CA，每级都有系统 orders/certs 记录
+- **架构**：certbot → Manager A → Manager B → ... → Gateway → CA，每级都有系统 orders/certs 记录
 - **去掉 acme_orders 表**：订单/证书全部使用系统 `orders` + `certs` 表
+- **无 account 概念**：REST API 不暴露 account，合并为单步 `POST /orders`（新建）+ `POST /orders/reissue/{id}`（重签）。只有 RFC 8555 handler 做 new/reissue 判断
 - **产品标识**：`products.support_acme = 1` 标识 ACME 产品（不新增 product_type）
-- **ID 映射**：每级独立 ID，通过映射字段关联上游（accountId→`orders.acme_account_id`、orderId→`certs.api_id`、challengeId→`acme_authorizations.acme_challenge_id`）。对外 REST API 统一使用 order.id（通过 `findCertByOrderId()` 查找 latestCert），与 Gateway 保持一致
+- **ID 映射**：一层映射 `certs.api_id → 上游 order.id`，`acme_authorizations.acme_challenge_id → 上游 challenge.id`。REST API 统一使用 order.id（通过 `findCertByOrderId()` 查找 latestCert）
+- **路由风格**：id 放在子操作后面，如 `/orders/finalize/{id}`、`/orders/reissue/{id}`、`/challenges/respond/{id}`
 - **AcmeAccount 精确关联**：`acme_accounts.order_id` 直接关联 Order，避免通过 user_id 查找错误（兼容旧数据回落到 user_id 查询）
-- **AcmeApiService 核心原则**：所有方法「查本级 → 映射 ID → 调上游」，不能透传下游 ID 给上游
+- **ApiService 核心原则**：所有方法「查本级 → 映射 ID → 调上游」，不能透传下游 ID 给上游。createOrder 始终调 submitNewOrder，reissueOrder 始终调 submitReissue
+- **OrderService 拆分**：`submitNewOrder`（新建）+ `submitReissue`（重签）+ `saveUpstreamResult`（共享保存逻辑）。RFC 8555 create 方法根据 `cert.action` 判断调用哪个
 - **EAB 可复用**：同一 EAB 可多次注册 ACME 账户（Certum 订单级认证），`eab_used_at` 仅记录首次使用时间
-- **createAccount 复用**：有有效 Order 时不重复扣费，统一返回现有 EAB
 - **续费联动**：`BillingService::tryAutoRenew` 创建新 Order 后自动迁移 `AcmeAccount.order_id`，并通知上游创建新订单（best-effort）
 - **DNS 委托自动化**：创建 ACME Order 时自动尝试通过委托写 TXT 记录（best-effort，不阻塞）
 - **URL 标识**：使用 `cert.refer_id`（随机唯一字符串）替代 token
 - **ACME 状态推导**：不存储状态字段，从 cert.status + acme_authorizations 推导
-- **延迟扣费**：创建订阅时不扣费（cert.amount=0，purchased_count=0），推迟到 `new-order` 提交域名后按实际域名精确计费。`OrderUtil::getOrderTransaction()` + `Transaction::create()`（boot 事件自动更新余额）
-- **ACME 取消**：cancel 端点（`DELETE /orders/{id}`）支持三种场景：pending（未扣费，快速清理）、processing（已扣费，通知上游+退费）、active（退费周期内通知上游+退费）。`Action::cancel()` 对 ACME cert 使用 `AcmeApiClient::cancelOrder` 替代 `api->cancel`
+- **延迟扣费**：创建订阅时不扣费（cert.amount=0，purchased_count=0），推迟到 `new-order` 提交域名后按实际域名精确计费
+- **ACME 取消**：cancel 端点（`DELETE /orders/{id}`）支持三种场景：pending（未扣费，快速清理）、processing（已扣费，通知上游+退费）、active（退费周期内通知上游+退费）
 - **SAN 验证**：`ValidatorUtil::validateSansMaxCount()` + purchased count 追踪
 - **不自动补齐根域名**：ACME 产品不调用 `DomainUtil::addGiftDomain()`
 - **配置**：优先 `ca.acmeUrl`/`ca.acmeToken`，未设置时回落到 `ca.url`（路径替换为 `/api/acme`）/`ca.token`
-- **AcmeApiClient**（原 UpstreamClient）：连接上级 ACME REST API
+- **ApiClient**：连接上级 ACME REST API
 - **EAB 获取方式**：Deploy Token（`GET /api/deploy/acme/eab/{orderId}`）、用户端 API（`GET /api/user/acme/eab`）
 - **Web 端 ACME 订阅**：`BillingService::createSubscription()` 供 Web 表单创建 ACME 订单，复用有效 Order 逻辑
 - **ACME 订单创建路由**：Deploy `POST /api/deploy/acme/order`、User `POST /api/user/acme/order`、Admin `POST /api/admin/acme/order` + `GET /api/admin/acme/eab/{orderId}`
@@ -97,7 +99,7 @@ skills/         # 开发规范（详细文档）
 - **RFC 8555 路由兼容**：order/authz/cert 路由同时支持 GET 和 POST（certbot finalize 后用 GET 轮询 order）
 - **ACME 异常处理**：`ApiExceptions` 对 ACME 路由返回 RFC 7807 格式（`urn:ietf:params:acme:error:*`），避免通用 `{"code":0}` 格式
 - **ACME 日志排除**：`LogOperation` 排除 `acme/*` 路由，避免非标准请求格式干扰
-- **E2E 测试**：Docker certbot → Manager → 上级系统 → CA，详见 `ACME.md`
+- **E2E 测试**：Docker certbot → Manager → 上级系统 → CA，详见 `skills/acme-e2e-test/SKILL.md`
 
 ### 自动续费/重签
 

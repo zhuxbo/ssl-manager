@@ -212,10 +212,10 @@ REDIS_PORT=6379
 **方式 A — REST API（下级系统调用）**：
 
 ```bash
-curl -s -X POST http://localhost:5300/api/acme/accounts \
+curl -s -X POST http://localhost:5300/api/acme/orders \
   -H "Authorization: Bearer <manager-api-token>" \
   -H "Content-Type: application/json" \
-  -d '{"customer":"user@example.com","product_code":"<product-api-id>"}' | jq .
+  -d '{"customer":"user@example.com","product_code":"<product-api-id>","domains":["example.com"]}' | jq .
 ```
 
 **方式 B — 用户端 API**：
@@ -335,7 +335,7 @@ cd gateway/backend/develop/docker && ./start.sh down
 
 ## 关键配置参考
 
-### Manager AcmeApiClient 配置优先级
+### Manager ApiClient 配置优先级
 
 1. `system_settings('ca', 'acmeUrl')` → 直接使用
 2. 回落：`system_settings('ca', 'url')` 路径替换为 `/api/acme`

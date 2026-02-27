@@ -59,7 +59,7 @@ else
 fi
 
 # --- 检查 4: Gateway 端口可达 ---
-gateway_status=$(curl -s -o /dev/null -w "%{http_code}" --max-time "$CURL_TIMEOUT" "$GATEWAY_URL/api/acme/accounts" 2>&1) || gateway_status="000"
+gateway_status=$(curl -s -o /dev/null -w "%{http_code}" --max-time "$CURL_TIMEOUT" "$GATEWAY_URL/api/acme/orders" 2>&1) || gateway_status="000"
 if [ "$gateway_status" != "000" ]; then
     check_pass "Gateway $GATEWAY_URL 可达 (HTTP ${gateway_status})"
 else

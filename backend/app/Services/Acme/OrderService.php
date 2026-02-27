@@ -87,35 +87,23 @@ class OrderService
         }
 
         // 4. 调用上游 API
-        if ($this->apiClient->isConfigured()) {
-            $acmeAccountId = $account->acme_account_id;
-
-            // 延迟注册：上游账户不存在时先创建
-            if (! $acmeAccountId) {
-                $acmeResult = $this->apiClient->createAccount(
-                    $user->email ?? '',
-                    (string) $product->api_id
-                );
-
-                if ($acmeResult['code'] === 1 && isset($acmeResult['data']['id'])) {
-                    $acmeAccountId = $acmeResult['data']['id'];
-                    $account->update(['acme_account_id' => $acmeAccountId]);
-                    $order->update(['acme_account_id' => $acmeAccountId]);
-                } else {
-                    return ['error' => 'serverInternal', 'detail' => $acmeResult['msg'] ?? 'Failed to create upstream account'];
-                }
-            }
-
-            $upstreamResult = $this->submitToUpstream($cert, $domains, $order, $acmeAccountId);
-
-            if (isset($upstreamResult['error'])) {
-                return ['error' => 'serverInternal', 'detail' => $upstreamResult['error']];
-            }
-
-            $cert = $upstreamResult['cert'];
-        } else {
+        if (! $this->apiClient->isConfigured()) {
             return ['error' => 'serverInternal', 'detail' => 'Upstream gateway not configured'];
         }
+
+        $upstreamOrderId = $order->latestCert?->api_id;
+
+        if ($cert->action === 'reissue' && $upstreamOrderId) {
+            $upstreamResult = $this->submitReissue($cert, $domains, $order, (int) $upstreamOrderId);
+        } else {
+            $upstreamResult = $this->submitNewOrder($cert, $domains, $order);
+        }
+
+        if (isset($upstreamResult['error'])) {
+            return ['error' => 'serverInternal', 'detail' => $upstreamResult['error']];
+        }
+
+        $cert = $upstreamResult['cert'];
 
         return ['order' => $cert];
     }
@@ -773,25 +761,52 @@ class OrderService
     }
 
     /**
-     * 调上游 + 创建 authorization
-     * 返回 Cert（已更新）或 null（失败，错误信息在 $error 中）
+     * 提交新订单到上游
      */
-    public function submitToUpstream(Cert $cert, array $domains, Order $order, ?int $acmeAccountId): array
+    public function submitNewOrder(Cert $cert, array $domains, Order $order): array
     {
-        $domainsString = implode(',', $domains);
-        $sans = OrderUtil::getSansFromDomains($domainsString, $order->product->gift_root_domain ?? false);
+        $user = $order->user;
+        $product = $order->product;
 
         $apiResult = $this->apiClient->createOrder(
-            $acmeAccountId,
+            $user->email ?? '',
+            (string) $product->api_id,
             $domains,
-            (string) $order->product->api_id
+            $cert->refer_id
         );
 
         if ($apiResult['code'] !== 1) {
             return ['error' => $apiResult['msg'] ?? 'Upstream order creation failed'];
         }
 
-        $apiData = $apiResult['data'];
+        return $this->saveUpstreamResult($cert, $domains, $order, $apiResult['data']);
+    }
+
+    /**
+     * 提交重签到上游
+     */
+    public function submitReissue(Cert $cert, array $domains, Order $order, int $upstreamOrderId): array
+    {
+        $apiResult = $this->apiClient->reissueOrder(
+            $upstreamOrderId,
+            $domains,
+            $cert->refer_id
+        );
+
+        if ($apiResult['code'] !== 1) {
+            return ['error' => $apiResult['msg'] ?? 'Upstream reissue failed'];
+        }
+
+        return $this->saveUpstreamResult($cert, $domains, $order, $apiResult['data']);
+    }
+
+    /**
+     * 保存上游返回结果（共享逻辑）
+     */
+    private function saveUpstreamResult(Cert $cert, array $domains, Order $order, array $apiData): array
+    {
+        $domainsString = implode(',', $domains);
+        $sans = OrderUtil::getSansFromDomains($domainsString, $order->product->gift_root_domain ?? false);
 
         $cert->update([
             'common_name' => $domains[0] ?? '',

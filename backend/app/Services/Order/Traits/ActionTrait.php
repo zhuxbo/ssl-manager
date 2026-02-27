@@ -1042,18 +1042,12 @@ trait ActionTrait
                 // 获取交易信息并创建取消记录
                 $transaction = OrderUtil::getCancelTransaction($order->toArray());
                 Transaction::create($transaction);
-                // 删除当前证书和订单
-                $cert->delete();
-                $order->delete();
+                // 标记证书为 cancelled，保留 order 和 cert
+                $cert->update(['status' => 'cancelled']);
             } else {
-                // ACME pending cert（未提交域名、未扣费）：快速清理
+                // ACME 订单取消：由 BillingService 清理特有数据
                 if ($cert->channel === 'acme' && empty($cert->api_id)) {
-                    $cert->acmeAuthorizations()->delete();
-                    $cert->update(['status' => 'cancelled']);
-                    DB::commit();
-                    $this->deleteTask($order_id, 'commit');
-
-                    return;
+                    app(\App\Services\Acme\BillingService::class)->cancelOrder($order);
                 }
 
                 // 获取交易信息
@@ -1063,6 +1057,7 @@ trait ActionTrait
                 Transaction::create($transaction);
 
                 $cert->update(['status' => 'cancelled']);
+                $order->update(['cancelled_at' => now()]);
             }
             DB::commit();
         } catch (Throwable $e) {

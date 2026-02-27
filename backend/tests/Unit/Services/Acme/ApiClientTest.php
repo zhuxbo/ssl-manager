@@ -18,7 +18,6 @@ class ApiClientTest extends TestCase
 
     public function test_request_uses_system_setting_url_and_key(): void
     {
-        // 设置 system_settings 模拟
         $this->mockSystemSettings('https://gateway.test/api', 'test-api-key-123');
 
         Http::fake([
@@ -26,7 +25,7 @@ class ApiClientTest extends TestCase
         ]);
 
         $client = app(ApiClient::class);
-        $result = $client->getAccount(1);
+        $result = $client->getOrder(1);
 
         $this->assertEquals(1, $result['code']);
 
@@ -45,7 +44,7 @@ class ApiClientTest extends TestCase
         ]);
 
         $client = app(ApiClient::class);
-        $result = $client->createOrder(1, ['example.com', '*.example.com'], 'DV_SSL');
+        $result = $client->createOrder('test@example.com', 'DV_SSL', ['example.com', '*.example.com'], 'ref123');
 
         $this->assertEquals(1, $result['code']);
 
@@ -53,9 +52,32 @@ class ApiClientTest extends TestCase
             $body = $request->data();
 
             return $request->url() === 'https://gateway.test/api/orders'
-                && $body['account_id'] === 1
+                && $body['customer'] === 'test@example.com'
+                && $body['product_code'] === 'DV_SSL'
                 && $body['domains'] === ['example.com', '*.example.com']
-                && $body['product_code'] === 'DV_SSL';
+                && $body['refer_id'] === 'ref123';
+        });
+    }
+
+    public function test_reissue_order_sends_correct_payload(): void
+    {
+        $this->mockSystemSettings('https://gateway.test/api', 'test-key');
+
+        Http::fake([
+            'gateway.test/api/*' => Http::response(['code' => 1, 'data' => ['id' => 99]], 200),
+        ]);
+
+        $client = app(ApiClient::class);
+        $result = $client->reissueOrder(42, ['new.example.com'], 'ref456');
+
+        $this->assertEquals(1, $result['code']);
+
+        Http::assertSent(function ($request) {
+            $body = $request->data();
+
+            return $request->url() === 'https://gateway.test/api/orders/reissue/42'
+                && $body['domains'] === ['new.example.com']
+                && $body['refer_id'] === 'ref456';
         });
     }
 
@@ -71,7 +93,7 @@ class ApiClientTest extends TestCase
         $result = $client->respondToChallenge(42);
 
         Http::assertSent(function ($request) {
-            return $request->url() === 'https://gateway.test/api/challenges/42/respond';
+            return $request->url() === 'https://gateway.test/api/challenges/respond/42';
         });
     }
 
@@ -87,8 +109,40 @@ class ApiClientTest extends TestCase
         $result = $client->finalizeOrder(10, 'test-csr-pem');
 
         Http::assertSent(function ($request) {
-            return $request->url() === 'https://gateway.test/api/orders/10/finalize'
+            return $request->url() === 'https://gateway.test/api/orders/finalize/10'
                 && $request->data()['csr'] === 'test-csr-pem';
+        });
+    }
+
+    public function test_get_order_authorizations_sends_correct_endpoint(): void
+    {
+        $this->mockSystemSettings('https://gateway.test/api', 'test-key');
+
+        Http::fake([
+            'gateway.test/api/*' => Http::response(['code' => 1, 'data' => []], 200),
+        ]);
+
+        $client = app(ApiClient::class);
+        $client->getOrderAuthorizations(15);
+
+        Http::assertSent(function ($request) {
+            return $request->url() === 'https://gateway.test/api/orders/authorizations/15';
+        });
+    }
+
+    public function test_get_certificate_sends_correct_endpoint(): void
+    {
+        $this->mockSystemSettings('https://gateway.test/api', 'test-key');
+
+        Http::fake([
+            'gateway.test/api/*' => Http::response(['code' => 1, 'data' => []], 200),
+        ]);
+
+        $client = app(ApiClient::class);
+        $client->getCertificate(20);
+
+        Http::assertSent(function ($request) {
+            return $request->url() === 'https://gateway.test/api/orders/certificate/20';
         });
     }
 
@@ -113,7 +167,7 @@ class ApiClientTest extends TestCase
         $this->mockSystemSettings('', '');
 
         $client = app(ApiClient::class);
-        $result = $client->getAccount(1);
+        $result = $client->getOrder(1);
 
         $this->assertEquals(0, $result['code']);
         $this->assertStringContainsString('not configured', $result['msg']);

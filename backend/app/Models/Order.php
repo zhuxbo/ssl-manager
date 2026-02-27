@@ -39,7 +39,6 @@ class Order extends BaseModel
         'eab_kid',
         'eab_hmac',
         'eab_used_at',
-        'acme_account_id',
         'auto_renew',
         'auto_reissue',
     ];

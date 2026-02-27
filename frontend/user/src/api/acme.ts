@@ -4,11 +4,12 @@ import { http } from "@/utils/http";
 export function createOrder(data: {
   product_id: number;
   period: number;
+  quantity?: number;
 }): Promise<BaseResponse> {
   return http.post<BaseResponse, any>("/acme/order", { data });
 }
 
 /** 获取 EAB 凭据 */
-export function getEab(): Promise<BaseResponse> {
-  return http.get<BaseResponse, any>("/acme/eab");
+export function getEab(orderId: number): Promise<BaseResponse> {
+  return http.get<BaseResponse, any>(`/acme/eab/${orderId}`);
 }
