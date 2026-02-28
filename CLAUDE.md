@@ -110,8 +110,8 @@ skills/         # 开发规范（详细文档）
 
 ## 测试
 
-- 纯单元测试：`php artisan test --exclude-group=database`
-- 全部测试需 MySQL 连接
+- 纯单元测试：`php artisan test --parallel --exclude-group=database`
+- 全部测试需 MySQL 连接，本地务必用 `--parallel` 与 CI 保持一致
 - 详见 `skills/backend-dev/SKILL.md` 测试章节
 
 ### M4 测试覆盖

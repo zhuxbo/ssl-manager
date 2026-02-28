@@ -123,10 +123,8 @@ class RateLimiter
      */
     private function checkLimit(string $key, int $limit, string $errorMessage): void
     {
-        // 使用原子递增操作
-        if (! Cache::has($key)) {
-            Cache::put($key, 0, 60);
-        }
+        // add() 是原子操作（Redis SETNX），key 已存在时不会覆盖
+        Cache::add($key, 0, 60);
         $current = Cache::increment($key);
 
         if ($current > $limit) {

@@ -556,10 +556,12 @@ ValidateCommand 定时验证
 ### 运行测试
 
 ```bash
-php artisan test                           # 全部测试（需 MySQL）
-php artisan test --exclude-group=database  # 纯单元测试（无需数据库）
-php artisan test --coverage --min=80       # 覆盖率报告
+php artisan test --parallel                           # 全部测试（需 MySQL，推荐加 --parallel 与 CI 一致）
+php artisan test --parallel --exclude-group=database  # 纯单元测试（无需数据库）
+php artisan test --coverage --min=80                  # 覆盖率报告
 ```
+
+> **CI 经验**：本地务必用 `--parallel` 跑测试，与 CI 保持一致。`paratest`（并行测试）对 PHP Warning 的处理比 `phpunit` 更严格——例如无命名空间文件中的 `use Mockery;`、`use ZipArchive;` 等全局类 use 语句，`phpunit` 仅输出 Warning 继续运行，而 `paratest` 会直接 fatal exit 导致 CI 失败。
 
 ### 测试分组
 
