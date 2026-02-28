@@ -20,7 +20,7 @@ class DelegationController extends BaseController
     public function __construct()
     {
         parent::__construct();
-        $this->delegationService = new CnameDelegationService;
+        $this->delegationService = app(CnameDelegationService::class);
     }
 
     /**

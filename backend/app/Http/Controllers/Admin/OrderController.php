@@ -18,7 +18,7 @@ class OrderController extends BaseController
     {
         parent::__construct();
 
-        $this->action = new Action;
+        $this->action = app(Action::class);
     }
 
     use \App\Http\Traits\OrderController;

@@ -200,7 +200,7 @@ class ProductController extends BaseController
         // new: 新增, update: 更新, all: 全部
         $type = $validated['type'] ?? 'new';
 
-        (new Action)->importProduct($source, $brand, $apiId, $type);
+        app(Action::class)->importProduct($source, $brand, $apiId, $type);
     }
 
     /**

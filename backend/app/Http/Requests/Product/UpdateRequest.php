@@ -125,7 +125,11 @@ class UpdateRequest extends BaseProductRequest
             }
 
             // 导入更新场景可跳过 SSL 域名数量校验
-            if (! $this->skipSslDomainValidation && $this->isSSL()) {
+            // 仅在传入域名相关字段时才校验
+            $hasDomainFields = isset($data['standard_max']) || isset($data['wildcard_max'])
+                || isset($data['standard_min']) || isset($data['wildcard_min'])
+                || isset($data['total_min']) || isset($data['total_max']);
+            if (! $this->skipSslDomainValidation && $hasDomainFields && $this->isSSL()) {
                 $this->validateSSLProductDomains($validator, $data);
             }
         });

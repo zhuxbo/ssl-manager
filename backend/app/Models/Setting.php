@@ -3,12 +3,15 @@
 namespace App\Models;
 
 use App\Bootstrap\ApiExceptions;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Facades\Cache;
 use JsonException;
 
 class Setting extends BaseModel
 {
+    use HasFactory;
+
     /**
      * 缓存前缀
      */

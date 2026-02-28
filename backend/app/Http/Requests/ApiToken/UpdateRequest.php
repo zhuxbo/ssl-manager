@@ -12,7 +12,7 @@ class UpdateRequest extends BaseRequest
 
         return [
             'user_id' => 'required|integer|exists:users,id|unique:api_tokens,user_id,'.$apiTokenId,
-            'token' => 'nullable|string|alpha_num|max:128',
+            'token' => 'nullable|string|max:128',
             'allowed_ips' => 'nullable|array',
             'allowed_ips.*' => 'ip',
             'rate_limit' => 'nullable|integer',

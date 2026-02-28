@@ -4,16 +4,18 @@ namespace App\Models;
 
 use App\Models\Traits\HasReadOnlyFields;
 use App\Models\Traits\HasSnowflakeId;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Facades\DB;
 use Throwable;
 
 class Invoice extends BaseModel
 {
+    use HasFactory;
     use HasReadOnlyFields;
     use HasSnowflakeId;
 
-    // 只读字段
+    // 只读字段：发票创建后不可修改的字段
     protected array $readOnlyFields = ['user_id', 'amount', 'organization', 'taxation'];
 
     protected $fillable = [

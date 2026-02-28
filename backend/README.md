@@ -175,8 +175,15 @@ database/
 └── seeders/           # 数据种子
 
 tests/
-├── Feature/           # 功能测试
-└── Unit/             # 单元测试
+├── Feature/
+│   ├── Commands/      # 命令行测试
+│   ├── Models/        # 模型测试
+│   ├── Middleware/     # 中间件测试
+│   ├── Http/          # 控制器测试
+│   ├── Services/      # 服务测试
+│   └── Jobs/          # 队列任务测试
+├── Unit/              # 单元测试
+└── Traits/            # 测试辅助 Traits
 ```
 
 ## 开发规范

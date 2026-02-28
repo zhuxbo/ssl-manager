@@ -172,7 +172,7 @@ class AutoRenewCommand extends Command
         ];
 
         // 执行续费或重签
-        $actionService = new Action($user->id);
+        $actionService = app(Action::class, ['userId' => $user->id]);
 
         try {
             if ($action === 'renew') {
@@ -204,7 +204,7 @@ class AutoRenewCommand extends Command
      */
     private function autoPayAndCommit(int $orderId, int $userId): void
     {
-        $actionService = new Action($userId);
+        $actionService = app(Action::class, ['userId' => $userId]);
 
         try {
             // 支付订单

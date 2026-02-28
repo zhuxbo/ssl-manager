@@ -109,12 +109,14 @@ trait ActionTrait
                 $this->error('订单状态错误');
             }
 
-            // 只有 active 可以续费，且订单到期前30天内才能续费
+            // 只有 active 可以续费
             if ($params['action'] == 'renew') {
                 if ($order->latestCert->status != 'active') {
                     $this->error('订单状态错误');
                 }
-                if ($order->period_till && $order->period_till->gt(now()->addDays(30))) {
+
+                // 订单到期前30天内才能续费
+                if ($order->period_till > now()->addDays(30)) {
                     $this->error('订单到期前30天内才能续费');
                 }
             }

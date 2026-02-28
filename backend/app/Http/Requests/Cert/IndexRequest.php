@@ -17,7 +17,7 @@ class IndexRequest extends BaseRequest
             'issued_at.*' => 'string|date_format:Y-m-d\TH:i:s.v\Z',
             'expires_at' => 'nullable|array|size:2',
             'expires_at.*' => 'string|date_format:Y-m-d\TH:i:s.v\Z',
-            'status' => 'nullable|string|in:activating,archived',
+            'status' => 'nullable|string|in:unpaid,pending,processing,approving,active,failed,cancelling,cancelled,revoked,renewed,reissued,expired',
         ];
     }
 }

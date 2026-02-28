@@ -121,7 +121,7 @@ class FindUtil
      */
     public static function UserByPhone($phone, $checkStatus = false): User
     {
-        $user = User::where('phone', $phone)->first();
+        $user = User::where('mobile', $phone)->first();
 
         if (! $user) {
             self::error('用户不存在');

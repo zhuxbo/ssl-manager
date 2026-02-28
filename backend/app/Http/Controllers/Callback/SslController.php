@@ -40,7 +40,7 @@ class SslController extends Controller
         }
 
         if (in_array($order->latestCert->status, ['processing', 'active', 'approving'])) {
-            (new Action)->createTask($order->id, 'sync');
+            app(Action::class)->createTask($order->id, 'sync');
         }
 
         $this->success();

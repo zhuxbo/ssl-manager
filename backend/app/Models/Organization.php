@@ -3,11 +3,12 @@
 namespace App\Models;
 
 use App\Models\Traits\HasSnowflakeId;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Organization extends BaseModel
 {
-    use HasSnowflakeId;
+    use HasFactory, HasSnowflakeId;
 
     protected $fillable = [
         'user_id',

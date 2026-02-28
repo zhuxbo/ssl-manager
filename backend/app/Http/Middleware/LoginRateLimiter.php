@@ -46,9 +46,11 @@ class LoginRateLimiter
         // $response 是 Illuminate\\Http\\JsonResponse (因为控制器抛出 ApiResponseException)
         $responseData = $response->getData(true);
 
+        $code = isset($responseData['code']) ? (int) $responseData['code'] : null;
+
         $loginSucceeded = false;
         // 判断登录是否成功：检查响应中的 'code' 字段
-        if (isset($responseData['code']) && $responseData['code'] === 1) {
+        if ($code === 1) {
             $loginSucceeded = true;
         }
 
@@ -58,7 +60,7 @@ class LoginRateLimiter
             Cache::forget($key.'_locked');
         } else {
             // 登录失败，仅当是由业务逻辑错误 (code === 0) 导致时，才增加尝试次数
-            if (isset($responseData['code']) && $responseData['code'] === 0) {
+            if ($code === 0) {
                 RateLimiter::hit($key, $decayMinutes * 60); // 增加计数器
 
                 $attempts = RateLimiter::attempts($key);

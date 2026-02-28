@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Models\Traits\HasSnowflakeId;
 use Illuminate\Database\Eloquent\Casts\Attribute;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
 
@@ -25,7 +26,7 @@ use Illuminate\Support\Carbon;
  */
 class CnameDelegation extends BaseModel
 {
-    use HasSnowflakeId;
+    use HasFactory, HasSnowflakeId;
 
     protected $fillable = [
         'user_id',

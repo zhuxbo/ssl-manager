@@ -84,7 +84,7 @@ class PurgeUserCommand extends Command
                 ['用户ID', $user->id],
                 ['用户名', $user->username],
                 ['邮箱', $user->email],
-                ['手机', $user->phone ?? '无'],
+                ['手机', $user->mobile ?? '无'],
                 ['创建时间', $user->created_at],
             ]
         );

@@ -534,7 +534,7 @@ class PluginManager
         }
 
         if ($expectedName && $manifest['name'] !== $expectedName) {
-            throw new RuntimeException("插件名不匹配：期望 $expectedName，实际 {$manifest['name']}");
+            throw new RuntimeException("插件名不匹配：期望 {$expectedName}，实际 {$manifest['name']}");
         }
 
         // realpath 防路径遍历
@@ -754,7 +754,7 @@ class PluginManager
     protected function validatePluginName(string $name): void
     {
         if (! preg_match('/^[a-z][a-z0-9-]*$/', $name)) {
-            throw new RuntimeException("无效的插件名: $name（仅允许小写字母、数字和连字符，以字母开头）");
+            throw new RuntimeException("无效的插件名: {$name}（仅允许小写字母、数字和连字符，以字母开头）");
         }
     }
 
@@ -843,7 +843,7 @@ class PluginManager
             }
 
             if (! version_compare($systemVersion, $requiredVersion, $operator)) {
-                throw new RuntimeException("插件要求系统版本 $requires，当前版本 v$systemVersion");
+                throw new RuntimeException("插件要求系统版本 {$requires}，当前版本 v{$systemVersion}");
             }
         }
     }

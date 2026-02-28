@@ -6,6 +6,7 @@ use App\Models\Traits\HasSnowflakeId;
 use Illuminate\Auth\Authenticatable;
 use Illuminate\Auth\MustVerifyEmail;
 use Illuminate\Contracts\Auth\Authenticatable as AuthenticatableContract;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
@@ -16,7 +17,7 @@ use Tymon\JWTAuth\Contracts\JWTSubject;
 
 class User extends BaseModel implements AuthenticatableContract, JWTSubject
 {
-    use Authenticatable, HasSnowflakeId, MustVerifyEmail, Notifiable;
+    use Authenticatable, HasFactory, HasSnowflakeId, MustVerifyEmail, Notifiable;
 
     protected $fillable = [
         'username',

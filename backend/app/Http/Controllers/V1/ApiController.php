@@ -38,12 +38,16 @@ class ApiController extends Controller
         // @phpstan-ignore assign.propertyType
         $this->guard = Auth::guard('api');
 
-        /** @var ApiToken $apiToken */
+        /** @var ApiToken|null $apiToken */
         $apiToken = $this->guard->user();
 
-        $this->user_id = $apiToken->user_id;
-        $this->model = new Order;
-        $this->action = new Action($this->user_id);
+        // 构造函数在中间件之前执行，未认证时 $apiToken 为 null
+        // 认证由 ApiAuthenticate 中间件保证，此处仅做安全防护
+        if ($apiToken) {
+            $this->user_id = $apiToken->user_id;
+            $this->model = new Order;
+            $this->action = new Action($this->user_id);
+        }
     }
 
     /**
@@ -288,7 +292,7 @@ class ApiController extends Controller
         $lastTime = Cache::get($cacheKey);
         // 签发状态120秒 其他状态10秒 内不能重复调用接口
         if (! $lastTime) {
-            // 待验证、待审批、已签发的订单同步
+            // 待验证、待审批、已签发的订单同步（同步失败不影响返回已有数据）
             if (in_array($order->latestCert->status, ['processing', 'approving', 'active'])) {
                 $this->action->sync($order_id, true);
             }

@@ -4,12 +4,13 @@ namespace App\Models;
 
 use App\Models\Acme\Authorization;
 use App\Models\Traits\HasSnowflakeId;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Cert extends BaseModel
 {
-    use HasSnowflakeId;
+    use HasFactory, HasSnowflakeId;
 
     /**
      * 缓存的中间证书（避免重复查询）
