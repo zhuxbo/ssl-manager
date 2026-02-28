@@ -58,7 +58,10 @@ export function useOrderTable() {
 
     // 委托验证
     if (dcv?.is_delegate) {
-      const prefix = getDelegationPrefix(dcv.ca || row.product?.ca, cert.channel);
+      const prefix = getDelegationPrefix(
+        dcv.ca || row.product?.ca,
+        cert.channel
+      );
       const validation = cert.validation || [];
       // 按 delegation_id 去重
       const seen = new Map();

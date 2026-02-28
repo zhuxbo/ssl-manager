@@ -110,7 +110,11 @@ const getStatusColor = (statusField: string) => {
         ? "var(--el-color-success)"
         : "var(--el-text-color-regular)";
     }
-    if (isAcme.value && cert.value.status === "pending" && statusField === "cert_apply_status") {
+    if (
+      isAcme.value &&
+      cert.value.status === "pending" &&
+      statusField === "cert_apply_status"
+    ) {
       return "var(--el-color-success)";
     }
     return "var(--el-text-color-regular)";

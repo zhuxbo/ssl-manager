@@ -1,4 +1,4 @@
-import { computed, h, ref } from "vue";
+import { h, ref } from "vue";
 import type { PlusColumn } from "plus-pro-components";
 import {
   show,

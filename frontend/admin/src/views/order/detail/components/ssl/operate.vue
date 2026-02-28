@@ -8,17 +8,26 @@
     </el-button>
     <template #dropdown>
       <el-dropdown-menu>
-        <el-dropdown-item v-if="cert.status == 'active' && !isAcme" command="send">{{
-          "发送"
-        }}</el-dropdown-item>
-        <el-dropdown-item v-if="cert.status == 'active' && !isAcme" command="transfer">{{
-          "过户"
-        }}</el-dropdown-item>
-        <el-dropdown-item v-if="cert.status == 'pending' && !isAcme" command="commit">{{
-          "提交"
-        }}</el-dropdown-item>
         <el-dropdown-item
-          v-if="['processing', 'active', 'approving'].includes(cert.status) && !isAcme"
+          v-if="cert.status == 'active' && !isAcme"
+          command="send"
+          >{{ "发送" }}</el-dropdown-item
+        >
+        <el-dropdown-item
+          v-if="cert.status == 'active' && !isAcme"
+          command="transfer"
+          >{{ "过户" }}</el-dropdown-item
+        >
+        <el-dropdown-item
+          v-if="cert.status == 'pending' && !isAcme"
+          command="commit"
+          >{{ "提交" }}</el-dropdown-item
+        >
+        <el-dropdown-item
+          v-if="
+            ['processing', 'active', 'approving'].includes(cert.status) &&
+            !isAcme
+          "
           command="sync"
           >{{ "同步" }}</el-dropdown-item
         >

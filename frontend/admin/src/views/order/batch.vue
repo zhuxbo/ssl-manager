@@ -259,7 +259,10 @@ const copy = () => {
 
         // 委托验证
         if (cert.dcv?.is_delegate) {
-          const prefix = getDelegationPrefix(cert.dcv.ca || item.product?.ca, cert.channel);
+          const prefix = getDelegationPrefix(
+            cert.dcv.ca || item.product?.ca,
+            cert.channel
+          );
           const validation = cert.validation || [];
           const seen = new Map();
           const uniqueDelegations = validation.filter((v: any) => {

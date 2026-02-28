@@ -9,7 +9,6 @@ use App\Services\Notification\DTOs\NotificationIntent;
 use App\Services\Notification\DTOs\NotificationPayload;
 use App\Services\Order\AutoRenewService;
 use Illuminate\Database\Eloquent\Collection;
-use Mockery;
 
 uses(Tests\TestCase::class);
 
