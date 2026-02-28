@@ -1,12 +1,14 @@
 <script setup lang="tsx">
-import { onMounted } from "vue";
+import { onMounted, ref, reactive, watch } from "vue";
 import { PlusSearch } from "plus-pro-components";
 import { useAgiso } from "./hook";
 import { useAgisoSearch } from "./search";
 import { useAgisoTable } from "./table";
 import { useAgisoDetail } from "./detail";
+import { payMethodOptions } from "./dictionary";
 import { useRenderIcon } from "../../shared/ReIcon";
 import CloseBold from "~icons/ep/close-bold";
+import AddFill from "~icons/ri/add-circle-line";
 import PureDescriptions from "@pureadmin/descriptions";
 import "vue-json-pretty/lib/styles.css";
 import VueJsonPretty from "vue-json-pretty";
@@ -87,6 +89,82 @@ const handleBatchDeleteRows = () => {
   handleBatchDestroy(selectedIds.value);
 };
 
+// 创建订单
+const createDialogVisible = ref(false);
+const createLoading = ref(false);
+const productList = ref<any[]>([]);
+const periodOptions = ref<number[]>([]);
+const createForm = reactive({
+  product_code: "",
+  period: undefined as number | undefined,
+  amount: 0,
+  pay_method: "other"
+});
+const createResult = ref<{
+  tid: string;
+  easy_url: string;
+  recharge_url: string;
+} | null>(null);
+
+watch(
+  () => createForm.product_code,
+  code => {
+    const product = productList.value.find((p: any) => p.code === code);
+    periodOptions.value = product?.periods ?? [];
+    createForm.period = periodOptions.value[0] ?? undefined;
+  }
+);
+
+const openCreateDialog = async () => {
+  createResult.value = null;
+  createForm.product_code = "";
+  createForm.period = undefined;
+  createForm.amount = 0;
+  createForm.pay_method = "other";
+  createDialogVisible.value = true;
+  try {
+    const { data } = await agisoApi.products();
+    productList.value = data;
+  } catch {
+    message("获取产品列表失败", { type: "error" });
+  }
+};
+
+const handleCreate = async () => {
+  if (!createForm.product_code) {
+    message("请选择产品", { type: "warning" });
+    return;
+  }
+  if (!createForm.period) {
+    message("请选择周期", { type: "warning" });
+    return;
+  }
+  createLoading.value = true;
+  try {
+    const { data } = await agisoApi.store({
+      product_code: createForm.product_code,
+      period: createForm.period,
+      amount: createForm.amount,
+      pay_method: createForm.pay_method
+    });
+    createResult.value = data;
+    onSearch();
+  } catch {
+    message("创建订单失败", { type: "error" });
+  } finally {
+    createLoading.value = false;
+  }
+};
+
+const copyText = async (text: string) => {
+  try {
+    await navigator.clipboard.writeText(text);
+    message("已复制", { type: "success" });
+  } catch {
+    message("复制失败", { type: "error" });
+  }
+};
+
 onMounted(() => {
   onSearch();
 });
@@ -116,6 +194,15 @@ onMounted(() => {
       />
     </div>
     <PureTableBar title="电商平台" :columns="tableColumns" @refresh="onSearch">
+      <template #title>
+        <el-button
+          type="primary"
+          :icon="useRenderIcon(AddFill)"
+          @click="openCreateDialog"
+        >
+          创建订单
+        </el-button>
+      </template>
       <template v-slot="{ size, dynamicColumns }">
         <div
           v-if="selectedIds.length > 0"
@@ -236,6 +323,107 @@ onMounted(() => {
         </el-tabs>
       </div>
     </el-drawer>
+
+    <el-dialog
+      v-model="createDialogVisible"
+      :title="createResult ? '创建成功' : '创建订单'"
+      width="500px"
+      destroy-on-close
+    >
+      <template v-if="!createResult">
+        <el-form label-width="80px">
+          <el-form-item label="产品">
+            <el-select
+              v-model="createForm.product_code"
+              placeholder="请选择产品"
+              filterable
+              class="w-full"
+            >
+              <el-option
+                v-for="p in productList"
+                :key="p.code"
+                :label="p.name"
+                :value="p.code"
+              />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="周期">
+            <el-select
+              v-model="createForm.period"
+              placeholder="请选择周期"
+              class="w-full"
+            >
+              <el-option
+                v-for="p in periodOptions"
+                :key="p"
+                :label="`${p} 年`"
+                :value="p"
+              />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="金额">
+            <el-input-number
+              v-model="createForm.amount"
+              :min="0"
+              :precision="2"
+              class="w-full"
+            />
+          </el-form-item>
+          <el-form-item label="支付方式">
+            <el-select v-model="createForm.pay_method" class="w-full">
+              <el-option
+                v-for="o in payMethodOptions"
+                :key="o.value"
+                :label="o.label"
+                :value="o.value"
+              />
+            </el-select>
+          </el-form-item>
+        </el-form>
+      </template>
+      <template v-else>
+        <el-form label-width="100px">
+          <el-form-item label="简易申请链接">
+            <el-input v-model="createResult.easy_url" readonly>
+              <template #append>
+                <el-button @click="copyText(createResult!.easy_url)">
+                  复制
+                </el-button>
+              </template>
+            </el-input>
+          </el-form-item>
+          <el-form-item label="充值链接">
+            <el-input v-model="createResult.recharge_url" readonly>
+              <template #append>
+                <el-button @click="copyText(createResult!.recharge_url)">
+                  复制
+                </el-button>
+              </template>
+            </el-input>
+          </el-form-item>
+        </el-form>
+      </template>
+      <template #footer>
+        <el-button v-if="!createResult" @click="createDialogVisible = false">
+          取消
+        </el-button>
+        <el-button
+          v-if="!createResult"
+          type="primary"
+          :loading="createLoading"
+          @click="handleCreate"
+        >
+          创建
+        </el-button>
+        <el-button
+          v-if="createResult"
+          type="primary"
+          @click="createDialogVisible = false"
+        >
+          关闭
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 

@@ -3,15 +3,81 @@
 namespace Plugins\Easy\Controllers\Admin;
 
 use App\Http\Controllers\Admin\BaseController;
+use App\Models\Product;
+use App\Utils\SnowFlake;
 use Plugins\Easy\Models\Agiso;
 use Plugins\Easy\Requests\AgisoGetIdsRequest;
 use Plugins\Easy\Requests\AgisoIndexRequest;
+use Plugins\Easy\Requests\AgisoStoreRequest;
 
 class AgisoController extends BaseController
 {
     public function __construct()
     {
         parent::__construct();
+    }
+
+    public function products(): void
+    {
+        $products = Product::where('validation_type', 'dv')
+            ->where('total_max', 1)
+            ->where('status', 1)
+            ->where(function ($query) {
+                $query->whereNull('product_type')
+                    ->orWhere('product_type', Product::TYPE_SSL);
+            })
+            ->select(['id', 'name', 'code', 'periods', 'common_name_types'])
+            ->get();
+
+        $this->success($products);
+    }
+
+    public function store(AgisoStoreRequest $request): void
+    {
+        $validated = $request->validated();
+        $productCode = $validated['product_code'];
+        $period = (int) $validated['period'];
+        $amount = (float) ($validated['amount'] ?? 0);
+        $payMethod = $validated['pay_method'] ?? 'other';
+
+        $product = Product::where('code', $productCode)
+            ->where('validation_type', 'dv')
+            ->where('total_max', 1)
+            ->where('status', 1)
+            ->where(function ($query) {
+                $query->whereNull('product_type')
+                    ->orWhere('product_type', Product::TYPE_SSL);
+            })
+            ->first();
+
+        if (! $product) {
+            $this->error('产品不存在或不符合条件');
+        }
+
+        if (! in_array($period, $product->periods)) {
+            $this->error('周期不可用');
+        }
+
+        $tid = 'E'.SnowFlake::generateParticle();
+
+        Agiso::create([
+            'platform' => Agiso::getPayMethodPlatform($payMethod),
+            'tid' => $tid,
+            'product_code' => $product->code,
+            'period' => $period,
+            'price' => $amount,
+            'amount' => $amount,
+            'count' => 1,
+            'recharged' => 0,
+        ]);
+
+        $siteUrl = rtrim(get_system_setting('site', 'url') ?? '', '/');
+
+        $this->success([
+            'tid' => $tid,
+            'easy_url' => "$siteUrl/easy/$tid",
+            'recharge_url' => "$siteUrl/tid/$tid",
+        ]);
     }
 
     public function index(AgisoIndexRequest $request): void

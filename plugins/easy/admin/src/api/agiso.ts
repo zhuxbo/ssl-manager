@@ -49,3 +49,16 @@ export function destroy(id: number): Promise<any> {
 export function batchDestroy(ids: number[]): Promise<any> {
   return http.delete("/agiso", { data: { ids } });
 }
+
+export function products(): Promise<any> {
+  return http.get("/agiso/products");
+}
+
+export function store(data: {
+  product_code: string;
+  period: number;
+  amount?: number;
+  pay_method?: string;
+}): Promise<any> {
+  return http.post("/agiso", data);
+}

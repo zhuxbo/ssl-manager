@@ -71,27 +71,33 @@ class RechargeController extends BaseController
                 $user->save();
             }
 
-            // 如果用户级别是 platinum 赠送金额，否则不赠送
-            if ($user->level_code === 'platinum') {
-                $amount = $agisoOrder->price;
-                $remark = "订单金额$agisoOrder->amount";
-                $remark .= bccomp($giftAmount, '0.00', 2) === 0 ? '' : "(赠送金额$giftAmount)";
-            } else {
-                $amount = $agisoOrder->amount;
-                $remark = "订单金额$agisoOrder->amount";
+            $isPlatinum = $user->level_code === 'platinum';
+
+            // 实付部分充值
+            if (bccomp((string) $agisoOrder->amount, '0.00', 2) > 0) {
+                Fund::create([
+                    'user_id' => $user->id,
+                    'amount' => $agisoOrder->amount,
+                    'type' => 'addfunds',
+                    'pay_method' => $payMethod,
+                    'pay_sn' => $agisoOrder->tid,
+                    'status' => 1,
+                    'ip' => request()->ip(),
+                ]);
             }
 
-            // 创建充值记录
-            Fund::create([
-                'user_id' => $user->id,
-                'amount' => $amount,
-                'type' => 'addfunds',
-                'pay_method' => $payMethod,
-                'pay_sn' => $agisoOrder->tid,
-                'status' => 1, // 直接设为成功状态
-                'remark' => $remark,
-                'ip' => request()->ip(),
-            ]);
+            // 赠送部分充值
+            if ($isPlatinum && bccomp($giftAmount, '0.00', 2) > 0) {
+                Fund::create([
+                    'user_id' => $user->id,
+                    'amount' => $giftAmount,
+                    'type' => 'addfunds',
+                    'pay_method' => 'gift',
+                    'pay_sn' => $agisoOrder->tid,
+                    'status' => 1,
+                    'ip' => request()->ip(),
+                ]);
+            }
 
             // 标记平台订单为已充值
             $agisoOrder->recharged = 1;

@@ -310,21 +310,32 @@ class EasyController extends Controller
                 $isPlatinum = true;
             }
 
-            $orderGiftAmount = $isPlatinum ? bcsub((string) $order->price, (string) $order->amount, 2) : '0.00';
+            // 实付部分充值
+            if (bccomp((string) $order->amount, '0.00', 2) > 0) {
+                Fund::create([
+                    'user_id' => $user->id,
+                    'amount' => $order->amount,
+                    'type' => 'addfunds',
+                    'pay_method' => Agiso::getPlatform($order->platform),
+                    'pay_sn' => $order->tid,
+                    'status' => 1,
+                ]);
+            }
 
-            $remark = "订单金额$order->amount";
-            $remark .= bccomp($orderGiftAmount, '0.00', 2) === 0 ? '' : "(赠送金额$orderGiftAmount)";
-
-            // 订单充值
-            Fund::create([
-                'user_id' => $user->id,
-                'amount' => $isPlatinum ? $order->price : $order->amount,
-                'type' => 'addfunds',
-                'pay_method' => Agiso::getPlatform($order->platform),
-                'pay_sn' => $order->tid,
-                'status' => 1,
-                'remark' => $remark,
-            ]);
+            // 赠送部分充值
+            if ($isPlatinum) {
+                $giftAmount = bcsub((string) $order->price, (string) $order->amount, 2);
+                if (bccomp($giftAmount, '0.00', 2) > 0) {
+                    Fund::create([
+                        'user_id' => $user->id,
+                        'amount' => $giftAmount,
+                        'type' => 'addfunds',
+                        'pay_method' => 'gift',
+                        'pay_sn' => $order->tid,
+                        'status' => 1,
+                    ]);
+                }
+            }
 
             // 提交证书申请（Action::new() 始终通过 ApiResponseException 返回结果，不会正常 return）
             $orderId = null;

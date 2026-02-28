@@ -102,9 +102,24 @@ class Agiso extends BaseModel
             'PddAlds' => 'pinduoduo',
             'AldsJd' => 'jingdong',
             'AldsDoudian' => 'douyin',
+            'gift' => 'gift',
             'All' => ['taobao', 'pinduoduo', 'jingdong', 'douyin'],
         ];
 
         return $platforms[$platform] ?? 'other';
+    }
+
+    public static function getPayMethodPlatform(string $payMethod): ?string
+    {
+        $map = [
+            'other' => null,
+            'gift' => 'gift',
+            'taobao' => 'TbAlds',
+            'pinduoduo' => 'PddAlds',
+            'jingdong' => 'AldsJd',
+            'douyin' => 'AldsDoudian',
+        ];
+
+        return $map[$payMethod] ?? null;
     }
 }

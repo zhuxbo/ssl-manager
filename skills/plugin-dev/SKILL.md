@@ -32,13 +32,13 @@ plugins/
 
 ```json
 {
-  "name": "easy",
+  "name": "{name}",
   "version": "0.0.1",
   "description": "插件描述",
-  "provider": "EasyServiceProvider",
-  "admin_bundle": "admin/easy-plugin.iife.js",
-  "admin_css": "admin/easy-plugin-admin.css",
-  "user_bundle": "user/easy-plugin.iife.js",
+  "provider": "{Name}ServiceProvider",
+  "admin_bundle": "admin/{name}-plugin.iife.js",
+  "admin_css": "admin/{name}-plugin-admin.css",
+  "user_bundle": "user/{name}-plugin.iife.js",
   "release_url": ""
 }
 ```
@@ -60,11 +60,11 @@ plugins/
 - 日志处理：实现 `PluginLogHandler` 接口注册到主系统日志
 
 ```php
-namespace Plugin\Easy;
+namespace Plugin\{Name};
 
 use Illuminate\Support\ServiceProvider;
 
-class EasyServiceProvider extends ServiceProvider
+class {Name}ServiceProvider extends ServiceProvider
 {
     public function boot(): void
     {
@@ -78,12 +78,12 @@ class EasyServiceProvider extends ServiceProvider
 ### 路由
 
 - 使用主系统中间件（`auth:api`、`admin` 等）
-- 路由前缀遵循主系统约定：`api/admin/`、`api/user/`、`api/easy/`（公共）、`api/callback/`
+- 路由前缀遵循主系统约定：`api/admin/`、`api/user/`、`api/{name}/`（公共）、`api/callback/`
 
 ### 数据库
 
 - 迁移文件放 `backend/migrations/`，安装时由 `loadMigrationsFrom()` 自动执行
-- 表名建议加插件前缀（如 `easy_logs`）避免冲突
+- 表名建议加插件前缀（如 `{name}_logs`）避免冲突
 - 卸载时可选回滚迁移（`remove_data=true`）
 - **插件表独立管理**：主系统 `db:structure --export` 通过 `--path=database/migrations` 排除插件迁移，`structure.json` 仅包含主系统表
 - **从主系统迁移分离时注意**：如果原来某些表在主系统迁移文件中，拆分到插件时必须确保主系统迁移文件仍保留主系统自己的表（不能整个删除包含多张表的迁移文件）
@@ -106,13 +106,28 @@ class EasyServiceProvider extends ServiceProvider
 // admin/src/index.ts
 const routes = [
   {
-    path: "/plugin-easy/agiso",
-    name: "PluginEasyAgiso",
-    component: () => import("./views/agiso/index.vue"),
-    meta: { title: "Easy 管理", icon: "ep:key" }
+    path: "/plugin-{name}/list",
+    name: "Plugin{Name}List",
+    component: () => import("./views/list/index.vue"),
+    meta: { title: "插件列表", icon: "ep:list" }
   }
 ];
 export { routes };
+```
+
+### 开发测试
+
+插件前端打包为 IIFE，没有 Vite dev server 热更新。开发流程：
+
+- **后端**：改完 PHP 代码直接生效，无需额外操作
+- **前端**：每次修改后需重新构建 IIFE，然后刷新浏览器
+
+```bash
+# 构建单端（在插件前端目录下）
+cd plugins/{name}/admin && pnpm build
+
+# 或构建整个插件（admin + user）
+bash plugins/build-plugin.sh {name} --build-only
 ```
 
 ### 共享依赖
@@ -173,16 +188,16 @@ window.__registerPlugin({
 
 ```bash
 # 仅构建打包（产物在 plugins/temp/）
-bash plugins/build-plugin.sh easy --build-only
+bash plugins/build-plugin.sh {name} --build-only
 
 # 构建 + 本地发布
-bash plugins/build-plugin.sh easy --local
+bash plugins/build-plugin.sh {name} --local
 
 # 构建 + 远程发布
-bash plugins/build-plugin.sh easy --remote
+bash plugins/build-plugin.sh {name} --remote
 
 # 远程发布到指定服务器
-bash plugins/build-plugin.sh easy --remote --server cn
+bash plugins/build-plugin.sh {name} --remote --server cn
 ```
 
 ### build.json
@@ -191,7 +206,7 @@ bash plugins/build-plugin.sh easy --remote --server cn
 
 ```json
 {
-  "include": ["plugin.json", "backend/", "admin/easy-plugin.iife.js", "admin/easy-plugin-admin.css", "user/easy-plugin.iife.js", "web/", "nginx/"],
+  "include": ["plugin.json", "backend/", "admin/{name}-plugin.iife.js", "admin/{name}-plugin-admin.css", "user/{name}-plugin.iife.js", "web/", "nginx/"],
   "exclude": ["node_modules/", "src/", "*.config.ts", "package.json", "pnpm-lock.yaml"]
 }
 ```
@@ -228,9 +243,9 @@ bash plugins/build-plugin.sh easy --remote --server cn
 ### 手动安装
 
 ```bash
-cd plugins && unzip easy-plugin-0.0.1.zip
+cd plugins && unzip {name}-plugin-0.0.1.zip
 cd ../backend
-php artisan migrate --path=../plugins/easy/backend/migrations --force
+php artisan migrate --path=../plugins/{name}/backend/migrations --force
 php artisan route:clear && php artisan config:clear
 ```
 
