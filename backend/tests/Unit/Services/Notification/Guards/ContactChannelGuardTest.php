@@ -4,7 +4,6 @@ use App\Models\NotificationTemplate;
 use App\Services\Notification\DTOs\NotificationIntent;
 use App\Services\Notification\Guards\ContactChannelGuard;
 use Illuminate\Database\Eloquent\Model;
-use Mockery;
 
 afterEach(function () {
     Mockery::close();

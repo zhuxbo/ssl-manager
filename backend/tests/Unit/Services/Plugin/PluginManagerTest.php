@@ -5,7 +5,6 @@ use App\Services\Upgrade\VersionManager;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
-use Mockery;
 
 uses(Tests\TestCase::class);
 

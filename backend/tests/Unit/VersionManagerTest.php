@@ -2,7 +2,6 @@
 
 use App\Services\Upgrade\VersionManager;
 use Illuminate\Support\Facades\Config;
-use Mockery;
 
 uses(Tests\TestCase::class);
 

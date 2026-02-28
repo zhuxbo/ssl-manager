@@ -5,7 +5,6 @@ use App\Models\NotificationTemplate;
 use App\Services\Notification\Channels\SmsChannel;
 use App\Utils\Sms;
 use Illuminate\Database\Eloquent\Model;
-use Mockery;
 
 afterEach(function () {
     Mockery::close();

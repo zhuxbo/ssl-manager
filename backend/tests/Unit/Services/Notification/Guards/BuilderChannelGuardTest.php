@@ -5,7 +5,6 @@ use App\Services\Notification\DTOs\NotificationIntent;
 use App\Services\Notification\Guards\BuilderChannelGuard;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Config;
-use Mockery;
 
 uses(Tests\TestCase::class);
 

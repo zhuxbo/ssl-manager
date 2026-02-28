@@ -4,7 +4,6 @@ use App\Services\Notification\ChannelManager;
 use App\Services\Notification\Channels\ChannelInterface;
 use App\Services\Notification\Channels\MailChannel;
 use App\Services\Notification\Channels\SmsChannel;
-use Mockery;
 
 afterEach(function () {
     Mockery::close();

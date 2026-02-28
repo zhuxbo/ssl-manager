@@ -6,7 +6,6 @@ use App\Services\Notification\Channels\ChannelInterface;
 use App\Services\Notification\DTOs\NotificationIntent;
 use App\Services\Notification\Guards\SystemChannelGuard;
 use Illuminate\Database\Eloquent\Model;
-use Mockery;
 
 afterEach(function () {
     Mockery::close();

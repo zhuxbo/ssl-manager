@@ -6,7 +6,6 @@ use App\Services\Notification\Channels\MailChannel;
 use App\Utils\Email;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\File;
-use Mockery;
 
 afterEach(function () {
     Mockery::close();
