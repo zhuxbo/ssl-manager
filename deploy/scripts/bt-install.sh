@@ -298,6 +298,13 @@ set_permissions() {
     # 创建 backups 目录（备份和升级包存储）
     mkdir -p "$INSTALL_DIR/backups/upgrades"
 
+    # 创建 storage 子目录（文件缓存等功能需要，必须在 chown 之前创建）
+    mkdir -p "$INSTALL_DIR/backend/storage/logs" \
+             "$INSTALL_DIR/backend/storage/framework/cache" \
+             "$INSTALL_DIR/backend/storage/framework/sessions" \
+             "$INSTALL_DIR/backend/storage/framework/views" \
+             "$INSTALL_DIR/backend/storage/app/public"
+
     # 使用 chown -R 一次性设置权限（比 find -exec 快得多）
     # 忽略 .user.ini 的错误（宝塔会锁定此文件）
     chown -R www:www "$INSTALL_DIR" 2>/dev/null || true
@@ -336,7 +343,7 @@ show_nginx_tips() {
     echo "   - 网站目录: $INSTALL_DIR"
     echo "   - PHP版本: 8.${PHP_VERSION: -1}"
     echo
-    echo "2. 在网站配置中添加以下内容（配置文件 → 自定义配置）:"
+    echo "2. 在网站配置中 (root 站点路径; 这一行下面) 添加以下内容（配置文件 → 自定义配置）:"
     echo "   include $INSTALL_DIR/nginx/manager.conf;"
     echo
 }

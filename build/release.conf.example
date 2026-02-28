@@ -1,6 +1,6 @@
 # SSL Manager 远程发布配置
-# 复制为 remote-release.conf 并填写实际值
-# 重要：设置文件权限 chmod 600 remote-release.conf
+# 复制为 release.conf 并填写实际值
+# 重要：设置文件权限 chmod 600 release.conf
 
 # ========================================
 # 服务器配置

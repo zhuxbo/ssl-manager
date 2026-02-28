@@ -103,14 +103,14 @@ curl -X POST /api/admin/plugin/uninstall \
 # 仅构建（产物在 plugins/temp/）
 bash plugins/build-plugin.sh {name} --build-only
 
-# 构建 + 本地发布
-bash plugins/build-plugin.sh {name} --local
+# 构建 + 发布
+bash plugins/build-plugin.sh {name}
 
-# 构建 + 远程发布
-bash plugins/build-plugin.sh {name} --remote
+# 只发布到指定服务器
+bash plugins/build-plugin.sh {name} --server cn
 ```
 
-发布需要配置文件 `plugins/local-release.conf` 或 `plugins/remote-release.conf`（不存在时回落到 `build/` 下的同名文件）。
+发布需要配置文件 `plugins/release.conf`（不存在时回落到 `build/release.conf`）。
 
 ## 更新地址优先级
 

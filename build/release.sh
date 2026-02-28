@@ -4,11 +4,11 @@
 # 将构建产物部署到远程 Linux 服务器
 #
 # 用法:
-#   ./remote-release.sh              # 发布 version.json 中的版本
-#   ./remote-release.sh 0.0.15-beta  # 发布指定版本
-#   ./remote-release.sh --server cn  # 只发布到指定服务器
-#   ./remote-release.sh --test       # 测试 SSH 连接
-#   ./remote-release.sh --upload-only # 只上传，跳过构建
+#   ./release.sh <版本号>      # 必须指定版本号
+#   ./release.sh 0.0.15-beta  # 发布指定版本
+#   ./release.sh --server cn  # 只发布到指定服务器
+#   ./release.sh --test       # 测试 SSH 连接
+#   ./release.sh --upload-only # 只上传，跳过构建
 
 set -e
 
@@ -18,7 +18,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 BUILD_DIR="$SCRIPT_DIR"
-CONFIG_FILE="$SCRIPT_DIR/remote-release.conf"
+CONFIG_FILE="$SCRIPT_DIR/release.conf"
 
 # 默认配置
 KEEP_VERSIONS=5
@@ -44,8 +44,8 @@ source "$SCRIPT_DIR/scripts/release-common.sh"
 load_config() {
     if [ ! -f "$CONFIG_FILE" ]; then
         log_error "配置文件不存在: $CONFIG_FILE"
-        log_info "请复制 remote-release.conf.example 并配置:"
-        log_info "  cp $SCRIPT_DIR/remote-release.conf.example $CONFIG_FILE"
+        log_info "请复制 release.conf.example 并配置:"
+        log_info "  cp $SCRIPT_DIR/release.conf.example $CONFIG_FILE"
         exit 1
     fi
 
@@ -85,6 +85,29 @@ load_config() {
 }
 
 # ========================================
+# 确保 tag 存在并指向当前提交
+# ========================================
+ensure_tag() {
+    local tag="$1"
+    local head_commit=$(git rev-parse HEAD)
+    local tag_commit=$(git rev-parse "refs/tags/$tag" 2>/dev/null || echo "")
+
+    if [ -z "$tag_commit" ]; then
+        log_info "创建 tag: $tag"
+        git tag "$tag"
+        git push origin "$tag"
+    elif [ "$tag_commit" != "$head_commit" ]; then
+        log_warning "tag $tag 指向其他提交，更新到当前提交"
+        git tag -d "$tag"
+        git push origin ":refs/tags/$tag" 2>/dev/null || true
+        git tag "$tag"
+        git push origin "$tag"
+    else
+        log_info "tag $tag 已指向当前提交"
+    fi
+}
+
+# ========================================
 # 解析服务器配置
 # 格式: "名称,主机,端口,目录,URL"
 # ========================================
@@ -101,7 +124,7 @@ ssh_cmd() {
     local host="$1"
     local port="$2"
     shift 2
-    ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no -o ConnectTimeout=$SSH_TIMEOUT \
+    ssh -i "$SSH_KEY" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=$SSH_TIMEOUT \
         -p "$port" "$SSH_USER@$host" "$@"
 }
 
@@ -110,7 +133,7 @@ rsync_cmd() {
     local host="$2"
     local port="$3"
     local dest="$4"
-    rsync -avz --progress -e "ssh -i $SSH_KEY -o StrictHostKeyChecking=no -p $port" \
+    rsync -avz --progress -e "ssh -i $SSH_KEY -o StrictHostKeyChecking=accept-new -p $port" \
         "$src" "$SSH_USER@$host:$dest"
 }
 
@@ -187,14 +210,14 @@ deploy_scripts_remote() {
     # 部署 install.sh
     if [ -f "$deploy_dir/install.sh" ]; then
         process_deploy_script "$deploy_dir/install.sh" "$SERVER_URL" | \
-            ssh_cmd "$SERVER_HOST" "$SERVER_PORT" "cat > $SERVER_DIR/install.sh && chmod +x $SERVER_DIR/install.sh"
+            ssh_cmd "$SERVER_HOST" "$SERVER_PORT" "cat > \"$SERVER_DIR/install.sh\" && chmod +x \"$SERVER_DIR/install.sh\""
         log_info "已部署: install.sh"
     fi
 
     # 部署 upgrade.sh
     if [ -f "$deploy_dir/upgrade.sh" ]; then
         process_deploy_script "$deploy_dir/upgrade.sh" "$SERVER_URL" | \
-            ssh_cmd "$SERVER_HOST" "$SERVER_PORT" "cat > $SERVER_DIR/upgrade.sh && chmod +x $SERVER_DIR/upgrade.sh"
+            ssh_cmd "$SERVER_HOST" "$SERVER_PORT" "cat > \"$SERVER_DIR/upgrade.sh\" && chmod +x \"$SERVER_DIR/upgrade.sh\""
         log_info "已部署: upgrade.sh"
     fi
 }
@@ -217,9 +240,9 @@ update_symlinks_remote() {
     local version_dir="$SERVER_DIR/$channel/v$version"
 
     ssh_cmd "$SERVER_HOST" "$SERVER_PORT" "
-        mkdir -p $latest_dir
-        cd $latest_dir
-        for pkg in $version_dir/ssl-manager-*.zip; do
+        mkdir -p \"$latest_dir\"
+        cd \"$latest_dir\"
+        for pkg in \"$version_dir\"/ssl-manager-*.zip; do
             if [ -f \"\$pkg\" ]; then
                 filename=\$(basename \"\$pkg\")
                 pkg_type=\$(echo \"\$filename\" | sed 's/ssl-manager-\\([^-]*\\)-.*/\\1/')
@@ -243,7 +266,7 @@ cleanup_old_versions_remote() {
     log_info "清理旧版本（保留 $KEEP_VERSIONS 个）..."
 
     ssh_cmd "$SERVER_HOST" "$SERVER_PORT" "
-        cd $SERVER_DIR/$channel 2>/dev/null || exit 0
+        cd \"$SERVER_DIR/$channel\" 2>/dev/null || exit 0
         ls -dt v* 2>/dev/null | tail -n +$((KEEP_VERSIONS + 1)) | xargs -r rm -rf
     "
 }
@@ -265,7 +288,7 @@ upload_to_server() {
 
     # 创建远程目录
     log_info "创建目录: $remote_version_dir"
-    ssh_cmd "$SERVER_HOST" "$SERVER_PORT" "mkdir -p $remote_version_dir && rm -f $remote_version_dir/*.zip"
+    ssh_cmd "$SERVER_HOST" "$SERVER_PORT" "mkdir -p \"$remote_version_dir\" && rm -f \"$remote_version_dir\"/*.zip"
 
     # 上传包文件
     log_info "上传包文件..."
@@ -342,7 +365,6 @@ show_help() {
   -h, --help        显示帮助
 
 示例:
-  $0                    发布 version.json 中的版本
   $0 0.0.15-beta        发布指定版本
   $0 --server cn        只发布到 cn 服务器
   $0 --test             测试连接
@@ -400,19 +422,35 @@ main() {
         exit $?
     fi
 
-    # 获取版本号（仅支持命令行参数或 exact-match tag）
+    # 版本号必须通过命令行参数传入
     if [ -z "$version" ]; then
-        version=$(git describe --tags --exact-match 2>/dev/null | sed 's/^v//')
-        if [ -z "$version" ]; then
-            log_error "远程发布必须指定版本号或打 git tag"
-            log_info "用法: $0 <版本号>  或  git tag v1.0.0 && $0"
-            exit 1
-        fi
-        log_info "从 git tag 获取版本: $version"
+        log_error "必须指定版本号"
+        log_info "用法: $0 <版本号>"
+        exit 1
     fi
 
     # 确定通道
     local channel=$(get_channel "$version")
+
+    # 正式版 + main 分支：检查未提交文件和 tag
+    if [ "$channel" = "main" ]; then
+        local current_branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+        if [ "$current_branch" = "main" ]; then
+            # 检查未提交修改
+            if [ -n "$(git status --porcelain 2>/dev/null)" ]; then
+                log_warning "检测到未提交的修改："
+                git status --short
+                echo ""
+                read -r -p "是否继续发布？[y/N] " confirm
+                if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then
+                    log_info "已取消发布"
+                    exit 0
+                fi
+            fi
+            # 确保 tag 指向当前提交
+            ensure_tag "v$version"
+        fi
+    fi
 
     log_info "版本号: $version"
     log_info "发布通道: $channel"
@@ -455,8 +493,8 @@ main() {
     fi
 
     # 部署
-    deploy_to_all "$version" "$channel" "$packages_dir" "$target_server"
-    local result=$?
+    local result=0
+    deploy_to_all "$version" "$channel" "$packages_dir" "$target_server" || result=$?
 
     echo ""
     if [ $result -eq 0 ]; then

@@ -4,16 +4,14 @@
 # 发布到 {RELEASE_DIR}/plugins/{name}/
 #
 # 配置文件查找优先级:
-#   1. plugins/local-release.conf 或 plugins/remote-release.conf（插件专用）
-#   2. build/local-release.conf 或 build/remote-release.conf（主系统回落）
+#   1. plugins/release.conf（插件专用）
+#   2. build/release.conf（主系统回落）
 #
 # 用法:
 #   ./plugins/build-plugin.sh easy                    # 构建+发布
 #   ./plugins/build-plugin.sh easy --build-only       # 仅构建，不发布
 #   ./plugins/build-plugin.sh easy --publish-only     # 仅发布已有的 zip
-#   ./plugins/build-plugin.sh easy --local            # 使用本地 release 配置
-#   ./plugins/build-plugin.sh easy --remote           # 使用远程 release 配置（默认）
-#   ./plugins/build-plugin.sh easy --remote --server cn  # 只发布到指定远程服务器
+#   ./plugins/build-plugin.sh easy --server cn        # 只发布到指定远程服务器
 
 set -e
 
@@ -48,14 +46,12 @@ show_help() {
   --version VERSION   指定版本号（自动写入 plugin.json）
   --build-only        仅构建打包，不发布
   --publish-only      仅发布已有的 zip，跳过构建
-  --local             使用本地 release 配置
-  --remote            使用远程 release 配置（默认）
-  --server NAME       远程发布时只发布到指定服务器
+  --server NAME       只发布到指定服务器
   -h, --help          显示帮助
 
 配置文件查找优先级:
-  1. plugins/local-release.conf 或 plugins/remote-release.conf
-  2. build/local-release.conf 或 build/remote-release.conf（回落）
+  1. plugins/release.conf（插件专用）
+  2. build/release.conf（主系统回落）
 
 示例:
   $0 easy                              构建并远程发布
@@ -72,7 +68,6 @@ EOF
 PLUGIN_INPUT=""
 BUILD_ONLY=false
 PUBLISH_ONLY=false
-RELEASE_MODE="remote"
 TARGET_SERVER=""
 INPUT_VERSION=""
 
@@ -81,8 +76,6 @@ while [ $# -gt 0 ]; do
         --version)      INPUT_VERSION="$2"; shift 2 ;;
         --build-only)   BUILD_ONLY=true; shift ;;
         --publish-only) PUBLISH_ONLY=true; shift ;;
-        --local)        RELEASE_MODE="local"; shift ;;
-        --remote)       RELEASE_MODE="remote"; shift ;;
         --server)       TARGET_SERVER="$2"; shift 2 ;;
         -h|--help)      show_help; exit 0 ;;
         -*)             log_error "未知选项: $1"; show_help; exit 1 ;;
@@ -287,66 +280,15 @@ PYEOF
 }
 
 # ========================================
-# 本地发布
-# ========================================
-publish_local() {
-    local config_file=$(find_config "local-release.conf")
-    if [ -z "$config_file" ]; then
-        log_error "未找到本地发布配置"
-        log_info "请创建以下任一配置文件:"
-        log_info "  plugins/local-release.conf（插件专用）"
-        log_info "  build/local-release.conf（主系统共享）"
-        exit 1
-    fi
-    source "$config_file"
-
-    if [ -z "$RELEASE_DIR" ] || [ -z "$RELEASE_URL" ]; then
-        log_error "配置缺失 RELEASE_DIR 或 RELEASE_URL"
-        exit 1
-    fi
-
-    local plugin_release_dir="$RELEASE_DIR/plugins/$NAME"
-    local version_dir="$plugin_release_dir/v$VERSION"
-    local releases_file="$plugin_release_dir/releases.json"
-    local rel_url="v$VERSION/$OUTPUT_FILE"
-
-    log_step "本地发布到 $plugin_release_dir ..."
-
-    # 创建目录 & 复制 zip
-    sudo mkdir -p "$version_dir"
-    sudo cp "$OUTPUT" "$version_dir/"
-    log_info "已复制: $OUTPUT_FILE → $version_dir/"
-
-    # 更新 releases.json
-    log_step "更新 releases.json ..."
-    # 确保文件存在且可写
-    sudo touch "$releases_file"
-    sudo chmod 666 "$releases_file"
-    generate_plugin_releases_update "$releases_file" "$VERSION" "$OUTPUT" "$rel_url" | python3
-    sudo chmod 644 "$releases_file"
-
-    # 设置权限
-    local web_user="www-data"
-    if [ -d "/www/server/panel" ] && id -u www &>/dev/null; then
-        web_user="www"
-    fi
-    sudo chown -R "$web_user:$web_user" "$plugin_release_dir"
-
-    log_success "本地发布完成"
-    echo ""
-    log_info "验证: curl $RELEASE_URL/plugins/$NAME/releases.json | jq ."
-}
-
-# ========================================
 # 远程发布
 # ========================================
 publish_remote() {
-    local config_file=$(find_config "remote-release.conf")
+    local config_file=$(find_config "release.conf")
     if [ -z "$config_file" ]; then
         log_error "未找到远程发布配置"
         log_info "请创建以下任一配置文件:"
-        log_info "  plugins/remote-release.conf（插件专用）"
-        log_info "  build/remote-release.conf（主系统共享）"
+        log_info "  plugins/release.conf（插件专用）"
+        log_info "  build/release.conf（主系统共享）"
         exit 1
     fi
     source "$config_file"
@@ -380,10 +322,10 @@ publish_remote() {
         local rel_url="v$VERSION/$OUTPUT_FILE"
 
         # 创建远程目录 & 上传
-        ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no -o ConnectTimeout=$ssh_timeout \
+        ssh -i "$SSH_KEY" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=$ssh_timeout \
             -p "$srv_port" "$SSH_USER@$srv_host" "mkdir -p $remote_version_dir"
 
-        rsync -avz --progress -e "ssh -i $SSH_KEY -o StrictHostKeyChecking=no -p $srv_port" \
+        rsync -avz --progress -e "ssh -i $SSH_KEY -o StrictHostKeyChecking=accept-new -p $srv_port" \
             "$OUTPUT" "$SSH_USER@$srv_host:$remote_version_dir/"
         log_info "已上传: $OUTPUT_FILE"
 
@@ -392,7 +334,7 @@ publish_remote() {
         local remote_releases_file="$remote_plugin_dir/releases.json"
         local zip_size=$(stat -f%z "$OUTPUT" 2>/dev/null || stat -c%s "$OUTPUT" 2>/dev/null || echo 0)
 
-        ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no -o ConnectTimeout=$ssh_timeout \
+        ssh -i "$SSH_KEY" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=$ssh_timeout \
             -p "$srv_port" "$SSH_USER@$srv_host" "python3 << 'PYEOF'
 import json, os
 from datetime import datetime
@@ -453,11 +395,7 @@ if [ "$BUILD_ONLY" = false ]; then
     fi
 
     # 发布
-    if [ "$RELEASE_MODE" = "local" ]; then
-        publish_local
-    else
-        publish_remote
-    fi
+    publish_remote
 fi
 
 echo ""

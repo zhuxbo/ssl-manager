@@ -113,3 +113,10 @@ skills/         # 开发规范（详细文档）
 - 纯单元测试：`php artisan test --exclude-group=database`
 - 全部测试需 MySQL 连接
 - 详见 `skills/backend-dev/SKILL.md` 测试章节
+
+### M4 测试覆盖
+
+- **Commands**（8 文件 40 用例）：AutoRenew、Expire、DelegationCheck、DelegationCleanup、Validate、Purge、ResetAdminPassword、ClearAllCache
+- **Models**（15 文件 163 用例）：Order、User、Cert、Admin、Product、Notification、NotificationTemplate、Contact、Organization、Fund、Invoice、Transaction、CnameDelegation、ApiToken、Task
+- **Middleware**（9 文件 67 用例）：AdminAuthenticate、UserAuthenticate、ApiAuthenticate、DeployAuthenticate、AcmeJwsMiddleware、LogOperation、RateLimiter、LoginRateLimiter、FlushLogs
+- 已有 Unit/Models 测试（DeployToken、OrderAutoFields、UserAutoSettings）不重复覆盖

@@ -23,6 +23,7 @@ class PermissionChecker
     {
         return [
             $this->projectRoot.'/storage',
+            $this->projectRoot.'/storage/framework/cache',
             $this->projectRoot.'/bootstrap/cache',
         ];
     }
