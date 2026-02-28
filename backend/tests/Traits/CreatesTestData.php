@@ -124,4 +124,43 @@ trait CreatesTestData
 
         return $csrOut;
     }
+
+    /**
+     * 生成自签名证书（用于测试 finalize 等需要证书数据的场景）
+     */
+    protected function generateSelfSignedCert(string $commonName = 'example.com'): array
+    {
+        $privateKey = openssl_pkey_new([
+            'private_key_type' => OPENSSL_KEYTYPE_RSA,
+            'private_key_bits' => 2048,
+        ]);
+
+        $csr = openssl_csr_new([
+            'commonName' => $commonName,
+            'countryName' => 'CN',
+            'stateOrProvinceName' => 'Shanghai',
+            'localityName' => 'Shanghai',
+        ], $privateKey);
+
+        $cert = openssl_csr_sign($csr, null, $privateKey, 365);
+
+        openssl_x509_export($cert, $certOut);
+        openssl_csr_export($csr, $csrOut);
+
+        return [
+            'certificate' => $certOut,
+            'chain' => $certOut,
+        ];
+    }
+
+    /**
+     * PEM 转 DER 格式
+     */
+    protected function pemToDer(string $pem): string
+    {
+        $pem = preg_replace('/-----[A-Z ]+-----/', '', $pem);
+        $pem = str_replace(["\r", "\n", ' '], '', $pem);
+
+        return base64_decode($pem);
+    }
 }

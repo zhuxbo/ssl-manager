@@ -1,137 +1,112 @@
 <?php
 
-namespace Tests\Unit;
-
 use App\Services\Upgrade\VersionManager;
 use Illuminate\Support\Facades\Config;
 use Mockery;
-use Tests\TestCase;
 
-class VersionManagerTest extends TestCase
-{
-    protected VersionManager $versionManager;
+uses(Tests\TestCase::class);
 
-    protected function setUp(): void
-    {
-        parent::setUp();
+beforeEach(function () {
+    Config::set('version', [
+        'version' => '1.0.0',
+        'channel' => 'main',
+    ]);
+    Config::set('upgrade.constraints.allow_downgrade', false);
 
-        Config::set('version', [
+    // 使用部分 mock，覆盖文件读取方法（protected 方法）
+    $this->versionManager = Mockery::mock(VersionManager::class)
+        ->makePartial()
+        ->shouldAllowMockingProtectedMethods();
+    $this->versionManager->shouldReceive('getVersionJson')
+        ->andReturn([
             'version' => '1.0.0',
             'channel' => 'main',
         ]);
-        Config::set('upgrade.constraints.allow_downgrade', false);
+});
 
-        // 使用部分 mock，覆盖文件读取方法（protected 方法）
-        $this->versionManager = Mockery::mock(VersionManager::class)
-            ->makePartial()
-            ->shouldAllowMockingProtectedMethods();
-        $this->versionManager->shouldReceive('getVersionJson')
-            ->andReturn([
-                'version' => '1.0.0',
-                'channel' => 'main',
-            ]);
-    }
+afterEach(function () {
+    Mockery::close();
+});
 
-    protected function tearDown(): void
-    {
-        Mockery::close();
-        parent::tearDown();
-    }
+test('get current version', function () {
+    $version = $this->versionManager->getCurrentVersion();
 
-    public function test_get_current_version(): void
-    {
-        $version = $this->versionManager->getCurrentVersion();
+    expect($version)->toBeArray();
+    expect($version['version'])->toBe('1.0.0');
+    expect($version['channel'])->toBe('main');
+});
 
-        $this->assertIsArray($version);
-        $this->assertEquals('1.0.0', $version['version']);
-        $this->assertEquals('main', $version['channel']);
-    }
+test('get channel', function () {
+    expect($this->versionManager->getChannel())->toBe('main');
+});
 
-    public function test_get_channel(): void
-    {
-        $this->assertEquals('main', $this->versionManager->getChannel());
-    }
+test('get version string', function () {
+    expect($this->versionManager->getVersionString())->toBe('1.0.0');
+});
 
-    public function test_get_version_string(): void
-    {
-        $this->assertEquals('1.0.0', $this->versionManager->getVersionString());
-    }
+test('compare versions greater', function () {
+    expect($this->versionManager->compareVersions('2.0.0', '1.0.0'))->toBe(1);
+    expect($this->versionManager->compareVersions('1.1.0', '1.0.0'))->toBe(1);
+    expect($this->versionManager->compareVersions('1.0.1', '1.0.0'))->toBe(1);
+});
 
-    public function test_compare_versions_greater(): void
-    {
-        $this->assertEquals(1, $this->versionManager->compareVersions('2.0.0', '1.0.0'));
-        $this->assertEquals(1, $this->versionManager->compareVersions('1.1.0', '1.0.0'));
-        $this->assertEquals(1, $this->versionManager->compareVersions('1.0.1', '1.0.0'));
-    }
+test('compare versions less', function () {
+    expect($this->versionManager->compareVersions('1.0.0', '2.0.0'))->toBe(-1);
+    expect($this->versionManager->compareVersions('1.0.0', '1.1.0'))->toBe(-1);
+    expect($this->versionManager->compareVersions('1.0.0', '1.0.1'))->toBe(-1);
+});
 
-    public function test_compare_versions_less(): void
-    {
-        $this->assertEquals(-1, $this->versionManager->compareVersions('1.0.0', '2.0.0'));
-        $this->assertEquals(-1, $this->versionManager->compareVersions('1.0.0', '1.1.0'));
-        $this->assertEquals(-1, $this->versionManager->compareVersions('1.0.0', '1.0.1'));
-    }
+test('compare versions equal', function () {
+    expect($this->versionManager->compareVersions('1.0.0', '1.0.0'))->toBe(0);
+});
 
-    public function test_compare_versions_equal(): void
-    {
-        $this->assertEquals(0, $this->versionManager->compareVersions('1.0.0', '1.0.0'));
-    }
+test('compare versions with prerelease', function () {
+    // 正式版 > 预发布版
+    expect($this->versionManager->compareVersions('1.0.0', '1.0.0-dev'))->toBe(1);
+    expect($this->versionManager->compareVersions('1.0.0-dev', '1.0.0'))->toBe(-1);
+    // 相同预发布版本
+    expect($this->versionManager->compareVersions('1.0.0-dev', '1.0.0-dev'))->toBe(0);
+});
 
-    public function test_compare_versions_with_prerelease(): void
-    {
-        // 正式版 > 预发布版
-        $this->assertEquals(1, $this->versionManager->compareVersions('1.0.0', '1.0.0-dev'));
-        $this->assertEquals(-1, $this->versionManager->compareVersions('1.0.0-dev', '1.0.0'));
-        // 相同预发布版本
-        $this->assertEquals(0, $this->versionManager->compareVersions('1.0.0-dev', '1.0.0-dev'));
-    }
+test('compare versions with v prefix', function () {
+    expect($this->versionManager->compareVersions('v1.0.0', '1.0.0'))->toBe(0);
+    expect($this->versionManager->compareVersions('V1.0.0', 'v1.0.0'))->toBe(0);
+    expect($this->versionManager->compareVersions('v2.0.0', 'v1.0.0'))->toBe(1);
+});
 
-    public function test_compare_versions_with_v_prefix(): void
-    {
-        $this->assertEquals(0, $this->versionManager->compareVersions('v1.0.0', '1.0.0'));
-        $this->assertEquals(0, $this->versionManager->compareVersions('V1.0.0', 'v1.0.0'));
-        $this->assertEquals(1, $this->versionManager->compareVersions('v2.0.0', 'v1.0.0'));
-    }
+test('is upgrade allowed newer version', function () {
+    expect($this->versionManager->isUpgradeAllowed('2.0.0'))->toBeTrue();
+    expect($this->versionManager->isUpgradeAllowed('1.1.0'))->toBeTrue();
+    expect($this->versionManager->isUpgradeAllowed('1.0.1'))->toBeTrue();
+});
 
-    public function test_is_upgrade_allowed_newer_version(): void
-    {
-        $this->assertTrue($this->versionManager->isUpgradeAllowed('2.0.0'));
-        $this->assertTrue($this->versionManager->isUpgradeAllowed('1.1.0'));
-        $this->assertTrue($this->versionManager->isUpgradeAllowed('1.0.1'));
-    }
+test('is upgrade allowed same version', function () {
+    // 相同版本不需要升级
+    expect($this->versionManager->isUpgradeAllowed('1.0.0'))->toBeFalse();
+});
 
-    public function test_is_upgrade_allowed_same_version(): void
-    {
-        // 相同版本不需要升级
-        $this->assertFalse($this->versionManager->isUpgradeAllowed('1.0.0'));
-    }
+test('is upgrade allowed older version', function () {
+    // 默认不允许降级
+    expect($this->versionManager->isUpgradeAllowed('0.9.0'))->toBeFalse();
+    expect($this->versionManager->isUpgradeAllowed('0.9.9'))->toBeFalse();
+});
 
-    public function test_is_upgrade_allowed_older_version(): void
-    {
-        // 默认不允许降级
-        $this->assertFalse($this->versionManager->isUpgradeAllowed('0.9.0'));
-        $this->assertFalse($this->versionManager->isUpgradeAllowed('0.9.9'));
-    }
+test('is upgrade allowed with downgrade enabled', function () {
+    Config::set('upgrade.constraints.allow_downgrade', true);
 
-    public function test_is_upgrade_allowed_with_downgrade_enabled(): void
-    {
-        Config::set('upgrade.constraints.allow_downgrade', true);
+    // 允许降级时可以"升级"到旧版本
+    expect($this->versionManager->isUpgradeAllowed('0.9.0'))->toBeTrue();
+});
 
-        // 允许降级时可以"升级"到旧版本
-        $this->assertTrue($this->versionManager->isUpgradeAllowed('0.9.0'));
-    }
+test('check php version', function () {
+    Config::set('upgrade.constraints.min_php_version', '8.0.0');
+    expect($this->versionManager->checkPhpVersion())->toBeTrue();
 
-    public function test_check_php_version(): void
-    {
-        Config::set('upgrade.constraints.min_php_version', '8.0.0');
-        $this->assertTrue($this->versionManager->checkPhpVersion());
+    Config::set('upgrade.constraints.min_php_version', '99.0.0');
+    expect($this->versionManager->checkPhpVersion())->toBeFalse();
+});
 
-        Config::set('upgrade.constraints.min_php_version', '99.0.0');
-        $this->assertFalse($this->versionManager->checkPhpVersion());
-    }
-
-    public function test_get_min_php_version(): void
-    {
-        Config::set('upgrade.constraints.min_php_version', '8.3.0');
-        $this->assertEquals('8.3.0', $this->versionManager->getMinPhpVersion());
-    }
-}
+test('get min php version', function () {
+    Config::set('upgrade.constraints.min_php_version', '8.3.0');
+    expect($this->versionManager->getMinPhpVersion())->toBe('8.3.0');
+});

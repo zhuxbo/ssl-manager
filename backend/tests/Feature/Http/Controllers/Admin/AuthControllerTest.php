@@ -1,0 +1,145 @@
+<?php
+
+use App\Models\Admin;
+use App\Models\AdminRefreshToken;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Hash;
+
+uses(Tests\Traits\ActsAsAdmin::class);
+uses(RefreshDatabase::class);
+
+test('管理员使用正确凭证登录成功', function () {
+    $admin = Admin::factory()->create([
+        'username' => 'testadmin',
+        'password' => 'password123',
+    ]);
+
+    $response = $this->postJson('/api/admin/login', [
+        'account' => 'testadmin',
+        'password' => 'password123',
+    ]);
+
+    $response->assertOk()->assertJson(['code' => 1]);
+    $response->assertJsonStructure(['data' => ['access_token', 'refresh_token', 'username']]);
+});
+
+test('管理员使用邮箱登录成功', function () {
+    $admin = Admin::factory()->create([
+        'email' => 'admin@test.com',
+        'password' => 'password123',
+    ]);
+
+    $response = $this->postJson('/api/admin/login', [
+        'account' => 'admin@test.com',
+        'password' => 'password123',
+    ]);
+
+    $response->assertOk()->assertJson(['code' => 1]);
+});
+
+test('管理员使用错误密码登录失败', function () {
+    Admin::factory()->create([
+        'username' => 'testadmin',
+        'password' => 'password123',
+    ]);
+
+    $response = $this->postJson('/api/admin/login', [
+        'account' => 'testadmin',
+        'password' => 'wrongpassword',
+    ]);
+
+    $response->assertOk()->assertJson(['code' => 0]);
+});
+
+test('管理员使用不存在的账号登录失败', function () {
+    $response = $this->postJson('/api/admin/login', [
+        'account' => 'nonexistent',
+        'password' => 'password123',
+    ]);
+
+    $response->assertOk()->assertJson(['code' => 0]);
+});
+
+test('已禁用的管理员登录失败', function () {
+    Admin::factory()->disabled()->create([
+        'username' => 'disabledadmin',
+        'password' => 'password123',
+    ]);
+
+    $response = $this->postJson('/api/admin/login', [
+        'account' => 'disabledadmin',
+        'password' => 'password123',
+    ]);
+
+    $response->assertOk()->assertJson(['code' => 0]);
+});
+
+test('已认证管理员可以获取个人信息', function () {
+    $admin = Admin::factory()->loggedIn()->create();
+
+    $response = $this->actingAsAdmin($admin)->getJson('/api/admin/me');
+
+    $response->assertOk()->assertJson(['code' => 1]);
+    $response->assertJsonStructure(['data' => ['id', 'username', 'email', 'mobile']]);
+    $response->assertJsonPath('data.id', $admin->id);
+});
+
+test('未认证用户无法获取管理员信息', function () {
+    $response = $this->getJson('/api/admin/me');
+
+    $response->assertUnauthorized();
+});
+
+test('管理员可以更新个人资料', function () {
+    $admin = Admin::factory()->create();
+
+    $response = $this->actingAsAdmin($admin)->patchJson('/api/admin/update-profile', [
+        'email' => 'newemail@test.com',
+        'mobile' => '13800138000',
+    ]);
+
+    $response->assertOk()->assertJson(['code' => 1]);
+
+    $admin->refresh();
+    expect($admin->email)->toBe('newemail@test.com');
+    expect($admin->mobile)->toBe('13800138000');
+});
+
+test('管理员使用正确旧密码可以修改密码', function () {
+    $admin = Admin::factory()->create([
+        'password' => 'oldpassword',
+    ]);
+
+    $response = $this->actingAsAdmin($admin)->patchJson('/api/admin/update-password', [
+        'oldPassword' => 'oldpassword',
+        'newPassword' => 'newpassword123',
+        'newPassword_confirmation' => 'newpassword123',
+    ]);
+
+    $response->assertOk()->assertJson(['code' => 1]);
+
+    $admin->refresh();
+    expect(Hash::check('newpassword123', $admin->password))->toBeTrue();
+});
+
+test('管理员使用错误旧密码无法修改密码', function () {
+    $admin = Admin::factory()->create([
+        'password' => 'oldpassword',
+    ]);
+
+    $response = $this->actingAsAdmin($admin)->patchJson('/api/admin/update-password', [
+        'oldPassword' => 'wrongoldpassword',
+        'newPassword' => 'newpassword123',
+        'newPassword_confirmation' => 'newpassword123',
+    ]);
+
+    $response->assertOk()->assertJson(['code' => 0]);
+});
+
+test('管理员可以退出登录', function () {
+    $admin = Admin::factory()->create();
+
+    $response = $this->actingAsAdmin($admin)->deleteJson('/api/admin/logout');
+
+    $response->assertOk()->assertJson(['code' => 1]);
+});

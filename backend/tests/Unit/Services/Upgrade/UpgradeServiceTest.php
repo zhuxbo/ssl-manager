@@ -1,247 +1,231 @@
 <?php
 
-namespace Tests\Unit\Services\Upgrade;
-
 use App\Services\Upgrade\BackupManager;
 use App\Services\Upgrade\DatabaseStructureService;
 use App\Services\Upgrade\PackageExtractor;
 use App\Services\Upgrade\ReleaseClient;
 use App\Services\Upgrade\UpgradeService;
 use App\Services\Upgrade\VersionManager;
-use Mockery;
-use Tests\TestCase;
 
-class UpgradeServiceTest extends TestCase
-{
-    protected function tearDown(): void
-    {
-        Mockery::close();
-        parent::tearDown();
-    }
+uses(Tests\TestCase::class);
 
-    public function test_check_for_update_returns_no_update_when_same_version(): void
-    {
-        $versionManager = Mockery::mock(VersionManager::class);
-        $versionManager->shouldReceive('getCurrentVersion')->andReturn([
+afterEach(function () {
+    Mockery::close();
+});
+
+test('check for update returns no update when same version', function () {
+    $versionManager = Mockery::mock(VersionManager::class);
+    $versionManager->shouldReceive('getCurrentVersion')->andReturn([
+        'version' => '1.0.0',
+        'channel' => 'main',
+    ]);
+    $versionManager->shouldReceive('compareVersions')
+        ->with('1.0.0', '1.0.0')
+        ->andReturn(0);
+
+    $releaseClient = Mockery::mock(ReleaseClient::class);
+    $releaseClient->shouldReceive('getLatestRelease')
+        ->with('main')
+        ->andReturn([
             'version' => '1.0.0',
-            'channel' => 'main',
+            'body' => 'Release notes',
+            'published_at' => '2026-01-01',
         ]);
-        $versionManager->shouldReceive('compareVersions')
-            ->with('1.0.0', '1.0.0')
-            ->andReturn(0);
+    $releaseClient->shouldReceive('findUpgradePackageUrl')->andReturn(null);
 
-        $releaseClient = Mockery::mock(ReleaseClient::class);
-        $releaseClient->shouldReceive('getLatestRelease')
-            ->with('main')
-            ->andReturn([
-                'version' => '1.0.0',
-                'body' => 'Release notes',
-                'published_at' => '2026-01-01',
-            ]);
-        $releaseClient->shouldReceive('findUpgradePackageUrl')->andReturn(null);
+    $service = new UpgradeService(
+        $versionManager,
+        $releaseClient,
+        Mockery::mock(BackupManager::class),
+        Mockery::mock(PackageExtractor::class),
+        Mockery::mock(DatabaseStructureService::class)
+    );
 
-        $service = new UpgradeService(
-            $versionManager,
-            $releaseClient,
-            Mockery::mock(BackupManager::class),
-            Mockery::mock(PackageExtractor::class),
-            Mockery::mock(DatabaseStructureService::class)
-        );
+    $result = $service->checkForUpdate();
 
-        $result = $service->checkForUpdate();
+    expect($result['has_update'])->toBeFalse();
+    expect($result['current_version'])->toBe('1.0.0');
+    expect($result['latest_version'])->toBe('1.0.0');
+});
 
-        $this->assertFalse($result['has_update']);
-        $this->assertEquals('1.0.0', $result['current_version']);
-        $this->assertEquals('1.0.0', $result['latest_version']);
-    }
+test('check for update returns update available', function () {
+    $versionManager = Mockery::mock(VersionManager::class);
+    $versionManager->shouldReceive('getCurrentVersion')->andReturn([
+        'version' => '1.0.0',
+        'channel' => 'main',
+    ]);
+    $versionManager->shouldReceive('compareVersions')
+        ->with('1.1.0', '1.0.0')
+        ->andReturn(1);
 
-    public function test_check_for_update_returns_update_available(): void
-    {
-        $versionManager = Mockery::mock(VersionManager::class);
-        $versionManager->shouldReceive('getCurrentVersion')->andReturn([
-            'version' => '1.0.0',
-            'channel' => 'main',
+    $releaseClient = Mockery::mock(ReleaseClient::class);
+    $releaseClient->shouldReceive('getLatestRelease')
+        ->with('main')
+        ->andReturn([
+            'version' => '1.1.0',
+            'body' => 'New features',
+            'published_at' => '2026-01-10',
         ]);
-        $versionManager->shouldReceive('compareVersions')
-            ->with('1.1.0', '1.0.0')
-            ->andReturn(1);
+    $releaseClient->shouldReceive('findUpgradePackageUrl')
+        ->andReturn('https://example.com/upgrade.zip');
 
-        $releaseClient = Mockery::mock(ReleaseClient::class);
-        $releaseClient->shouldReceive('getLatestRelease')
-            ->with('main')
-            ->andReturn([
-                'version' => '1.1.0',
-                'body' => 'New features',
-                'published_at' => '2026-01-10',
-            ]);
-        $releaseClient->shouldReceive('findUpgradePackageUrl')
-            ->andReturn('https://example.com/upgrade.zip');
+    $service = new UpgradeService(
+        $versionManager,
+        $releaseClient,
+        Mockery::mock(BackupManager::class),
+        Mockery::mock(PackageExtractor::class),
+        Mockery::mock(DatabaseStructureService::class)
+    );
 
-        $service = new UpgradeService(
-            $versionManager,
-            $releaseClient,
-            Mockery::mock(BackupManager::class),
-            Mockery::mock(PackageExtractor::class),
-            Mockery::mock(DatabaseStructureService::class)
-        );
+    $result = $service->checkForUpdate();
 
-        $result = $service->checkForUpdate();
+    expect($result['has_update'])->toBeTrue();
+    expect($result['current_version'])->toBe('1.0.0');
+    expect($result['latest_version'])->toBe('1.1.0');
+    expect($result['changelog'])->toBe('New features');
+});
 
-        $this->assertTrue($result['has_update']);
-        $this->assertEquals('1.0.0', $result['current_version']);
-        $this->assertEquals('1.1.0', $result['latest_version']);
-        $this->assertEquals('New features', $result['changelog']);
-    }
+test('check for update handles no release', function () {
+    $versionManager = Mockery::mock(VersionManager::class);
+    $versionManager->shouldReceive('getCurrentVersion')->andReturn([
+        'version' => '1.0.0',
+        'channel' => 'main',
+    ]);
 
-    public function test_check_for_update_handles_no_release(): void
-    {
-        $versionManager = Mockery::mock(VersionManager::class);
-        $versionManager->shouldReceive('getCurrentVersion')->andReturn([
-            'version' => '1.0.0',
-            'channel' => 'main',
-        ]);
+    $releaseClient = Mockery::mock(ReleaseClient::class);
+    $releaseClient->shouldReceive('getLatestRelease')
+        ->with('main')
+        ->andReturn(null);
 
-        $releaseClient = Mockery::mock(ReleaseClient::class);
-        $releaseClient->shouldReceive('getLatestRelease')
-            ->with('main')
-            ->andReturn(null);
+    $service = new UpgradeService(
+        $versionManager,
+        $releaseClient,
+        Mockery::mock(BackupManager::class),
+        Mockery::mock(PackageExtractor::class),
+        Mockery::mock(DatabaseStructureService::class)
+    );
 
-        $service = new UpgradeService(
-            $versionManager,
-            $releaseClient,
-            Mockery::mock(BackupManager::class),
-            Mockery::mock(PackageExtractor::class),
-            Mockery::mock(DatabaseStructureService::class)
-        );
+    $result = $service->checkForUpdate();
 
-        $result = $service->checkForUpdate();
+    expect($result['has_update'])->toBeFalse();
+    expect($result['latest_version'])->toBeNull();
+    expect($result['message'])->toBe('无法获取最新版本信息');
+});
 
-        $this->assertFalse($result['has_update']);
-        $this->assertNull($result['latest_version']);
-        $this->assertEquals('无法获取最新版本信息', $result['message']);
-    }
+test('get release history returns releases', function () {
+    $versionManager = Mockery::mock(VersionManager::class);
+    $versionManager->shouldReceive('getChannel')->andReturn('main');
 
-    public function test_get_release_history_returns_releases(): void
-    {
-        $versionManager = Mockery::mock(VersionManager::class);
-        $versionManager->shouldReceive('getChannel')->andReturn('main');
+    $releases = [
+        ['version' => '1.1.0', 'tag_name' => 'v1.1.0'],
+        ['version' => '1.0.0', 'tag_name' => 'v1.0.0'],
+    ];
 
-        $releases = [
-            ['version' => '1.1.0', 'tag_name' => 'v1.1.0'],
-            ['version' => '1.0.0', 'tag_name' => 'v1.0.0'],
-        ];
+    $releaseClient = Mockery::mock(ReleaseClient::class);
+    $releaseClient->shouldReceive('getReleaseHistory')
+        ->with(5, 'main')
+        ->andReturn($releases);
 
-        $releaseClient = Mockery::mock(ReleaseClient::class);
-        $releaseClient->shouldReceive('getReleaseHistory')
-            ->with(5, 'main')
-            ->andReturn($releases);
+    $service = new UpgradeService(
+        $versionManager,
+        $releaseClient,
+        Mockery::mock(BackupManager::class),
+        Mockery::mock(PackageExtractor::class),
+        Mockery::mock(DatabaseStructureService::class)
+    );
 
-        $service = new UpgradeService(
-            $versionManager,
-            $releaseClient,
-            Mockery::mock(BackupManager::class),
-            Mockery::mock(PackageExtractor::class),
-            Mockery::mock(DatabaseStructureService::class)
-        );
+    $result = $service->getReleaseHistory(5);
 
-        $result = $service->getReleaseHistory(5);
+    expect($result)->toHaveCount(2);
+    expect($result[0]['version'])->toBe('1.1.0');
+});
 
-        $this->assertCount(2, $result);
-        $this->assertEquals('1.1.0', $result[0]['version']);
-    }
+test('get backups returns backup list', function () {
+    $backups = [
+        ['id' => 'backup_1', 'created_at' => '2026-01-01'],
+        ['id' => 'backup_2', 'created_at' => '2026-01-02'],
+    ];
 
-    public function test_get_backups_returns_backup_list(): void
-    {
-        $backups = [
-            ['id' => 'backup_1', 'created_at' => '2026-01-01'],
-            ['id' => 'backup_2', 'created_at' => '2026-01-02'],
-        ];
+    $backupManager = Mockery::mock(BackupManager::class);
+    $backupManager->shouldReceive('listBackups')->andReturn($backups);
 
-        $backupManager = Mockery::mock(BackupManager::class);
-        $backupManager->shouldReceive('listBackups')->andReturn($backups);
+    $service = new UpgradeService(
+        Mockery::mock(VersionManager::class),
+        Mockery::mock(ReleaseClient::class),
+        $backupManager,
+        Mockery::mock(PackageExtractor::class),
+        Mockery::mock(DatabaseStructureService::class)
+    );
 
-        $service = new UpgradeService(
-            Mockery::mock(VersionManager::class),
-            Mockery::mock(ReleaseClient::class),
-            $backupManager,
-            Mockery::mock(PackageExtractor::class),
-            Mockery::mock(DatabaseStructureService::class)
-        );
+    $result = $service->getBackups();
 
-        $result = $service->getBackups();
+    expect($result)->toHaveCount(2);
+});
 
-        $this->assertCount(2, $result);
-    }
+test('rollback fails for missing backup', function () {
+    $backupManager = Mockery::mock(BackupManager::class);
+    $backupManager->shouldReceive('getBackup')
+        ->with('invalid_backup')
+        ->once()
+        ->andReturn(null);
 
-    public function test_rollback_fails_for_missing_backup(): void
-    {
-        $backupManager = Mockery::mock(BackupManager::class);
-        $backupManager->shouldReceive('getBackup')
-            ->with('invalid_backup')
-            ->once()
-            ->andReturn(null);
+    $service = new UpgradeService(
+        Mockery::mock(VersionManager::class),
+        Mockery::mock(ReleaseClient::class),
+        $backupManager,
+        Mockery::mock(PackageExtractor::class),
+        Mockery::mock(DatabaseStructureService::class)
+    );
 
-        $service = new UpgradeService(
-            Mockery::mock(VersionManager::class),
-            Mockery::mock(ReleaseClient::class),
-            $backupManager,
-            Mockery::mock(PackageExtractor::class),
-            Mockery::mock(DatabaseStructureService::class)
-        );
+    $result = $service->rollback('invalid_backup');
 
-        $result = $service->rollback('invalid_backup');
+    expect($result['success'])->toBeFalse();
+    expect($result['error'])->toContain('备份不存在');
+});
 
-        $this->assertFalse($result['success']);
-        $this->assertStringContainsString('备份不存在', $result['error']);
-    }
+test('delete backup calls backup manager', function () {
+    $backupManager = Mockery::mock(BackupManager::class);
+    $backupManager->shouldReceive('deleteBackup')
+        ->with('backup_123')
+        ->once()
+        ->andReturn(true);
 
-    public function test_delete_backup_calls_backup_manager(): void
-    {
-        $backupManager = Mockery::mock(BackupManager::class);
-        $backupManager->shouldReceive('deleteBackup')
-            ->with('backup_123')
-            ->once()
-            ->andReturn(true);
+    $service = new UpgradeService(
+        Mockery::mock(VersionManager::class),
+        Mockery::mock(ReleaseClient::class),
+        $backupManager,
+        Mockery::mock(PackageExtractor::class),
+        Mockery::mock(DatabaseStructureService::class)
+    );
 
-        $service = new UpgradeService(
-            Mockery::mock(VersionManager::class),
-            Mockery::mock(ReleaseClient::class),
-            $backupManager,
-            Mockery::mock(PackageExtractor::class),
-            Mockery::mock(DatabaseStructureService::class)
-        );
+    $result = $service->deleteBackup('backup_123');
 
-        $result = $service->deleteBackup('backup_123');
+    expect($result)->toBeTrue();
+});
 
-        $this->assertTrue($result);
-    }
+test('find composer command', function () {
+    $service = app(UpgradeService::class);
 
-    public function test_find_composer_command(): void
-    {
-        $service = app(UpgradeService::class);
+    $reflection = new \ReflectionClass($service);
+    $method = $reflection->getMethod('findComposerCommand');
+    $method->setAccessible(true);
 
-        $reflection = new \ReflectionClass($service);
-        $method = $reflection->getMethod('findComposerCommand');
-        $method->setAccessible(true);
+    $result = $method->invoke($service);
 
-        $result = $method->invoke($service);
+    // 在开发环境中，composer 应该是可用的
+    expect($result)->not->toBeNull();
+});
 
-        // 在开发环境中，composer 应该是可用的
-        $this->assertNotNull($result);
-    }
+test('check network access method', function () {
+    $service = app(UpgradeService::class);
 
-    public function test_check_network_access_method(): void
-    {
-        $service = app(UpgradeService::class);
+    $reflection = new \ReflectionClass($service);
+    $method = $reflection->getMethod('checkNetworkAccess');
+    $method->setAccessible(true);
 
-        $reflection = new \ReflectionClass($service);
-        $method = $reflection->getMethod('checkNetworkAccess');
-        $method->setAccessible(true);
+    // 测试本地地址
+    $result = $method->invoke($service, 'http://localhost', 1);
 
-        // 测试本地地址
-        $result = $method->invoke($service, 'http://localhost', 1);
-
-        // 本地可能有或没有服务运行，所以只验证方法执行不报错
-        $this->assertIsBool($result);
-    }
-}
+    // 本地可能有或没有服务运行，所以只验证方法执行不报错
+    expect($result)->toBeBool();
+});

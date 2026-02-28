@@ -1,0 +1,241 @@
+<?php
+
+use App\Models\Admin;
+use App\Models\Cert;
+use App\Models\Order;
+use App\Models\Product;
+use App\Models\User;
+use App\Services\Order\Action;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+
+uses(Tests\Traits\ActsAsAdmin::class);
+uses(Tests\Traits\MocksExternalApis::class);
+uses(RefreshDatabase::class);
+
+beforeEach(function () {
+    $this->admin = Admin::factory()->create();
+    $this->user = User::factory()->create();
+    $this->product = Product::factory()->create();
+});
+
+function createOrderWithCert(string $status = 'pending', array $orderOverrides = [], array $certOverrides = []): array
+{
+    $order = Order::factory()->create(array_merge([
+        'user_id' => test()->user->id,
+        'product_id' => test()->product->id,
+    ], $orderOverrides));
+
+    $cert = Cert::factory()->create(array_merge([
+        'order_id' => $order->id,
+        'status' => $status,
+    ], $certOverrides));
+
+    $order->update(['latest_cert_id' => $cert->id]);
+
+    return [$order, $cert];
+}
+
+test('管理员可以获取订单列表', function () {
+    [$order, $cert] = createOrderWithCert('pending');
+
+    $response = $this->actingAsAdmin($this->admin)->getJson('/api/admin/order');
+
+    $response->assertOk()->assertJson(['code' => 1]);
+    $response->assertJsonStructure(['data' => ['items', 'total', 'pageSize', 'currentPage']]);
+});
+
+test('管理员可以筛选活动中的订单', function () {
+    createOrderWithCert('active');
+    createOrderWithCert('cancelled');
+
+    $response = $this->actingAsAdmin($this->admin)->getJson('/api/admin/order?statusSet=activating');
+
+    $response->assertOk()->assertJson(['code' => 1]);
+    expect($response->json('data.total'))->toBe(1);
+});
+
+test('管理员可以筛选已存档的订单', function () {
+    createOrderWithCert('active');
+    createOrderWithCert('cancelled');
+
+    $response = $this->actingAsAdmin($this->admin)->getJson('/api/admin/order?statusSet=archived');
+
+    $response->assertOk()->assertJson(['code' => 1]);
+    expect($response->json('data.total'))->toBe(1);
+});
+
+test('管理员可以通过快速搜索筛选订单', function () {
+    [$order, $cert] = createOrderWithCert('pending', ['remark' => 'special order']);
+    createOrderWithCert('pending');
+
+    $response = $this->actingAsAdmin($this->admin)->getJson('/api/admin/order?quickSearch=special');
+
+    $response->assertOk()->assertJson(['code' => 1]);
+});
+
+test('管理员可以按用户ID筛选订单', function () {
+    createOrderWithCert('pending');
+    $otherUser = User::factory()->create();
+    $otherOrder = Order::factory()->create(['user_id' => $otherUser->id, 'product_id' => $this->product->id]);
+    $otherCert = Cert::factory()->create(['order_id' => $otherOrder->id, 'status' => 'pending']);
+    $otherOrder->update(['latest_cert_id' => $otherCert->id]);
+
+    $response = $this->actingAsAdmin($this->admin)->getJson("/api/admin/order?user_id={$this->user->id}");
+
+    $response->assertOk()->assertJson(['code' => 1]);
+});
+
+test('管理员可以查看订单详情', function () {
+    [$order, $cert] = createOrderWithCert('pending');
+
+    $response = $this->actingAsAdmin($this->admin)->getJson("/api/admin/order/$order->id");
+
+    $response->assertOk()->assertJson(['code' => 1]);
+    $response->assertJsonPath('data.id', $order->id);
+});
+
+test('查看不存在的订单返回错误', function () {
+    $response = $this->actingAsAdmin($this->admin)->getJson('/api/admin/order/99999');
+
+    $response->assertOk()->assertJson(['code' => 0]);
+});
+
+test('管理员可以创建新订单', function () {
+    $mockAction = Mockery::mock(Action::class);
+    $mockAction->shouldReceive('new')->once();
+    $this->app->instance(Action::class, $mockAction);
+
+    $response = $this->actingAsAdmin($this->admin)->postJson('/api/admin/order/new', [
+        'user_id' => $this->user->id,
+        'product_id' => $this->product->id,
+        'period' => 12,
+        'common_name' => 'test.com',
+        'dcv' => [['domain' => 'test.com', 'method' => 'txt']],
+    ]);
+
+    $response->assertOk();
+});
+
+test('管理员可以支付订单', function () {
+    [$order, $cert] = createOrderWithCert('unpaid');
+
+    $mockAction = Mockery::mock(Action::class);
+    $mockAction->shouldReceive('pay')->once();
+    $this->app->instance(Action::class, $mockAction);
+
+    $response = $this->actingAsAdmin($this->admin)->postJson("/api/admin/order/pay/$order->id");
+
+    $response->assertOk();
+});
+
+test('管理员可以提交订单', function () {
+    [$order, $cert] = createOrderWithCert('pending');
+
+    $mockAction = Mockery::mock(Action::class);
+    $mockAction->shouldReceive('commit')->once();
+    $this->app->instance(Action::class, $mockAction);
+
+    $response = $this->actingAsAdmin($this->admin)->postJson("/api/admin/order/commit/$order->id");
+
+    $response->assertOk();
+});
+
+test('管理员可以同步订单', function () {
+    [$order, $cert] = createOrderWithCert('processing');
+
+    $mockAction = Mockery::mock(Action::class);
+    $mockAction->shouldReceive('sync')->once();
+    $this->app->instance(Action::class, $mockAction);
+
+    $response = $this->actingAsAdmin($this->admin)->postJson("/api/admin/order/sync/$order->id");
+
+    $response->assertOk();
+});
+
+test('管理员可以提交取消订单', function () {
+    [$order, $cert] = createOrderWithCert('active');
+
+    $mockAction = Mockery::mock(Action::class);
+    $mockAction->shouldReceive('commitCancel')->once();
+    $this->app->instance(Action::class, $mockAction);
+
+    $response = $this->actingAsAdmin($this->admin)->postJson("/api/admin/order/commit-cancel/$order->id");
+
+    $response->assertOk();
+});
+
+test('管理员可以添加订单备注', function () {
+    [$order, $cert] = createOrderWithCert('pending');
+
+    $mockAction = Mockery::mock(Action::class);
+    $mockAction->shouldReceive('remark')->once();
+    $this->app->instance(Action::class, $mockAction);
+
+    $response = $this->actingAsAdmin($this->admin)->postJson("/api/admin/order/remark/$order->id", [
+        'remark' => '测试备注',
+    ]);
+
+    $response->assertOk();
+});
+
+test('管理员可以转移订单', function () {
+    $mockAction = Mockery::mock(Action::class);
+    $mockAction->shouldReceive('transfer')->once();
+    $this->app->instance(Action::class, $mockAction);
+
+    $response = $this->actingAsAdmin($this->admin)->postJson('/api/admin/order/transfer', [
+        'order_id' => 1,
+        'user_id' => $this->user->id,
+    ]);
+
+    $response->assertOk();
+});
+
+test('管理员可以修改未支付订单价格', function () {
+    [$order, $cert] = createOrderWithCert('unpaid');
+
+    $response = $this->actingAsAdmin($this->admin)->patchJson("/api/admin/order/amount/$order->id", [
+        'amount' => '200.00',
+    ]);
+
+    $response->assertOk()->assertJson(['code' => 1]);
+
+    $cert->refresh();
+    expect($cert->amount)->toBe('200.00');
+});
+
+test('管理员不能修改已支付订单价格', function () {
+    [$order, $cert] = createOrderWithCert('active');
+
+    $response = $this->actingAsAdmin($this->admin)->patchJson("/api/admin/order/amount/$order->id", [
+        'amount' => '200.00',
+    ]);
+
+    $response->assertOk()->assertJson(['code' => 0]);
+});
+
+test('管理员可以更新订单自动续费设置', function () {
+    [$order, $cert] = createOrderWithCert('active');
+
+    $response = $this->actingAsAdmin($this->admin)->patchJson("/api/admin/order/auto-settings/$order->id", [
+        'auto_renew' => true,
+        'auto_reissue' => false,
+    ]);
+
+    $response->assertOk()->assertJson(['code' => 1]);
+});
+
+test('管理员可以批量获取订单', function () {
+    [$order1, $cert1] = createOrderWithCert('pending');
+    [$order2, $cert2] = createOrderWithCert('active');
+
+    $response = $this->actingAsAdmin($this->admin)->getJson('/api/admin/order/batch?ids[]=' . $order1->id . '&ids[]=' . $order2->id);
+
+    $response->assertOk()->assertJson(['code' => 1]);
+});
+
+test('未认证用户无法访问订单管理', function () {
+    $response = $this->getJson('/api/admin/order');
+
+    $response->assertUnauthorized();
+});

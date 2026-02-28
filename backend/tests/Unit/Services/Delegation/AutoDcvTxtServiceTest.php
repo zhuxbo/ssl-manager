@@ -1,496 +1,448 @@
 <?php
 
-namespace Tests\Unit\Services\Delegation;
-
 use App\Services\Delegation\AutoDcvTxtService;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use PHPUnit\Framework\Attributes\DataProvider;
-use PHPUnit\Framework\Attributes\Group;
-use ReflectionClass;
-use Tests\TestCase;
 use Tests\Traits\CreatesTestData;
 
-/**
- * AutoDcvTxtService 测试
- * 部分测试需要数据库连接
- */
-#[Group('database')]
-class AutoDcvTxtServiceTest extends TestCase
-{
-    use CreatesTestData, RefreshDatabase;
+uses(Tests\TestCase::class, CreatesTestData::class, RefreshDatabase::class)->group('database');
 
-    protected bool $seed = true;
+beforeEach(function () {
+    $this->seed = true;
+    $this->seeder = DatabaseSeeder::class;
+    $this->service = new AutoDcvTxtService;
+});
 
-    protected string $seeder = DatabaseSeeder::class;
+// ==================== handleOrder ====================
 
-    protected AutoDcvTxtService $service;
+test('handle order returns false when no cert', function () {
+    $user = $this->createTestUser();
+    $product = $this->createTestProduct();
+    $order = $this->createTestOrder($user, $product);
+    // 不创建证书
 
-    protected function setUp(): void
-    {
-        parent::setUp();
-        $this->service = new AutoDcvTxtService;
-    }
+    $result = $this->service->handleOrder($order);
 
-    // ==================== handleOrder ====================
+    expect($result)->toBeFalse();
+});
 
-    public function test_handle_order_returns_false_when_no_cert(): void
-    {
-        $user = $this->createTestUser();
-        $product = $this->createTestProduct();
-        $order = $this->createTestOrder($user, $product);
-        // 不创建证书
+test('handle order returns false when dcv method not txt', function () {
+    $user = $this->createTestUser();
+    $product = $this->createTestProduct();
+    $order = $this->createTestOrder($user, $product);
+    $this->createTestCert($order, [
+        'dcv' => ['method' => 'http', 'dns' => ['host' => '_acme-challenge']],
+    ]);
 
-        $result = $this->service->handleOrder($order);
+    $order->refresh();
+    $result = $this->service->handleOrder($order);
 
-        $this->assertFalse($result);
-    }
+    expect($result)->toBeFalse();
+});
 
-    public function test_handle_order_returns_false_when_dcv_method_not_txt(): void
-    {
-        $user = $this->createTestUser();
-        $product = $this->createTestProduct();
-        $order = $this->createTestOrder($user, $product);
-        $this->createTestCert($order, [
-            'dcv' => ['method' => 'http', 'dns' => ['host' => '_acme-challenge']],
-        ]);
+test('handle order returns false when validation empty', function () {
+    $user = $this->createTestUser();
+    $product = $this->createTestProduct();
+    $order = $this->createTestOrder($user, $product);
+    $this->createTestCert($order, [
+        'dcv' => ['method' => 'txt', 'dns' => ['host' => '_acme-challenge']],
+        'validation' => [],
+    ]);
 
-        $order->refresh();
-        $result = $this->service->handleOrder($order);
+    $order->refresh();
+    $result = $this->service->handleOrder($order);
 
-        $this->assertFalse($result);
-    }
+    expect($result)->toBeFalse();
+});
 
-    public function test_handle_order_returns_false_when_validation_empty(): void
-    {
-        $user = $this->createTestUser();
-        $product = $this->createTestProduct();
-        $order = $this->createTestOrder($user, $product);
-        $this->createTestCert($order, [
-            'dcv' => ['method' => 'txt', 'dns' => ['host' => '_acme-challenge']],
-            'validation' => [],
-        ]);
-
-        $order->refresh();
-        $result = $this->service->handleOrder($order);
-
-        $this->assertFalse($result);
-    }
-
-    public function test_handle_order_returns_true_when_all_processed(): void
-    {
-        $user = $this->createTestUser();
-        $product = $this->createTestProduct();
-        $order = $this->createTestOrder($user, $product);
-        $this->createTestCert($order, [
-            'dcv' => ['method' => 'txt', 'dns' => ['host' => '_acme-challenge']],
-            'validation' => [
-                [
-                    'host' => '_acme-challenge.example.com',
-                    'domain' => 'example.com',
-                    'value' => 'token123',
-                    'auto_txt_written' => true,
-                ],
+test('handle order returns true when all processed', function () {
+    $user = $this->createTestUser();
+    $product = $this->createTestProduct();
+    $order = $this->createTestOrder($user, $product);
+    $this->createTestCert($order, [
+        'dcv' => ['method' => 'txt', 'is_delegate' => true, 'dns' => ['host' => '_acme-challenge']],
+        'validation' => [
+            [
+                'host' => '_acme-challenge.example.com',
+                'domain' => 'example.com',
+                'value' => 'token123',
+                'auto_txt_written' => true,
             ],
-        ]);
+        ],
+    ]);
 
-        $order->refresh();
-        $result = $this->service->handleOrder($order);
+    $order->refresh();
+    $result = $this->service->handleOrder($order);
 
-        $this->assertTrue($result);
-    }
+    expect($result)->toBeTrue();
+});
 
-    // ==================== allTxtRecordsProcessed ====================
+// ==================== allTxtRecordsProcessed ====================
 
-    #[DataProvider('allTxtRecordsProcessedProvider')]
-    public function test_all_txt_records_processed(array $validation, bool $expected): void
-    {
-        $result = $this->service->allTxtRecordsProcessed($validation);
-        $this->assertEquals($expected, $result);
-    }
+test('all txt records processed', function (array $validation, bool $expected) {
+    $result = $this->service->allTxtRecordsProcessed($validation);
+    expect($result)->toBe($expected);
+})->with([
+    '空数组' => [[], true],
+    '全部已处理' => [
+        [
+            ['auto_txt_written' => true],
+            ['auto_txt_written' => true],
+        ],
+        true,
+    ],
+    '部分已处理' => [
+        [
+            ['auto_txt_written' => true],
+            ['auto_txt_written' => false],
+        ],
+        false,
+    ],
+    '无标记' => [
+        [
+            ['host' => 'example.com'],
+        ],
+        false,
+    ],
+    '标记为false' => [
+        [
+            ['auto_txt_written' => false],
+        ],
+        false,
+    ],
+]);
 
-    public static function allTxtRecordsProcessedProvider(): array
-    {
-        return [
-            '空数组' => [[], true],
-            '全部已处理' => [
-                [
-                    ['auto_txt_written' => true],
-                    ['auto_txt_written' => true],
-                ],
-                true,
+// ==================== splitPrefixAndZone ====================
+
+test('split prefix and zone', function (string $host, ?string $expectedPrefix, ?string $expectedZone) {
+    $reflection = new ReflectionClass($this->service);
+    $method = $reflection->getMethod('splitPrefixAndZone');
+    $method->setAccessible(true);
+
+    [$prefix, $zone] = $method->invoke($this->service, $host);
+
+    expect($prefix)->toBe($expectedPrefix);
+    expect($zone)->toBe($expectedZone);
+})->with([
+    '_acme-challenge' => ['_acme-challenge.example.com', '_acme-challenge', 'example.com'],
+    '_dnsauth' => ['_dnsauth.example.com', '_dnsauth', 'example.com'],
+    '_pki-validation' => ['_pki-validation.example.com', '_pki-validation', 'example.com'],
+    '_certum' => ['_certum.example.com', '_certum', 'example.com'],
+    '子域名' => ['_acme-challenge.sub.example.com', '_acme-challenge', 'sub.example.com'],
+    '多级子域名' => ['_acme-challenge.a.b.example.com', '_acme-challenge', 'a.b.example.com'],
+    '不支持的前缀' => ['_unknown.example.com', null, null],
+    '太短' => ['_acme-challenge.com', null, null],
+    '无前缀' => ['example.com', null, null],
+    '大写转换' => ['_ACME-CHALLENGE.EXAMPLE.COM', '_acme-challenge', 'example.com'],
+]);
+
+// ==================== shouldProcessDelegation ====================
+
+test('should process delegation returns false when no changes', function () {
+    $user = $this->createTestUser();
+    $product = $this->createTestProduct();
+    $order = $this->createTestOrder($user, $product);
+    $this->createTestCert($order, [
+        'dcv' => ['method' => 'txt', 'dns' => ['host' => '_acme-challenge']],
+        'validation' => [
+            [
+                'host' => '_acme-challenge.example.com',
+                'domain' => 'example.com',
+                'value' => 'token123',
+                'auto_txt_written' => true,
             ],
-            '部分已处理' => [
-                [
-                    ['auto_txt_written' => true],
-                    ['auto_txt_written' => false],
-                ],
-                false,
+        ],
+    ]);
+
+    $order->refresh();
+    $result = $this->service->shouldProcessDelegation($order);
+
+    expect($result)->toBeFalse();
+});
+
+test('should process delegation returns true when has changes', function () {
+    $user = $this->createTestUser();
+    $product = $this->createTestProduct();
+    $order = $this->createTestOrder($user, $product);
+
+    // 创建委托记录
+    $this->createTestDelegation($user, [
+        'zone' => 'example.com',
+        'prefix' => '_acme-challenge',
+        'valid' => true,
+    ]);
+
+    $this->createTestCert($order, [
+        'dcv' => ['method' => 'txt', 'dns' => ['host' => '_acme-challenge']],
+        'validation' => [
+            [
+                'host' => '_acme-challenge.example.com',
+                'domain' => 'example.com',
+                'value' => 'token123',
             ],
-            '无标记' => [
-                [
-                    ['host' => 'example.com'],
-                ],
-                false,
+        ],
+    ]);
+
+    $order->refresh();
+    $result = $this->service->shouldProcessDelegation($order);
+
+    expect($result)->toBeTrue();
+});
+
+// ==================== collectTxtRecords ====================
+
+test('collect txt records skips already processed', function () {
+    $user = $this->createTestUser();
+    $product = $this->createTestProduct();
+    $order = $this->createTestOrder($user, $product);
+    $this->createTestCert($order, [
+        'dcv' => ['method' => 'txt', 'dns' => ['host' => '_acme-challenge']],
+        'validation' => [
+            [
+                'host' => '_acme-challenge.example.com',
+                'domain' => 'example.com',
+                'value' => 'token123',
+                'auto_txt_written' => true,
             ],
-            '标记为false' => [
-                [
-                    ['auto_txt_written' => false],
-                ],
-                false,
+        ],
+    ]);
+
+    $reflection = new ReflectionClass($this->service);
+    $method = $reflection->getMethod('collectTxtRecords');
+    $method->setAccessible(true);
+
+    $order->refresh();
+    [$txtRecords, $updatedValidation, $hasChanges] = $method->invoke($this->service, $order);
+
+    expect($txtRecords)->toBeEmpty();
+    expect($hasChanges)->toBeFalse();
+});
+
+test('collect txt records skips incomplete validation', function () {
+    $user = $this->createTestUser();
+    $product = $this->createTestProduct();
+    $order = $this->createTestOrder($user, $product);
+    $this->createTestCert($order, [
+        'dcv' => ['method' => 'txt', 'dns' => ['host' => '_acme-challenge']],
+        'validation' => [
+            [
+                'host' => '_acme-challenge.example.com',
+                // 缺少 domain 和 value
             ],
-        ];
-    }
+        ],
+    ]);
 
-    // ==================== splitPrefixAndZone ====================
+    $reflection = new ReflectionClass($this->service);
+    $method = $reflection->getMethod('collectTxtRecords');
+    $method->setAccessible(true);
 
-    #[DataProvider('splitPrefixAndZoneProvider')]
-    public function test_split_prefix_and_zone(string $host, ?string $expectedPrefix, ?string $expectedZone): void
-    {
-        $reflection = new ReflectionClass($this->service);
-        $method = $reflection->getMethod('splitPrefixAndZone');
-        $method->setAccessible(true);
+    $order->refresh();
+    [$txtRecords, $updatedValidation, $hasChanges] = $method->invoke($this->service, $order);
 
-        [$prefix, $zone] = $method->invoke($this->service, $host);
+    expect($txtRecords)->toBeEmpty();
+    expect($hasChanges)->toBeFalse();
+});
 
-        $this->assertEquals($expectedPrefix, $prefix);
-        $this->assertEquals($expectedZone, $zone);
-    }
+test('collect txt records uses dcv host when validation host missing', function () {
+    $user = $this->createTestUser();
+    $product = $this->createTestProduct();
+    $order = $this->createTestOrder($user, $product);
 
-    public static function splitPrefixAndZoneProvider(): array
-    {
-        return [
-            '_acme-challenge' => ['_acme-challenge.example.com', '_acme-challenge', 'example.com'],
-            '_dnsauth' => ['_dnsauth.example.com', '_dnsauth', 'example.com'],
-            '_pki-validation' => ['_pki-validation.example.com', '_pki-validation', 'example.com'],
-            '_certum' => ['_certum.example.com', '_certum', 'example.com'],
-            '子域名' => ['_acme-challenge.sub.example.com', '_acme-challenge', 'sub.example.com'],
-            '多级子域名' => ['_acme-challenge.a.b.example.com', '_acme-challenge', 'a.b.example.com'],
-            '不支持的前缀' => ['_unknown.example.com', null, null],
-            '太短' => ['_acme-challenge.com', null, null],
-            '无前缀' => ['example.com', null, null],
-            '大写转换' => ['_ACME-CHALLENGE.EXAMPLE.COM', '_acme-challenge', 'example.com'],
-        ];
-    }
+    // 创建委托记录
+    $delegation = $this->createTestDelegation($user, [
+        'zone' => 'example.com',
+        'prefix' => '_acme-challenge',
+        'valid' => true,
+    ]);
 
-    // ==================== shouldProcessDelegation ====================
-
-    public function test_should_process_delegation_returns_false_when_no_changes(): void
-    {
-        $user = $this->createTestUser();
-        $product = $this->createTestProduct();
-        $order = $this->createTestOrder($user, $product);
-        $this->createTestCert($order, [
-            'dcv' => ['method' => 'txt', 'dns' => ['host' => '_acme-challenge']],
-            'validation' => [
-                [
-                    'host' => '_acme-challenge.example.com',
-                    'domain' => 'example.com',
-                    'value' => 'token123',
-                    'auto_txt_written' => true,
-                ],
+    $this->createTestCert($order, [
+        'dcv' => ['method' => 'txt', 'dns' => ['host' => '_acme-challenge']],
+        'validation' => [
+            [
+                // host 缺失，依赖 dcv.dns.host 回退
+                'domain' => 'example.com',
+                'value' => 'token123',
             ],
-        ]);
+        ],
+    ]);
 
-        $order->refresh();
-        $result = $this->service->shouldProcessDelegation($order);
+    $reflection = new ReflectionClass($this->service);
+    $method = $reflection->getMethod('collectTxtRecords');
+    $method->setAccessible(true);
 
-        $this->assertFalse($result);
-    }
+    $order->refresh();
+    [$txtRecords, $updatedValidation, $hasChanges] = $method->invoke($this->service, $order);
 
-    public function test_should_process_delegation_returns_true_when_has_changes(): void
-    {
-        $user = $this->createTestUser();
-        $product = $this->createTestProduct();
-        $order = $this->createTestOrder($user, $product);
+    expect($txtRecords)->toHaveCount(1);
+    expect($updatedValidation[0]['delegation_id'])->toBe($delegation->id);
+    expect($updatedValidation[0]['auto_txt_written'])->toBeTrue();
+    expect($hasChanges)->toBeTrue();
+});
 
-        // 创建委托记录
-        $this->createTestDelegation($user, [
-            'zone' => 'example.com',
-            'prefix' => '_acme-challenge',
-            'valid' => true,
-        ]);
+test('collect txt records expands prefix only host', function () {
+    $user = $this->createTestUser();
+    $product = $this->createTestProduct();
+    $order = $this->createTestOrder($user, $product);
 
-        $this->createTestCert($order, [
-            'dcv' => ['method' => 'txt', 'dns' => ['host' => '_acme-challenge']],
-            'validation' => [
-                [
-                    'host' => '_acme-challenge.example.com',
-                    'domain' => 'example.com',
-                    'value' => 'token123',
-                ],
+    // 创建委托记录
+    $delegation = $this->createTestDelegation($user, [
+        'zone' => 'example.com',
+        'prefix' => '_acme-challenge',
+        'valid' => true,
+    ]);
+
+    $this->createTestCert($order, [
+        'dcv' => ['method' => 'txt', 'dns' => ['host' => '_acme-challenge']],
+        'validation' => [
+            [
+                // 仅前缀，需补全域名
+                'host' => '_acme-challenge',
+                'domain' => 'example.com',
+                'value' => 'token123',
             ],
-        ]);
+        ],
+    ]);
 
-        $order->refresh();
-        $result = $this->service->shouldProcessDelegation($order);
+    $reflection = new ReflectionClass($this->service);
+    $method = $reflection->getMethod('collectTxtRecords');
+    $method->setAccessible(true);
 
-        $this->assertTrue($result);
-    }
+    $order->refresh();
+    [$txtRecords, $updatedValidation, $hasChanges] = $method->invoke($this->service, $order);
 
-    // ==================== collectTxtRecords ====================
+    expect($txtRecords)->toHaveCount(1);
+    expect($updatedValidation[0]['delegation_id'])->toBe($delegation->id);
+    expect($updatedValidation[0]['auto_txt_written'])->toBeTrue();
+    expect($hasChanges)->toBeTrue();
+});
 
-    public function test_collect_txt_records_skips_already_processed(): void
-    {
-        $user = $this->createTestUser();
-        $product = $this->createTestProduct();
-        $order = $this->createTestOrder($user, $product);
-        $this->createTestCert($order, [
-            'dcv' => ['method' => 'txt', 'dns' => ['host' => '_acme-challenge']],
-            'validation' => [
-                [
-                    'host' => '_acme-challenge.example.com',
-                    'domain' => 'example.com',
-                    'value' => 'token123',
-                    'auto_txt_written' => true,
-                ],
+test('collect txt records skips when missing host and dcv host', function () {
+    $user = $this->createTestUser();
+    $product = $this->createTestProduct();
+    $order = $this->createTestOrder($user, $product);
+
+    $this->createTestCert($order, [
+        'dcv' => ['method' => 'txt'],
+        'validation' => [
+            [
+                'domain' => 'example.com',
+                'value' => 'token123',
             ],
-        ]);
+        ],
+    ]);
 
-        $reflection = new ReflectionClass($this->service);
-        $method = $reflection->getMethod('collectTxtRecords');
-        $method->setAccessible(true);
+    $reflection = new ReflectionClass($this->service);
+    $method = $reflection->getMethod('collectTxtRecords');
+    $method->setAccessible(true);
 
-        $order->refresh();
-        [$txtRecords, $updatedValidation, $hasChanges] = $method->invoke($this->service, $order);
+    $order->refresh();
+    [$txtRecords, $updatedValidation, $hasChanges] = $method->invoke($this->service, $order);
 
-        $this->assertEmpty($txtRecords);
-        $this->assertFalse($hasChanges);
-    }
+    expect($txtRecords)->toBeEmpty();
+    expect($hasChanges)->toBeFalse();
+    expect($updatedValidation[0])->not->toHaveKey('auto_txt_written');
+});
 
-    public function test_collect_txt_records_skips_incomplete_validation(): void
-    {
-        $user = $this->createTestUser();
-        $product = $this->createTestProduct();
-        $order = $this->createTestOrder($user, $product);
-        $this->createTestCert($order, [
-            'dcv' => ['method' => 'txt', 'dns' => ['host' => '_acme-challenge']],
-            'validation' => [
-                [
-                    'host' => '_acme-challenge.example.com',
-                    // 缺少 domain 和 value
-                ],
+test('collect txt records groups by delegation', function () {
+    $user = $this->createTestUser();
+    $product = $this->createTestProduct();
+    $order = $this->createTestOrder($user, $product);
+
+    // 创建委托记录
+    $delegation = $this->createTestDelegation($user, [
+        'zone' => 'example.com',
+        'prefix' => '_acme-challenge',
+        'valid' => true,
+    ]);
+
+    $this->createTestCert($order, [
+        'dcv' => ['method' => 'txt', 'dns' => ['host' => '_acme-challenge']],
+        'validation' => [
+            [
+                'host' => '_acme-challenge.example.com',
+                'domain' => 'example.com',
+                'value' => 'token1',
             ],
-        ]);
-
-        $reflection = new ReflectionClass($this->service);
-        $method = $reflection->getMethod('collectTxtRecords');
-        $method->setAccessible(true);
-
-        $order->refresh();
-        [$txtRecords, $updatedValidation, $hasChanges] = $method->invoke($this->service, $order);
-
-        $this->assertEmpty($txtRecords);
-        $this->assertFalse($hasChanges);
-    }
-
-    public function test_collect_txt_records_uses_dcv_host_when_validation_host_missing(): void
-    {
-        $user = $this->createTestUser();
-        $product = $this->createTestProduct();
-        $order = $this->createTestOrder($user, $product);
-
-        // 创建委托记录
-        $delegation = $this->createTestDelegation($user, [
-            'zone' => 'example.com',
-            'prefix' => '_acme-challenge',
-            'valid' => true,
-        ]);
-
-        $this->createTestCert($order, [
-            'dcv' => ['method' => 'txt', 'dns' => ['host' => '_acme-challenge']],
-            'validation' => [
-                [
-                    // host 缺失，依赖 dcv.dns.host 回退
-                    'domain' => 'example.com',
-                    'value' => 'token123',
-                ],
+            [
+                'host' => '_acme-challenge.example.com',
+                'domain' => 'example.com',
+                'value' => 'token2',
             ],
-        ]);
+        ],
+    ]);
 
-        $reflection = new ReflectionClass($this->service);
-        $method = $reflection->getMethod('collectTxtRecords');
-        $method->setAccessible(true);
+    $reflection = new ReflectionClass($this->service);
+    $method = $reflection->getMethod('collectTxtRecords');
+    $method->setAccessible(true);
 
-        $order->refresh();
-        [$txtRecords, $updatedValidation, $hasChanges] = $method->invoke($this->service, $order);
+    $order->refresh();
+    [$txtRecords, $updatedValidation, $hasChanges] = $method->invoke($this->service, $order);
 
-        $this->assertCount(1, $txtRecords);
-        $this->assertEquals($delegation->id, $updatedValidation[0]['delegation_id']);
-        $this->assertTrue($updatedValidation[0]['auto_txt_written']);
-        $this->assertTrue($hasChanges);
-    }
+    expect($txtRecords)->toHaveCount(1); // 按 delegation 分组
+    expect($txtRecords[$delegation->id]['tokens'])->toHaveCount(2);
+    expect($hasChanges)->toBeTrue();
+});
 
-    public function test_collect_txt_records_expands_prefix_only_host(): void
-    {
-        $user = $this->createTestUser();
-        $product = $this->createTestProduct();
-        $order = $this->createTestOrder($user, $product);
+test('collect txt records marks delegation id', function () {
+    $user = $this->createTestUser();
+    $product = $this->createTestProduct();
+    $order = $this->createTestOrder($user, $product);
 
-        // 创建委托记录
-        $delegation = $this->createTestDelegation($user, [
-            'zone' => 'example.com',
-            'prefix' => '_acme-challenge',
-            'valid' => true,
-        ]);
+    // 创建委托记录
+    $delegation = $this->createTestDelegation($user, [
+        'zone' => 'example.com',
+        'prefix' => '_acme-challenge',
+        'valid' => true,
+    ]);
 
-        $this->createTestCert($order, [
-            'dcv' => ['method' => 'txt', 'dns' => ['host' => '_acme-challenge']],
-            'validation' => [
-                [
-                    // 仅前缀，需补全域名
-                    'host' => '_acme-challenge',
-                    'domain' => 'example.com',
-                    'value' => 'token123',
-                ],
+    $this->createTestCert($order, [
+        'dcv' => ['method' => 'txt', 'dns' => ['host' => '_acme-challenge']],
+        'validation' => [
+            [
+                'host' => '_acme-challenge.example.com',
+                'domain' => 'example.com',
+                'value' => 'token123',
             ],
-        ]);
+        ],
+    ]);
 
-        $reflection = new ReflectionClass($this->service);
-        $method = $reflection->getMethod('collectTxtRecords');
-        $method->setAccessible(true);
+    $reflection = new ReflectionClass($this->service);
+    $method = $reflection->getMethod('collectTxtRecords');
+    $method->setAccessible(true);
 
-        $order->refresh();
-        [$txtRecords, $updatedValidation, $hasChanges] = $method->invoke($this->service, $order);
+    $order->refresh();
+    [$txtRecords, $updatedValidation, $hasChanges] = $method->invoke($this->service, $order);
 
-        $this->assertCount(1, $txtRecords);
-        $this->assertEquals($delegation->id, $updatedValidation[0]['delegation_id']);
-        $this->assertTrue($updatedValidation[0]['auto_txt_written']);
-        $this->assertTrue($hasChanges);
-    }
+    expect($updatedValidation[0]['delegation_id'])->toBe($delegation->id);
+    expect($updatedValidation[0]['auto_txt_written'])->toBeTrue();
+    expect($updatedValidation[0]['auto_txt_written_at'])->not->toBeEmpty();
+});
 
-    public function test_collect_txt_records_skips_when_missing_host_and_dcv_host(): void
-    {
-        $user = $this->createTestUser();
-        $product = $this->createTestProduct();
-        $order = $this->createTestOrder($user, $product);
+test('collect txt records skips when no delegation found', function () {
+    $user = $this->createTestUser();
+    $product = $this->createTestProduct();
+    $order = $this->createTestOrder($user, $product);
+    // 不创建委托记录
 
-        $this->createTestCert($order, [
-            'dcv' => ['method' => 'txt'],
-            'validation' => [
-                [
-                    'domain' => 'example.com',
-                    'value' => 'token123',
-                ],
+    $this->createTestCert($order, [
+        'dcv' => ['method' => 'txt', 'dns' => ['host' => '_acme-challenge']],
+        'validation' => [
+            [
+                'host' => '_acme-challenge.example.com',
+                'domain' => 'example.com',
+                'value' => 'token123',
             ],
-        ]);
+        ],
+    ]);
 
-        $reflection = new ReflectionClass($this->service);
-        $method = $reflection->getMethod('collectTxtRecords');
-        $method->setAccessible(true);
+    $reflection = new ReflectionClass($this->service);
+    $method = $reflection->getMethod('collectTxtRecords');
+    $method->setAccessible(true);
 
-        $order->refresh();
-        [$txtRecords, $updatedValidation, $hasChanges] = $method->invoke($this->service, $order);
+    $order->refresh();
+    [$txtRecords, $updatedValidation, $hasChanges] = $method->invoke($this->service, $order);
 
-        $this->assertEmpty($txtRecords);
-        $this->assertFalse($hasChanges);
-        $this->assertArrayNotHasKey('auto_txt_written', $updatedValidation[0]);
-    }
-
-    public function test_collect_txt_records_groups_by_delegation(): void
-    {
-        $user = $this->createTestUser();
-        $product = $this->createTestProduct();
-        $order = $this->createTestOrder($user, $product);
-
-        // 创建委托记录
-        $delegation = $this->createTestDelegation($user, [
-            'zone' => 'example.com',
-            'prefix' => '_acme-challenge',
-            'valid' => true,
-        ]);
-
-        $this->createTestCert($order, [
-            'dcv' => ['method' => 'txt', 'dns' => ['host' => '_acme-challenge']],
-            'validation' => [
-                [
-                    'host' => '_acme-challenge.example.com',
-                    'domain' => 'example.com',
-                    'value' => 'token1',
-                ],
-                [
-                    'host' => '_acme-challenge.example.com',
-                    'domain' => 'example.com',
-                    'value' => 'token2',
-                ],
-            ],
-        ]);
-
-        $reflection = new ReflectionClass($this->service);
-        $method = $reflection->getMethod('collectTxtRecords');
-        $method->setAccessible(true);
-
-        $order->refresh();
-        [$txtRecords, $updatedValidation, $hasChanges] = $method->invoke($this->service, $order);
-
-        $this->assertCount(1, $txtRecords); // 按 delegation 分组
-        $this->assertCount(2, $txtRecords[$delegation->id]['tokens']);
-        $this->assertTrue($hasChanges);
-    }
-
-    public function test_collect_txt_records_marks_delegation_id(): void
-    {
-        $user = $this->createTestUser();
-        $product = $this->createTestProduct();
-        $order = $this->createTestOrder($user, $product);
-
-        // 创建委托记录
-        $delegation = $this->createTestDelegation($user, [
-            'zone' => 'example.com',
-            'prefix' => '_acme-challenge',
-            'valid' => true,
-        ]);
-
-        $this->createTestCert($order, [
-            'dcv' => ['method' => 'txt', 'dns' => ['host' => '_acme-challenge']],
-            'validation' => [
-                [
-                    'host' => '_acme-challenge.example.com',
-                    'domain' => 'example.com',
-                    'value' => 'token123',
-                ],
-            ],
-        ]);
-
-        $reflection = new ReflectionClass($this->service);
-        $method = $reflection->getMethod('collectTxtRecords');
-        $method->setAccessible(true);
-
-        $order->refresh();
-        [$txtRecords, $updatedValidation, $hasChanges] = $method->invoke($this->service, $order);
-
-        $this->assertEquals($delegation->id, $updatedValidation[0]['delegation_id']);
-        $this->assertTrue($updatedValidation[0]['auto_txt_written']);
-        $this->assertNotEmpty($updatedValidation[0]['auto_txt_written_at']);
-    }
-
-    public function test_collect_txt_records_skips_when_no_delegation_found(): void
-    {
-        $user = $this->createTestUser();
-        $product = $this->createTestProduct();
-        $order = $this->createTestOrder($user, $product);
-        // 不创建委托记录
-
-        $this->createTestCert($order, [
-            'dcv' => ['method' => 'txt', 'dns' => ['host' => '_acme-challenge']],
-            'validation' => [
-                [
-                    'host' => '_acme-challenge.example.com',
-                    'domain' => 'example.com',
-                    'value' => 'token123',
-                ],
-            ],
-        ]);
-
-        $reflection = new ReflectionClass($this->service);
-        $method = $reflection->getMethod('collectTxtRecords');
-        $method->setAccessible(true);
-
-        $order->refresh();
-        [$txtRecords, $updatedValidation, $hasChanges] = $method->invoke($this->service, $order);
-
-        $this->assertEmpty($txtRecords);
-        $this->assertFalse($hasChanges);
-        $this->assertArrayNotHasKey('auto_txt_written', $updatedValidation[0]);
-    }
-}
+    expect($txtRecords)->toBeEmpty();
+    expect($hasChanges)->toBeFalse();
+    expect($updatedValidation[0])->not->toHaveKey('auto_txt_written');
+});

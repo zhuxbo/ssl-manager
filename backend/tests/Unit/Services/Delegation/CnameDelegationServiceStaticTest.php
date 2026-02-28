@@ -1,60 +1,36 @@
 <?php
 
-namespace Tests\Unit\Services\Delegation;
-
 use App\Services\Delegation\CnameDelegationService;
-use PHPUnit\Framework\Attributes\DataProvider;
-use Tests\TestCase;
+
+// ==================== getDelegationPrefixForCa ====================
+
+test('get delegation prefix for ca', function (string $ca, string $expected) {
+    expect(CnameDelegationService::getDelegationPrefixForCa($ca))->toBe($expected);
+})->with([
+    'Sectigo' => ['Sectigo', '_pki-validation'],
+    'sectigo小写' => ['sectigo', '_pki-validation'],
+    'Comodo' => ['Comodo', '_pki-validation'],
+    'Certum' => ['Certum', '_certum'],
+    'DigiCert' => ['DigiCert', '_dnsauth'],
+    'digicert小写' => ['digicert', '_dnsauth'],
+    'GeoTrust' => ['GeoTrust', '_dnsauth'],
+    'Thawte' => ['Thawte', '_dnsauth'],
+    'RapidSSL' => ['RapidSSL', '_dnsauth'],
+    'Symantec' => ['Symantec', '_dnsauth'],
+    'TrustAsia' => ['TrustAsia', '_dnsauth'],
+    'LetsEncrypt' => ['LetsEncrypt', '_acme-challenge'],
+    'ZeroSSL' => ['ZeroSSL', '_acme-challenge'],
+    '未知CA' => ['Unknown', '_acme-challenge'],
+]);
 
 /**
- * CnameDelegationService 静态方法测试（不需要数据库）
+ * ACME 渠道：无论 CA 是什么，都返回 _acme-challenge
  */
-class CnameDelegationServiceStaticTest extends TestCase
-{
-    // ==================== getDelegationPrefixForCa ====================
-
-    #[DataProvider('caPrefixProvider')]
-    public function test_get_delegation_prefix_for_ca(string $ca, string $expected): void
-    {
-        $this->assertEquals($expected, CnameDelegationService::getDelegationPrefixForCa($ca));
-    }
-
-    public static function caPrefixProvider(): array
-    {
-        return [
-            'Sectigo' => ['Sectigo', '_pki-validation'],
-            'sectigo小写' => ['sectigo', '_pki-validation'],
-            'Comodo' => ['Comodo', '_pki-validation'],
-            'Certum' => ['Certum', '_certum'],
-            'DigiCert' => ['DigiCert', '_dnsauth'],
-            'digicert小写' => ['digicert', '_dnsauth'],
-            'GeoTrust' => ['GeoTrust', '_dnsauth'],
-            'Thawte' => ['Thawte', '_dnsauth'],
-            'RapidSSL' => ['RapidSSL', '_dnsauth'],
-            'Symantec' => ['Symantec', '_dnsauth'],
-            'TrustAsia' => ['TrustAsia', '_dnsauth'],
-            'LetsEncrypt' => ['LetsEncrypt', '_acme-challenge'],
-            'ZeroSSL' => ['ZeroSSL', '_acme-challenge'],
-            '未知CA' => ['Unknown', '_acme-challenge'],
-        ];
-    }
-
-    /**
-     * ACME 渠道：无论 CA 是什么，都返回 _acme-challenge
-     */
-    #[DataProvider('acmeChannelProvider')]
-    public function test_acme_channel_always_returns_acme_challenge(string $ca, string $channel): void
-    {
-        $this->assertEquals('_acme-challenge', CnameDelegationService::getDelegationPrefixForCa($ca, $channel));
-    }
-
-    public static function acmeChannelProvider(): array
-    {
-        return [
-            'Certum+acme' => ['Certum', 'acme'],
-            'Sectigo+acme' => ['Sectigo', 'acme'],
-            'DigiCert+acme' => ['DigiCert', 'acme'],
-            '空CA+acme' => ['', 'acme'],
-        ];
-    }
-}
+test('acme channel always returns acme challenge', function (string $ca, string $channel) {
+    expect(CnameDelegationService::getDelegationPrefixForCa($ca, $channel))->toBe('_acme-challenge');
+})->with([
+    'Certum+acme' => ['Certum', 'acme'],
+    'Sectigo+acme' => ['Sectigo', 'acme'],
+    'DigiCert+acme' => ['DigiCert', 'acme'],
+    '空CA+acme' => ['', 'acme'],
+]);

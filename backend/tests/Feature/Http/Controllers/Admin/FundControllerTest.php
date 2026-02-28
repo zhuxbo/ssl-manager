@@ -1,0 +1,171 @@
+<?php
+
+use App\Models\Admin;
+use App\Models\Fund;
+use App\Models\User;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+
+uses(Tests\Traits\ActsAsAdmin::class);
+uses(RefreshDatabase::class);
+
+beforeEach(function () {
+    $this->admin = Admin::factory()->create();
+    $this->user = User::factory()->create();
+});
+
+test('管理员可以获取资金记录列表', function () {
+    Fund::factory()->count(3)->create(['user_id' => $this->user->id]);
+
+    $response = $this->actingAsAdmin($this->admin)->getJson('/api/admin/fund');
+
+    $response->assertOk()->assertJson(['code' => 1]);
+    $response->assertJsonStructure(['data' => ['items', 'total', 'pageSize', 'currentPage']]);
+});
+
+test('管理员可以快速搜索资金记录', function () {
+    Fund::factory()->create(['user_id' => $this->user->id, 'remark' => 'special payment']);
+    Fund::factory()->create(['user_id' => $this->user->id, 'remark' => 'normal']);
+
+    $response = $this->actingAsAdmin($this->admin)->getJson('/api/admin/fund?quickSearch=special');
+
+    $response->assertOk()->assertJson(['code' => 1]);
+    expect($response->json('data.total'))->toBe(1);
+});
+
+test('管理员可以按类型筛选资金记录', function () {
+    Fund::factory()->create(['user_id' => $this->user->id, 'type' => 'addfunds']);
+    Fund::factory()->deduct()->create(['user_id' => $this->user->id]);
+
+    $response = $this->actingAsAdmin($this->admin)->getJson('/api/admin/fund?type=deduct');
+
+    $response->assertOk()->assertJson(['code' => 1]);
+    expect($response->json('data.total'))->toBe(1);
+});
+
+test('管理员可以按状态筛选资金记录', function () {
+    Fund::factory()->create(['user_id' => $this->user->id, 'status' => 0]);
+    Fund::factory()->completed()->create(['user_id' => $this->user->id]);
+
+    $response = $this->actingAsAdmin($this->admin)->getJson('/api/admin/fund?status=1');
+
+    $response->assertOk()->assertJson(['code' => 1]);
+    expect($response->json('data.total'))->toBe(1);
+});
+
+test('管理员可以按支付方式筛选资金记录', function () {
+    Fund::factory()->create(['user_id' => $this->user->id, 'pay_method' => 'alipay']);
+    Fund::factory()->wechat()->create(['user_id' => $this->user->id]);
+
+    $response = $this->actingAsAdmin($this->admin)->getJson('/api/admin/fund?pay_method=wechat');
+
+    $response->assertOk()->assertJson(['code' => 1]);
+    expect($response->json('data.total'))->toBe(1);
+});
+
+test('管理员可以查看资金记录详情', function () {
+    $fund = Fund::factory()->create(['user_id' => $this->user->id]);
+
+    $response = $this->actingAsAdmin($this->admin)->getJson("/api/admin/fund/$fund->id");
+
+    $response->assertOk()->assertJson(['code' => 1]);
+    $response->assertJsonPath('data.id', $fund->id);
+});
+
+test('查看不存在的资金记录返回错误', function () {
+    $response = $this->actingAsAdmin($this->admin)->getJson('/api/admin/fund/99999');
+
+    $response->assertOk()->assertJson(['code' => 0]);
+});
+
+test('管理员可以删除资金记录', function () {
+    // Fund deleting 事件要求 status=0 且创建超2小时
+    $fund = Fund::factory()->create([
+        'user_id' => $this->user->id,
+        'created_at' => now()->subHours(3),
+    ]);
+
+    $response = $this->actingAsAdmin($this->admin)->deleteJson("/api/admin/fund/$fund->id");
+
+    $response->assertOk()->assertJson(['code' => 1]);
+    expect(Fund::find($fund->id))->toBeNull();
+});
+
+test('管理员可以退款已完成的充值记录', function () {
+    $fund = Fund::factory()->completed()->create([
+        'user_id' => $this->user->id,
+        'type' => 'addfunds',
+    ]);
+
+    $response = $this->actingAsAdmin($this->admin)->postJson("/api/admin/fund/refunds/$fund->id");
+
+    $response->assertOk()->assertJson(['code' => 1]);
+
+    $fund->refresh();
+    expect($fund->type)->toBe('refunds');
+    expect($fund->status)->toBe(2);
+});
+
+test('不能退款处理中的资金记录', function () {
+    $fund = Fund::factory()->create([
+        'user_id' => $this->user->id,
+        'type' => 'addfunds',
+        'status' => 0,
+    ]);
+
+    $response = $this->actingAsAdmin($this->admin)->postJson("/api/admin/fund/refunds/$fund->id");
+
+    $response->assertOk()->assertJson(['code' => 0]);
+});
+
+test('不能重复退款', function () {
+    // Fund 的 creating 事件禁止 status=2 直接创建
+    // 需要先创建 completed(status=1)，再更新为退款状态
+    $fund = Fund::factory()->completed()->create([
+        'user_id' => $this->user->id,
+        'type' => 'addfunds',
+    ]);
+    // 通过 updating 将 status 从 1 改为 2（退款状态）
+    $fund->status = 2;
+    $fund->type = 'refunds';
+    $fund->save();
+
+    $response = $this->actingAsAdmin($this->admin)->postJson("/api/admin/fund/refunds/$fund->id");
+
+    $response->assertOk()->assertJson(['code' => 0]);
+});
+
+test('管理员可以退回扣款记录', function () {
+    $fund = Fund::factory()->deduct()->completed()->create([
+        'user_id' => $this->user->id,
+    ]);
+
+    $response = $this->actingAsAdmin($this->admin)->postJson("/api/admin/fund/reverse/$fund->id");
+
+    $response->assertOk()->assertJson(['code' => 1]);
+
+    $fund->refresh();
+    expect($fund->type)->toBe('reverse');
+    expect($fund->status)->toBe(2);
+});
+
+test('管理员可以批量删除资金记录', function () {
+    // Fund deleting 事件要求 status=0 且创建超2小时
+    $funds = Fund::factory()->count(3)->create([
+        'user_id' => $this->user->id,
+        'created_at' => now()->subHours(3),
+    ]);
+    $ids = $funds->pluck('id')->toArray();
+
+    $response = $this->actingAsAdmin($this->admin)->deleteJson('/api/admin/fund/batch', [
+        'ids' => $ids,
+    ]);
+
+    $response->assertOk()->assertJson(['code' => 1]);
+    expect(Fund::whereIn('id', $ids)->count())->toBe(0);
+});
+
+test('未认证用户无法访问资金管理', function () {
+    $response = $this->getJson('/api/admin/fund');
+
+    $response->assertUnauthorized();
+});

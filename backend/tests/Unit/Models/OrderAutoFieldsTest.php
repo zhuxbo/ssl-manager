@@ -1,132 +1,120 @@
 <?php
 
-namespace Tests\Unit\Models;
-
 use App\Models\Order;
 use App\Models\Product;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use PHPUnit\Framework\Attributes\Group;
-use Tests\TestCase;
 use Tests\Traits\CreatesTestData;
 
-#[Group('database')]
-class OrderAutoFieldsTest extends TestCase
-{
-    use CreatesTestData, RefreshDatabase;
+uses(Tests\TestCase::class, CreatesTestData::class, RefreshDatabase::class)->group('database');
 
-    protected bool $seed = true;
+beforeEach(function () {
+    $this->seed = true;
+    $this->seeder = DatabaseSeeder::class;
+});
 
-    protected string $seeder = DatabaseSeeder::class;
+/**
+ * 测试 auto_renew 正确转换为 boolean
+ */
+test('auto renew casts to boolean', function () {
+    $user = $this->createTestUser();
+    $product = Product::factory()->create();
 
-    /**
-     * 测试 auto_renew 正确转换为 boolean
-     */
-    public function test_auto_renew_casts_to_boolean(): void
-    {
-        $user = $this->createTestUser();
-        $product = Product::factory()->create();
+    $order = Order::create([
+        'user_id' => $user->id,
+        'product_id' => $product->id,
+        'brand' => 'test',
+        'period' => 12,
+        'auto_renew' => true,
+    ]);
 
-        $order = Order::create([
-            'user_id' => $user->id,
-            'product_id' => $product->id,
-            'brand' => 'test',
-            'period' => 12,
-            'auto_renew' => true,
-        ]);
+    expect($order->auto_renew)->toBeTrue();
 
-        $this->assertTrue($order->auto_renew);
+    $order->auto_renew = false;
+    $order->save();
+    $order->refresh();
 
-        $order->auto_renew = false;
-        $order->save();
-        $order->refresh();
+    expect($order->auto_renew)->toBeFalse();
+});
 
-        $this->assertFalse($order->auto_renew);
-    }
+/**
+ * 测试 auto_reissue 正确转换为 boolean
+ */
+test('auto reissue casts to boolean', function () {
+    $user = $this->createTestUser();
+    $product = Product::factory()->create();
 
-    /**
-     * 测试 auto_reissue 正确转换为 boolean
-     */
-    public function test_auto_reissue_casts_to_boolean(): void
-    {
-        $user = $this->createTestUser();
-        $product = Product::factory()->create();
+    $order = Order::create([
+        'user_id' => $user->id,
+        'product_id' => $product->id,
+        'brand' => 'test',
+        'period' => 12,
+        'auto_reissue' => true,
+    ]);
 
-        $order = Order::create([
-            'user_id' => $user->id,
-            'product_id' => $product->id,
-            'brand' => 'test',
-            'period' => 12,
-            'auto_reissue' => true,
-        ]);
+    expect($order->auto_reissue)->toBeTrue();
 
-        $this->assertTrue($order->auto_reissue);
+    $order->auto_reissue = false;
+    $order->save();
+    $order->refresh();
 
-        $order->auto_reissue = false;
-        $order->save();
-        $order->refresh();
+    expect($order->auto_reissue)->toBeFalse();
+});
 
-        $this->assertFalse($order->auto_reissue);
-    }
+/**
+ * 测试允许 null 值以便回落到用户设置
+ */
+test('allows null for fallback', function () {
+    $user = $this->createTestUser();
+    $product = Product::factory()->create();
 
-    /**
-     * 测试允许 null 值以便回落到用户设置
-     */
-    public function test_allows_null_for_fallback(): void
-    {
-        $user = $this->createTestUser();
-        $product = Product::factory()->create();
+    $order = Order::create([
+        'user_id' => $user->id,
+        'product_id' => $product->id,
+        'brand' => 'test',
+        'period' => 12,
+        'auto_renew' => null,
+        'auto_reissue' => null,
+    ]);
 
-        $order = Order::create([
-            'user_id' => $user->id,
-            'product_id' => $product->id,
-            'brand' => 'test',
-            'period' => 12,
-            'auto_renew' => null,
-            'auto_reissue' => null,
-        ]);
+    expect($order->auto_renew)->toBeNull();
+    expect($order->auto_reissue)->toBeNull();
+});
 
-        $this->assertNull($order->auto_renew);
-        $this->assertNull($order->auto_reissue);
-    }
+/**
+ * 测试整数转换为 boolean
+ */
+test('casts integer to boolean', function () {
+    $user = $this->createTestUser();
+    $product = Product::factory()->create();
 
-    /**
-     * 测试整数转换为 boolean
-     */
-    public function test_casts_integer_to_boolean(): void
-    {
-        $user = $this->createTestUser();
-        $product = Product::factory()->create();
+    $order = Order::create([
+        'user_id' => $user->id,
+        'product_id' => $product->id,
+        'brand' => 'test',
+        'period' => 12,
+        'auto_renew' => 1,
+        'auto_reissue' => 0,
+    ]);
 
-        $order = Order::create([
-            'user_id' => $user->id,
-            'product_id' => $product->id,
-            'brand' => 'test',
-            'period' => 12,
-            'auto_renew' => 1,
-            'auto_reissue' => 0,
-        ]);
+    expect($order->auto_renew)->toBeTrue();
+    expect($order->auto_reissue)->toBeFalse();
+});
 
-        $this->assertTrue($order->auto_renew);
-        $this->assertFalse($order->auto_reissue);
-    }
+/**
+ * 测试默认创建时字段为 null
+ */
+test('defaults to null on create', function () {
+    $user = $this->createTestUser();
+    $product = Product::factory()->create();
 
-    /**
-     * 测试默认创建时字段为 null
-     */
-    public function test_defaults_to_null_on_create(): void
-    {
-        $user = $this->createTestUser();
-        $product = Product::factory()->create();
+    $order = Order::create([
+        'user_id' => $user->id,
+        'product_id' => $product->id,
+        'brand' => 'test',
+        'period' => 12,
+    ]);
 
-        $order = Order::create([
-            'user_id' => $user->id,
-            'product_id' => $product->id,
-            'brand' => 'test',
-            'period' => 12,
-        ]);
-
-        $this->assertNull($order->auto_renew);
-        $this->assertNull($order->auto_reissue);
-    }
-}
+    expect($order->auto_renew)->toBeNull();
+    expect($order->auto_reissue)->toBeNull();
+});
