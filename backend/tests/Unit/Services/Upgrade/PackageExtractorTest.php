@@ -2,7 +2,6 @@
 
 use App\Services\Upgrade\PackageExtractor;
 use Illuminate\Support\Facades\File;
-use ZipArchive;
 
 uses(Tests\TestCase::class);
 
