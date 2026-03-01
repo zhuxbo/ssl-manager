@@ -56,8 +56,7 @@ class RechargeController extends BaseController
                 $this->error('订单支付已超过90天，请联系客服处理');
             }
 
-            // 获取平台对应的支付方式
-            $payMethod = Agiso::getPlatform($agisoOrder->platform);
+            $payMethod = $agisoOrder->pay_method;
 
             // 计算赠送金额
             $giftAmount = bcsub((string) $agisoOrder->price, (string) $agisoOrder->amount, 2);

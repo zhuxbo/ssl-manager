@@ -2,8 +2,8 @@ import { ref } from "vue";
 import { useRouter } from "vue-router";
 import dayjs from "dayjs";
 import {
-  platformOptions,
-  platformMap,
+  payMethodOptions,
+  payMethodMap,
   rechargedOptions,
   rechargedMap
 } from "./dictionary";
@@ -27,16 +27,17 @@ export const useAgisoTable = () => {
     { label: "勾选列", type: "selection", reserveSelection: true },
     { label: "ID", prop: "id", minWidth: 80 },
     {
-      label: "平台",
-      prop: "platform",
+      label: "支付方式",
+      prop: "pay_method",
       minWidth: 80,
       cellRenderer: ({ row, props }: any) => (
         <el-tag
           size={props.size}
-          type={platformMap[row.platform]}
+          type={payMethodMap[row.pay_method]}
           effect="plain"
         >
-          {platformOptions.find(item => item.value === row.platform)?.label}
+          {payMethodOptions.find(item => item.value === row.pay_method)
+            ?.label ?? row.pay_method}
         </el-tag>
       )
     },
@@ -81,13 +82,6 @@ export const useAgisoTable = () => {
     { label: "数量", prop: "count", minWidth: 50 },
     { label: "价格", prop: "price", minWidth: 80 },
     { label: "实付金额", prop: "amount", minWidth: 80 },
-    {
-      label: "时间戳",
-      prop: "timestamp",
-      minWidth: 180,
-      formatter: ({ timestamp }: any) =>
-        timestamp ? dayjs(timestamp * 1000).format("YYYY-MM-DD HH:mm:ss") : "-"
-    },
     {
       label: "创建时间",
       prop: "created_at",

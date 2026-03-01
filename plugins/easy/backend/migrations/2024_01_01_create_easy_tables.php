@@ -11,9 +11,8 @@ return new class extends Migration
         if (! Schema::hasTable('agisos')) {
             Schema::create('agisos', function (Blueprint $table) {
                 $table->id();
-                $table->string('platform', 50)->nullable();
+                $table->string('pay_method', 50)->nullable();
                 $table->string('sign', 100)->nullable();
-                $table->bigInteger('timestamp')->nullable();
                 $table->integer('type')->nullable();
                 $table->json('data')->nullable();
                 $table->string('tid', 100)->nullable()->index();

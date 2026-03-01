@@ -125,9 +125,8 @@ class CallbackController extends Controller
 
         if ($totalPrice !== '0.00') {
             Agiso::create([
-                'platform' => $params['fromPlatform'] ?? $params['data']['Platform'] ?? null,
+                'pay_method' => Agiso::platformToPayMethod($params['fromPlatform'] ?? $params['data']['Platform'] ?? ''),
                 'sign' => $params['sign'],
-                'timestamp' => $params['timestamp'],
                 'type' => $params['aopic'],
                 'data' => $params['json'],
                 'tid' => (string) $params['data']['Tid'],
@@ -173,9 +172,8 @@ class CallbackController extends Controller
 
         if ($totalPrice !== '0.00') {
             Agiso::create([
-                'platform' => $params['fromPlatform'] ?? $params['data']['Platform'] ?? null,
+                'pay_method' => Agiso::platformToPayMethod($params['fromPlatform'] ?? $params['data']['Platform'] ?? ''),
                 'sign' => $params['sign'],
-                'timestamp' => $params['timestamp'],
                 'type' => $params['aopic'],
                 'data' => $params['json'],
                 'tid' => (string) $params['data']['Tid'],

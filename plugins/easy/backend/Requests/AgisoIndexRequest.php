@@ -12,7 +12,7 @@ class AgisoIndexRequest extends BaseRequest
             'currentPage' => 'nullable|integer|min:1',
             'pageSize' => 'nullable|integer|min:1|max:100',
             'quickSearch' => 'nullable|string|max:100',
-            'platform' => 'nullable|string|max:50',
+            'pay_method' => 'nullable|string|max:50',
             'product_code' => 'nullable|string|max:100',
             'order_id' => 'nullable|string|max:100',
             'tid' => 'nullable|string|max:100',

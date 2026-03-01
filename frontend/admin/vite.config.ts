@@ -27,6 +27,11 @@ function servePlugins(): Plugin {
         } catch {
           return next();
         }
+        // 开发环境：frontend/{admin,user}/file → frontend/{admin,user}/dist/file
+        decodedPath = decodedPath.replace(
+          /^([^/]+\/frontend\/(admin|user))\/([^/]+\.(js|css))$/,
+          "$1/dist/$3"
+        );
         const filePath = resolve(pluginsRoot, decodedPath);
         // 防止路径遍历（不要使用 startsWith 前缀判断）
         const relPath = relative(pluginsRoot, filePath);

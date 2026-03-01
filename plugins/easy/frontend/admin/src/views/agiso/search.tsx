@@ -2,7 +2,7 @@ import "plus-pro-components/es/components/search/style/css";
 import type { PlusColumn } from "plus-pro-components";
 import { debounce } from "lodash-es";
 import { getPickerShortcuts } from "../../shared/utils";
-import { platformOptions, rechargedOptions } from "./dictionary";
+import { payMethodOptions, rechargedOptions } from "./dictionary";
 
 export const useAgisoSearch = (onSearch: () => void) => {
   const debouncedSearch = debounce(() => {
@@ -32,11 +32,11 @@ export const useAgisoSearch = (onSearch: () => void) => {
       fieldProps: { placeholder: "请输入用户名" }
     },
     {
-      label: "平台",
-      prop: "platform",
+      label: "支付方式",
+      prop: "pay_method",
       valueType: "select",
-      options: platformOptions,
-      fieldProps: { placeholder: "请选择平台" }
+      options: payMethodOptions,
+      fieldProps: { placeholder: "请选择支付方式" }
     },
     {
       label: "类型",

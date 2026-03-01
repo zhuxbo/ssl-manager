@@ -287,12 +287,7 @@ class EasyController extends Controller
             }
         }
 
-        $from = '';
-        if ($order->platform === 'TbAlds') {
-            $from = 'taobao';
-        } elseif ($order->platform === 'PddAlds') {
-            $from = 'pinduoduo';
-        }
+        $from = in_array($order->pay_method, ['taobao', 'pinduoduo']) ? $order->pay_method : '';
 
         $user = $this->getUserByEmail($params['email'], $from);
 
@@ -316,7 +311,7 @@ class EasyController extends Controller
                     'user_id' => $user->id,
                     'amount' => $order->amount,
                     'type' => 'addfunds',
-                    'pay_method' => Agiso::getPlatform($order->platform),
+                    'pay_method' => $order->pay_method,
                     'pay_sn' => $order->tid,
                     'status' => 1,
                 ]);

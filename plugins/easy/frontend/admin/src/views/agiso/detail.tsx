@@ -1,6 +1,6 @@
 import { ref } from "vue";
 import dayjs from "dayjs";
-import { platformOptions, rechargedOptions } from "./dictionary";
+import { payMethodOptions, rechargedOptions } from "./dictionary";
 import type { AgisoDetail } from "../../api/agiso";
 
 export const useAgisoDetail = () => {
@@ -39,14 +39,11 @@ export const useAgisoDetail = () => {
       cellRenderer: () => detailData.value.user?.email || "-"
     },
     {
-      label: "平台",
-      prop: "platform",
+      label: "支付方式",
+      prop: "pay_method",
       cellRenderer: () => {
-        const platform = detailData.value.platform;
-        return (
-          platformOptions.find(item => item.value === platform)?.label ||
-          platform
-        );
+        const pm = detailData.value.pay_method;
+        return payMethodOptions.find(item => item.value === pm)?.label || pm;
       }
     },
     { label: "交易单号", prop: "tid" },
@@ -72,7 +69,6 @@ export const useAgisoDetail = () => {
       prop: "order_id",
       cellRenderer: () => detailData.value.order_id || "无关联订单"
     },
-    { label: "时间戳", prop: "timestamp" },
     {
       label: "创建时间",
       prop: "created_at",

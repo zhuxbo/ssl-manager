@@ -163,30 +163,15 @@ find_config() {
 # 构建阶段
 # ========================================
 build_plugin() {
-    # 构建 admin 端
-    if [ -d "admin" ] && [ -f "admin/package.json" ]; then
-        log_step "构建 admin 端..."
-        cd admin
-        pnpm install
-        pnpm build
-        cd "$PLUGIN_DIR"
-        log_success "admin 端构建完成"
-    fi
-
-    # 构建 user 端
-    if [ -d "user" ] && [ -f "user/package.json" ]; then
-        log_step "构建 user 端..."
-        cd user
-        pnpm install
-        pnpm build
-        cd "$PLUGIN_DIR"
-        log_success "user 端构建完成"
-    fi
-
-    # 提升 dist 产物到上级目录（打包时去掉 dist/ 层级）
+    # 构建前端（源码在 frontend/{admin,user}/，产物输出到 dist/）
     for side in admin user; do
-        if [ -d "$side/dist" ]; then
-            cp -f "$side/dist/"* "$side/" 2>/dev/null || true
+        if [ -d "frontend/$side" ] && [ -f "frontend/$side/package.json" ]; then
+            log_step "构建 $side 端..."
+            cd "frontend/$side"
+            pnpm install
+            pnpm build
+            cd "$PLUGIN_DIR"
+            log_success "$side 端构建完成"
         fi
     done
 
@@ -212,6 +197,15 @@ build_plugin() {
         fi
     done < <(grep -A 100 '"include"' build.json | grep '"' | grep -v 'include\|exclude\|\[' | head -20)
 
+    # 复制前端构建产物（从 dist/ 到 frontend/{admin,user}/）
+    for side in admin user; do
+        if [ -d "$PLUGIN_DIR/frontend/$side/dist" ]; then
+            mkdir -p "$PACK_DIR/frontend/$side"
+            cp -f "$PLUGIN_DIR/frontend/$side/dist/"* "$PACK_DIR/frontend/$side/"
+            log_info "已复制 $side 端构建产物"
+        fi
+    done
+
     # 清理排除项
     while IFS= read -r item; do
         item=$(echo "$item" | tr -d '",' | xargs)
@@ -219,7 +213,8 @@ build_plugin() {
         find "$PACK_DIR" -name "$item" -exec rm -rf {} + 2>/dev/null || true
     done < <(grep -A 100 '"exclude"' build.json | grep '"' | grep -v 'exclude\|\[' | head -20)
 
-    # 打包
+    # 打包（先删除旧 zip，避免 zip 更新模式残留已删除文件）
+    rm -f "$OUTPUT"
     cd "$WORK_DIR"
     zip -rq "$OUTPUT" "$NAME"
     rm -rf "$WORK_DIR"

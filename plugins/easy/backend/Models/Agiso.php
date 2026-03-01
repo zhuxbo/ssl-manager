@@ -14,9 +14,8 @@ use Illuminate\Database\Eloquent\Relations\HasOneThrough;
 class Agiso extends BaseModel
 {
     protected $fillable = [
-        'platform',
+        'pay_method',
         'sign',
-        'timestamp',
         'type',
         'data',
         'tid',
@@ -40,7 +39,6 @@ class Agiso extends BaseModel
         'user_id' => 'integer',
         'order_id' => 'integer',
         'recharged' => 'integer',
-        'timestamp' => 'integer',
         'type' => 'integer',
         'product_code' => 'string',
         'period' => 'integer',
@@ -95,31 +93,19 @@ class Agiso extends BaseModel
         );
     }
 
-    public static function getPlatform(string $platform): string|array
+    /**
+     * 将外部平台代码转换为 pay_method 值
+     */
+    public static function platformToPayMethod(string $platform): string
     {
-        $platforms = [
+        $map = [
             'TbAlds' => 'taobao',
             'PddAlds' => 'pinduoduo',
             'AldsJd' => 'jingdong',
             'AldsDoudian' => 'douyin',
             'gift' => 'gift',
-            'All' => ['taobao', 'pinduoduo', 'jingdong', 'douyin'],
         ];
 
-        return $platforms[$platform] ?? 'other';
-    }
-
-    public static function getPayMethodPlatform(string $payMethod): ?string
-    {
-        $map = [
-            'other' => null,
-            'gift' => 'gift',
-            'taobao' => 'TbAlds',
-            'pinduoduo' => 'PddAlds',
-            'jingdong' => 'AldsJd',
-            'douyin' => 'AldsDoudian',
-        ];
-
-        return $map[$payMethod] ?? null;
+        return $map[$platform] ?? 'other';
     }
 }

@@ -41,9 +41,9 @@ window.__registerPlugin({
       ],
       fundPayMethodMap: {
         taobao: "primary",
-        pinduoduo: "primary",
-        jingdong: "primary",
-        douyin: "primary"
+        pinduoduo: "warning",
+        jingdong: "info",
+        douyin: "info"
       }
     }
   }

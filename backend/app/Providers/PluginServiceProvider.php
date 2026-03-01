@@ -179,8 +179,8 @@ class PluginServiceProvider extends ServiceProvider
         // 去掉开头的 /
         $path = ltrim($path, '/');
 
-        // 验证：仅允许 (admin|user)/ 下的静态文件
-        if (! preg_match('#^(admin|user)/[a-zA-Z0-9._-]+\.(js|css)$#', $path)) {
+        // 验证：允许 frontend/(admin|user)/ 下的静态文件
+        if (! preg_match('#^frontend/(admin|user)/[a-zA-Z0-9._-]+\.(js|css)$#', $path)) {
             return null;
         }
 

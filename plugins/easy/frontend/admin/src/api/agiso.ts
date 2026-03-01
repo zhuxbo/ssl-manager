@@ -4,7 +4,7 @@ export interface IndexParams {
   currentPage?: number;
   pageSize?: number;
   quickSearch?: string;
-  platform?: string;
+  pay_method?: string;
   tid?: string;
   username?: string;
   type?: number;
@@ -14,7 +14,7 @@ export interface IndexParams {
 
 export interface AgisoDetail {
   id: number;
-  platform: string;
+  pay_method: string;
   sign: string;
   data: string;
   tid: string;
@@ -25,7 +25,6 @@ export interface AgisoDetail {
   user_id: number;
   order_id: number;
   recharged: number;
-  timestamp: number;
   created_at: string;
   user?: {
     id: number;

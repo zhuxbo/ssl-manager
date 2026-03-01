@@ -361,7 +361,7 @@ onMounted(() => {
               <el-option
                 v-for="p in periodOptions"
                 :key="p"
-                :label="`${p} 年`"
+                :label="p >= 12 ? `${p / 12} 年` : `${p} 个月`"
                 :value="p"
               />
             </el-select>

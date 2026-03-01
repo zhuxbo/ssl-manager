@@ -4,6 +4,7 @@ namespace Plugins\Easy\Controllers\Admin;
 
 use App\Http\Controllers\Admin\BaseController;
 use App\Models\Product;
+use App\Models\ProductPrice;
 use App\Utils\SnowFlake;
 use Plugins\Easy\Models\Agiso;
 use Plugins\Easy\Requests\AgisoGetIdsRequest;
@@ -29,7 +30,7 @@ class AgisoController extends BaseController
             ->select(['id', 'name', 'code', 'periods', 'common_name_types'])
             ->get();
 
-        $this->success($products);
+        $this->success($products->toArray());
     }
 
     public function store(AgisoStoreRequest $request): void
@@ -58,15 +59,23 @@ class AgisoController extends BaseController
             $this->error('周期不可用');
         }
 
+        // 查询产品 platinum 价格作为系统价值（与回调逻辑一致）
+        $productPrice = ProductPrice::where('product_id', $product->id)
+            ->where('level_code', 'platinum')
+            ->where('period', $period)
+            ->first();
+
+        $price = $productPrice ? (string) $productPrice->price : '0.00';
+
         $tid = 'E'.SnowFlake::generateParticle();
 
         Agiso::create([
-            'platform' => Agiso::getPayMethodPlatform($payMethod),
+            'pay_method' => $payMethod,
             'tid' => $tid,
             'product_code' => $product->code,
             'period' => $period,
-            'price' => $amount,
-            'amount' => $amount,
+            'price' => $price,
+            'amount' => (string) $amount,
             'count' => 1,
             'recharged' => 0,
         ]);
@@ -91,15 +100,15 @@ class AgisoController extends BaseController
         if (! empty($validated['quickSearch'])) {
             $query->where(function ($q) use ($validated) {
                 $q->where('tid', 'like', "%{$validated['quickSearch']}%")
-                    ->orWhere('platform', 'like', "%{$validated['quickSearch']}%")
+                    ->orWhere('pay_method', 'like', "%{$validated['quickSearch']}%")
                     ->orWhere('product_code', 'like', "%{$validated['quickSearch']}%")
                     ->orWhereHas('user', function ($userQuery) use ($validated) {
                         $userQuery->where('username', 'like', "%{$validated['quickSearch']}%");
                     });
             });
         }
-        if (! empty($validated['platform'])) {
-            $query->where('platform', $validated['platform']);
+        if (! empty($validated['pay_method'])) {
+            $query->where('pay_method', $validated['pay_method']);
         }
         if (! empty($validated['order_id'])) {
             $query->where('order_id', 'like', "%{$validated['order_id']}%");
@@ -135,8 +144,8 @@ class AgisoController extends BaseController
             },
         ])
             ->select([
-                'id', 'platform', 'tid', 'type', 'price', 'count', 'product_code', 'period',
-                'amount', 'user_id', 'order_id', 'recharged', 'timestamp', 'created_at',
+                'id', 'pay_method', 'tid', 'type', 'price', 'count', 'product_code', 'period',
+                'amount', 'user_id', 'order_id', 'recharged', 'created_at',
             ])
             ->orderBy('id', 'desc')
             ->offset(($currentPage - 1) * $pageSize)

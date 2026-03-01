@@ -3,18 +3,10 @@
   "include": [
     "plugin.json",
     "backend/",
-    "admin/easy-plugin.iife.js",
-    "admin/easy-plugin-admin.css",
-    "user/easy-plugin.iife.js",
-    "web/",
+    "frontend/web/",
     "nginx/"
   ],
   "exclude": [
-    "node_modules/",
-    "src/",
-    "*.config.ts",
-    "package.json",
-    "pnpm-lock.yaml",
     ".gitignore"
   ]
 }
