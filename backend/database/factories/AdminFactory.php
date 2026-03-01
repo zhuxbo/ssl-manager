@@ -19,7 +19,8 @@ class AdminFactory extends Factory
         return [
             'username' => 'a_'.fake()->unique()->numerify('######'),
             'email' => fake()->unique()->safeEmail(),
-            'mobile' => fake()->phoneNumber(),
+            // admins.mobile 有唯一索引，使用唯一数字串避免批量建数时碰撞
+            'mobile' => fake()->unique()->numerify('1##########'),
             'password' => 'password',
             'token_version' => 0,
             'status' => 1,

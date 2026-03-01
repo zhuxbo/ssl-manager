@@ -20,46 +20,55 @@ test('管理员可以获取资金记录列表', function () {
 
     $response->assertOk()->assertJson(['code' => 1]);
     $response->assertJsonStructure(['data' => ['items', 'total', 'pageSize', 'currentPage']]);
+    expect($response->json('data.total'))->toBe(3);
+    expect($response->json('data.items'))->toHaveCount(3);
 });
 
 test('管理员可以快速搜索资金记录', function () {
-    Fund::factory()->create(['user_id' => $this->user->id, 'remark' => 'special payment']);
+    $matchedFund = Fund::factory()->create(['user_id' => $this->user->id, 'remark' => 'special payment']);
     Fund::factory()->create(['user_id' => $this->user->id, 'remark' => 'normal']);
 
     $response = $this->actingAsAdmin($this->admin)->getJson('/api/admin/fund?quickSearch=special');
 
     $response->assertOk()->assertJson(['code' => 1]);
     expect($response->json('data.total'))->toBe(1);
+    expect($response->json('data.items.0.id'))->toBe($matchedFund->id);
 });
 
 test('管理员可以按类型筛选资金记录', function () {
     Fund::factory()->create(['user_id' => $this->user->id, 'type' => 'addfunds']);
-    Fund::factory()->deduct()->create(['user_id' => $this->user->id]);
+    $deductFund = Fund::factory()->deduct()->create(['user_id' => $this->user->id]);
 
     $response = $this->actingAsAdmin($this->admin)->getJson('/api/admin/fund?type=deduct');
 
     $response->assertOk()->assertJson(['code' => 1]);
     expect($response->json('data.total'))->toBe(1);
+    expect($response->json('data.items.0.id'))->toBe($deductFund->id);
+    expect($response->json('data.items.0.type'))->toBe('deduct');
 });
 
 test('管理员可以按状态筛选资金记录', function () {
     Fund::factory()->create(['user_id' => $this->user->id, 'status' => 0]);
-    Fund::factory()->completed()->create(['user_id' => $this->user->id]);
+    $completedFund = Fund::factory()->completed()->create(['user_id' => $this->user->id]);
 
     $response = $this->actingAsAdmin($this->admin)->getJson('/api/admin/fund?status=1');
 
     $response->assertOk()->assertJson(['code' => 1]);
     expect($response->json('data.total'))->toBe(1);
+    expect($response->json('data.items.0.id'))->toBe($completedFund->id);
+    expect($response->json('data.items.0.status'))->toBe(1);
 });
 
 test('管理员可以按支付方式筛选资金记录', function () {
     Fund::factory()->create(['user_id' => $this->user->id, 'pay_method' => 'alipay']);
-    Fund::factory()->wechat()->create(['user_id' => $this->user->id]);
+    $wechatFund = Fund::factory()->wechat()->create(['user_id' => $this->user->id]);
 
     $response = $this->actingAsAdmin($this->admin)->getJson('/api/admin/fund?pay_method=wechat');
 
     $response->assertOk()->assertJson(['code' => 1]);
     expect($response->json('data.total'))->toBe(1);
+    expect($response->json('data.items.0.id'))->toBe($wechatFund->id);
+    expect($response->json('data.items.0.pay_method'))->toBe('wechat');
 });
 
 test('管理员可以查看资金记录详情', function () {
@@ -115,6 +124,8 @@ test('不能退款处理中的资金记录', function () {
     $response = $this->actingAsAdmin($this->admin)->postJson("/api/admin/fund/refunds/$fund->id");
 
     $response->assertOk()->assertJson(['code' => 0]);
+    expect($fund->fresh()->type)->toBe('addfunds');
+    expect($fund->fresh()->status)->toBe(0);
 });
 
 test('不能重复退款', function () {
@@ -132,6 +143,8 @@ test('不能重复退款', function () {
     $response = $this->actingAsAdmin($this->admin)->postJson("/api/admin/fund/refunds/$fund->id");
 
     $response->assertOk()->assertJson(['code' => 0]);
+    expect($fund->fresh()->type)->toBe('refunds');
+    expect($fund->fresh()->status)->toBe(2);
 });
 
 test('管理员可以退回扣款记录', function () {
@@ -146,6 +159,19 @@ test('管理员可以退回扣款记录', function () {
     $fund->refresh();
     expect($fund->type)->toBe('reverse');
     expect($fund->status)->toBe(2);
+});
+
+test('不能退回非扣款记录', function () {
+    $fund = Fund::factory()->completed()->create([
+        'user_id' => $this->user->id,
+        'type' => 'addfunds',
+    ]);
+
+    $response = $this->actingAsAdmin($this->admin)->postJson("/api/admin/fund/reverse/$fund->id");
+
+    $response->assertOk()->assertJson(['code' => 0]);
+    expect($fund->fresh()->type)->toBe('addfunds');
+    expect($fund->fresh()->status)->toBe(1);
 });
 
 test('管理员可以批量删除资金记录', function () {

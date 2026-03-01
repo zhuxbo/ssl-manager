@@ -1,4 +1,6 @@
-import { type UserConfigExport, type ConfigEnv, loadEnv } from "vite";
+import { type UserConfigExport, type ConfigEnv, loadEnv, type Plugin } from "vite";
+import { resolve, relative, isAbsolute } from "path";
+import { createReadStream, existsSync, statSync } from "fs";
 import {
   root,
   alias,
@@ -9,6 +11,38 @@ import {
   include,
   exclude
 } from "./build";
+
+/** 开发环境：将 /plugins/* 请求映射到项目根目录的 plugins/ 目录 */
+function servePlugins(): Plugin {
+  const pluginsRoot = resolve(__dirname, "../../plugins");
+  return {
+    name: "serve-plugins",
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        if (!req.url?.startsWith("/plugins/")) return next();
+        const pathname = req.url.split("?")[0].split("#")[0];
+        let decodedPath = "";
+        try {
+          decodedPath = decodeURIComponent(pathname.slice("/plugins/".length));
+        } catch {
+          return next();
+        }
+        const filePath = resolve(pluginsRoot, decodedPath);
+        // 防止路径遍历（不要使用 startsWith 前缀判断）
+        const relPath = relative(pluginsRoot, filePath);
+        if (relPath.startsWith("..") || isAbsolute(relPath)) return next();
+        if (!existsSync(filePath) || !statSync(filePath).isFile()) return next();
+        const ext = filePath.split(".").pop();
+        const mime: Record<string, string> = {
+          js: "application/javascript",
+          css: "text/css"
+        };
+        res.setHeader("Content-Type", mime[ext ?? ""] ?? "application/octet-stream");
+        createReadStream(filePath).pipe(res);
+      });
+    }
+  };
+}
 
 export default ({ mode }: ConfigEnv): UserConfigExport => {
   const env = loadEnv(mode, root);
@@ -39,7 +73,7 @@ export default ({ mode }: ConfigEnv): UserConfigExport => {
         clientFiles: ["./index.html", "./src/{views,components}/*"]
       }
     },
-    plugins: getPluginsList(VITE_CDN, VITE_COMPRESSION),
+    plugins: [servePlugins(), ...getPluginsList(VITE_CDN, VITE_COMPRESSION)],
     // https://cn.vitejs.dev/config/dep-optimization-options.html#dep-optimization-options
     optimizeDeps: {
       include,

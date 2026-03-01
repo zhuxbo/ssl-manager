@@ -1,6 +1,4 @@
-import Detail from "./detail.vue";
 import { message } from "../../../shared/message";
-import { addDialog } from "../../../shared/ReDialog";
 import type { PaginationProps } from "@pureadmin/table";
 import { reactive, ref, onMounted, toRaw } from "vue";
 import { useCopyToClipboard } from "@pureadmin/utils";
@@ -41,18 +39,18 @@ export function useEasyLog() {
       : message("拷贝失败", { type: "warning" });
   }
 
+  const detailVisible = ref(false);
+  const detailData = ref<any>(null);
+
   function onDetail(row: { id: number }) {
-    getLogDetail(row.id).then((res: any) => {
-      addDialog({
-        title: "简易申请日志详情",
-        fullscreen: true,
-        hideFooter: true,
-        contentRenderer: () => Detail,
-        props: {
-          data: res.data
-        }
+    getLogDetail(row.id)
+      .then((res: any) => {
+        detailData.value = res.data;
+        detailVisible.value = true;
+      })
+      .catch(() => {
+        message("获取详情失败", { type: "error" });
       });
-    });
   }
 
   function onSearch() {
@@ -98,6 +96,8 @@ export function useEasyLog() {
     loading,
     dataList,
     pagination,
+    detailVisible,
+    detailData,
     onSearch,
     onDetail,
     onResetSearch,

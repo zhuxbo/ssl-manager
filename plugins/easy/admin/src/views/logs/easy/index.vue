@@ -4,11 +4,15 @@ import { useEasyLog } from "./hook";
 import { searchColumns } from "./search";
 import { tableColumns } from "./table";
 import { useRenderIcon } from "../../../shared/ReIcon";
+import { useDrawerSize } from "../../../shared/utils";
 import View from "~icons/ep/view";
+import Detail from "./detail.vue";
 
 defineOptions({
   name: "EasyLogs"
 });
+
+const { drawerSize } = useDrawerSize();
 
 const {
   tableRef,
@@ -16,6 +20,8 @@ const {
   loading,
   dataList,
   pagination,
+  detailVisible,
+  detailData,
   onSearch,
   onDetail,
   onResetSearch,
@@ -91,6 +97,14 @@ const {
         </pure-table>
       </template>
     </PureTableBar>
+    <el-drawer
+      v-model="detailVisible"
+      title="简易申请日志详情"
+      direction="rtl"
+      :size="drawerSize"
+    >
+      <Detail v-if="detailData" :data="detailData" />
+    </el-drawer>
   </div>
 </template>
 

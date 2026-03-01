@@ -140,6 +140,8 @@ test('管理员可以分页获取任务列表', function () {
     $response->assertOk()->assertJson(['code' => 1]);
     $response->assertJsonPath('data.currentPage', 2);
     $response->assertJsonPath('data.pageSize', 5);
+    expect($response->json('data.total'))->toBe(15);
+    expect($response->json('data.items'))->toHaveCount(5);
 });
 
 test('未认证用户无法访问任务管理', function () {

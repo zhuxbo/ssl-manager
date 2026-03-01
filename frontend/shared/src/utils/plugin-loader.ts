@@ -1,4 +1,6 @@
 import type { Router } from "vue-router";
+import Cookies from "js-cookie";
+import { storageNameSpace } from "../config";
 
 interface PluginRouteConfig {
   parent?: string;
@@ -50,22 +52,18 @@ export async function exposeSharedDeps() {
 }
 
 /**
- * 从 Cookie 中获取 access token
+ * 从 Cookie 中获取 access token（与主应用使用相同的 js-cookie 库）
  */
 function getAccessToken(): string {
-  const cookies = document.cookie.split(";");
-  for (const cookie of cookies) {
-    const [name, value] = cookie.trim().split("=");
-    if (name && name.endsWith("authorized-token") && value) {
-      try {
-        const data = JSON.parse(decodeURIComponent(value));
-        return data?.access_token || "";
-      } catch {
-        return "";
-      }
-    }
+  const tokenKey = `${storageNameSpace()}authorized-token`;
+  const raw = Cookies.get(tokenKey);
+  if (!raw) return "";
+  try {
+    const data = JSON.parse(raw);
+    return data?.access_token || "";
+  } catch {
+    return "";
   }
-  return "";
 }
 
 /**

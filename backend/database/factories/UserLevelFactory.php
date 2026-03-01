@@ -18,7 +18,8 @@ class UserLevelFactory extends Factory
     {
         return [
             'code' => fake()->unique()->slug(1),
-            'name' => fake()->word().'会员',
+            // user_levels.name 有唯一索引，避免批量创建时碰撞
+            'name' => fake()->unique()->word().'会员',
             'custom' => 0,
             'cost_rate' => 1.0,
             'weight' => 0,
@@ -57,7 +58,7 @@ class UserLevelFactory extends Factory
         return $this->state([
             'custom' => 1,
             'code' => 'custom_'.fake()->unique()->slug(1),
-            'name' => '自定义等级',
+            'name' => '自定义等级-'.fake()->unique()->slug(1),
         ]);
     }
 }

@@ -84,11 +84,31 @@ test('管理员可以按日期范围筛选日志', function () {
 });
 
 test('管理员可以分页获取日志', function () {
+    foreach (range(1, 15) as $index) {
+        AdminLog::create([
+            'admin_id' => $this->admin->id,
+            'module' => 'dashboard',
+            'action' => "list-$index",
+            'method' => 'GET',
+            'url' => "/api/admin/logs/admin?page=$index",
+            'params' => ['currentPage' => $index],
+            'response' => ['code' => 1],
+            'status_code' => 200,
+            'status' => 1,
+            'duration' => '0.01',
+            'ip' => '127.0.0.1',
+            'user_agent' => 'pest',
+            'created_at' => now()->subSeconds($index),
+        ]);
+    }
+
     $response = $this->actingAsAdmin($this->admin)->getJson('/api/admin/logs/admin?currentPage=1&pageSize=5');
 
     $response->assertOk()->assertJson(['code' => 1]);
     $response->assertJsonPath('data.currentPage', 1);
     $response->assertJsonPath('data.pageSize', 5);
+    expect($response->json('data.total'))->toBeGreaterThanOrEqual(15);
+    expect($response->json('data.items'))->toHaveCount(5);
 });
 
 test('未认证用户无法访问日志', function () {

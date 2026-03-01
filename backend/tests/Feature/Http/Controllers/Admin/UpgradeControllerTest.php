@@ -24,6 +24,8 @@ test('管理员可以获取当前版本信息', function () {
     $response = $this->actingAsAdmin($this->admin)->getJson('/api/admin/upgrade/version');
 
     $response->assertOk()->assertJson(['code' => 1]);
+    $response->assertJsonPath('data.version', '1.0.0');
+    $response->assertJsonPath('data.channel', 'main');
 });
 
 test('管理员可以检查系统更新', function () {
@@ -37,11 +39,18 @@ test('管理员可以检查系统更新', function () {
     $response = $this->actingAsAdmin($this->admin)->getJson('/api/admin/upgrade/check');
 
     $response->assertOk()->assertJson(['code' => 1]);
+    $response->assertJsonPath('data.has_update', false);
+    $response->assertJsonPath('data.current_version', '1.0.0');
 });
 
 test('管理员可以获取历史版本列表', function () {
+    $releaseHistory = [
+        ['tag_name' => 'v1.0.1'],
+        ['tag_name' => 'v1.0.0'],
+    ];
+
     $mockUpgrade = Mockery::mock(UpgradeService::class);
-    $mockUpgrade->shouldReceive('getReleaseHistory')->once()->andReturn([]);
+    $mockUpgrade->shouldReceive('getReleaseHistory')->with(5)->once()->andReturn($releaseHistory);
     $this->app->instance(UpgradeService::class, $mockUpgrade);
 
     $mockVersion = Mockery::mock(VersionManager::class);
@@ -52,6 +61,8 @@ test('管理员可以获取历史版本列表', function () {
 
     $response->assertOk()->assertJson(['code' => 1]);
     $response->assertJsonStructure(['data' => ['releases', 'current_version']]);
+    expect($response->json('data.releases'))->toBe($releaseHistory);
+    $response->assertJsonPath('data.current_version', '1.0.0');
 });
 
 test('管理员可以获取升级状态', function () {
@@ -78,22 +89,29 @@ test('管理员可以获取升级进行中的状态', function () {
 
     $response->assertOk()->assertJson(['code' => 1]);
     $response->assertJsonPath('data.status', 'running');
+    $response->assertJsonPath('data.step', 'downloading');
+    $response->assertJsonPath('data.progress', 50);
 });
 
 test('管理员可以获取备份列表', function () {
+    $backups = [
+        ['id' => 'backup_20250101', 'size' => 1024],
+    ];
+
     $mock = Mockery::mock(UpgradeService::class);
-    $mock->shouldReceive('getBackups')->once()->andReturn([]);
+    $mock->shouldReceive('getBackups')->once()->andReturn($backups);
     $this->app->instance(UpgradeService::class, $mock);
 
     $response = $this->actingAsAdmin($this->admin)->getJson('/api/admin/upgrade/backups');
 
     $response->assertOk()->assertJson(['code' => 1]);
     $response->assertJsonStructure(['data' => ['backups']]);
+    expect($response->json('data.backups'))->toBe($backups);
 });
 
 test('管理员可以执行回滚', function () {
     $mock = Mockery::mock(UpgradeService::class);
-    $mock->shouldReceive('rollback')->once()->andReturn(['success' => true]);
+    $mock->shouldReceive('rollback')->with('backup_20250101')->once()->andReturn(['success' => true]);
     $this->app->instance(UpgradeService::class, $mock);
 
     $response = $this->actingAsAdmin($this->admin)->postJson('/api/admin/upgrade/rollback', [
@@ -101,6 +119,7 @@ test('管理员可以执行回滚', function () {
     ]);
 
     $response->assertOk()->assertJson(['code' => 1]);
+    $response->assertJsonPath('data.success', true);
 });
 
 test('回滚未指定备份ID返回错误', function () {
@@ -109,14 +128,41 @@ test('回滚未指定备份ID返回错误', function () {
     $response->assertOk()->assertJson(['code' => 0]);
 });
 
+test('回滚失败时返回错误', function () {
+    $mock = Mockery::mock(UpgradeService::class);
+    $mock->shouldReceive('rollback')->with('backup_20250101')->once()->andReturn([
+        'success' => false,
+        'error' => 'backup broken',
+    ]);
+    $this->app->instance(UpgradeService::class, $mock);
+
+    $response = $this->actingAsAdmin($this->admin)->postJson('/api/admin/upgrade/rollback', [
+        'backup_id' => 'backup_20250101',
+    ]);
+
+    $response->assertOk()->assertJson(['code' => 0]);
+    $response->assertJsonPath('msg', 'backup broken');
+});
+
 test('管理员可以删除备份', function () {
     $mock = Mockery::mock(UpgradeService::class);
-    $mock->shouldReceive('deleteBackup')->once()->andReturn(true);
+    $mock->shouldReceive('deleteBackup')->with('backup_20250101')->once()->andReturn(true);
     $this->app->instance(UpgradeService::class, $mock);
 
     $response = $this->actingAsAdmin($this->admin)->deleteJson('/api/admin/upgrade/backup?backup_id=backup_20250101');
 
     $response->assertOk()->assertJson(['code' => 1]);
+    $response->assertJsonPath('data.deleted', true);
+});
+
+test('删除备份失败返回错误', function () {
+    $mock = Mockery::mock(UpgradeService::class);
+    $mock->shouldReceive('deleteBackup')->with('backup_20250101')->once()->andReturn(false);
+    $this->app->instance(UpgradeService::class, $mock);
+
+    $response = $this->actingAsAdmin($this->admin)->deleteJson('/api/admin/upgrade/backup?backup_id=backup_20250101');
+
+    $response->assertOk()->assertJson(['code' => 0]);
 });
 
 test('管理员可以设置发布通道', function () {
@@ -129,11 +175,24 @@ test('管理员可以设置发布通道', function () {
     ]);
 
     $response->assertOk()->assertJson(['code' => 1]);
+    $response->assertJsonPath('data.channel', 'dev');
 });
 
 test('设置无效通道返回错误', function () {
     $response = $this->actingAsAdmin($this->admin)->postJson('/api/admin/upgrade/channel', [
         'channel' => 'invalid',
+    ]);
+
+    $response->assertOk()->assertJson(['code' => 0]);
+});
+
+test('设置通道失败返回错误', function () {
+    $mock = Mockery::mock(VersionManager::class);
+    $mock->shouldReceive('setChannel')->with('main')->once()->andReturn(false);
+    $this->app->instance(VersionManager::class, $mock);
+
+    $response = $this->actingAsAdmin($this->admin)->postJson('/api/admin/upgrade/channel', [
+        'channel' => 'main',
     ]);
 
     $response->assertOk()->assertJson(['code' => 0]);
@@ -149,6 +208,7 @@ test('已有升级任务运行时不能启动新任务', function () {
     ]);
 
     $response->assertOk()->assertJson(['code' => 0]);
+    $response->assertJsonPath('msg', '已有升级任务在运行中');
 });
 
 test('未认证用户无法访问升级管理', function () {

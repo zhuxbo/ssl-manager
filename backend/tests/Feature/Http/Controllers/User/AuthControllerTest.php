@@ -13,13 +13,23 @@ test('用户登录成功', function () {
         'status' => 1,
     ]);
 
-    $this->postJson('/api/login', [
+    $response = $this->postJson('/api/login', [
         'account' => $user->email,
         'password' => 'password123',
-    ])
+    ]);
+
+    $response
         ->assertOk()
         ->assertJson(['code' => 1])
         ->assertJsonStructure(['data' => ['access_token', 'refresh_token', 'username', 'balance']]);
+
+    $plainRefreshToken = $response->json('data.refresh_token');
+    $storedRefreshToken = UserRefreshToken::where('user_id', $user->id)->first();
+
+    expect($storedRefreshToken)->not->toBeNull();
+    expect($storedRefreshToken?->refresh_token)->toBe(hash('sha256', $plainRefreshToken));
+    expect($user->fresh()->last_login_at)->not->toBeNull();
+    expect($user->fresh()->last_login_ip)->not->toBeNull();
 });
 
 test('用户登录失败-密码错误', function () {
@@ -33,20 +43,29 @@ test('用户登录失败-密码错误', function () {
     ])
         ->assertOk()
         ->assertJson(['code' => 0]);
+
+    expect(UserRefreshToken::count())->toBe(0);
 });
 
 test('用户注册成功', function () {
     Cache::put('verify_code_register_newuser@example.com', '123456', 600);
 
-    $this->postJson('/api/register', [
+    $response = $this->postJson('/api/register', [
         'username' => 'newuser123',
         'email' => 'newuser@example.com',
         'password' => 'password123',
         'code' => '123456',
-    ])
+    ]);
+
+    $response
         ->assertOk()
         ->assertJson(['code' => 1])
         ->assertJsonStructure(['data' => ['access_token', 'refresh_token', 'username']]);
+
+    $user = User::where('email', 'newuser@example.com')->first();
+    expect($user)->not->toBeNull();
+    expect($user?->email_verified_at)->not->toBeNull();
+    expect(UserRefreshToken::where('user_id', $user?->id)->count())->toBe(1);
 });
 
 test('用户注册失败-用户名已存在', function () {
@@ -87,6 +106,8 @@ test('重置密码成功', function () {
     ])
         ->assertOk()
         ->assertJson(['code' => 1]);
+
+    expect(Hash::check('newpassword123', $user->fresh()->password))->toBeTrue();
 });
 
 test('重置密码失败-邮箱不存在', function () {
@@ -189,9 +210,17 @@ test('绑定邮箱成功', function () {
 
 test('退出登录成功', function () {
     $user = User::factory()->create();
+    UserRefreshToken::createToken($user->id);
+    UserRefreshToken::createToken($user->id);
+    expect(UserRefreshToken::where('user_id', $user->id)->count())->toBe(2);
 
     $this->actingAsUser($user)
         ->deleteJson('/api/logout')
         ->assertOk()
         ->assertJson(['code' => 1]);
+
+    $user->refresh();
+    expect($user->token_version)->toBe(1);
+    expect($user->logout_at)->not->toBeNull();
+    expect(UserRefreshToken::where('user_id', $user->id)->count())->toBe(0);
 });

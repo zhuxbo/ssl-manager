@@ -68,6 +68,9 @@ getPlatformConfig(app).then(async config => {
   const { setupSharedModules } = await import("@/utils/setup");
   setupSharedModules();
   await exposeSharedDeps();
+  // 暴露主应用 http 给插件使用（已认证、带 token 刷新）
+  const { http: sharedHttp } = await import("@shared/utils/http");
+  window.__deps.http = sharedHttp;
   // 加载插件（在 router 安装之前，确保菜单数据就绪）
   await loadPlugins(router, "admin", constantMenus);
   app.use(router);

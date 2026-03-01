@@ -125,6 +125,11 @@ const openCreateDialog = async () => {
   try {
     const { data } = await agisoApi.products();
     productList.value = data;
+    if (!data.length) {
+      message("暂无可用的单域名 DV 产品，请先在产品管理中添加", {
+        type: "warning"
+      });
+    }
   } catch {
     message("获取产品列表失败", { type: "error" });
   }

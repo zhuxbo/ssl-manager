@@ -42,6 +42,9 @@ test('管理员可以获取订单列表', function () {
 
     $response->assertOk()->assertJson(['code' => 1]);
     $response->assertJsonStructure(['data' => ['items', 'total', 'pageSize', 'currentPage']]);
+    expect($response->json('data.total'))->toBe(1);
+    expect($response->json('data.items'))->toHaveCount(1);
+    expect($response->json('data.items.0.id'))->toBe($order->id);
 });
 
 test('管理员可以筛选活动中的订单', function () {
@@ -71,6 +74,8 @@ test('管理员可以通过快速搜索筛选订单', function () {
     $response = $this->actingAsAdmin($this->admin)->getJson('/api/admin/order?quickSearch=special');
 
     $response->assertOk()->assertJson(['code' => 1]);
+    expect($response->json('data.total'))->toBe(1);
+    expect($response->json('data.items.0.id'))->toBe($order->id);
 });
 
 test('管理员可以按用户ID筛选订单', function () {
@@ -83,6 +88,8 @@ test('管理员可以按用户ID筛选订单', function () {
     $response = $this->actingAsAdmin($this->admin)->getJson("/api/admin/order?user_id={$this->user->id}");
 
     $response->assertOk()->assertJson(['code' => 1]);
+    expect($response->json('data.total'))->toBe(1);
+    expect($response->json('data.items.0.user_id'))->toBe($this->user->id);
 });
 
 test('管理员可以查看订单详情', function () {
@@ -102,7 +109,16 @@ test('查看不存在的订单返回错误', function () {
 
 test('管理员可以创建新订单', function () {
     $mockAction = Mockery::mock(Action::class);
-    $mockAction->shouldReceive('new')->once();
+    $mockAction->shouldReceive('new')
+        ->once()
+        ->withArgs(function (array $params): bool {
+            return $params['action'] === 'new'
+                && $params['channel'] === 'admin'
+                && $params['user_id'] === test()->user->id
+                && $params['product_id'] === test()->product->id
+                && $params['period'] === 12
+                && $params['common_name'] === 'test.com';
+        });
     $this->app->instance(Action::class, $mockAction);
 
     $response = $this->actingAsAdmin($this->admin)->postJson('/api/admin/order/new', [
@@ -120,7 +136,9 @@ test('管理员可以支付订单', function () {
     [$order, $cert] = createOrderWithCert('unpaid');
 
     $mockAction = Mockery::mock(Action::class);
-    $mockAction->shouldReceive('pay')->once();
+    $mockAction->shouldReceive('pay')
+        ->once()
+        ->with($order->id, true, true);
     $this->app->instance(Action::class, $mockAction);
 
     $response = $this->actingAsAdmin($this->admin)->postJson("/api/admin/order/pay/$order->id");
@@ -132,7 +150,9 @@ test('管理员可以提交订单', function () {
     [$order, $cert] = createOrderWithCert('pending');
 
     $mockAction = Mockery::mock(Action::class);
-    $mockAction->shouldReceive('commit')->once();
+    $mockAction->shouldReceive('commit')
+        ->once()
+        ->with($order->id);
     $this->app->instance(Action::class, $mockAction);
 
     $response = $this->actingAsAdmin($this->admin)->postJson("/api/admin/order/commit/$order->id");
@@ -144,7 +164,9 @@ test('管理员可以同步订单', function () {
     [$order, $cert] = createOrderWithCert('processing');
 
     $mockAction = Mockery::mock(Action::class);
-    $mockAction->shouldReceive('sync')->once();
+    $mockAction->shouldReceive('sync')
+        ->once()
+        ->with($order->id);
     $this->app->instance(Action::class, $mockAction);
 
     $response = $this->actingAsAdmin($this->admin)->postJson("/api/admin/order/sync/$order->id");
@@ -156,7 +178,9 @@ test('管理员可以提交取消订单', function () {
     [$order, $cert] = createOrderWithCert('active');
 
     $mockAction = Mockery::mock(Action::class);
-    $mockAction->shouldReceive('commitCancel')->once();
+    $mockAction->shouldReceive('commitCancel')
+        ->once()
+        ->with($order->id);
     $this->app->instance(Action::class, $mockAction);
 
     $response = $this->actingAsAdmin($this->admin)->postJson("/api/admin/order/commit-cancel/$order->id");
@@ -168,7 +192,9 @@ test('管理员可以添加订单备注', function () {
     [$order, $cert] = createOrderWithCert('pending');
 
     $mockAction = Mockery::mock(Action::class);
-    $mockAction->shouldReceive('remark')->once();
+    $mockAction->shouldReceive('remark')
+        ->once()
+        ->with($order->id, '测试备注');
     $this->app->instance(Action::class, $mockAction);
 
     $response = $this->actingAsAdmin($this->admin)->postJson("/api/admin/order/remark/$order->id", [
@@ -180,7 +206,12 @@ test('管理员可以添加订单备注', function () {
 
 test('管理员可以转移订单', function () {
     $mockAction = Mockery::mock(Action::class);
-    $mockAction->shouldReceive('transfer')->once();
+    $mockAction->shouldReceive('transfer')
+        ->once()
+        ->withArgs(function (array $params): bool {
+            return $params['order_id'] === 1
+                && $params['user_id'] === test()->user->id;
+        });
     $this->app->instance(Action::class, $mockAction);
 
     $response = $this->actingAsAdmin($this->admin)->postJson('/api/admin/order/transfer', [
@@ -212,6 +243,7 @@ test('管理员不能修改已支付订单价格', function () {
     ]);
 
     $response->assertOk()->assertJson(['code' => 0]);
+    expect($cert->fresh()->amount)->not->toBe('200.00');
 });
 
 test('管理员可以更新订单自动续费设置', function () {
@@ -223,6 +255,12 @@ test('管理员可以更新订单自动续费设置', function () {
     ]);
 
     $response->assertOk()->assertJson(['code' => 1]);
+    $response->assertJsonPath('data.auto_renew', true);
+    $response->assertJsonPath('data.auto_reissue', false);
+
+    $order->refresh();
+    expect((bool) $order->auto_renew)->toBeTrue();
+    expect((bool) $order->auto_reissue)->toBeFalse();
 });
 
 test('管理员可以批量获取订单', function () {
@@ -232,6 +270,12 @@ test('管理员可以批量获取订单', function () {
     $response = $this->actingAsAdmin($this->admin)->getJson('/api/admin/order/batch?ids[]=' . $order1->id . '&ids[]=' . $order2->id);
 
     $response->assertOk()->assertJson(['code' => 1]);
+    expect($response->json('data'))->toHaveCount(2);
+    $returnedIds = array_column($response->json('data'), 'id');
+    sort($returnedIds);
+    $expectedIds = [$order1->id, $order2->id];
+    sort($expectedIds);
+    expect($returnedIds)->toBe($expectedIds);
 });
 
 test('未认证用户无法访问订单管理', function () {

@@ -19,7 +19,8 @@ class UserFactory extends Factory
         return [
             'username' => 'u_'.fake()->unique()->numerify('######'),
             'email' => fake()->unique()->safeEmail(),
-            'mobile' => fake()->phoneNumber(),
+            // users.mobile 有唯一索引，使用唯一数字串避免批量建数时碰撞
+            'mobile' => fake()->unique()->numerify('1##########'),
             'password' => 'password',
             'balance' => '0.00',
             'level_code' => 'standard',

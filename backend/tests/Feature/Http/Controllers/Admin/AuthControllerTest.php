@@ -21,6 +21,14 @@ test('管理员使用正确凭证登录成功', function () {
 
     $response->assertOk()->assertJson(['code' => 1]);
     $response->assertJsonStructure(['data' => ['access_token', 'refresh_token', 'username']]);
+
+    $plainRefreshToken = $response->json('data.refresh_token');
+    $storedRefreshToken = AdminRefreshToken::where('admin_id', $admin->id)->first();
+
+    expect($storedRefreshToken)->not->toBeNull();
+    expect($storedRefreshToken?->refresh_token)->toBe(hash('sha256', $plainRefreshToken));
+    expect($admin->fresh()->last_login_at)->not->toBeNull();
+    expect($admin->fresh()->last_login_ip)->not->toBeNull();
 });
 
 test('管理员使用邮箱登录成功', function () {
@@ -35,6 +43,9 @@ test('管理员使用邮箱登录成功', function () {
     ]);
 
     $response->assertOk()->assertJson(['code' => 1]);
+
+    expect(AdminRefreshToken::where('admin_id', $admin->id)->count())->toBe(1);
+    expect($admin->fresh()->last_login_at)->not->toBeNull();
 });
 
 test('管理员使用错误密码登录失败', function () {
@@ -49,6 +60,7 @@ test('管理员使用错误密码登录失败', function () {
     ]);
 
     $response->assertOk()->assertJson(['code' => 0]);
+    expect(AdminRefreshToken::count())->toBe(0);
 });
 
 test('管理员使用不存在的账号登录失败', function () {
@@ -58,6 +70,7 @@ test('管理员使用不存在的账号登录失败', function () {
     ]);
 
     $response->assertOk()->assertJson(['code' => 0]);
+    expect(AdminRefreshToken::count())->toBe(0);
 });
 
 test('已禁用的管理员登录失败', function () {
@@ -72,6 +85,7 @@ test('已禁用的管理员登录失败', function () {
     ]);
 
     $response->assertOk()->assertJson(['code' => 0]);
+    expect(AdminRefreshToken::count())->toBe(0);
 });
 
 test('已认证管理员可以获取个人信息', function () {
@@ -109,6 +123,8 @@ test('管理员使用正确旧密码可以修改密码', function () {
     $admin = Admin::factory()->create([
         'password' => 'oldpassword',
     ]);
+    AdminRefreshToken::createToken($admin->id);
+    expect(AdminRefreshToken::where('admin_id', $admin->id)->count())->toBe(1);
 
     $response = $this->actingAsAdmin($admin)->patchJson('/api/admin/update-password', [
         'oldPassword' => 'oldpassword',
@@ -120,12 +136,15 @@ test('管理员使用正确旧密码可以修改密码', function () {
 
     $admin->refresh();
     expect(Hash::check('newpassword123', $admin->password))->toBeTrue();
+    expect(AdminRefreshToken::where('admin_id', $admin->id)->count())->toBe(0);
 });
 
 test('管理员使用错误旧密码无法修改密码', function () {
     $admin = Admin::factory()->create([
         'password' => 'oldpassword',
     ]);
+    AdminRefreshToken::createToken($admin->id);
+    expect(AdminRefreshToken::where('admin_id', $admin->id)->count())->toBe(1);
 
     $response = $this->actingAsAdmin($admin)->patchJson('/api/admin/update-password', [
         'oldPassword' => 'wrongoldpassword',
@@ -134,12 +153,22 @@ test('管理员使用错误旧密码无法修改密码', function () {
     ]);
 
     $response->assertOk()->assertJson(['code' => 0]);
+    expect(Hash::check('oldpassword', $admin->fresh()->password))->toBeTrue();
+    expect(AdminRefreshToken::where('admin_id', $admin->id)->count())->toBe(1);
 });
 
 test('管理员可以退出登录', function () {
     $admin = Admin::factory()->create();
+    AdminRefreshToken::createToken($admin->id);
+    AdminRefreshToken::createToken($admin->id);
+    expect(AdminRefreshToken::where('admin_id', $admin->id)->count())->toBe(2);
 
     $response = $this->actingAsAdmin($admin)->deleteJson('/api/admin/logout');
 
     $response->assertOk()->assertJson(['code' => 1]);
+
+    $admin->refresh();
+    expect($admin->token_version)->toBe(1);
+    expect($admin->logout_at)->not->toBeNull();
+    expect(AdminRefreshToken::where('admin_id', $admin->id)->count())->toBe(0);
 });
