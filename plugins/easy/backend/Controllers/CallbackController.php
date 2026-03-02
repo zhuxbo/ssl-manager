@@ -89,9 +89,9 @@ class CallbackController extends Controller
     {
         $platform = $params['fromPlatform'] ?? $params['data']['Platform'] ?? null;
 
-        match ($platform) {
-            'PddAlds' => $this->processPinduoduoOrder($params),
-            'TbAlds' => $this->processTaobaoOrder($params),
+        match (strtolower($platform)) {
+            'pddalds', 'pinduoduo' => $this->processPinduoduoOrder($params),
+            'tbalds', 'taobao' => $this->processTaobaoOrder($params),
             default => $this->error('Invalid platform'),
         };
     }

@@ -4,7 +4,7 @@
 
 ```
 plugins/
-├── build-plugin.sh          # 通用构建脚本
+├── release-plugin.sh          # 通用构建脚本
 ├── temp/                    # 构建产物（git 忽略）
 ├── README.md                # 安装/更新/卸载说明
 └── {name}/                  # 插件目录
@@ -127,7 +127,7 @@ export { routes };
 cd plugins/{name}/admin && pnpm build
 
 # 或构建整个插件（admin + user）
-bash plugins/build-plugin.sh {name} --build-only
+bash plugins/release-plugin.sh {name} --build-only
 ```
 
 ### 共享依赖
@@ -188,16 +188,16 @@ window.__registerPlugin({
 
 ```bash
 # 仅构建打包（产物在 plugins/temp/）
-bash plugins/build-plugin.sh {name} --build-only
+bash plugins/release-plugin.sh {name} --build-only
 
 # 构建 + 本地发布
-bash plugins/build-plugin.sh {name} --local
+bash plugins/release-plugin.sh {name} --local
 
 # 构建 + 远程发布
-bash plugins/build-plugin.sh {name} --remote
+bash plugins/release-plugin.sh {name} --remote
 
 # 远程发布到指定服务器
-bash plugins/build-plugin.sh {name} --remote --server cn
+bash plugins/release-plugin.sh {name} --remote --server cn
 ```
 
 ### build.json

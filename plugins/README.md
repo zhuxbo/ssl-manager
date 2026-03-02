@@ -4,7 +4,7 @@
 
 ```
 plugins/
-├── build-plugin.sh     # 通用构建脚本
+├── release-plugin.sh     # 通用构建脚本
 ├── temp/               # 构建产物（git 忽略）
 └── {name}/             # 已安装的插件
     ├── plugin.json     # 插件元数据（必须）
@@ -97,17 +97,17 @@ curl -X POST /api/admin/plugin/uninstall \
 
 ## 构建插件
 
-使用 `build-plugin.sh` 构建打包：
+使用 `release-plugin.sh` 构建打包：
 
 ```bash
 # 仅构建（产物在 plugins/temp/）
-bash plugins/build-plugin.sh {name} --build-only
+bash plugins/release-plugin.sh {name} --build-only
 
 # 构建 + 发布
-bash plugins/build-plugin.sh {name}
+bash plugins/release-plugin.sh {name}
 
 # 只发布到指定服务器
-bash plugins/build-plugin.sh {name} --server cn
+bash plugins/release-plugin.sh {name} --server cn
 ```
 
 发布需要配置文件 `plugins/release.conf`（不存在时回落到 `build/release.conf`）。

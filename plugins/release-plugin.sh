@@ -8,10 +8,10 @@
 #   2. build/release.conf（主系统回落）
 #
 # 用法:
-#   ./plugins/build-plugin.sh easy                    # 构建+发布
-#   ./plugins/build-plugin.sh easy --build-only       # 仅构建，不发布
-#   ./plugins/build-plugin.sh easy --publish-only     # 仅发布已有的 zip
-#   ./plugins/build-plugin.sh easy --server cn        # 只发布到指定远程服务器
+#   ./plugins/release-plugin.sh easy --version 0.1.0          # 构建+发布
+#   ./plugins/release-plugin.sh easy --version 0.1.0 --build-only  # 仅构建
+#   ./plugins/release-plugin.sh easy --version 0.1.0 --publish-only # 仅发布已有 zip
+#   ./plugins/release-plugin.sh easy --version 0.1.0 --server cn   # 只发布到指定服务器
 
 set -e
 
@@ -43,7 +43,7 @@ show_help() {
 用法: $0 <插件名或目录> [选项]
 
 选项:
-  --version VERSION   指定版本号（自动写入 plugin.json）
+  --version VERSION   指定版本号（注入到打包产物，不修改源文件）
   --build-only        仅构建打包，不发布
   --publish-only      仅发布已有的 zip，跳过构建
   --server NAME       只发布到指定服务器
@@ -107,27 +107,20 @@ if [ ! -f "plugin.json" ]; then
     exit 1
 fi
 
-# 读取插件名和版本号
+# 读取插件名
 NAME=$(grep -o '"name"[[:space:]]*:[[:space:]]*"[^"]*"' plugin.json | head -1 | cut -d'"' -f4)
-VERSION=$(grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' plugin.json | head -1 | cut -d'"' -f4)
 
 if [ -z "$NAME" ]; then
     log_error "无法从 plugin.json 读取插件名"
     exit 1
 fi
-if [ -z "$VERSION" ]; then
-    log_error "无法从 plugin.json 读取版本号"
+
+# 版本号必须通过 --version 指定
+if [ -z "$INPUT_VERSION" ]; then
+    log_error "请通过 --version 指定版本号"
     exit 1
 fi
-
-# 如果指定了版本号，写入 plugin.json
-if [ -n "$INPUT_VERSION" ]; then
-    INPUT_VERSION="${INPUT_VERSION#v}"
-    sed -i.bak "s/\"version\"[[:space:]]*:[[:space:]]*\"[^\"]*\"/\"version\": \"$INPUT_VERSION\"/" plugin.json
-    rm -f plugin.json.bak
-    VERSION="$INPUT_VERSION"
-    log_info "版本号已更新为: $VERSION"
-fi
+VERSION="${INPUT_VERSION#v}"
 
 OUTPUT_DIR="$SCRIPT_DIR/temp"
 mkdir -p "$OUTPUT_DIR"
@@ -196,6 +189,17 @@ build_plugin() {
             cp -r "$PLUGIN_DIR/$item" "$PACK_DIR/$item"
         fi
     done < <(grep -A 100 '"include"' build.json | grep '"' | grep -v 'include\|exclude\|\[' | head -20)
+
+    # 注入版本号到临时副本（源文件不含 version 字段）
+    if [ -f "$PACK_DIR/plugin.json" ]; then
+        sed -i.bak 's/"name"[[:space:]]*:/"version": "'"$VERSION"'", "name":/' "$PACK_DIR/plugin.json"
+        rm -f "$PACK_DIR/plugin.json.bak"
+        # 用 python 格式化 JSON（保持可读性）
+        if command -v python3 &> /dev/null; then
+            python3 -c "import json; d=json.load(open('$PACK_DIR/plugin.json')); json.dump(d, open('$PACK_DIR/plugin.json','w'), indent=2, ensure_ascii=False)"
+        fi
+        log_info "已注入版本号: $VERSION"
+    fi
 
     # 复制前端构建产物（从 dist/ 到 frontend/{admin,user}/）
     for side in admin user; do
