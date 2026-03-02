@@ -948,10 +948,15 @@ async function batchVerifyValidation(validation: any[], ca?: string) {
               { timeout: 10000 }
             );
             if (res.data?.code === 1) {
-              const txtRecords = (res.data.data?.records || []).filter(
-                (r: any) => r.type === "TXT" && r.value
+              const normalizedHost = cnameHost.toLowerCase().replace(/\.$/, "");
+              // 通过 name 字段精确匹配：仅检测直接属于该主机名的 TXT 记录，排除 CNAME 链解析到的记录
+              const directTxtRecords = (res.data.data?.records || []).filter(
+                (r: any) =>
+                  r.type === "TXT" &&
+                  r.value &&
+                  r.name?.toLowerCase().replace(/\.$/, "") === normalizedHost
               );
-              if (txtRecords.length > 0) {
+              if (directTxtRecords.length > 0) {
                 txtConflict = `检测到 ${cnameHost} 存在 TXT 记录，TXT 和 CNAME 同名共存会导致委托不生效，请删除 TXT 记录`;
               }
             }

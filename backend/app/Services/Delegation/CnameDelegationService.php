@@ -277,7 +277,7 @@ class CnameDelegationService
         $host = DomainUtil::convertToAscii("$delegation->prefix.$delegation->zone");
 
         try {
-            $txtRecords = VerifyUtil::queryTxtRecords($host);
+            $txtRecords = VerifyUtil::queryTxtRecords($host, direct: true);
 
             if (! empty($txtRecords)) {
                 return "检测到 $host 存在TXT记录，TXT和CNAME同一名称同时存在会导致CNAME委托不生效，请删除TXT记录";

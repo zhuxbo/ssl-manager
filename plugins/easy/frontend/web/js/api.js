@@ -216,12 +216,13 @@ window.API = (function () {
     return { checked: false, detected_value: "", error: "检测服务不可用" };
   }
 
-  // 查询指定 host 的 TXT 记录（用于检测 TXT 与 CNAME 冲突）
+  // 查询指定 host 的直接 TXT 记录（通过 name 字段精确匹配，排除 CNAME 链解析到的记录）
   async function queryTxtRecords(host) {
     const dnsToolsHosts = Config.getConfig("dnsTools") || [
       "https://dns-tools-cn.cnssl.com",
       "https://dns-tools-us.cnssl.com"
     ];
+    const normalizedHost = host.toLowerCase().replace(/\.$/, "");
 
     for (const baseUrl of dnsToolsHosts) {
       try {
@@ -236,7 +237,15 @@ window.API = (function () {
 
         const records = data.data?.records || [];
         return records
-          .filter(r => r.type === "TXT" && r.value)
+          .filter(r => {
+            if (r.type !== "TXT" || !r.value) return false;
+            // 仅保留 name 与查询主机匹配的 TXT 记录，排除 CNAME 链解析到的记录
+            if (r.name) {
+              const recordName = r.name.toLowerCase().replace(/\.$/, "");
+              if (recordName !== normalizedHost) return false;
+            }
+            return true;
+          })
           .map(r => r.value.replace(/^"|"$/g, "").trim());
       } catch (error) {
         continue;
