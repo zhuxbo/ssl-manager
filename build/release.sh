@@ -90,7 +90,7 @@ load_config() {
 ensure_tag() {
     local tag="$1"
     local head_commit=$(git rev-parse HEAD)
-    local tag_commit=$(git rev-parse "refs/tags/$tag" 2>/dev/null || echo "")
+    local tag_commit=$(git rev-parse --verify "refs/tags/$tag" 2>/dev/null || echo "")
 
     if [ -z "$tag_commit" ]; then
         log_info "创建 tag: $tag"
