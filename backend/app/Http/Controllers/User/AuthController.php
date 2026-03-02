@@ -188,6 +188,17 @@ class AuthController extends BaseController
         $accessToken = $this->guard->login($user);
         $refreshToken = UserRefreshToken::createToken($user->id);
 
+        $source = $request->input('source', '');
+        if (is_string($source) && $source !== '') {
+            $user->source = $source;
+
+            $sourceLevel = get_system_setting('site', 'sourceLevel', []);
+
+            if (isset($sourceLevel[$source])) {
+                $user->level_code = $sourceLevel[$source];
+            }
+        }
+
         $user->last_login_at = now();
         $user->last_login_ip = request()->ip();
         $user->save();

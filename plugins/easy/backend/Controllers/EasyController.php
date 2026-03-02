@@ -527,6 +527,15 @@ class EasyController extends Controller
     {
         $user = User::where('email', $email)->first();
 
+        // 根据 sourceLevel 设置确定目标等级，默认 platinum
+        $targetLevel = 'platinum';
+        if ($from !== '') {
+            $sourceLevel = get_system_setting('site', 'sourceLevel', []);
+            if (isset($sourceLevel[$from])) {
+                $targetLevel = $sourceLevel[$from];
+            }
+        }
+
         if (! $user) {
             $username = Random::build('alpha', 10);
             $password = Random::build('alnum', 10);
@@ -536,7 +545,7 @@ class EasyController extends Controller
                 'username' => $username,
                 'email' => $email,
                 'password' => $password,
-                'level_code' => 'platinum',
+                'level_code' => $targetLevel,
                 'source' => $from,
                 'status' => 1,
                 'join_at' => now(),
@@ -566,10 +575,14 @@ class EasyController extends Controller
             } catch (Throwable $e) {
                 app(ApiExceptions::class)->logException($e);
             }
-        }
+        } else {
+            // 已有用户：内置等级保底提升到目标等级，自定义等级不动
+            $levelOrder = ['standard' => 1, 'gold' => 2, 'platinum' => 3, 'crown' => 4, 'partner' => 5];
 
-        if ($user->level_code === 'standard' || $user->level_code === 'gold') {
-            $user->update(['level_code' => 'platinum']);
+            if (isset($levelOrder[$user->level_code]) && isset($levelOrder[$targetLevel])
+                && $levelOrder[$targetLevel] > $levelOrder[$user->level_code]) {
+                $user->update(['level_code' => $targetLevel]);
+            }
         }
 
         return $user;
