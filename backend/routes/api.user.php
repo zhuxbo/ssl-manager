@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\User\AcmeController;
 use App\Http\Controllers\User\AuthController;
 use App\Http\Controllers\User\CertController;
 use App\Http\Controllers\User\ContactController;
@@ -106,7 +107,6 @@ Route::middleware('api.user')->group(function () {
     Route::prefix('fund')->group(function () {
         Route::get('/', [FundController::class, 'index']);
         Route::post('check/{id}', [FundController::class, 'check'])->where('id', '[0-9]+');
-        Route::post('platform-recharge', [FundController::class, 'platformRecharge']);
     });
 
     // 发票路由
@@ -148,6 +148,12 @@ Route::middleware('api.user')->group(function () {
         Route::get('get-bank-account', [TopUpController::class, 'getBankAccount']);
         // 清除支付配置缓存
         Route::get('clear-pay-config', [TopUpController::class, 'clearConfigCache']);
+    });
+
+    // ACME 路由
+    Route::prefix('acme')->group(function () {
+        Route::get('eab/{orderId}', [AcmeController::class, 'getEab'])->where('orderId', '[0-9]+');
+        Route::post('order', [AcmeController::class, 'createOrder']);
     });
 
     // CNAME 委托管理路由

@@ -3,11 +3,14 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 
 class Notification extends BaseModel
 {
+    use HasFactory;
+
     public const string STATUS_PENDING = 'pending';
 
     public const string STATUS_SENDING = 'sending';

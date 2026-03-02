@@ -1,128 +1,115 @@
 <?php
 
-namespace Tests\Unit\Models;
-
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use PHPUnit\Framework\Attributes\Group;
-use Tests\TestCase;
 use Tests\Traits\CreatesTestData;
 
-#[Group('database')]
-class UserAutoSettingsTest extends TestCase
-{
-    use CreatesTestData, RefreshDatabase;
+uses(Tests\TestCase::class, CreatesTestData::class, RefreshDatabase::class)->group('database');
 
-    protected bool $seed = true;
+beforeEach(function () {
+    $this->seed = true;
+    $this->seeder = DatabaseSeeder::class;
+});
 
-    protected string $seeder = DatabaseSeeder::class;
+/**
+ * 测试 auto_settings 为 null 时返回默认值
+ */
+test('returns default when null', function () {
+    $user = $this->createTestUser();
+    $user->auto_settings = null;
+    $user->save();
 
-    /**
-     * 测试 auto_settings 为 null 时返回默认值
-     */
-    public function test_returns_default_when_null(): void
-    {
-        $user = $this->createTestUser();
-        $user->auto_settings = null;
-        $user->save();
+    $user->refresh();
 
-        $user->refresh();
+    expect($user->auto_settings)->toBeArray();
+    expect($user->auto_settings['auto_renew'])->toBeFalse();
+    expect($user->auto_settings['auto_reissue'])->toBeTrue();
+});
 
-        $this->assertIsArray($user->auto_settings);
-        $this->assertFalse($user->auto_settings['auto_renew']);
-        $this->assertTrue($user->auto_settings['auto_reissue']);
-    }
+/**
+ * 测试正确解析 JSON 字符串
+ */
+test('normalizes json string', function () {
+    $user = $this->createTestUser();
 
-    /**
-     * 测试正确解析 JSON 字符串
-     */
-    public function test_normalizes_json_string(): void
-    {
-        $user = $this->createTestUser();
+    // 通过 setRawAttributes 设置原始 JSON 字符串
+    $user->setRawAttributes(array_merge(
+        $user->getAttributes(),
+        ['auto_settings' => '{"auto_renew":true,"auto_reissue":false}']
+    ));
+    $settings = $user->auto_settings;
 
-        // 通过 setRawAttributes 设置原始 JSON 字符串
-        $user->setRawAttributes(array_merge(
-            $user->getAttributes(),
-            ['auto_settings' => '{"auto_renew":true,"auto_reissue":false}']
-        ));
-        $settings = $user->auto_settings;
+    expect($settings['auto_renew'])->toBeTrue();
+    expect($settings['auto_reissue'])->toBeFalse();
+});
 
-        $this->assertTrue($settings['auto_renew']);
-        $this->assertFalse($settings['auto_reissue']);
-    }
+/**
+ * 测试正确处理数组输入
+ */
+test('normalizes array input', function () {
+    $user = $this->createTestUser();
+    $user->auto_settings = ['auto_renew' => true, 'auto_reissue' => true];
+    $user->save();
 
-    /**
-     * 测试正确处理数组输入
-     */
-    public function test_normalizes_array_input(): void
-    {
-        $user = $this->createTestUser();
-        $user->auto_settings = ['auto_renew' => true, 'auto_reissue' => true];
-        $user->save();
+    $user->refresh();
 
-        $user->refresh();
+    expect($user->auto_settings['auto_renew'])->toBeTrue();
+    expect($user->auto_settings['auto_reissue'])->toBeTrue();
+});
 
-        $this->assertTrue($user->auto_settings['auto_renew']);
-        $this->assertTrue($user->auto_settings['auto_reissue']);
-    }
+/**
+ * 测试各种真值转换为 boolean true
+ */
+test('casts truthy to boolean', function () {
+    $user = $this->createTestUser();
 
-    /**
-     * 测试各种真值转换为 boolean true
-     */
-    public function test_casts_truthy_to_boolean(): void
-    {
-        $user = $this->createTestUser();
+    // 测试字符串 "1"
+    $user->auto_settings = ['auto_renew' => '1', 'auto_reissue' => '0'];
+    $user->save();
+    $user->refresh();
 
-        // 测试字符串 "1"
-        $user->auto_settings = ['auto_renew' => '1', 'auto_reissue' => '0'];
-        $user->save();
-        $user->refresh();
+    expect($user->auto_settings['auto_renew'])->toBeTrue();
+    expect($user->auto_settings['auto_reissue'])->toBeFalse();
 
-        $this->assertTrue($user->auto_settings['auto_renew']);
-        $this->assertFalse($user->auto_settings['auto_reissue']);
+    // 测试整数 1
+    $user->auto_settings = ['auto_renew' => 1, 'auto_reissue' => 0];
+    $user->save();
+    $user->refresh();
 
-        // 测试整数 1
-        $user->auto_settings = ['auto_renew' => 1, 'auto_reissue' => 0];
-        $user->save();
-        $user->refresh();
+    expect($user->auto_settings['auto_renew'])->toBeTrue();
+    expect($user->auto_settings['auto_reissue'])->toBeFalse();
+});
 
-        $this->assertTrue($user->auto_settings['auto_renew']);
-        $this->assertFalse($user->auto_settings['auto_reissue']);
-    }
+/**
+ * 测试只返回 auto_renew 和 auto_reissue，忽略其他字段
+ */
+test('ignores extra fields', function () {
+    $user = $this->createTestUser();
+    $user->auto_settings = [
+        'auto_renew' => true,
+        'auto_reissue' => false,
+        'extra_field' => 'should_be_ignored',
+    ];
+    $user->save();
 
-    /**
-     * 测试只返回 auto_renew 和 auto_reissue，忽略其他字段
-     */
-    public function test_ignores_extra_fields(): void
-    {
-        $user = $this->createTestUser();
-        $user->auto_settings = [
-            'auto_renew' => true,
-            'auto_reissue' => false,
-            'extra_field' => 'should_be_ignored',
-        ];
-        $user->save();
+    $user->refresh();
 
-        $user->refresh();
+    expect($user->auto_settings)->toHaveKey('auto_renew');
+    expect($user->auto_settings)->toHaveKey('auto_reissue');
+    expect($user->auto_settings)->not->toHaveKey('extra_field');
+    expect($user->auto_settings)->toHaveCount(2);
+});
 
-        $this->assertArrayHasKey('auto_renew', $user->auto_settings);
-        $this->assertArrayHasKey('auto_reissue', $user->auto_settings);
-        $this->assertArrayNotHasKey('extra_field', $user->auto_settings);
-        $this->assertCount(2, $user->auto_settings);
-    }
+/**
+ * 测试空数组输入返回默认值
+ */
+test('returns default for empty array', function () {
+    $user = $this->createTestUser();
+    $user->auto_settings = [];
+    $user->save();
 
-    /**
-     * 测试空数组输入返回默认值
-     */
-    public function test_returns_default_for_empty_array(): void
-    {
-        $user = $this->createTestUser();
-        $user->auto_settings = [];
-        $user->save();
+    $user->refresh();
 
-        $user->refresh();
-
-        $this->assertFalse($user->auto_settings['auto_renew']);
-        $this->assertTrue($user->auto_settings['auto_reissue']);
-    }
-}
+    expect($user->auto_settings['auto_renew'])->toBeFalse();
+    expect($user->auto_settings['auto_reissue'])->toBeTrue();
+});

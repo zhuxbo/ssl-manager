@@ -365,17 +365,17 @@ class OrderUtil
             self::calculateMinPrice(
                 $levelPrice->price ?? null,
                 $customLevelPrice->price ?? null
-            );
+            ) ?? '0';
         $minPrice['alternative_standard_price'] =
             self::calculateMinPrice(
                 $levelPrice->alternative_standard_price ?? null,
                 $customLevelPrice->alternative_standard_price ?? null
-            );
+            ) ?? '0';
         $minPrice['alternative_wildcard_price'] =
             self::calculateMinPrice(
                 $levelPrice->alternative_wildcard_price ?? null,
                 $customLevelPrice->alternative_wildcard_price ?? null
-            );
+            ) ?? '0';
 
         return array_filter($minPrice, function ($value) {
             return ! is_null($value);

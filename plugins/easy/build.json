@@ -1,0 +1,12 @@
+{
+  "name": "easy",
+  "include": [
+    "plugin.json",
+    "backend/",
+    "frontend/web/",
+    "nginx/"
+  ],
+  "exclude": [
+    ".gitignore"
+  ]
+}

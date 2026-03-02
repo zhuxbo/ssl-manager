@@ -11,11 +11,17 @@
         </tr>
         <tr>
           <td class="label">品牌</td>
-          <td class="content">{{ order.brand }}</td>
+          <td class="content">{{ brandLabels[order.brand?.toLowerCase()] || order.brand }}</td>
         </tr>
         <tr>
           <td class="label">产品</td>
           <td class="content">{{ order.product.name }}</td>
+        </tr>
+        <tr v-if="isAcme">
+          <td class="label">签发方式</td>
+          <td class="content">
+            <el-tag size="small" type="success">ACME</el-tag>
+          </td>
         </tr>
         <tr>
           <td class="label">金额</td>
@@ -45,7 +51,7 @@
             }}
           </td>
         </tr>
-        <tr>
+        <tr v-if="!isAcme">
           <td class="label">已购</td>
           <td class="content">
             {{
@@ -115,7 +121,7 @@
             </el-select>
           </td>
         </tr>
-        <tr>
+        <tr v-if="!isAcme">
           <td class="label">自动重签</td>
           <td class="content">
             <el-select
@@ -141,10 +147,11 @@ import { buildUUID } from "@pureadmin/utils";
 import { ElMessageBox } from "element-plus";
 import * as OrderApi from "@/api/order";
 import { message } from "@shared/utils";
-import { periodLabels } from "@/views/system/dictionary";
+import { brandLabels, periodLabels } from "@/views/system/dictionary";
 import dayjs from "dayjs";
 
 const order = inject("order") as any;
+const isAcme = inject("isAcme", ref(false)) as any;
 
 const autoLoading = ref(false);
 

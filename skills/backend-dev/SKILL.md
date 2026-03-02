@@ -76,18 +76,23 @@ certbot → Manager (ACME 服务) → Gateway/上级 Manager (REST API) → Cert
 | POST | `/acme/new-order` | 创建订单 |
 | POST | `/acme/authz/{token}` | 获取授权 |
 | POST | `/acme/chall/{token}` | 响应验证 |
-| POST | `/acme/order/{token}/finalize` | 完成订单 |
-| POST | `/acme/cert/{token}` | 下载证书 |
+| POST | `/acme/order/{referId}/finalize` | 完成订单（cert.refer_id） |
+| POST | `/acme/cert/{referId}` | 下载证书（cert.refer_id） |
+| POST | `/acme/revoke-cert` | 吊销证书 |
 
 ### REST API 端点 (`/api/acme/*`)
 
-供下级 Manager 调用：
+供下级 Manager 调用，无 account 概念，路由风格 id 放后面：
 
-- `POST /api/acme/accounts` - 创建账户
-- `POST /api/acme/orders` - 创建订单
+- `POST /api/acme/orders` - 创建订单（参数：customer, product_code, domains, refer_id）
+- `POST /api/acme/orders/reissue/{id}` - 重签订单（参数：domains, refer_id）
 - `GET /api/acme/orders/{id}` - 获取订单
-- `POST /api/acme/orders/{id}/finalize` - 完成订单
-- `GET /api/acme/orders/{id}/certificate` - 下载证书
+- `DELETE /api/acme/orders/{id}` - 取消订单
+- `GET /api/acme/orders/authorizations/{id}` - 获取授权列表
+- `POST /api/acme/orders/finalize/{id}` - 完成订单
+- `GET /api/acme/orders/certificate/{id}` - 下载证书
+- `POST /api/acme/challenges/respond/{id}` - 响应验证
+- `POST /api/acme/certificates/revoke` - 吊销证书（by serial_number）
 
 ### 关键服务
 
@@ -96,17 +101,43 @@ certbot → Manager (ACME 服务) → Gateway/上级 Manager (REST API) → Cert
 | `JwsService` | JWS 解析和验证 |
 | `NonceService` | Nonce 管理（Redis Cache::pull 原子操作） |
 | `AccountService` | 账户管理 |
-| `OrderService` | 订单管理 |
-| `BillingService` | 计费逻辑 |
-| `UpstreamClient` | 上级 API 调用 |
+| `OrderService` | 订单管理（操作 Cert 代替 AcmeOrder） |
+| `ApiService` | 订单创建 + 重签 + 取消（REST API 端点逻辑） |
+| `BillingService` | 订阅创建（延迟扣费）、自动续费 |
+| `ApiClient` | 连接的 ACME REST API 调用 |
+
+### 数据模型
+
+- **去掉 `acme_orders` 表**，订单/证书使用系统 `orders` + `certs` 表
+- `products.support_acme = 1` 标识 ACME 产品
+- `certs.api_id` 存储连接的 ACME 服务的订单 ID
+- `certs.refer_id` 随机唯一字符串用于 ACME URL
+- `acme_authorizations.cert_id` FK → certs.id
+- `acme_authorizations.acme_challenge_id` 连接的服务 challenge ID
+- ACME 状态从 cert.status + acme_authorizations 推导，不存储；有 CSR 无证书 → processing
+- `cert.status = 'processing'` 由 createOrder 上游成功后设置（区别于 ACME 协议状态推导，用于 commitCancel 区分取消场景）
+- `OrderService::tryCompletePendingFinalize()` — processing 状态时向上游查询证书是否已签发
+
+### 扣费时机
+
+- **延迟扣费**：创建订阅（BillingService::createSubscription / tryAutoRenew / ApiService::createOrder）时不扣费，cert.amount='0.00'，purchased_count=0
+- **首次扣费**：new-order 提交域名时按实际域名精确计费（OrderService::create / ApiService::createOrder）
+- **action 判断**：purchased_standard_count==0 && purchased_wildcard_count==0 → action='new'（含基础价格），否则 → action='reissue'（只计增购）
+- **幂等扣费**：通过 purchased count 判断是否需要增购，避免重复扣费
+
+### 订单取消
+
+- **cancel 端点**：`DELETE /api/acme/orders/{id}`（ApiService::cancelOrder / ApiClient::cancelOrder）
+- **pending 取消**（未提交域名、未扣费）：ActionTrait::cancelPending() ACME 快速清理分支，清理 acme_authorizations + 标记 cancelled
+- **processing/active 取消**（已提交、已扣费）：Action::cancel() 对 ACME cert 使用 ApiClient::cancelOrder 通知上游 + getCancelTransaction 退费
+- **best-effort**：上游取消失败不阻断本地流程
 
 ### 配置
 
-```bash
-# .env
-ACME_GATEWAY_URL=https://gateway.example.com/api
-ACME_GATEWAY_KEY=xxx
-ACME_DEFAULT_PRODUCT_ID=xxx
+```
+# system_settings ca 组（优先使用专用配置，未设置时回落到通用配置）
+acmeUrl  = ACME REST API 地址      ← 回落: url（路径 /api/v\w+ 替换为 /api/acme）
+acmeToken = ACME API 认证 Token    ← 回落: token
 ```
 
 ### 安全机制
@@ -116,6 +147,37 @@ ACME_DEFAULT_PRODUCT_ID=xxx
 - **Nonce 防重放** - `Cache::pull()` 原子操作
 - **EAB 强制要求** - 必须提供有效凭证
 - **时序攻击防护** - HMAC 使用 `hash_equals()`
+
+### 多级代理架构
+
+```
+certbot → Manager A (ACME 服务端) → Manager B / 上级系统 (REST API) → ... → CA
+```
+
+每一级都使用系统 `orders` + `certs` 表，不使用独立的 acme_orders 表。连接的 ACME 服务返回的订单 ID 存入 `certs.api_id`。
+
+### 数据流
+
+```
+1. certbot register  → Manager /acme/new-acct  → 验证 EAB + JWS → 创建 AcmeAccount
+2. certbot certonly  → Manager /acme/new-order → AcmeApiService.createOrder → 上级 REST API
+3. Manager 返回 DNS challenge → 用户添加 _acme-challenge TXT 记录
+4. certbot 通知验证  → Manager /acme/chall     → OrderService.respondToChallenge → 上级触发验证
+5. 验证通过          → Manager /acme/order/.../finalize → OrderService.finalize → 上级签发（可能返回 processing）
+5a. 如果 processing  → certbot 轮询 /acme/order/{referId} → OrderController.getOrder → tryCompletePendingFinalize 检查上游
+6. certbot 下载证书  → Manager /acme/cert      → 返回证书 + 中间证书
+```
+
+### E2E 测试
+
+完整链路：certbot (Docker) → Manager → 上级系统 → CA
+
+验证要点：
+- Manager `certs` 表出现 `channel='acme'` 记录
+- 上级系统 `certs` 表出现对应记录
+- 完整流程：EAB → 注册 → 创建订单 → DNS 验证 → Finalize → 下载证书
+
+详细操作步骤见 `skills/acme-e2e-test/SKILL.md`。
 
 ---
 
@@ -258,6 +320,12 @@ php artisan queue:work --queue Task  # 队列
 
 - 兼容 MySQL 5.7，不使用 `json` 字段类型
 - 数组类型字段使用 `string` 存储，由 Laravel 模型 `'array'` cast 自动 JSON 序列化
+
+## 迁移规范
+
+- **不用 enum**：需要插件扩展的字段使用 `string` 而非 `enum`，方便插件写入自定义值
+- **幂等检查**：修改表结构的迁移必须先检查当前状态（表是否存在、字段类型是否已符合预期），避免重复执行报错
+- **structure.json 不手动改**：迁移变动后发布前通过 `php artisan db:structure --export` 重新导出
 
 ---
 
@@ -488,10 +556,12 @@ ValidateCommand 定时验证
 ### 运行测试
 
 ```bash
-php artisan test                           # 全部测试（需 MySQL）
-php artisan test --exclude-group=database  # 纯单元测试（无需数据库）
-php artisan test --coverage --min=80       # 覆盖率报告
+php artisan test --parallel                           # 全部测试（需 MySQL，推荐加 --parallel 与 CI 一致）
+php artisan test --parallel --exclude-group=database  # 纯单元测试（无需数据库）
+php artisan test --coverage --min=80                  # 覆盖率报告
 ```
+
+> **CI 经验**：本地务必用 `--parallel` 跑测试，与 CI 保持一致。`paratest`（并行测试）对 PHP Warning 的处理比 `phpunit` 更严格——例如无命名空间文件中的 `use Mockery;`、`use ZipArchive;` 等全局类 use 语句，`phpunit` 仅输出 Warning 继续运行，而 `paratest` 会直接 fatal exit 导致 CI 失败。
 
 ### 测试分组
 

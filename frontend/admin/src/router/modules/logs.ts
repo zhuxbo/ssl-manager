@@ -59,16 +59,6 @@ export default {
       }
     },
     {
-      path: "/logs/easy",
-      name: "EasyLogs",
-      component: () => import("@/views/logs/easy/index.vue"),
-      meta: {
-        icon: "ri:file-edit-line",
-        title: "简易申请日志",
-        keepAlive: true
-      }
-    },
-    {
       path: "/logs/error",
       name: "ErrorLogs",
       component: () => import("@/views/logs/error/index.vue"),

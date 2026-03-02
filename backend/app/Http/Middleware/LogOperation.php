@@ -2,10 +2,10 @@
 
 namespace App\Http\Middleware;
 
+use App\Contracts\PluginLogHandler;
 use App\Models\AdminLog;
 use App\Models\ApiLog;
 use App\Models\CallbackLog;
-use App\Models\EasyLog;
 use App\Models\UserLog;
 use App\Services\LogBuffer;
 use App\Traits\LogSanitizer;
@@ -28,6 +28,7 @@ class LogOperation
         'api/admin/logs/*',
         'api/V1/*/health',
         'api/v2/*/health',
+        'acme/*',
         '_debugger/*',
         '_ignition/*',
     ];
@@ -105,8 +106,8 @@ class LogOperation
                 $this->logApiDeployRequest($request, $logData);
             } elseif ($request->is('api/admin/*')) {
                 $this->logAdminRequest($request, $logData);
-            } elseif ($request->is('api/easy/*')) {
-                $this->logEasyRequest($logData);
+            } elseif ($this->handlePluginLog($request, $logData)) {
+                // 插件日志处理器已处理
             } elseif ($request->is('callback/*')) {
                 $this->logCallbackRequest($logData);
             } else {
@@ -203,11 +204,21 @@ class LogOperation
     }
 
     /**
-     * 记录Easy日志
+     * 处理插件日志
      */
-    protected function logEasyRequest(array $logData): void
+    protected function handlePluginLog(Request $request, array $logData): bool
     {
-        LogBuffer::add(EasyLog::class, $logData);
+        $path = $request->path();
+        $handlers = app()->tagged('plugin.log_handlers');
+        foreach ($handlers as $handler) {
+            if ($handler instanceof PluginLogHandler && $handler->shouldHandle($path)) {
+                $handler->handle($logData);
+
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

@@ -55,6 +55,7 @@ pnpm-debug.log*
 
 # Test coverage
 coverage/
+backups/
 
 # 开发/测试目录
 deploy/release-server/

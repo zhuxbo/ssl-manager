@@ -3,6 +3,7 @@
 namespace App\Services\Upgrade;
 
 use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
@@ -280,7 +281,7 @@ class BackupManager
         }
 
         // 备份前端应用（生产环境直接部署，没有 dist 子目录）
-        $apps = ['admin', 'user', 'easy'];
+        $apps = ['admin', 'user'];
         $hasContent = false;
 
         foreach ($apps as $app) {
@@ -330,6 +331,22 @@ class BackupManager
 
         // 构建排除表参数
         $excludeTables = Config::get('upgrade.backup.exclude_tables', []);
+
+        // 动态追加所有 _logs 后缀表（插件日志表等）
+        try {
+            $allTables = DB::select("SHOW TABLES LIKE '%\\_logs'");
+            foreach ($allTables as $row) {
+                $tableName = current((array) $row);
+                if (! preg_match('/^[a-zA-Z0-9_]+$/', $tableName)) {
+                    continue;
+                }
+                if (! in_array($tableName, $excludeTables)) {
+                    $excludeTables[] = $tableName;
+                }
+            }
+        } catch (\Throwable) {
+            // ignore
+        }
         $ignoreArgs = '';
         foreach ($excludeTables as $table) {
             $ignoreArgs .= sprintf(' --ignore-table=%s', escapeshellarg("$database.$table"));

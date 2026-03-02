@@ -59,6 +59,7 @@ export const FORM_PARAMS_DEFAULT = {
   renew: 0,
   reuse_csr: 0,
   gift_root_domain: 0,
+  support_acme: 0,
   refund_period: 30,
   remark: "",
   weight: 0,

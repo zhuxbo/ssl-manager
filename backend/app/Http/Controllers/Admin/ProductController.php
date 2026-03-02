@@ -72,6 +72,9 @@ class ProductController extends BaseController
         if (isset($validated['status'])) {
             $query->where('status', $validated['status']);
         }
+        if (isset($validated['support_acme'])) {
+            $query->where('support_acme', $validated['support_acme']);
+        }
 
         $total = $query->count();
         $items = $query->orderBy('weight')
@@ -197,7 +200,7 @@ class ProductController extends BaseController
         // new: 新增, update: 更新, all: 全部
         $type = $validated['type'] ?? 'new';
 
-        (new Action)->importProduct($source, $brand, $apiId, $type);
+        app(Action::class)->importProduct($source, $brand, $apiId, $type);
     }
 
     /**

@@ -29,7 +29,6 @@ return [
             'user_logs',
             'admin_logs',
             'error_logs',
-            'easy_logs',
             // 队列表
             'jobs',
             'failed_jobs',

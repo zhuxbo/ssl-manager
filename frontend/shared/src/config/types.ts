@@ -37,6 +37,7 @@ export interface PlatformConfigs {
   Brands?: string[];
   DnsTools?: string[];
   Beian?: string;
+  AcmeIssueMode?: boolean;
 }
 
 /**

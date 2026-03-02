@@ -13,7 +13,7 @@ class UpdateRequest extends BaseRequest
             'last_name' => 'required|string|max:50',
             'first_name' => 'required|string|max:50',
             'identification_number' => 'nullable|string|max:100',
-            'title' => 'required|string|max:50',
+            'title' => 'nullable|string|max:50',
             'email' => 'required|string|email|max:100',
             'phone' => 'required|string|max:20',
         ];

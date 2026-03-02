@@ -259,11 +259,13 @@ class VerifyUtil
      * 查询 TXT 记录，支持故障转移
      *
      * @param  string  $host  主机名（如 _certum.example.com）
+     * @param  bool  $direct  仅返回直接属于该主机名的 TXT 记录，排除通过 CNAME 链解析到的记录
      * @return array TXT 记录数组
      */
-    public static function queryTxtRecords(string $host): array
+    public static function queryTxtRecords(string $host, bool $direct = false): array
     {
         $urls = self::getDnsToolsUrls();
+        $normalizedHost = strtolower(rtrim($host, '.'));
 
         if (! empty($urls)) {
             $client = new Client([
@@ -289,9 +291,19 @@ class VerifyUtil
                     $records = $result['data']['records'] ?? [];
                     $txtValues = [];
                     foreach ($records as $record) {
-                        if (($record['type'] ?? '') === 'TXT' && isset($record['value'])) {
-                            $txtValues[] = $record['value'];
+                        if (($record['type'] ?? '') !== 'TXT' || ! isset($record['value'])) {
+                            continue;
                         }
+
+                        // direct 模式：通过 name 字段精确匹配，排除 CNAME 链解析到的 TXT 记录
+                        if ($direct && isset($record['name'])) {
+                            $recordName = strtolower(rtrim($record['name'], '.'));
+                            if ($recordName !== $normalizedHost) {
+                                continue;
+                            }
+                        }
+
+                        $txtValues[] = $record['value'];
                     }
 
                     return $txtValues;
@@ -302,6 +314,14 @@ class VerifyUtil
         }
 
         // 回退到本地 dns_get_record
+        // direct 模式：先查 CNAME，存在则说明 TXT 来自 CNAME 目标（dns_get_record 无法区分 owner name）
+        if ($direct) {
+            $cnameRecords = @dns_get_record($host, DNS_CNAME);
+            if (! empty($cnameRecords)) {
+                return [];
+            }
+        }
+
         $records = @dns_get_record($host, DNS_TXT);
         if (empty($records)) {
             return [];

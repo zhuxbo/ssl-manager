@@ -30,18 +30,14 @@ class DelegationCleanupCommand extends Command
 
     protected ProxyDNS $proxyDNS;
 
-    public function __construct()
-    {
-        parent::__construct();
-        $this->dnsService = new DelegationDnsService;
-        $this->proxyDNS = new ProxyDNS;
-    }
-
     /**
      * Execute the console command.
      */
     public function handle(): void
     {
+        $this->dnsService = app(DelegationDnsService::class);
+        $this->proxyDNS = app(ProxyDNS::class);
+
         $this->info('开始清理委托DNS记录...');
 
         try {

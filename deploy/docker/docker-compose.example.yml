@@ -13,7 +13,6 @@ services:
       - ./backend/public:/var/www/html/backend/public:ro
       - ./frontend/admin:/var/www/html/frontend/admin:ro
       - ./frontend/user:/var/www/html/frontend/user:ro
-      - ./frontend/easy:/var/www/html/frontend/easy:ro
       - ./frontend/web:/var/www/html/frontend/web:ro
       - ./nginx:/var/www/html/nginx:ro
       - ./config/nginx.conf:/etc/nginx/nginx.conf:ro

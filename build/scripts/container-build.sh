@@ -38,7 +38,6 @@ FORCE_BUILD="${FORCE_BUILD:-false}"
 BUILD_BACKEND=false
 BUILD_ADMIN=false
 BUILD_USER=false
-BUILD_EASY=false
 BUILD_NGINX=false
 BUILD_WEB=false
 
@@ -48,14 +47,12 @@ case "$BUILD_MODULE" in
         BUILD_BACKEND=true
         BUILD_ADMIN=true
         BUILD_USER=true
-        BUILD_EASY=true
         BUILD_NGINX=true
         BUILD_WEB=true
         ;;
     api) BUILD_BACKEND=true ;;
     admin) BUILD_ADMIN=true ;;
     user) BUILD_USER=true ;;
-    easy) BUILD_EASY=true ;;
     nginx) BUILD_NGINX=true ;;
     web) BUILD_WEB=true ;;
 esac
@@ -96,7 +93,7 @@ echo ""
 mkdir -p "$WORKSPACE_DIR" "$PRODUCTION_DIR"
 
 # 导出构建标志供子脚本使用
-export BUILD_BACKEND BUILD_ADMIN BUILD_USER BUILD_EASY BUILD_NGINX BUILD_WEB
+export BUILD_BACKEND BUILD_ADMIN BUILD_USER BUILD_NGINX BUILD_WEB
 export BUILD_MODULE BUILD_VERSION RELEASE_CHANNEL FORCE_BUILD
 export SOURCE_DIR WORKSPACE_DIR PRODUCTION_DIR CONFIG_FILE
 
@@ -129,6 +126,7 @@ if [ "$BUILD_ADMIN" = "true" ] || [ "$BUILD_USER" = "true" ]; then
     cp "$SOURCE_DIR/package.json" "$WORKSPACE_DIR/"
     cp "$SOURCE_DIR/pnpm-workspace.yaml" "$WORKSPACE_DIR/"
     cp "$SOURCE_DIR/pnpm-lock.yaml" "$WORKSPACE_DIR/"
+    [ -f "$SOURCE_DIR/.npmrc" ] && cp "$SOURCE_DIR/.npmrc" "$WORKSPACE_DIR/"
 
     # 复制前端目录
     mkdir -p "$WORKSPACE_DIR/frontend"

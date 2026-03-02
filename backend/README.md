@@ -175,8 +175,15 @@ database/
 └── seeders/           # 数据种子
 
 tests/
-├── Feature/           # 功能测试
-└── Unit/             # 单元测试
+├── Feature/
+│   ├── Commands/      # 命令行测试
+│   ├── Models/        # 模型测试
+│   ├── Middleware/     # 中间件测试
+│   ├── Http/          # 控制器测试
+│   ├── Services/      # 服务测试
+│   └── Jobs/          # 队列任务测试
+├── Unit/              # 单元测试
+└── Traits/            # 测试辅助 Traits
 ```
 
 ## 开发规范
@@ -225,6 +232,14 @@ php artisan test
 - API 访问控制
 - 操作审计日志
 - 资金账户管理
+
+### ACME 多级代理
+
+- 支持 certbot → Manager A → Manager B → ... → CA 多级链路
+- 每级独立 ID 体系，通过映射字段关联上游（accountId、orderId、challengeId）
+- AcmeApiService 统一处理「查本级 → 映射 ID → 调上游」流程
+- 延迟扣费：创建订阅时不扣费，推迟到 new-order 提交域名后按实际域名精确计费
+- 订单取消：支持 pending（快速清理）、processing/active（通知上游+退费）三种场景
 
 ### 系统集成
 

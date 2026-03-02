@@ -393,7 +393,7 @@ create_backup() {
         local frontend_tmp="$TEMP_DIR/backup_frontend"
         mkdir -p "$frontend_tmp"
 
-        for app in admin user easy; do
+        for app in admin user; do
             if [ -d "$INSTALL_DIR/frontend/$app" ]; then
                 cp -r "$INSTALL_DIR/frontend/$app" "$frontend_tmp/"
                 has_frontend=true
@@ -489,9 +489,6 @@ perform_upgrade() {
     for file in logo.svg platform-config.json qrcode.png; do
         [ -f "$INSTALL_DIR/frontend/user/$file" ] && cp "$INSTALL_DIR/frontend/user/$file" "$preserve_dir/frontend_config/user_$file"
     done
-    # easy: config.json
-    [ -f "$INSTALL_DIR/frontend/easy/config.json" ] && cp "$INSTALL_DIR/frontend/easy/config.json" "$preserve_dir/frontend_config/easy_config.json"
-
     # 保留自定义 API 适配器（排除核心文件 Api.php 和 default/）
     local api_adapter_dir="$INSTALL_DIR/backend/app/Services/Order/Api"
     if [ -d "$api_adapter_dir" ]; then
@@ -670,8 +667,6 @@ PYEOF
         for file in logo.svg platform-config.json qrcode.png; do
             [ -f "$preserve_dir/frontend_config/user_$file" ] && cp "$preserve_dir/frontend_config/user_$file" "$INSTALL_DIR/frontend/user/$file"
         done
-        # easy
-        [ -f "$preserve_dir/frontend_config/easy_config.json" ] && cp "$preserve_dir/frontend_config/easy_config.json" "$INSTALL_DIR/frontend/easy/config.json"
     fi
 
     # 恢复自定义 API 适配器

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Release 公共函数库
-# 供 local-release.sh 和 remote-release.sh 使用
+# 供 release.sh 使用
 
 # ========================================
 # 颜色定义

@@ -60,7 +60,7 @@ class AutoRenewCommand extends Command
                     ->where('expires_at', '>', now()->subDays(15))
                     ->where('expires_at', '<', now()->addDays(14))
                     ->where(function ($q) {
-                        $q->whereNull('channel')->orWhere('channel', '!=', 'acme');
+                        $q->whereNull('channel')->orWhereNotIn('channel', ['acme', 'api']);
                     });
             })
             // 订单级 auto_renew=true，或订单未设置时回落到用户设置
@@ -97,7 +97,7 @@ class AutoRenewCommand extends Command
                     ->where('expires_at', '>', now()->subDays(15))
                     ->where('expires_at', '<', now()->addDays(14))
                     ->where(function ($q) {
-                        $q->whereNull('channel')->orWhere('channel', '!=', 'acme');
+                        $q->whereNull('channel')->orWhereNotIn('channel', ['acme', 'api']);
                     });
             })
             // 订单级 auto_reissue=true，或订单未设置时回落到用户设置
@@ -141,7 +141,8 @@ class AutoRenewCommand extends Command
 
         // 检查委托有效性，无有效委托则跳过
         $ca = strtolower($product->ca ?? '');
-        if (! $this->checkDelegationValidity($user->id, $cert->alternative_names, $ca)) {
+        $channel = $cert->channel ?? '';
+        if (! $this->checkDelegationValidity($user->id, $cert->alternative_names, $ca, $channel)) {
             $this->warn("订单 #{$order->id} 跳过：无有效委托记录");
 
             return;
@@ -156,7 +157,7 @@ class AutoRenewCommand extends Command
             $estimatedAmount = $cert->amount ?? '0.00';
 
             if (bccomp($availableBalance, $estimatedAmount, 2) < 0) {
-                throw new \Exception("余额不足，可用余额: $availableBalance，预计需要: $estimatedAmount");
+                throw new \Exception("余额不足，可用余额: {$availableBalance}，预计需要: $estimatedAmount");
             }
         }
 
@@ -171,7 +172,7 @@ class AutoRenewCommand extends Command
         ];
 
         // 执行续费或重签
-        $actionService = new Action($user->id);
+        $actionService = app(Action::class, ['userId' => $user->id]);
 
         try {
             if ($action === 'renew') {
@@ -203,7 +204,7 @@ class AutoRenewCommand extends Command
      */
     private function autoPayAndCommit(int $orderId, int $userId): void
     {
-        $actionService = new Action($userId);
+        $actionService = app(Action::class, ['userId' => $userId]);
 
         try {
             // 支付订单
@@ -250,8 +251,8 @@ class AutoRenewCommand extends Command
     /**
      * 检查所有域名是否都有有效委托记录（即时验证）
      */
-    private function checkDelegationValidity(int $userId, string $domains, string $ca): bool
+    private function checkDelegationValidity(int $userId, string $domains, string $ca, string $channel = ''): bool
     {
-        return app(AutoRenewService::class)->checkDelegationValidity($userId, $domains, $ca);
+        return app(AutoRenewService::class)->checkDelegationValidity($userId, $domains, $ca, $channel);
     }
 }

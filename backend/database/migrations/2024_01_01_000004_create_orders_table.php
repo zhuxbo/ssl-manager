@@ -28,6 +28,7 @@ return new class extends Migration
             $table->string('remark', 255)->default('')->comment('会员备注');
             $table->string('eab_kid', 200)->nullable()->index()->comment('EAB Key ID');
             $table->text('eab_hmac')->nullable()->comment('EAB HMAC Key (加密存储)');
+            $table->unsignedBigInteger('acme_account_id')->nullable()->comment('连接的 ACME 服务的账户 ID');
             $table->timestamp('eab_used_at')->nullable()->comment('EAB 使用时间（防重放）');
             $table->boolean('auto_renew')->nullable()->comment('自动续费');
             $table->boolean('auto_reissue')->nullable()->comment('自动重签');

@@ -106,6 +106,14 @@ class Action
                         }
                     }
 
+                    // 保留本地已有的名称和备注，不被导入数据覆盖
+                    if (! empty($product->name)) {
+                        unset($item['name']);
+                    }
+                    if (! empty($product->remark)) {
+                        unset($item['remark']);
+                    }
+
                     $product->update($item);
                 }
             } else {
@@ -617,7 +625,7 @@ class Action
         }
 
         // 创建 delegation 任务处理 TXT 记录写入（SMIME/CodeSign/DocSign 没有 DCV）
-        if (isset($cert->dcv['method']) && $cert->dcv['method'] === 'txt') {
+        if (isset($cert->dcv['method']) && $cert->dcv['method'] === 'txt' && ($cert->dcv['is_delegate'] ?? false)) {
             // 检测 validation 是否为空
             $isEmpty = empty($cert->validation) || ! is_array($cert->validation);
 
@@ -764,6 +772,10 @@ class Action
      */
     public function cancel(int $orderId): void
     {
+        // 先在事务内完成校验
+        $order = null;
+        $isAcme = false;
+
         DB::beginTransaction();
         try {
             // 事务查询不锁定产品
@@ -785,30 +797,42 @@ class Action
             $order->latestCert->status === 'cancelled' && $this->error('订单已取消');
             $order->latestCert->status != 'cancelling' && $this->error('订单状态不是取消中');
 
-            try {
-                $this->api->cancel($orderId);
-            } catch (ApiResponseException $e) {
-                $errors = $e->getApiResponse()['errors'] ?? null;
-                $msg = $e->getApiResponse()['msg'] ?: 'CA取消失败';
-                $this->error($msg, $errors);
+            $isAcme = $order->latestCert->channel === 'acme';
+
+            if ($isAcme) {
+                // ACME 分支：校验通过后先提交事务，executeCancel 内部管理自己的事务和 cancelled_at
+                DB::commit();
+            } else {
+                try {
+                    $this->api->cancel($orderId);
+                } catch (ApiResponseException $e) {
+                    $errors = $e->getApiResponse()['errors'] ?? null;
+                    $msg = $e->getApiResponse()['msg'] ?: 'CA取消失败';
+                    $this->error($msg, $errors);
+                }
+
+                // 获取交易信息
+                $transaction = OrderUtil::getCancelTransaction($order->toArray());
+
+                // 创建交易记录并退款
+                Transaction::create($transaction);
+
+                // 更新订单状态
+                $order->latestCert->update(['status' => 'cancelled']);
+
+                // 保存取消时间
+                $order->update(['cancelled_at' => now()]);
+
+                DB::commit();
             }
-
-            // 获取交易信息
-            $transaction = OrderUtil::getCancelTransaction($order->toArray());
-
-            // 创建交易记录并退款
-            Transaction::create($transaction);
-
-            // 更新订单状态
-            $order->latestCert->update(['status' => 'cancelled']);
-
-            // 保存取消时间
-            $order->update(['cancelled_at' => now()]);
-
-            DB::commit();
         } catch (Throwable $e) {
             DB::rollback();
             throw $e;
+        }
+
+        // ACME 分支：CA 调用和本地清理在外层事务外执行
+        if ($isAcme) {
+            app(\App\Services\Acme\BillingService::class)->executeCancel($order);
         }
 
         $this->success();

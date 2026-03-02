@@ -157,9 +157,7 @@ export function getBackups(): Promise<BaseResponse<{ backups: BackupInfo[] }>> {
 }
 
 // 执行回滚
-export function executeRollback(
-  backupId: string
-): Promise<
+export function executeRollback(backupId: string): Promise<
   BaseResponse<{
     success: boolean;
     backup_id: string;

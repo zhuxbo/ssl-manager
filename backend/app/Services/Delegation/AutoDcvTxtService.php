@@ -38,7 +38,7 @@ class AutoDcvTxtService
             return false;
         }
 
-        if ($cert->dcv['method'] !== 'txt') {
+        if ($cert->dcv['method'] !== 'txt' || ! ($cert->dcv['is_delegate'] ?? false)) {
             return false;
         }
 

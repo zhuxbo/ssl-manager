@@ -37,10 +37,10 @@ class DelegationCheckCommand extends Command
 
     protected CnameDelegationService $delegationService;
 
-    public function __construct()
+    public function __construct(CnameDelegationService $delegationService)
     {
         parent::__construct();
-        $this->delegationService = new CnameDelegationService;
+        $this->delegationService = $delegationService;
     }
 
     /**

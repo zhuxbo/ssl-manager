@@ -1,362 +1,315 @@
 <?php
 
-namespace Tests\Unit\Services\Delegation;
-
 use App\Models\CnameDelegation;
 use App\Services\Delegation\CnameDelegationService;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use PHPUnit\Framework\Attributes\Group;
-use Tests\TestCase;
 use Tests\Traits\CreatesTestData;
 
-/**
- * CnameDelegationService 数据库集成测试
- * 需要真实数据库连接
- */
-#[Group('database')]
-class CnameDelegationServiceTest extends TestCase
-{
-    use CreatesTestData, RefreshDatabase;
+uses(Tests\TestCase::class, CreatesTestData::class, RefreshDatabase::class)->group('database');
 
-    protected bool $seed = true;
+beforeEach(function () {
+    $this->seed = true;
+    $this->seeder = DatabaseSeeder::class;
+    $this->service = new CnameDelegationService;
+});
 
-    protected string $seeder = DatabaseSeeder::class;
+// ==================== createOrGet ====================
 
-    protected CnameDelegationService $service;
+test('create or get creates new delegation', function () {
+    $user = $this->createTestUser();
 
-    protected function setUp(): void
-    {
-        parent::setUp();
-        $this->service = new CnameDelegationService;
-    }
+    $delegation = $this->service->createOrGet($user->id, 'example.com', '_acme-challenge');
 
-    protected function tearDown(): void
-    {
-        parent::tearDown();
-    }
+    expect($delegation)->toBeInstanceOf(CnameDelegation::class);
+    expect($delegation->user_id)->toBe($user->id);
+    expect($delegation->zone)->toBe('example.com');
+    expect($delegation->prefix)->toBe('_acme-challenge');
+    expect($delegation->label)->not->toBeEmpty();
+    expect(strlen($delegation->label))->toBe(32);
+    expect($delegation->valid)->toBeFalse();
+});
 
-    // ==================== createOrGet ====================
+test('create or get returns existing delegation', function () {
+    $user = $this->createTestUser();
 
-    public function test_create_or_get_creates_new_delegation(): void
-    {
-        $user = $this->createTestUser();
+    $delegation1 = $this->service->createOrGet($user->id, 'example.com', '_acme-challenge');
+    $delegation2 = $this->service->createOrGet($user->id, 'example.com', '_acme-challenge');
 
-        $delegation = $this->service->createOrGet($user->id, 'example.com', '_acme-challenge');
+    expect($delegation2->id)->toBe($delegation1->id);
+});
 
-        $this->assertInstanceOf(CnameDelegation::class, $delegation);
-        $this->assertEquals($user->id, $delegation->user_id);
-        $this->assertEquals('example.com', $delegation->zone);
-        $this->assertEquals('_acme-challenge', $delegation->prefix);
-        $this->assertNotEmpty($delegation->label);
-        $this->assertEquals(32, strlen($delegation->label));
-        $this->assertFalse($delegation->valid);
-    }
+test('create or get normalizes domain to lowercase', function () {
+    $user = $this->createTestUser();
 
-    public function test_create_or_get_returns_existing_delegation(): void
-    {
-        $user = $this->createTestUser();
+    $delegation = $this->service->createOrGet($user->id, 'EXAMPLE.COM', '_acme-challenge');
 
-        $delegation1 = $this->service->createOrGet($user->id, 'example.com', '_acme-challenge');
-        $delegation2 = $this->service->createOrGet($user->id, 'example.com', '_acme-challenge');
+    expect($delegation->zone)->toBe('example.com');
+});
 
-        $this->assertEquals($delegation1->id, $delegation2->id);
-    }
+test('create or get stores idn as unicode', function () {
+    $user = $this->createTestUser();
 
-    public function test_create_or_get_normalizes_domain_to_lowercase(): void
-    {
-        $user = $this->createTestUser();
+    $delegation = $this->service->createOrGet($user->id, '中文.com', '_acme-challenge');
 
-        $delegation = $this->service->createOrGet($user->id, 'EXAMPLE.COM', '_acme-challenge');
+    expect($delegation->zone)->toBe('中文.com');
+});
 
-        $this->assertEquals('example.com', $delegation->zone);
-    }
+test('create or get converts punycode input to unicode', function () {
+    $user = $this->createTestUser();
 
-    public function test_create_or_get_stores_idn_as_unicode(): void
-    {
-        $user = $this->createTestUser();
-
-        $delegation = $this->service->createOrGet($user->id, '中文.com', '_acme-challenge');
+    $delegation = $this->service->createOrGet($user->id, 'xn--fiq228c.com', '_acme-challenge');
 
-        $this->assertEquals('中文.com', $delegation->zone);
-    }
+    expect($delegation->zone)->toBe('中文.com');
+});
 
-    public function test_create_or_get_converts_punycode_input_to_unicode(): void
-    {
-        $user = $this->createTestUser();
+test('create or get generates unique label per user', function () {
+    $user1 = $this->createTestUser();
+    $user2 = $this->createTestUser();
 
-        $delegation = $this->service->createOrGet($user->id, 'xn--fiq228c.com', '_acme-challenge');
+    $delegation1 = $this->service->createOrGet($user1->id, 'example.com', '_acme-challenge');
+    $delegation2 = $this->service->createOrGet($user2->id, 'example.com', '_acme-challenge');
 
-        $this->assertEquals('中文.com', $delegation->zone);
-    }
-
-    public function test_create_or_get_generates_unique_label_per_user(): void
-    {
-        $user1 = $this->createTestUser();
-        $user2 = $this->createTestUser();
+    expect($delegation2->label)->not->toBe($delegation1->label);
+});
 
-        $delegation1 = $this->service->createOrGet($user1->id, 'example.com', '_acme-challenge');
-        $delegation2 = $this->service->createOrGet($user2->id, 'example.com', '_acme-challenge');
-
-        $this->assertNotEquals($delegation1->label, $delegation2->label);
-    }
-
-    public function test_create_or_get_different_prefixes_create_different_delegations(): void
-    {
-        $user = $this->createTestUser();
-
-        $delegation1 = $this->service->createOrGet($user->id, 'example.com', '_acme-challenge');
-        $delegation2 = $this->service->createOrGet($user->id, 'example.com', '_dnsauth');
-
-        $this->assertNotEquals($delegation1->id, $delegation2->id);
-    }
-
-    // ==================== findDelegation ====================
-
-    public function test_find_delegation_returns_exact_match(): void
-    {
-        $user = $this->createTestUser();
-        $created = $this->createTestDelegation($user, [
-            'zone' => 'example.com',
-            'prefix' => '_acme-challenge',
-        ]);
-
-        $found = $this->service->findDelegation($user->id, 'example.com', '_acme-challenge');
-
-        $this->assertNotNull($found);
-        $this->assertEquals($created->id, $found->id);
-    }
-
-    public function test_find_delegation_strips_wildcard_prefix(): void
-    {
-        $user = $this->createTestUser();
-        $created = $this->createTestDelegation($user, [
-            'zone' => 'example.com',
-            'prefix' => '_acme-challenge',
-        ]);
-
-        $found = $this->service->findDelegation($user->id, '*.example.com', '_acme-challenge');
-
-        $this->assertNotNull($found);
-        $this->assertEquals($created->id, $found->id);
-    }
-
-    public function test_find_delegation_acme_prefix_only_matches_exact_fqdn(): void
-    {
-        $user = $this->createTestUser();
-        $this->createTestDelegation($user, [
-            'zone' => 'example.com',
-            'prefix' => '_acme-challenge',
-        ]);
-
-        // 子域名不应该匹配根域名的委托（对于 _acme-challenge）
-        $found = $this->service->findDelegation($user->id, 'sub.example.com', '_acme-challenge');
-
-        $this->assertNull($found);
-    }
-
-    public function test_find_delegation_acme_prefix_does_not_normalize_www_to_root(): void
-    {
-        $user = $this->createTestUser();
-        $this->createTestDelegation($user, [
-            'zone' => 'example.com',
-            'prefix' => '_acme-challenge',
-        ]);
-
-        // 确保 www 在 _acme-challenge 场景下保持精确匹配语义
-        $found = $this->service->findDelegation($user->id, 'www.example.com', '_acme-challenge');
-
-        $this->assertNull($found);
-    }
-
-    public function test_find_delegation_dnsauth_prefix_only_matches_exact_fqdn(): void
-    {
-        $user = $this->createTestUser();
-        $this->createTestDelegation($user, [
-            'zone' => 'example.com',
-            'prefix' => '_dnsauth',
-        ]);
-
-        // 子域名不应该匹配根域名的委托
-        $found = $this->service->findDelegation($user->id, 'sub.example.com', '_dnsauth');
-
-        $this->assertNull($found);
-    }
-
-    public function test_find_delegation_other_prefix_falls_back_to_root_domain(): void
-    {
-        $user = $this->createTestUser();
-        $created = $this->createTestDelegation($user, [
-            'zone' => 'example.com',
-            'prefix' => '_pki-validation',
-        ]);
-
-        // 子域名应该回落到根域名
-        $found = $this->service->findDelegation($user->id, 'sub.example.com', '_pki-validation');
-
-        $this->assertNotNull($found);
-        $this->assertEquals($created->id, $found->id);
-    }
-
-    public function test_find_delegation_prefers_subdomain_over_root(): void
-    {
-        $user = $this->createTestUser();
-        $this->createTestDelegation($user, [
-            'zone' => 'example.com',
-            'prefix' => '_pki-validation',
-        ]);
-        $subDelegation = $this->createTestDelegation($user, [
-            'zone' => 'sub.example.com',
-            'prefix' => '_pki-validation',
-        ]);
-
-        $found = $this->service->findDelegation($user->id, 'sub.example.com', '_pki-validation');
-
-        $this->assertEquals($subDelegation->id, $found->id);
-    }
-
-    public function test_find_delegation_returns_null_when_not_found(): void
-    {
-        $user = $this->createTestUser();
-
-        $found = $this->service->findDelegation($user->id, 'notexist.com', '_acme-challenge');
-
-        $this->assertNull($found);
-    }
-
-    // ==================== findValidDelegation ====================
-
-    public function test_find_valid_delegation_returns_only_valid(): void
-    {
-        $user = $this->createTestUser();
-        $this->createTestDelegation($user, [
-            'zone' => 'example.com',
-            'prefix' => '_acme-challenge',
-            'valid' => true,
-        ]);
-
-        $found = $this->service->findValidDelegation($user->id, 'example.com', '_acme-challenge');
-
-        $this->assertNotNull($found);
-        $this->assertTrue($found->valid);
-    }
-
-    public function test_find_valid_delegation_returns_null_for_invalid(): void
-    {
-        $user = $this->createTestUser();
-        $this->createTestDelegation($user, [
-            'zone' => 'example.com',
-            'prefix' => '_acme-challenge',
-            'valid' => false,
-        ]);
-
-        $found = $this->service->findValidDelegation($user->id, 'example.com', '_acme-challenge');
-
-        $this->assertNull($found);
-    }
-
-    public function test_find_valid_delegation_acme_prefix_does_not_normalize_www_to_root(): void
-    {
-        $user = $this->createTestUser();
-        $this->createTestDelegation($user, [
-            'zone' => 'example.com',
-            'prefix' => '_acme-challenge',
-            'valid' => true,
-        ]);
-
-        // 确保 www 在 _acme-challenge 场景下不回落到根域
-        $found = $this->service->findValidDelegation($user->id, 'www.example.com', '_acme-challenge');
-
-        $this->assertNull($found);
-    }
-
-    // ==================== checkAndUpdateValidity ====================
-
-    public function test_check_and_update_validity_returns_boolean(): void
-    {
-        $user = $this->createTestUser();
-        $delegation = $this->createTestDelegation($user, [
-            'zone' => 'example.com',
-            'prefix' => '_acme-challenge',
-            'valid' => false,
-            'fail_count' => 3,
-        ]);
-
-        // 实际调用会失败（因为没有真实的 CNAME 记录）
-        // 这个测试验证方法能正常执行并返回布尔值
-        $result = $this->service->checkAndUpdateValidity($delegation);
-
-        $this->assertIsBool($result);
-        $this->assertNotNull($delegation->last_checked_at);
-    }
-
-    public function test_check_and_update_validity_failure_increments_fail_count(): void
-    {
-        $user = $this->createTestUser();
-        $delegation = $this->createTestDelegation($user, [
-            'zone' => 'example.com',
-            'prefix' => '_acme-challenge',
-            'valid' => true,
-            'fail_count' => 0,
-        ]);
-
-        // 实际调用会失败（因为没有真实的 CNAME 记录）
-        $result = $this->service->checkAndUpdateValidity($delegation);
-
-        $delegation->refresh();
-        $this->assertFalse($result);
-        $this->assertFalse($delegation->valid);
-        $this->assertGreaterThan(0, $delegation->fail_count);
-    }
-
-    // ==================== withCnameGuide ====================
-
-    public function test_with_cname_guide(): void
-    {
-        $user = $this->createTestUser();
-        $delegation = $this->createTestDelegation($user, [
-            'zone' => 'example.com',
-            'prefix' => '_acme-challenge',
-        ]);
-
-        $result = $this->service->withCnameGuide($delegation);
-
-        $this->assertArrayHasKey('cname_to', $result);
-        $this->assertEquals('_acme-challenge.example.com', $result['cname_to']['host']);
-        // value 依赖系统设置 delegation.proxyZone，可能为空
-        $this->assertArrayHasKey('value', $result['cname_to']);
-    }
-
-    // ==================== update ====================
-
-    public function test_update_regen_label(): void
-    {
-        $user = $this->createTestUser();
-        $delegation = $this->createTestDelegation($user, [
-            'zone' => 'example.com',
-            'prefix' => '_acme-challenge',
-            'valid' => true,
-        ]);
-        $oldLabel = $delegation->label;
-
-        $updated = $this->service->update($user->id, $delegation->id, ['regen_label' => true]);
-
-        // 注意：由于 label 生成使用相同的输入，新 label 可能相同
-        // 但 valid 应该被重置
-        $this->assertFalse($updated->valid);
-        $this->assertEquals(0, $updated->fail_count);
-    }
-
-    public function test_update_throws_exception_for_other_user(): void
-    {
-        $user1 = $this->createTestUser();
-        $user2 = $this->createTestUser();
-        $delegation = $this->createTestDelegation($user1, [
-            'zone' => 'example.com',
-            'prefix' => '_acme-challenge',
-        ]);
-
-        $this->expectException(\Illuminate\Database\Eloquent\ModelNotFoundException::class);
-        $this->service->update($user2->id, $delegation->id, ['regen_label' => true]);
-    }
-}
+test('create or get different prefixes create different delegations', function () {
+    $user = $this->createTestUser();
+
+    $delegation1 = $this->service->createOrGet($user->id, 'example.com', '_acme-challenge');
+    $delegation2 = $this->service->createOrGet($user->id, 'example.com', '_dnsauth');
+
+    expect($delegation2->id)->not->toBe($delegation1->id);
+});
+
+// ==================== findDelegation ====================
+
+test('find delegation returns exact match', function () {
+    $user = $this->createTestUser();
+    $created = $this->createTestDelegation($user, [
+        'zone' => 'example.com',
+        'prefix' => '_acme-challenge',
+    ]);
+
+    $found = $this->service->findDelegation($user->id, 'example.com', '_acme-challenge');
+
+    expect($found)->not->toBeNull();
+    expect($found->id)->toBe($created->id);
+});
+
+test('find delegation strips wildcard prefix', function () {
+    $user = $this->createTestUser();
+    $created = $this->createTestDelegation($user, [
+        'zone' => 'example.com',
+        'prefix' => '_acme-challenge',
+    ]);
+
+    $found = $this->service->findDelegation($user->id, '*.example.com', '_acme-challenge');
+
+    expect($found)->not->toBeNull();
+    expect($found->id)->toBe($created->id);
+});
+
+test('find delegation acme prefix only matches exact fqdn', function () {
+    $user = $this->createTestUser();
+    $this->createTestDelegation($user, [
+        'zone' => 'example.com',
+        'prefix' => '_acme-challenge',
+    ]);
+
+    // 子域名不应该匹配根域名的委托（对于 _acme-challenge）
+    $found = $this->service->findDelegation($user->id, 'sub.example.com', '_acme-challenge');
+
+    expect($found)->toBeNull();
+});
+
+test('find delegation acme prefix does not normalize www to root', function () {
+    $user = $this->createTestUser();
+    $this->createTestDelegation($user, [
+        'zone' => 'example.com',
+        'prefix' => '_acme-challenge',
+    ]);
+
+    // 确保 www 在 _acme-challenge 场景下保持精确匹配语义
+    $found = $this->service->findDelegation($user->id, 'www.example.com', '_acme-challenge');
+
+    expect($found)->toBeNull();
+});
+
+test('find delegation dnsauth prefix only matches exact fqdn', function () {
+    $user = $this->createTestUser();
+    $this->createTestDelegation($user, [
+        'zone' => 'example.com',
+        'prefix' => '_dnsauth',
+    ]);
+
+    // 子域名不应该匹配根域名的委托
+    $found = $this->service->findDelegation($user->id, 'sub.example.com', '_dnsauth');
+
+    expect($found)->toBeNull();
+});
+
+test('find delegation other prefix falls back to root domain', function () {
+    $user = $this->createTestUser();
+    $created = $this->createTestDelegation($user, [
+        'zone' => 'example.com',
+        'prefix' => '_pki-validation',
+    ]);
+
+    // 子域名应该回落到根域名
+    $found = $this->service->findDelegation($user->id, 'sub.example.com', '_pki-validation');
+
+    expect($found)->not->toBeNull();
+    expect($found->id)->toBe($created->id);
+});
+
+test('find delegation prefers subdomain over root', function () {
+    $user = $this->createTestUser();
+    $this->createTestDelegation($user, [
+        'zone' => 'example.com',
+        'prefix' => '_pki-validation',
+    ]);
+    $subDelegation = $this->createTestDelegation($user, [
+        'zone' => 'sub.example.com',
+        'prefix' => '_pki-validation',
+    ]);
+
+    $found = $this->service->findDelegation($user->id, 'sub.example.com', '_pki-validation');
+
+    expect($found->id)->toBe($subDelegation->id);
+});
+
+test('find delegation returns null when not found', function () {
+    $user = $this->createTestUser();
+
+    $found = $this->service->findDelegation($user->id, 'notexist.com', '_acme-challenge');
+
+    expect($found)->toBeNull();
+});
+
+// ==================== findValidDelegation ====================
+
+test('find valid delegation returns only valid', function () {
+    $user = $this->createTestUser();
+    $this->createTestDelegation($user, [
+        'zone' => 'example.com',
+        'prefix' => '_acme-challenge',
+        'valid' => true,
+    ]);
+
+    $found = $this->service->findValidDelegation($user->id, 'example.com', '_acme-challenge');
+
+    expect($found)->not->toBeNull();
+    expect($found->valid)->toBeTrue();
+});
+
+test('find valid delegation returns null for invalid', function () {
+    $user = $this->createTestUser();
+    $this->createTestDelegation($user, [
+        'zone' => 'example.com',
+        'prefix' => '_acme-challenge',
+        'valid' => false,
+    ]);
+
+    $found = $this->service->findValidDelegation($user->id, 'example.com', '_acme-challenge');
+
+    expect($found)->toBeNull();
+});
+
+test('find valid delegation acme prefix does not normalize www to root', function () {
+    $user = $this->createTestUser();
+    $this->createTestDelegation($user, [
+        'zone' => 'example.com',
+        'prefix' => '_acme-challenge',
+        'valid' => true,
+    ]);
+
+    // 确保 www 在 _acme-challenge 场景下不回落到根域
+    $found = $this->service->findValidDelegation($user->id, 'www.example.com', '_acme-challenge');
+
+    expect($found)->toBeNull();
+});
+
+// ==================== checkAndUpdateValidity ====================
+
+test('check and update validity returns boolean', function () {
+    $user = $this->createTestUser();
+    $delegation = $this->createTestDelegation($user, [
+        'zone' => 'example.com',
+        'prefix' => '_acme-challenge',
+        'valid' => false,
+        'fail_count' => 3,
+    ]);
+
+    // 实际调用会失败（因为没有真实的 CNAME 记录）
+    // 这个测试验证方法能正常执行并返回布尔值
+    $result = $this->service->checkAndUpdateValidity($delegation);
+
+    expect($result)->toBeBool();
+    expect($delegation->last_checked_at)->not->toBeNull();
+});
+
+test('check and update validity failure increments fail count', function () {
+    $user = $this->createTestUser();
+    $delegation = $this->createTestDelegation($user, [
+        'zone' => 'example.com',
+        'prefix' => '_acme-challenge',
+        'valid' => true,
+        'fail_count' => 0,
+    ]);
+
+    // 实际调用会失败（因为没有真实的 CNAME 记录）
+    $result = $this->service->checkAndUpdateValidity($delegation);
+
+    $delegation->refresh();
+    expect($result)->toBeFalse();
+    expect($delegation->valid)->toBeFalse();
+    expect($delegation->fail_count)->toBeGreaterThan(0);
+});
+
+// ==================== withCnameGuide ====================
+
+test('with cname guide', function () {
+    $user = $this->createTestUser();
+    $delegation = $this->createTestDelegation($user, [
+        'zone' => 'example.com',
+        'prefix' => '_acme-challenge',
+    ]);
+
+    $result = $this->service->withCnameGuide($delegation);
+
+    expect($result)->toHaveKey('cname_to');
+    expect($result['cname_to']['host'])->toBe('_acme-challenge.example.com');
+    // value 依赖系统设置 delegation.proxyZone，可能为空
+    expect($result['cname_to'])->toHaveKey('value');
+});
+
+// ==================== update ====================
+
+test('update regen label', function () {
+    $user = $this->createTestUser();
+    $delegation = $this->createTestDelegation($user, [
+        'zone' => 'example.com',
+        'prefix' => '_acme-challenge',
+        'valid' => true,
+    ]);
+    $oldLabel = $delegation->label;
+
+    $updated = $this->service->update($user->id, $delegation->id, ['regen_label' => true]);
+
+    // 注意：由于 label 生成使用相同的输入，新 label 可能相同
+    // 但 valid 应该被重置
+    expect($updated->valid)->toBeFalse();
+    expect($updated->fail_count)->toBe(0);
+});
+
+test('update throws exception for other user', function () {
+    $user1 = $this->createTestUser();
+    $user2 = $this->createTestUser();
+    $delegation = $this->createTestDelegation($user1, [
+        'zone' => 'example.com',
+        'prefix' => '_acme-challenge',
+    ]);
+
+    $this->service->update($user2->id, $delegation->id, ['regen_label' => true]);
+})->throws(\Illuminate\Database\Eloquent\ModelNotFoundException::class);

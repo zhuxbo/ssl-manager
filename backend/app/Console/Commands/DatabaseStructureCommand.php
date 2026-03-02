@@ -384,11 +384,12 @@ class DatabaseStructureCommand extends Command
         Config::set('database.connections.log', Config::get('database.connections.temp'));
         DB::purge('log');
 
-        // 执行迁移
+        // 执行迁移（仅主系统迁移，排除插件迁移）
         try {
             $this->call('migrate:fresh', [
                 '--database' => 'temp',
                 '--force' => true,
+                '--path' => 'database/migrations',
             ]);
         } finally {
             // 迁移完成后立即恢复 log 连接，避免后续代码继续访问临时库

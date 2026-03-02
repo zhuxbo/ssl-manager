@@ -70,7 +70,6 @@ Monorepo 构建脚本 - 容器化构建
   api         仅构建后端 API
   admin       仅构建管理端前端
   user        仅构建用户端前端
-  easy        处理简易端（无构建，直接同步发布）
   nginx       仅更新 nginx 配置
   web         仅更新 web 静态文件
 
@@ -146,11 +145,11 @@ while [ $i -lt ${#ARGS[@]} ]; do
             ;;
         *)
             # 模块名
-            if [[ "$arg" =~ ^(all|api|admin|user|easy|nginx|web)$ ]]; then
+            if [[ "$arg" =~ ^(all|api|admin|user|nginx|web)$ ]]; then
                 BUILD_MODULE="$arg"
             else
                 log_error "无效的模块名: $arg"
-                echo "有效模块: all, api, admin, user, easy, nginx, web"
+                echo "有效模块: all, api, admin, user, nginx, web"
                 exit 1
             fi
             ;;
@@ -350,7 +349,7 @@ log_step "启动容器执行构建"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 # 构建 docker run 选项
-DOCKER_OPTS=(--rm --memory=2g)
+DOCKER_OPTS=(--rm --memory=4g)
 
 # 挂载 monorepo 源代码（只读）
 DOCKER_OPTS+=( -v "$MONOREPO_ROOT:/source:ro" )

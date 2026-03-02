@@ -24,7 +24,19 @@ class AuthorizationController extends Controller
         $authorization = $this->orderService->getAuthorization($token);
 
         if (! $authorization) {
-            return $this->acmeError('malformed', 'Authorization not found', 404);
+            return $this->acmeError('about:blank', 'Authorization not found', 404);
+        }
+
+        // POST 请求有 JWS 认证，验证归属；GET 请求依赖 token 不可猜测性
+        $account = $request->attributes->get('acme_account');
+        if ($request->isMethod('POST') && $authorization->cert && ! $this->orderService->verifyOwnership($authorization->cert, $account)) {
+            return $this->acmeError('unauthorized', 'Authorization does not belong to this account', 403);
+        }
+
+        // 轮询时重新查询上游状态（challenge 已提交但 authz 仍为 pending）
+        if ($authorization->status === 'pending' && $authorization->acme_challenge_id) {
+            $this->orderService->respondToChallenge($authorization);
+            $authorization->refresh();
         }
 
         $nonce = $this->nonceService->generate();
@@ -47,7 +59,7 @@ class AuthorizationController extends Controller
         $nonce = $this->nonceService->generate();
 
         return response()->json([
-            'type' => "urn:ietf:params:acme:error:$type",
+            'type' => $type === 'about:blank' ? 'about:blank' : "urn:ietf:params:acme:error:$type",
             'detail' => $detail,
             'status' => $status,
         ], $status, [

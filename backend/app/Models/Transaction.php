@@ -3,12 +3,15 @@
 namespace App\Models;
 
 use Exception;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Facades\DB;
 use Throwable;
 
 class Transaction extends BaseModel
 {
+    use HasFactory;
+
     // Laravel 不更新时间戳
     public const null UPDATED_AT = null;
 

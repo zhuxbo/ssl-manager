@@ -269,7 +269,7 @@ function renderInstallSuccess(event, logDiv) {
     successHtml += '</div>';
 
     successHtml += '<div style="margin-top: 20px; text-align: center;">';
-    successHtml += '<a href="/" class="btn" style="display: inline-block; padding: 12px 30px; background: #4CAF50; color: white; text-decoration: none; border-radius: 6px;">进入系统</a>';
+    successHtml += '<a href="/admin" class="btn" style="display: inline-block; padding: 12px 30px; background: #4CAF50; color: white; text-decoration: none; border-radius: 6px;">进入系统</a>';
     successHtml += '</div>';
 
     logDiv.innerHTML = successHtml;

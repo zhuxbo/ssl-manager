@@ -20,6 +20,7 @@ class IndexRequest extends BaseRequest
             'name_type' => 'nullable|string|in:standard,wildcard,ipv4,ipv6',
             'domains' => 'nullable|string|in:single',
             'status' => 'nullable|integer|in:0,1',
+            'support_acme' => 'nullable|integer|in:0,1',
         ];
     }
 }

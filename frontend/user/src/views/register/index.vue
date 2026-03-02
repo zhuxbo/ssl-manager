@@ -271,7 +271,7 @@ const rules = {
       trigger: "blur"
     },
     {
-      pattern: /^[a-zA-Z0-9_-]+@[a-zA-Z0-9_-]+(\.[a-zA-Z0-9_-]+)+$/,
+      pattern: /^[a-zA-Z0-9._-]+@[a-zA-Z0-9_-]+(\.[a-zA-Z0-9_-]+)+$/,
       message: "请输入正确的邮箱格式",
       trigger: "blur"
     }

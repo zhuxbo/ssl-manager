@@ -48,6 +48,7 @@ class StoreRequest extends BaseProductRequest
             'renew' => 'nullable|in:0,1',
             'reuse_csr' => 'nullable|in:0,1',
             'gift_root_domain' => 'in:0,1',
+            'support_acme' => 'in:0,1',
             'refund_period' => 'required|integer|min:0|max:30',
             'remark' => 'nullable|string|max:500',
             'weight' => 'required|integer|min:0',
@@ -164,5 +165,4 @@ class StoreRequest extends BaseProductRequest
             );
         }
     }
-
 }

@@ -52,14 +52,21 @@ class ApiExceptions
      */
     public function logException(Throwable $e): void
     {
-        // CLI 环境下跳过日志记录（避免 request 不存在的问题）
-        if (app()->runningInConsole()) {
-            return;
-        }
-
         if (! $this->shouldNotLog($e)) {
-            $request = Request::instance();
-            $url = substr($request->url(), 0, 500);
+            if (app()->runningInConsole()) {
+                $method = 'CLI';
+                $url = implode(' ', $_SERVER['argv'] ?? ['unknown']);
+                $ip = '127.0.0.1';
+            } else {
+                $request = Request::instance();
+                $method = $request->method();
+                $url = $request->fullUrl();
+                $ip = $request->ip();
+            }
+
+            if (strlen($url) > 2000) {
+                $url = substr($url, 0, 1997).'...';
+            }
 
             // 截断过长的错误信息，防止数据库字段溢出
             $message = $e->getMessage();
@@ -68,13 +75,13 @@ class ApiExceptions
             }
 
             LogBuffer::add(ErrorLog::class, [
-                'method' => $request->method(),
+                'method' => $method,
                 'url' => $url,
                 'exception' => class_basename($e),
                 'message' => $message,
                 'trace' => $this->sanitizeResponse($e->getTrace()),
                 'status_code' => $this->getExceptionStatusCode($e),
-                'ip' => $request->ip(),
+                'ip' => $ip,
             ]);
         }
     }
@@ -118,6 +125,11 @@ class ApiExceptions
      */
     protected function handleApiException(Throwable $e): JsonResponse
     {
+        // ACME 路由返回 RFC 7807 格式
+        if ($this->isAcmeRequest()) {
+            return $this->handleAcmeException($e);
+        }
+
         if ($e instanceof ApiResponseException) {
             return new JsonResponse($e->getApiResponse());
         }
@@ -155,5 +167,47 @@ class ApiExceptions
         }
 
         return new JsonResponse($response, $status);
+    }
+
+    /**
+     * 判断是否 ACME 路由请求
+     */
+    protected function isAcmeRequest(): bool
+    {
+        try {
+            return Request::instance()->is('acme/*');
+        } catch (Throwable) {
+            return false;
+        }
+    }
+
+    /**
+     * ACME 路由异常处理 — 返回 RFC 7807 格式
+     */
+    protected function handleAcmeException(Throwable $e): JsonResponse
+    {
+        $debug = config('app.debug', false);
+        $detail = $debug ? $e->getMessage() : 'Internal server error';
+
+        \Log::error('ACME exception', [
+            'exception' => get_class($e),
+            'message' => $e->getMessage(),
+            'file' => $e->getFile().':'.$e->getLine(),
+        ]);
+
+        $status = match (true) {
+            $e instanceof NotFoundHttpException => 404,
+            $e instanceof ThrottleRequestsException => 429,
+            $e instanceof HttpException => $e->getStatusCode(),
+            default => 500,
+        };
+
+        return new JsonResponse([
+            'type' => 'urn:ietf:params:acme:error:serverInternal',
+            'detail' => $detail,
+            'status' => $status,
+        ], $status, [
+            'Content-Type' => 'application/problem+json',
+        ]);
     }
 }

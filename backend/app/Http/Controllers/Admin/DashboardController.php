@@ -283,14 +283,14 @@ class DashboardController extends Controller
         $brandStats = Cache::remember($cacheKey, $cacheMinutes * 60, function () use ($days) {
             $startDate = now()->subDays($days);
 
-            // 基于产品的brand字段统计
-            return Order::select('products.brand')
+            // 基于产品的brand字段统计（LOWER 兼容历史数据大小写不一致）
+            return Order::selectRaw('LOWER(products.brand) as brand')
                 ->selectRaw('COUNT(orders.id) as total_orders')
                 ->selectRaw('SUM(orders.amount) as revenue')
                 ->join('products', 'orders.product_id', '=', 'products.id')
                 ->where('orders.created_at', '>=', $startDate)
                 ->whereNotNull('products.brand')
-                ->groupBy('products.brand')
+                ->groupByRaw('LOWER(products.brand)')
                 ->orderByDesc('revenue')
                 ->get()
                 ->map(function ($item) {

@@ -8,17 +8,26 @@
     </el-button>
     <template #dropdown>
       <el-dropdown-menu>
-        <el-dropdown-item v-if="cert.status == 'active'" command="send">{{
-          "发送"
-        }}</el-dropdown-item>
-        <el-dropdown-item v-if="cert.status == 'active'" command="transfer">{{
-          "过户"
-        }}</el-dropdown-item>
-        <el-dropdown-item v-if="cert.status == 'pending'" command="commit">{{
-          "提交"
-        }}</el-dropdown-item>
         <el-dropdown-item
-          v-if="['processing', 'active', 'approving'].includes(cert.status)"
+          v-if="cert.status == 'active' && !isAcme"
+          command="send"
+          >{{ "发送" }}</el-dropdown-item
+        >
+        <el-dropdown-item
+          v-if="cert.status == 'active' && !isAcme"
+          command="transfer"
+          >{{ "过户" }}</el-dropdown-item
+        >
+        <el-dropdown-item
+          v-if="cert.status == 'pending' && !isAcme"
+          command="commit"
+          >{{ "提交" }}</el-dropdown-item
+        >
+        <el-dropdown-item
+          v-if="
+            ['processing', 'active', 'approving'].includes(cert.status) &&
+            !isAcme
+          "
           command="sync"
           >{{ "同步" }}</el-dropdown-item
         >
@@ -31,13 +40,13 @@
           >{{ "撤回" }}</el-dropdown-item
         >
         <el-dropdown-item
-          v-if="cert.status == 'active'"
+          v-if="cert.status == 'active' && !isAcme"
           command="renew"
           divided
           >{{ "续费" }}</el-dropdown-item
         >
         <el-dropdown-item
-          v-if="['active', 'expired'].includes(cert.status)"
+          v-if="['active', 'expired'].includes(cert.status) && !isAcme"
           command="reissue"
           divided
           >{{ "重签" }}</el-dropdown-item
@@ -115,6 +124,7 @@ const params = route.params;
 
 const order = inject("order") as any;
 const cert = inject("cert") as any;
+const isAcme = inject("isAcme", ref(false)) as any;
 const sync = inject("sync") as Function;
 const get = inject("get") as Function;
 
@@ -127,7 +137,7 @@ const allowCancel = computed(() => {
   }
   return (
     ["processing", "approving", "active"].includes(order.latest_cert.status) &&
-    Math.floor(Date.now() / 1000) - new Date(order.created_at).getTime() <
+    dayjs().diff(dayjs(order.created_at), "seconds") <
       86400 * order.product.refund_period
   );
 });

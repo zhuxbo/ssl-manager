@@ -5,14 +5,12 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Requests\Logs\LogsApiRequest;
 use App\Http\Requests\Logs\LogsCallbackRequest;
 use App\Http\Requests\Logs\LogsCaRequest;
-use App\Http\Requests\Logs\LogsEasyRequest;
 use App\Http\Requests\Logs\LogsErrorRequest;
 use App\Http\Requests\Logs\LogsWebRequest;
 use App\Models\AdminLog;
 use App\Models\ApiLog;
 use App\Models\CallbackLog;
 use App\Models\CaLog;
-use App\Models\EasyLog;
 use App\Models\ErrorLog;
 use App\Models\UserLog;
 
@@ -36,7 +34,6 @@ class LogsController extends BaseController
                 $query->select(['id', 'username']);
             }])->find($id),
             'callback' => CallbackLog::find($id),
-            'easy' => EasyLog::find($id),
             'ca' => CaLog::find($id),
             'error' => ErrorLog::find($id),
         };
@@ -78,12 +75,6 @@ class LogsController extends BaseController
     {
         $fields = ['id', 'url', 'method', 'created_at', 'status_code', 'exception', 'message', 'ip'];
         $this->logsQuery(ErrorLog::query()->select($fields), '', $request);
-    }
-
-    public function easy(LogsEasyRequest $request): void
-    {
-        $fields = ['id', 'url', 'status', 'created_at', 'method', 'ip'];
-        $this->logsQuery(EasyLog::query()->select($fields), '', $request);
     }
 
     private function logsQuery($query, string $relation, $request): void

@@ -14,17 +14,7 @@ return new class extends Migration
             $table->decimal('amount', 10)->default(0.00)->comment('金额');
             $table->enum('type', ['addfunds', 'refunds', 'deduct', 'reverse'])->index()
                 ->comment('类型:addfunds=充值,refunds=退款,deduct=扣款,reverse=退回');
-            $table->enum('pay_method', [
-                'wechat',
-                'alipay',
-                'credit',
-                'taobao',
-                'pinduoduo',
-                'jingdong',
-                'douyin',
-                'gift',
-                'other',
-            ])->default('other')->comment('支付方法');
+            $table->string('pay_method', 32)->default('other')->comment('支付方法');
             $table->string('pay_sn', 256)->nullable()->comment('支付编号');
             $table->string('ip', 200)->nullable()->comment('IP');
             $table->string('remark', 500)->nullable()->comment('备注');

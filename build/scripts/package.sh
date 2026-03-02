@@ -240,15 +240,6 @@ rsync -a --exclude-from="$FULL_EXCLUDE_FILE" "$PRODUCTION_DIR/" "$FULL_DIR/"
 # 计算源目录路径（BUILD_DIR 的父目录是项目根目录）
 PROJECT_ROOT="$(cd "$BUILD_DIR/.." && pwd)"
 
-# 确保 easy 目录存在（easy 是纯静态文件，直接从源目录复制）
-EASY_SOURCE="$PROJECT_ROOT/frontend/easy"
-if [ ! -d "$FULL_DIR/frontend/easy" ] && [ -d "$EASY_SOURCE" ]; then
-    log_info "从源目录复制 easy 前端..."
-    mkdir -p "$FULL_DIR/frontend/easy"
-    rsync -a --exclude='.git*' --exclude='*.md' --exclude='LICENSE*' \
-        "$EASY_SOURCE/" "$FULL_DIR/frontend/easy/"
-fi
-
 # 复制 web 目录（自定义静态页面）
 WEB_SOURCE="$BUILD_DIR/web"
 if [ -d "$WEB_SOURCE" ]; then
@@ -266,7 +257,7 @@ if [ -d "$NGINX_SOURCE" ]; then
 fi
 
 # 确保前端目录完整
-for app in admin user easy web; do
+for app in admin user web; do
     if [ -d "$FULL_DIR/frontend/$app" ]; then
         log_info "已包含前端: $app"
     fi
@@ -341,22 +332,6 @@ if [ -d "$PRODUCTION_DIR/frontend" ]; then
             log_info "升级包已包含前端: $app（已排除用户配置）"
         fi
     done
-fi
-
-# 确保 easy 目录存在（从源目录复制）
-if [ ! -d "$UPGRADE_DIR/frontend/easy" ] && [ -d "$EASY_SOURCE" ]; then
-    log_info "升级包：从源目录复制 easy 前端..."
-    mkdir -p "$UPGRADE_DIR/frontend/easy"
-    # 创建 easy 的排除列表（过滤 frontend/easy/ 前缀的规则）
-    EASY_EXCLUDE_FILE="$WORK_DIR/upgrade-frontend-easy-exclude.txt"
-    create_exclude_file "upgrade" "$EASY_EXCLUDE_FILE" "frontend/easy/"
-    # 添加通用排除（easy 从源目录复制，需要额外排除）
-    echo ".git*" >> "$EASY_EXCLUDE_FILE"
-    echo "*.md" >> "$EASY_EXCLUDE_FILE"
-    echo "LICENSE*" >> "$EASY_EXCLUDE_FILE"
-
-    rsync -a --exclude-from="$EASY_EXCLUDE_FILE" "$EASY_SOURCE/" "$UPGRADE_DIR/frontend/easy/"
-    log_info "升级包已包含前端: easy（已排除用户配置）"
 fi
 
 # 复制 nginx 目录（路由配置，升级时需要更新）

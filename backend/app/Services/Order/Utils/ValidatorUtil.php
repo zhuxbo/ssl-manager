@@ -333,6 +333,9 @@ class ValidatorUtil
      */
     public static function validateContact(array $contact): array
     {
+        if (empty(self::$rules)) {
+            self::init();
+        }
         $config = self::$rules['contact'];
         $validator = Validator::make(
             $contact,
@@ -349,6 +352,9 @@ class ValidatorUtil
      */
     public static function validateOrganization(array $organization): array
     {
+        if (empty(self::$rules)) {
+            self::init();
+        }
         $config = self::$rules['organization'];
         $validator = Validator::make(
             $organization,

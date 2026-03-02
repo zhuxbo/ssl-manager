@@ -21,7 +21,10 @@ class AcmeJwsMiddleware
     {
         // 跳过 GET/HEAD 请求（如 directory、new-nonce）
         if (in_array($request->method(), ['GET', 'HEAD'])) {
-            return $next($request);
+            $response = $next($request);
+            \Log::info('ACME', ['method' => $request->method(), 'url' => $request->fullUrl(), 'status' => $response->getStatusCode()]);
+
+            return $response;
         }
 
         // 解析 JWS
@@ -50,6 +53,18 @@ class AcmeJwsMiddleware
         $jwk = $this->jwsService->extractPublicKey($protected);
         $kid = $this->jwsService->extractKid($protected);
 
+        // S4: RFC 8555 §6.2 — JWK 和 KID 互斥
+        if ($jwk && $kid) {
+            return $this->acmeError('malformed', 'JWK and KID are mutually exclusive', 400);
+        }
+
+        // S1: 非 new-acct 和 revoke-cert 路由强制要求 KID
+        $path = $request->path();
+        $allowJwk = str_ends_with($path, '/new-acct') || str_ends_with($path, '/revoke-cert');
+        if (! $kid && ! $allowJwk) {
+            return $this->acmeError('malformed', 'KID is required for this endpoint', 400);
+        }
+
         $account = null;
 
         if ($kid) {
@@ -57,7 +72,7 @@ class AcmeJwsMiddleware
             $account = $this->jwsService->findAccountByKid($kid);
 
             if (! $account) {
-                return $this->acmeError('accountDoesNotExist', 'Account not found', 400);
+                return $this->acmeError('accountDoesNotExist', 'Account not found', 404);
             }
 
             // 检查账户状态
@@ -86,7 +101,10 @@ class AcmeJwsMiddleware
         $request->attributes->set('acme_account', $account);
         $request->attributes->set('acme_jwk', $jwk);
 
-        return $next($request);
+        $response = $next($request);
+        \Log::info('ACME', ['method' => 'POST', 'url' => $request->fullUrl(), 'status' => $response->getStatusCode()]);
+
+        return $response;
     }
 
     private function acmeError(string $type, string $detail, int $status): Response

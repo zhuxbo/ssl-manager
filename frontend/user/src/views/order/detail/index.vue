@@ -13,12 +13,10 @@
 </template>
 <script setup lang="ts">
 import {
-  ref,
   computed,
   provide,
   reactive,
   onMounted,
-  onUnmounted,
   onBeforeUnmount,
   toRefs
 } from "vue";
@@ -35,7 +33,11 @@ const props = defineProps(["modelValue"]);
 const order = reactive(props.modelValue);
 provide("order", order);
 
-// 产品类型
+// ACME 判断
+const isAcme = computed(() => order.latest_cert?.channel === "acme");
+provide("isAcme", isAcme);
+
+// 产品类型（ACME 订单产品类型也是 ssl，走 SslDetail）
 const productType = computed(() => order.product?.product_type || "ssl");
 provide("productType", productType);
 

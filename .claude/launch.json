@@ -1,0 +1,23 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "admin",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "admin", "dev"],
+      "port": 5201
+    },
+    {
+      "name": "user",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "user", "dev"],
+      "port": 5202
+    },
+    {
+      "name": "backend",
+      "runtimeExecutable": "php",
+      "runtimeArgs": ["artisan", "serve", "--port=8001"],
+      "port": 8001
+    }
+  ]
+}

@@ -5,9 +5,7 @@
 ```
 build/
 ├── build.sh              # 主构建脚本
-├── git-release.sh        # Git 版本发布（打 tag、push）
-├── local-release.sh      # 本地发布测试
-├── remote-release.sh     # 远程服务器发布
+├── release.sh            # 远程服务器发布
 ├── config.json           # 构建配置
 ├── build.env             # 构建环境变量
 ├── scripts/              # 辅助脚本
@@ -22,38 +20,12 @@ build/
 
 ## 版本发布
 
-### Git 版本发布
-
-```bash
-# 发布测试版（自动推送到 dev 分支）
-./build/git-release.sh 0.0.10-beta
-
-# 发布正式版（自动推送到 main 分支）
-./build/git-release.sh 1.0.0
-
-# 强制重新发布（删除旧 tag 后重新创建）
-./build/git-release.sh 0.0.10-beta --force
-
-# 仅本地提交，不推送
-./build/git-release.sh 0.0.10-beta --no-push
-```
-
-### 分支规则
-
-| 版本类型 | 示例 | 目标分支 |
-|---------|------|---------|
-| 正式版 | 1.0.0, 2.1.0 | main |
-| 测试版 | 0.0.10-beta, 1.0.0-rc.1 | dev |
-| 开发版 | 0.0.10-dev, 1.0.0-alpha | dev |
-
 ### 发布流程
 
-1. `git-release.sh` 自动更新 `version.json`
-2. 提交更改并创建 tag
-3. 推送到远程仓库
-4. 本地/远程发布：
-   - `local-release.sh` - 发布到本地测试服务
-   - `remote-release.sh` - 发布到远程服务器
+1. 提交代码并推送
+2. 构建并发布到远程服务器：`./build/release.sh <版本号>`
+   - 正式版在 main 分支发布时自动创建/更新 tag 并 push
+   - 测试版无需 tag
 
 ## 构建命令
 
@@ -101,9 +73,8 @@ build/
 | 场景 | 优先级 | 说明 |
 |------|--------|------|
 | **build.sh** | --version 参数 > git tag > 0.0.0-dev | 通过环境变量传入容器 |
-| **remote-release.sh** | 命令行参数 > git tag | 必须明确指定，不回退 |
+| **release.sh** | 命令行参数（必须指定） | 不支持从 version.json 或 git tag 回落 |
 | **GitHub CI** | git tag | 由 tag push 触发 |
-| **local-release.sh** | 命令行参数 > git tag > 默认值 | 灵活，方便本地测试 |
 
 ### 本地开发
 
@@ -120,86 +91,7 @@ build/
 
 GitHub Release 仅用于代码存档，实际部署使用自建 release 服务。
 
-## 本地发布测试
-
-### 配置
-
-```bash
-# 创建配置文件（必须）
-cp build/local-release.conf.example build/local-release.conf
-vim build/local-release.conf
-```
-
-### 环境准备
-
-搭建本地 release 服务用于测试升级流程：
-
-```
-/www/wwwroot/dev/release/           # Release 服务目录 (https://release.example.com)
-├── install.sh                      # 安装脚本（自动注入 release_url）
-├── upgrade.sh                      # 升级脚本（自动注入 release_url）
-├── releases.json                   # Release 索引
-├── main/v1.0.0/                    # 正式版
-│   └── ssl-manager-*.zip
-├── dev/v0.0.10-beta/               # 开发版
-│   └── ssl-manager-*.zip
-├── latest/                         # 最新稳定版符号链接
-└── dev-latest/                     # 最新开发版符号链接
-```
-
-### 一键发布
-
-```bash
-# 构建并发布到本地 release 服务
-./build/local-release.sh              # 自动检测版本（git tag 或默认值）
-./build/local-release.sh 0.0.10-beta  # 指定版本（推荐）
-```
-
-脚本会自动：
-1. 构建所有包（full、upgrade、script）
-2. 复制到对应版本目录
-3. 更新 releases.json
-4. 部署 install.sh/upgrade.sh 到根目录（替换 `__RELEASE_URL__` 占位符）
-5. 创建 latest 符号链接
-6. 设置权限
-
-### 测试安装/升级
-
-```bash
-# 一键安装（curl 方式）
-curl -fsSL https://release.example.com/install.sh | sudo bash
-
-# 一键升级
-curl -fsSL https://release.example.com/upgrade.sh | sudo bash
-
-# 指定版本安装
-curl -fsSL https://release.example.com/install.sh | sudo bash -s -- --version 0.0.10-beta
-
-# 手动升级（指定目录）
-./deploy/upgrade.sh --url https://release.example.com --version 0.0.10-beta --dir /path/to/app -y
-```
-
-### version.json（运行时）
-
-`version.json` 由构建自动生成，包含在安装/升级包中：
-
-```json
-{
-  "version": "0.0.9-beta",
-  "channel": "dev",
-  "release_url": "https://release.example.com"
-}
-```
-
-| 字段 | 说明 |
-|------|------|
-| `version` | 当前版本号（构建时注入） |
-| `channel` | 渠道：`main`（正式）或 `dev`（开发） |
-| `release_url` | 自定义 release 服务 URL（可选，升级时保留） |
-
-`release_url` 在升级过程中会被保留，不会被新版本覆盖。
-
-## 远程发布
+## 发布
 
 ### 服务器设置
 
@@ -227,11 +119,11 @@ chown -R release:release /www/wwwroot/release.example.com
 
 ```bash
 # 1. 创建配置文件
-cp build/remote-release.conf.example build/remote-release.conf
-chmod 600 build/remote-release.conf
+cp build/release.conf.example build/release.conf
+chmod 600 build/release.conf
 
 # 2. 编辑配置
-vim build/remote-release.conf
+vim build/release.conf
 ```
 
 配置文件示例：
@@ -251,20 +143,17 @@ KEEP_VERSIONS=5
 ### 发布命令
 
 ```bash
-# 发布到所有服务器（使用 version.json 版本）
-./build/remote-release.sh
-
-# 发布指定版本
-./build/remote-release.sh 0.1.0
+# 发布指定版本（版本号必须指定）
+./build/release.sh 0.1.0
 
 # 只发布到指定服务器
-./build/remote-release.sh --server cn
+./build/release.sh 0.1.0 --server cn
 
 # 只上传（跳过构建）
-./build/remote-release.sh --upload-only
+./build/release.sh 0.1.0 --upload-only
 
 # 测试 SSH 连接
-./build/remote-release.sh --test
+./build/release.sh --test
 ```
 
 ### 远程目录结构

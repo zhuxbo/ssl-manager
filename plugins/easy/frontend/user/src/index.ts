@@ -1,0 +1,45 @@
+window.__registerPlugin({
+  name: "easy",
+  routes: [
+    {
+      parent: "",
+      route: {
+        path: "/tb",
+        name: "TaoBao",
+        redirect: "/register?source=taobao",
+        meta: {
+          title: "淘宝",
+          showLink: false
+        }
+      }
+    },
+    {
+      parent: "",
+      route: {
+        path: "/pdd",
+        name: "Pinduoduo",
+        redirect: "/register?source=pinduoduo",
+        meta: {
+          title: "拼多多",
+          showLink: false
+        }
+      }
+    }
+  ],
+  dictionaries: {
+    funds: {
+      fundPayMethodOptions: [
+        { label: "淘宝", value: "taobao" },
+        { label: "拼多多", value: "pinduoduo" },
+        { label: "京东", value: "jingdong" },
+        { label: "抖音", value: "douyin" }
+      ],
+      fundPayMethodMap: {
+        taobao: "primary",
+        pinduoduo: "primary",
+        jingdong: "primary",
+        douyin: "primary"
+      }
+    }
+  }
+});

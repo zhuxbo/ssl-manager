@@ -15,20 +15,37 @@
         :label-position="dialogSize == '90%' ? 'top' : 'right'"
         label-width="90px"
       >
-        <!-- CSR 选项：所有产品类型都可以选择 -->
-        <el-form-item v-if="needCSR" label=" " prop="csr_generate">
+        <!-- 签发方式选择：仅申请/批量申请时且 AcmeIssueMode 开启时显示 -->
+        <el-form-item
+          v-if="
+            acmeIssueModeEnabled && ['apply', 'batchApply'].includes(actionType)
+          "
+          label="签发方式"
+        >
+          <el-radio-group v-model="issueMode" @change="handleIssueModeChange">
+            <el-radio value="manual">手工签发</el-radio>
+            <el-radio value="acme">ACME签发</el-radio>
+          </el-radio-group>
+        </el-form-item>
+
+        <!-- CSR 选项：所有产品类型都可以选择（ACME 模式隐藏） -->
+        <el-form-item
+          v-if="needCSR && !isAcmeMode"
+          label="CSR"
+          prop="csr_generate"
+        >
           <el-radio-group
             v-model="formData.csr_generate"
             :disabled="isBatchApply"
           >
-            <el-radio :value="1">{{ "自动生成CSR" }}</el-radio>
-            <el-radio :value="0">{{ "已有CSR" }}</el-radio>
+            <el-radio :value="1">{{ "自动生成" }}</el-radio>
+            <el-radio :value="0">{{ "已有" }}</el-radio>
           </el-radio-group>
         </el-form-item>
 
         <el-form-item
-          v-if="needCSR && !parseInt(formData.csr_generate)"
-          label="CSR"
+          v-if="needCSR && !isAcmeMode && !parseInt(formData.csr_generate)"
+          label=" "
           prop="csr"
           :rules="rules.csr"
         >
@@ -68,6 +85,7 @@
           :rules="rules.product_id"
         >
           <re-remote-select
+            ref="productSelectRef"
             v-model="formData.product_id"
             uri="/product"
             searchField="quickSearch"
@@ -79,18 +97,15 @@
             :pageSize="100"
             :showPagination="false"
             :disabled="disabledFields.includes('product_id')"
-            :queryParams="{
-              domains: isBatchApply ? 'single' : '',
-              product_type: isBatchApply ? 'ssl' : '',
-              status: 1
-            }"
+            :queryParams="productQueryParams"
+            :refresh-key="productRefreshKey"
             @change="productSelected"
           />
         </el-form-item>
 
-        <!-- SSL 证书才需要域名 -->
+        <!-- SSL 证书才需要域名（ACME 模式隐藏） -->
         <el-form-item
-          v-if="isSSL"
+          v-if="isSSL && !isAcmeMode"
           label="域名"
           prop="domains"
           :rules="rules.domains"
@@ -112,9 +127,9 @@
           />
         </el-form-item>
 
-        <!-- SMIME 证书需要邮箱 -->
+        <!-- SMIME 证书需要邮箱（ACME 模式隐藏） -->
         <el-form-item
-          v-if="isSMIME"
+          v-if="isSMIME && !isAcmeMode"
           label="邮箱"
           prop="email"
           :rules="rules.email"
@@ -147,9 +162,22 @@
                 />
               </el-select>
             </el-form-item>
-            <!-- 验证方式：只有 SSL 需要 -->
+            <!-- 数量：ACME + 批量申请时显示 -->
             <el-form-item
-              v-if="isSSL"
+              v-if="isAcmeMode && isBatchApply"
+              label="数量"
+              prop="quantity"
+            >
+              <el-input-number
+                v-model="formData.quantity"
+                :min="1"
+                :max="100"
+                style="width: 100%"
+              />
+            </el-form-item>
+            <!-- 验证方式：只有 SSL 需要（ACME 模式隐藏） -->
+            <el-form-item
+              v-if="isSSL && !isAcmeMode"
               label="验证方式"
               prop="validation_method"
               :rules="rules.validation_method"
@@ -168,7 +196,7 @@
               </el-select>
             </el-form-item>
             <el-form-item
-              v-if="showPlusOption && isSSL"
+              v-if="showPlusOption && isSSL && !isAcmeMode"
               label="赠送时间"
               prop="plus"
             >
@@ -180,9 +208,10 @@
           </el-col>
         </el-row>
 
-        <!-- 组织：OV/EV、CodeSign、SMIME(sponsor/organization) 需要 -->
+        <!-- 组织：OV/EV、CodeSign、SMIME(sponsor/organization) 需要（ACME 模式隐藏） -->
         <el-form-item
           v-if="
+            !isAcmeMode &&
             (isOrg || isCodeSign || isDocSign || smimeNeedOrganization) &&
             props.actionType !== 'reissue'
           "
@@ -204,9 +233,13 @@
             :queryParams="{ user_id: formData.user_id }"
           />
         </el-form-item>
-        <!-- 联系人：OV/EV、SMIME(individual/sponsor) 需要 -->
+        <!-- 联系人：OV/EV、SMIME(individual/sponsor) 需要（ACME 模式隐藏） -->
         <el-form-item
-          v-if="(isOrg || smimeNeedContact) && props.actionType !== 'reissue'"
+          v-if="
+            !isAcmeMode &&
+            (isOrg || smimeNeedContact) &&
+            props.actionType !== 'reissue'
+          "
           label="联系人"
           prop="contact"
           :rules="rules.contact"
@@ -226,9 +259,9 @@
           />
         </el-form-item>
 
-        <!-- 加密选项折叠面板：SSL 自动生成 CSR 时、SMIME、CodeSign 显示 -->
+        <!-- 加密选项折叠面板：SSL 自动生成 CSR 时、SMIME、CodeSign 显示（ACME 模式隐藏） -->
         <re-collapse
-          v-if="showEncryption"
+          v-if="showEncryption && !isAcmeMode"
           v-model="encryptionOpen"
           title="加密选项"
           :border="false"
@@ -295,7 +328,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, reactive } from "vue";
+import { ref, computed, watch, reactive, nextTick } from "vue";
 import {
   show,
   apply,
@@ -304,6 +337,7 @@ import {
   reissue,
   ACTION_PARAMS_DEFAULT
 } from "@/api/order";
+import { createOrder as acmeCreateOrder } from "@/api/acme";
 import { message } from "@shared/utils";
 import { show as productShow } from "@/api/product";
 import ReRemoteSelect from "@shared/components/ReRemoteSelect";
@@ -316,6 +350,7 @@ import {
 } from "@/views/system/dictionary";
 import type { FormInstance, FormRules } from "element-plus";
 import { useDialogSize } from "@/views/system/dialog";
+import { getConfig } from "@/config";
 
 const props = defineProps({
   visible: {
@@ -341,6 +376,33 @@ const { dialogSize } = useDialogSize();
 const formRef = ref<FormInstance>();
 // 加载状态
 const loading = ref(false);
+// ACME 签发模式开关
+const acmeIssueModeEnabled = computed(
+  () => getConfig()?.AcmeIssueMode === true
+);
+// 签发方式
+const issueMode = ref<"manual" | "acme">("manual");
+// 是否 ACME 模式
+const isAcmeMode = computed(
+  () =>
+    issueMode.value === "acme" &&
+    ["apply", "batchApply"].includes(props.actionType)
+);
+// 产品选择引用
+const productSelectRef = ref();
+// 产品列表刷新 key（延迟更新，避免与 v-if 切换冲突）
+const productRefreshKey = ref(0);
+// ACME 产品查询参数
+const productQueryParams = computed(() => {
+  if (isAcmeMode.value) {
+    return { support_acme: 1, status: 1 };
+  }
+  return {
+    domains: isBatchApply.value ? "single" : "",
+    product_type: isBatchApply.value ? "ssl" : "",
+    status: 1
+  };
+});
 // 禁用字段列表
 const disabledFields = ref<string[]>([]);
 // 表单数据
@@ -353,10 +415,12 @@ const validationMethodOptions = ref<{ label: string; value: string }[]>([]);
 
 // 加密算法选项
 const encryptionAlgOptions = computed(() => {
-  return formData.product?.encryption_alg.map((item: string) => ({
-    label: item.toUpperCase(),
-    value: item.toLowerCase()
-  }));
+  return (
+    formData.product?.encryption_alg?.map((item: string) => ({
+      label: item.toUpperCase(),
+      value: item.toLowerCase()
+    })) ?? []
+  );
 });
 
 // 密钥长度选项
@@ -375,10 +439,12 @@ const keyBitsOptions = computed(() => {
 
 // 摘要算法选项
 const signatureDigestAlgOptions = computed(() => {
-  return formData.product?.signature_digest_alg.map((item: string) => ({
-    label: item.toUpperCase(),
-    value: item.toLowerCase()
-  }));
+  return (
+    formData.product?.signature_digest_alg?.map((item: string) => ({
+      label: item.toUpperCase(),
+      value: item.toLowerCase()
+    })) ?? []
+  );
 });
 
 // 是否显示赠送时间选项
@@ -443,12 +509,31 @@ const encryptionOpen = ref(false);
 
 // 标题
 const getTitle = computed(() => {
+  if (isAcmeMode.value) return "申请 ACME 订阅";
   if (props.actionType === "apply") return "申请证书";
   if (props.actionType === "batchApply") return "批量申请";
   if (props.actionType === "renew") return "续费证书";
   if (props.actionType === "reissue") return "重签证书";
   return "";
 });
+
+// 签发方式切换处理
+const handleIssueModeChange = () => {
+  // 先让 v-if 切换完成（此时产品数据还在，el-select 有有效选项）
+  nextTick(() => {
+    // DOM 稳定后再清空产品数据
+    formData.product_id = "";
+    formData.product = {};
+    periodOptions.value = [];
+    validationMethodOptions.value = [];
+    formData.period = "";
+    formData.validation_method = "";
+    nextTick(() => {
+      productRefreshKey.value++;
+      formRef.value?.clearValidate();
+    });
+  });
+};
 
 // 单个域名验证函数
 const checkDomain = (
@@ -841,6 +926,32 @@ const handleSubmit = async () => {
 
     loading.value = true;
 
+    // ACME 模式提交
+    if (isAcmeMode.value) {
+      const params: any = {
+        user_id: formData.user_id,
+        product_id: formData.product_id,
+        period: formData.period
+      };
+      if (isBatchApply.value && formData.quantity > 1) {
+        params.quantity = formData.quantity;
+      }
+      const res = await acmeCreateOrder(params);
+      if (res.code === 1) {
+        const created = res.data?.created ?? 1;
+        if (params.quantity && created < params.quantity) {
+          message(`部分成功：已创建 ${created}/${params.quantity} 个订单`, {
+            type: "warning"
+          });
+        } else {
+          message("提交成功", { type: "success" });
+        }
+        emit("success");
+        emit("update:visible", false);
+      }
+      return;
+    }
+
     // 根据操作类型执行不同的API
     if (props.actionType === "apply") {
       await apply(prepareOrderData());
@@ -889,7 +1000,11 @@ const initFormData = () => {
     }
   });
 
+  // 批量数量默认值
+  formData.quantity = 1;
+
   // 重置其他相关状态
+  issueMode.value = "manual";
   disabledFields.value = [];
   periodOptions.value = [];
   validationMethodOptions.value = [];

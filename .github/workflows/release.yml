@@ -140,7 +140,6 @@ jobs:
           mkdir -p release/ssl-manager/frontend
           cp -r frontend/admin/dist release/ssl-manager/frontend/admin
           cp -r frontend/user/dist release/ssl-manager/frontend/user
-          cp -r frontend/easy release/ssl-manager/frontend/easy
 
           # 复制 build/web 整个目录到 frontend/web（包含 web.conf、help、public）
           cp -r build/web release/ssl-manager/frontend/

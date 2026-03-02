@@ -73,8 +73,7 @@
         "frontend/admin/platform-config.json",
         "frontend/user/logo.svg",
         "frontend/user/platform-config.json",
-        "frontend/user/qrcode.png",
-        "frontend/easy/config.json"
+        "frontend/user/qrcode.png"
       ]
     }
   }

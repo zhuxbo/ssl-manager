@@ -2,12 +2,15 @@
 
 namespace App\Models;
 
+use App\Models\Acme\Authorization;
 use App\Models\Traits\HasSnowflakeId;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Cert extends BaseModel
 {
-    use HasSnowflakeId;
+    use HasFactory, HasSnowflakeId;
 
     /**
      * 缓存的中间证书（避免重复查询）
@@ -83,7 +86,10 @@ class Cert extends BaseModel
         parent::boot();
 
         static::creating(function ($model) {
-            $model->csr_md5 = md5($model->csr);
+            $model->csr_md5 = md5($model->csr ?? '');
+            if (empty($model->refer_id)) {
+                $model->refer_id = bin2hex(random_bytes(16));
+            }
         });
 
         // 模型检索后的事件：检查中间证书状态并缓存查询结果
@@ -107,6 +113,14 @@ class Cert extends BaseModel
     public function order(): BelongsTo
     {
         return $this->belongsTo(Order::class);
+    }
+
+    /**
+     * 获取 ACME 授权
+     */
+    public function acmeAuthorizations(): HasMany
+    {
+        return $this->hasMany(Authorization::class, 'cert_id');
     }
 
     /**

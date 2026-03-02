@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Traits\HasSnowflakeId;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
@@ -16,7 +17,7 @@ use Illuminate\Database\Eloquent\Relations\MorphMany;
  * */
 class Order extends BaseModel
 {
-    use HasSnowflakeId;
+    use HasFactory, HasSnowflakeId;
 
     protected $fillable = [
         'user_id',

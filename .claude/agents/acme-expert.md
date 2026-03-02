@@ -67,11 +67,16 @@ ACME_DEFAULT_PRODUCT_ID=xxx
 
 供下级 Manager 调用:
 
-- `POST /api/acme/accounts` - 创建账户
-- `POST /api/acme/orders` - 创建订单
+- `POST /api/acme/orders` - 创建订单（customer, product_code, domains, refer_id）
+- `POST /api/acme/orders/reissue/{id}` - 重签订单（domains, refer_id）
 - `GET /api/acme/orders/{id}` - 获取订单
-- `POST /api/acme/orders/{id}/finalize` - 完成订单
-- `GET /api/acme/orders/{id}/certificate` - 下载证书
+- `DELETE /api/acme/orders/{id}` - 取消订单
+- `GET /api/acme/orders/authorizations/{id}` - 获取订单授权
+- `POST /api/acme/orders/finalize/{id}` - 完成订单
+- `GET /api/acme/orders/certificate/{id}` - 下载证书
+- `GET /api/acme/authorizations/{id}` - 获取授权详情
+- `POST /api/acme/challenges/respond/{id}` - 响应挑战
+- `POST /api/acme/certificates/revoke` - 吊销证书
 
 ## 问题排查
 

@@ -109,12 +109,14 @@ trait ActionTrait
                 $this->error('订单状态错误');
             }
 
-            // 只有 active 可以续费，且订单到期前30天内才能续费
+            // 只有 active 可以续费
             if ($params['action'] == 'renew') {
                 if ($order->latestCert->status != 'active') {
                     $this->error('订单状态错误');
                 }
-                if ($order->period_till && $order->period_till->gt(now()->addDays(30))) {
+
+                // 订单到期前30天内才能续费
+                if ($order->period_till > now()->addDays(30)) {
                     $this->error('订单到期前30天内才能续费');
                 }
             }
@@ -521,7 +523,7 @@ trait ActionTrait
                 // 查找或创建委托记录
                 if ($delegationService) {
                     // 根据 CA 确定委托前缀（不同 CA 使用不同的验证前缀）
-                    $prefix = $this->getDelegationPrefixForCa($dcv['ca'] ?? '');
+                    $prefix = $this->getDelegationPrefixForCa($dcv['ca'] ?? '', $dcv['channel'] ?? '');
 
                     // 判断是否精确匹配前缀（ACME/DigiCert 需要每个子域单独委托）
                     $isExactMatch = in_array($prefix, ['_acme-challenge', '_dnsauth']);
@@ -682,10 +684,14 @@ trait ActionTrait
      * - Sectigo: _pki-validation
      * - Certum: _certum
      * - DigiCert/GeoTrust/Thawte/RapidSSL/TrustAsia: _dnsauth
-     * - ACME (Let's Encrypt 等): _acme-challenge
+     * - ACME 渠道统一: _acme-challenge
      */
-    protected function getDelegationPrefixForCa(string $ca): string
+    protected function getDelegationPrefixForCa(string $ca, string $channel = ''): string
     {
+        if ($channel === 'acme') {
+            return '_acme-challenge';
+        }
+
         return match (strtolower($ca)) {
             'sectigo', 'comodo' => '_pki-validation',
             'certum' => '_certum',
@@ -1038,10 +1044,14 @@ trait ActionTrait
                 // 获取交易信息并创建取消记录
                 $transaction = OrderUtil::getCancelTransaction($order->toArray());
                 Transaction::create($transaction);
-                // 删除当前证书和订单
-                $cert->delete();
-                $order->delete();
+                // 标记证书为 cancelled，保留 order 和 cert
+                $cert->update(['status' => 'cancelled']);
             } else {
+                // ACME 订单取消：由 BillingService 清理特有数据
+                if ($cert->channel === 'acme' && empty($cert->api_id)) {
+                    app(\App\Services\Acme\BillingService::class)->cancelOrder($order);
+                }
+
                 // 获取交易信息
                 $transaction = OrderUtil::getCancelTransaction($order->toArray());
 
@@ -1049,6 +1059,7 @@ trait ActionTrait
                 Transaction::create($transaction);
 
                 $cert->update(['status' => 'cancelled']);
+                $order->update(['cancelled_at' => now()]);
             }
             DB::commit();
         } catch (Throwable $e) {

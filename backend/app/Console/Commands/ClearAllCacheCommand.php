@@ -16,7 +16,12 @@ class ClearAllCacheCommand extends Command
      *
      * @var string
      */
-    protected $signature = 'cache:clear-all {--quick : 快速模式，不显示详细信息} {--logs : 同时清除旧日志文件} {--restart-queue : 清理完成后重启队列服务}';
+    protected $signature = 'cache:clear-all
+                            {--quick : 快速模式，不显示详细信息}
+                            {--logs : 同时清除旧日志文件}
+                            {--restart-queue : 清理完成后重启队列服务}
+                            {--without-composer : 跳过 Composer autoload 缓存清理}
+                            {--without-opcache : 跳过 OPCache 清理}';
 
     /**
      * The console command description.
@@ -33,6 +38,8 @@ class ClearAllCacheCommand extends Command
         $quick = $this->option('quick');
         $clearLogs = $this->option('logs');
         $restartQueue = $this->option('restart-queue');
+        $skipComposer = $this->option('without-composer');
+        $skipOpcache = $this->option('without-opcache');
 
         if (! $quick) {
             $this->info('开始清除SSL证书管理系统所有缓存...');
@@ -54,10 +61,20 @@ class ClearAllCacheCommand extends Command
         }
 
         // 5. 清除Composer autoload缓存
-        $this->clearComposerCache($quick);
+        if (! $skipComposer) {
+            $this->clearComposerCache($quick);
+        } elseif (! $quick) {
+            $this->newLine();
+            $this->warn('5. 已跳过 Composer autoload 缓存清理');
+        }
 
         // 6. 清除OPCache
-        $this->clearOPCache($quick);
+        if (! $skipOpcache) {
+            $this->clearOPCache($quick);
+        } elseif (! $quick) {
+            $this->newLine();
+            $this->warn('6. 已跳过 OPCache 清理');
+        }
 
         // 7. 重启队列服务（可选）
         if ($restartQueue) {
@@ -201,6 +218,10 @@ class ClearAllCacheCommand extends Command
                         $deletedCount = 0;
 
                         foreach ($files as $file) {
+                            if ($file->getFilename() === '.gitignore') {
+                                continue;
+                            }
+
                             File::delete($file->getPathname());
                             $deletedCount++;
                         }
