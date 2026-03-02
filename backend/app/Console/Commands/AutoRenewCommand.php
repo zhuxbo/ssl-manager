@@ -60,7 +60,7 @@ class AutoRenewCommand extends Command
                     ->where('expires_at', '>', now()->subDays(15))
                     ->where('expires_at', '<', now()->addDays(14))
                     ->where(function ($q) {
-                        $q->whereNull('channel')->orWhere('channel', '!=', 'acme');
+                        $q->whereNull('channel')->orWhereNotIn('channel', ['acme', 'api']);
                     });
             })
             // 订单级 auto_renew=true，或订单未设置时回落到用户设置
@@ -97,7 +97,7 @@ class AutoRenewCommand extends Command
                     ->where('expires_at', '>', now()->subDays(15))
                     ->where('expires_at', '<', now()->addDays(14))
                     ->where(function ($q) {
-                        $q->whereNull('channel')->orWhere('channel', '!=', 'acme');
+                        $q->whereNull('channel')->orWhereNotIn('channel', ['acme', 'api']);
                     });
             })
             // 订单级 auto_reissue=true，或订单未设置时回落到用户设置
@@ -157,7 +157,7 @@ class AutoRenewCommand extends Command
             $estimatedAmount = $cert->amount ?? '0.00';
 
             if (bccomp($availableBalance, $estimatedAmount, 2) < 0) {
-                throw new \Exception("余额不足，可用余额: $availableBalance，预计需要: $estimatedAmount");
+                throw new \Exception("余额不足，可用余额: {$availableBalance}，预计需要: $estimatedAmount");
             }
         }
 

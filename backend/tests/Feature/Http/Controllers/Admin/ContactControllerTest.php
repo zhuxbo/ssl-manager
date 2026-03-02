@@ -114,7 +114,7 @@ test('管理员可以批量获取联系人', function () {
     $contacts = Contact::factory()->count(3)->create(['user_id' => $this->user->id]);
     $ids = $contacts->pluck('id')->toArray();
 
-    $response = $this->actingAsAdmin($this->admin)->getJson('/api/admin/contact/batch?ids[]=' . implode('&ids[]=', $ids));
+    $response = $this->actingAsAdmin($this->admin)->getJson('/api/admin/contact/batch?ids[]='.implode('&ids[]=', $ids));
 
     $response->assertOk()->assertJson(['code' => 1]);
 });

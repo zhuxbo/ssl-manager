@@ -4,7 +4,6 @@ use App\Models\Cert;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\User;
-use App\Services\Delegation\CnameDelegationService;
 
 test('签名为 schedule:validate', function () {
     $this->artisan('schedule:validate')->assertSuccessful();

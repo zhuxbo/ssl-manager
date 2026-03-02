@@ -2,6 +2,7 @@
 
 namespace App\Services\Upgrade;
 
+use App\Traits\ResolvesExecutablePath;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -13,6 +14,8 @@ use RuntimeException;
  */
 class ReleaseClient
 {
+    use ResolvesExecutablePath;
+
     protected ?string $baseUrl = null;
 
     public function __construct()
@@ -309,8 +312,8 @@ class ReleaseClient
      */
     protected function downloadWithCurl(string $url, string $savePath, int $timeout): bool
     {
-        $curlPath = trim(shell_exec('which curl 2>/dev/null') ?? '');
-        if (empty($curlPath)) {
+        $curlPath = $this->resolveExecutablePath('curl');
+        if ($curlPath === null) {
             return false;
         }
 

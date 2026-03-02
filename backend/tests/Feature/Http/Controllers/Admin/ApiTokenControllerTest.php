@@ -100,7 +100,7 @@ test('管理员可以批量获取API令牌', function () {
     $tokens = ApiToken::factory()->count(3)->create(['user_id' => $this->user->id]);
     $ids = $tokens->pluck('id')->toArray();
 
-    $response = $this->actingAsAdmin($this->admin)->getJson('/api/admin/api-token/batch?ids[]=' . implode('&ids[]=', $ids));
+    $response = $this->actingAsAdmin($this->admin)->getJson('/api/admin/api-token/batch?ids[]='.implode('&ids[]=', $ids));
 
     $response->assertOk()->assertJson(['code' => 1]);
 });

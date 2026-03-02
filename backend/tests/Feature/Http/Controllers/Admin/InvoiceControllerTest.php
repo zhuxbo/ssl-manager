@@ -120,7 +120,7 @@ test('管理员可以批量获取发票', function () {
     $invoices = Invoice::factory()->count(3)->create(['user_id' => $this->user->id]);
     $ids = $invoices->pluck('id')->toArray();
 
-    $response = $this->actingAsAdmin($this->admin)->getJson('/api/admin/invoice/batch?ids[]=' . implode('&ids[]=', $ids));
+    $response = $this->actingAsAdmin($this->admin)->getJson('/api/admin/invoice/batch?ids[]='.implode('&ids[]=', $ids));
 
     $response->assertOk()->assertJson(['code' => 1]);
 });

@@ -1,8 +1,6 @@
 <?php
 
 use App\Models\Acme\Account;
-use App\Models\Order;
-use App\Models\Product;
 use App\Models\User;
 use App\Services\Acme\AccountService;
 use App\Services\Acme\JwsService;

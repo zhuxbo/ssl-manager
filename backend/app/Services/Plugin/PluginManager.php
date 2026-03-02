@@ -3,17 +3,21 @@
 namespace App\Services\Plugin;
 
 use App\Services\Upgrade\VersionManager;
+use App\Traits\ResolvesExecutablePath;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use RuntimeException;
 use ZipArchive;
 
 class PluginManager
 {
+    use ResolvesExecutablePath;
+
     protected string $pluginsPath;
 
     protected string $downloadPath;
@@ -161,6 +165,7 @@ class PluginManager
 
             // 运行 migrate
             $this->runPluginMigrations($name);
+            $this->runPluginSeeders($name);
 
             // 替换 nginx 占位符
             $this->replaceNginxPlaceholders("$pluginDir/nginx");
@@ -210,6 +215,7 @@ class PluginManager
 
             // 运行 migrate
             $this->runPluginMigrations($name);
+            $this->runPluginSeeders($name);
 
             // 替换 nginx 占位符
             $this->replaceNginxPlaceholders("$pluginDir/nginx");
@@ -293,6 +299,7 @@ class PluginManager
 
             // 运行 migrate（增量迁移）
             $this->runPluginMigrations($name);
+            $this->runPluginSeeders($name);
 
             // 替换 nginx 占位符 + 清理缓存
             $this->replaceNginxPlaceholders("$pluginDir/nginx");
@@ -340,6 +347,7 @@ class PluginManager
         // 回滚迁移（删除数据库表）
         if ($removeData) {
             $this->rollbackPluginMigrations($name);
+            $this->cleanupPluginSeeders($name);
         }
 
         // 删除插件目录（校验路径归属，防止 symlink 攻击）
@@ -455,8 +463,8 @@ class PluginManager
      */
     protected function downloadWithCurl(string $url, string $savePath, int $timeout): bool
     {
-        $curlPath = trim(shell_exec('which curl 2>/dev/null') ?? '');
-        if (empty($curlPath)) {
+        $curlPath = $this->resolveExecutablePath('curl');
+        if ($curlPath === null) {
             return false;
         }
 
@@ -662,6 +670,73 @@ class PluginManager
                 Log::info("[Plugin] 清理迁移记录: $name ($deleted 条)");
             }
         }
+    }
+
+    /**
+     * 运行插件 Seeder（安装/升级后）
+     */
+    protected function runPluginSeeders(string $name): void
+    {
+        $class = $this->loadPluginSeederClass($name);
+        if ($class === null) {
+            return;
+        }
+
+        try {
+            Artisan::call('db:seed', [
+                '--class' => $class,
+                '--force' => true,
+            ]);
+            Log::info("[Plugin] Seed 完成: $name ($class)");
+        } catch (\Exception $e) {
+            Log::warning("[Plugin] Seed 失败: $name - {$e->getMessage()}");
+        }
+    }
+
+    /**
+     * 清理插件 Seeder 产物（卸载并删除数据时）
+     */
+    protected function cleanupPluginSeeders(string $name): void
+    {
+        $class = $this->loadPluginSeederClass($name);
+        if ($class === null) {
+            return;
+        }
+
+        try {
+            $seeder = app($class);
+            if (method_exists($seeder, 'clear')) {
+                // clear 为插件可选清理钩子，用于删除 Seed 产生的配置数据。
+                $seeder->clear();
+                Log::info("[Plugin] Seed 清理完成: $name ($class)");
+            }
+        } catch (\Exception $e) {
+            Log::warning("[Plugin] Seed 清理失败: $name - {$e->getMessage()}");
+        }
+    }
+
+    /**
+     * 加载插件 Seeder 类，返回完整类名
+     */
+    protected function loadPluginSeederClass(string $name): ?string
+    {
+        $pluginClassName = Str::studly($name);
+        $class = "Plugins\\$pluginClassName\\Seeders\\PluginSeeder";
+        $paths = [
+            base_path("../plugins/$name/backend/Seeders/PluginSeeder.php"),
+            base_path("../plugins/$name/backend/seeders/PluginSeeder.php"),
+        ];
+
+        foreach ($paths as $path) {
+            if (is_file($path)) {
+                require_once $path;
+                if (class_exists($class)) {
+                    return $class;
+                }
+            }
+        }
+
+        return null;
     }
 
     /**

@@ -2,6 +2,7 @@
 
 use App\Services\Delegation\DelegationDnsService;
 use App\Services\Delegation\ProxyDNS;
+
 afterEach(function () {
     Mockery::close();
 });

@@ -149,5 +149,4 @@ class FundController extends BaseController
             $this->error('充值失败：'.$e->getMessage());
         }
     }
-
 }

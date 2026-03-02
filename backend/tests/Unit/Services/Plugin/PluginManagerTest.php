@@ -2,9 +2,7 @@
 
 use App\Services\Plugin\PluginManager;
 use App\Services\Upgrade\VersionManager;
-use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\File;
-use Illuminate\Support\Facades\Http;
 
 uses(Tests\TestCase::class);
 
@@ -17,7 +15,7 @@ afterEach(function () {
 test('getInstalledPlugins 返回已安装插件列表', function () {
     $versionManager = Mockery::mock(VersionManager::class);
 
-    $pluginsPath = sys_get_temp_dir() . '/test_plugins_' . uniqid();
+    $pluginsPath = sys_get_temp_dir().'/test_plugins_'.uniqid();
     $pluginDir = "$pluginsPath/test-plugin";
     mkdir($pluginDir, 0755, true);
     file_put_contents("$pluginDir/plugin.json", json_encode([
@@ -54,7 +52,7 @@ test('getInstalledPlugins 插件目录不存在时返回空数组', function () 
 
     $reflection = new ReflectionClass($manager);
     $prop = $reflection->getProperty('pluginsPath');
-    $prop->setValue($manager, '/tmp/nonexistent_plugins_dir_' . uniqid());
+    $prop->setValue($manager, '/tmp/nonexistent_plugins_dir_'.uniqid());
 
     $plugins = $manager->getInstalledPlugins();
 
@@ -64,7 +62,7 @@ test('getInstalledPlugins 插件目录不存在时返回空数组', function () 
 test('getInstalledPlugins 跳过无效的 plugin.json', function () {
     $versionManager = Mockery::mock(VersionManager::class);
 
-    $pluginsPath = sys_get_temp_dir() . '/test_plugins_' . uniqid();
+    $pluginsPath = sys_get_temp_dir().'/test_plugins_'.uniqid();
     $pluginDir = "$pluginsPath/bad-plugin";
     mkdir($pluginDir, 0755, true);
     file_put_contents("$pluginDir/plugin.json", 'invalid json content');
@@ -153,7 +151,7 @@ test('ZIP 安全检查 - 包含路径遍历的 ZIP 被拒绝', function () {
     $versionManager = Mockery::mock(VersionManager::class);
     $manager = new PluginManager($versionManager);
 
-    $downloadPath = sys_get_temp_dir() . '/test_extract_' . uniqid();
+    $downloadPath = sys_get_temp_dir().'/test_extract_'.uniqid();
     mkdir($downloadPath, 0755, true);
 
     $reflection = new ReflectionClass($manager);
@@ -179,7 +177,7 @@ test('ZIP 安全检查 - 以斜杠开头的路径被拒绝', function () {
     $versionManager = Mockery::mock(VersionManager::class);
     $manager = new PluginManager($versionManager);
 
-    $downloadPath = sys_get_temp_dir() . '/test_extract_' . uniqid();
+    $downloadPath = sys_get_temp_dir().'/test_extract_'.uniqid();
     mkdir($downloadPath, 0755, true);
 
     $reflection = new ReflectionClass($manager);
@@ -204,7 +202,7 @@ test('ZIP 安全检查 - 合法 ZIP 可以正常解压', function () {
     $versionManager = Mockery::mock(VersionManager::class);
     $manager = new PluginManager($versionManager);
 
-    $downloadPath = sys_get_temp_dir() . '/test_extract_' . uniqid();
+    $downloadPath = sys_get_temp_dir().'/test_extract_'.uniqid();
     mkdir($downloadPath, 0755, true);
 
     $reflection = new ReflectionClass($manager);
@@ -232,7 +230,7 @@ test('ZIP 安全检查 - 合法 ZIP 可以正常解压', function () {
 test('配置解析 - plugin.json 缺少 name 字段时使用目录名', function () {
     $versionManager = Mockery::mock(VersionManager::class);
 
-    $pluginsPath = sys_get_temp_dir() . '/test_plugins_' . uniqid();
+    $pluginsPath = sys_get_temp_dir().'/test_plugins_'.uniqid();
     $pluginDir = "$pluginsPath/fallback-name";
     mkdir($pluginDir, 0755, true);
     file_put_contents("$pluginDir/plugin.json", json_encode([
@@ -261,7 +259,7 @@ test('install 已安装的插件时抛出异常', function () {
     $versionManager = Mockery::mock(VersionManager::class);
     $manager = new PluginManager($versionManager);
 
-    $pluginsPath = sys_get_temp_dir() . '/test_plugins_' . uniqid();
+    $pluginsPath = sys_get_temp_dir().'/test_plugins_'.uniqid();
     $pluginDir = "$pluginsPath/existing-plugin";
     mkdir($pluginDir, 0755, true);
     file_put_contents("$pluginDir/plugin.json", json_encode([
@@ -285,7 +283,7 @@ test('install 无法确定下载地址时抛出异常', function () {
 
     $manager = new PluginManager($versionManager);
 
-    $pluginsPath = sys_get_temp_dir() . '/test_plugins_' . uniqid();
+    $pluginsPath = sys_get_temp_dir().'/test_plugins_'.uniqid();
     mkdir($pluginsPath, 0755, true);
 
     $reflection = new ReflectionClass($manager);
@@ -304,7 +302,7 @@ test('update 未安装的插件时抛出异常', function () {
     $versionManager = Mockery::mock(VersionManager::class);
     $manager = new PluginManager($versionManager);
 
-    $pluginsPath = sys_get_temp_dir() . '/test_plugins_' . uniqid();
+    $pluginsPath = sys_get_temp_dir().'/test_plugins_'.uniqid();
     mkdir($pluginsPath, 0755, true);
 
     $reflection = new ReflectionClass($manager);
@@ -323,7 +321,7 @@ test('uninstall 不存在的插件时抛出异常', function () {
     $versionManager = Mockery::mock(VersionManager::class);
     $manager = new PluginManager($versionManager);
 
-    $pluginsPath = sys_get_temp_dir() . '/test_plugins_' . uniqid();
+    $pluginsPath = sys_get_temp_dir().'/test_plugins_'.uniqid();
     mkdir($pluginsPath, 0755, true);
 
     $reflection = new ReflectionClass($manager);
@@ -342,7 +340,7 @@ test('安全检查 - 路径遍历防护 validatePluginPath', function () {
     $versionManager = Mockery::mock(VersionManager::class);
     $manager = new PluginManager($versionManager);
 
-    $pluginsPath = sys_get_temp_dir() . '/test_plugins_' . uniqid();
+    $pluginsPath = sys_get_temp_dir().'/test_plugins_'.uniqid();
     mkdir($pluginsPath, 0755, true);
 
     $reflection = new ReflectionClass($manager);
@@ -555,7 +553,7 @@ test('validatePlugin 缺少 plugin.json 时抛出异常', function () {
     $versionManager = Mockery::mock(VersionManager::class);
     $manager = new PluginManager($versionManager);
 
-    $tempDir = sys_get_temp_dir() . '/test_validate_' . uniqid();
+    $tempDir = sys_get_temp_dir().'/test_validate_'.uniqid();
     mkdir($tempDir, 0755, true);
 
     $reflection = new ReflectionClass($manager);
@@ -571,7 +569,7 @@ test('validatePlugin plugin.json 格式错误时抛出异常', function () {
     $versionManager = Mockery::mock(VersionManager::class);
     $manager = new PluginManager($versionManager);
 
-    $tempDir = sys_get_temp_dir() . '/test_validate_' . uniqid();
+    $tempDir = sys_get_temp_dir().'/test_validate_'.uniqid();
     mkdir($tempDir, 0755, true);
     file_put_contents("$tempDir/plugin.json", 'not json');
 
@@ -588,7 +586,7 @@ test('validatePlugin 缺少 name 字段时抛出异常', function () {
     $versionManager = Mockery::mock(VersionManager::class);
     $manager = new PluginManager($versionManager);
 
-    $tempDir = sys_get_temp_dir() . '/test_validate_' . uniqid();
+    $tempDir = sys_get_temp_dir().'/test_validate_'.uniqid();
     mkdir($tempDir, 0755, true);
     file_put_contents("$tempDir/plugin.json", json_encode(['version' => '1.0.0']));
 
@@ -605,7 +603,7 @@ test('validatePlugin 名称不匹配时抛出异常', function () {
     $versionManager = Mockery::mock(VersionManager::class);
     $manager = new PluginManager($versionManager);
 
-    $downloadPath = sys_get_temp_dir() . '/test_download_' . uniqid();
+    $downloadPath = sys_get_temp_dir().'/test_download_'.uniqid();
     mkdir($downloadPath, 0755, true);
 
     $tempDir = "$downloadPath/extract_test";
@@ -630,7 +628,7 @@ test('getPluginReleaseUrl 从 plugin.json 读取 release_url', function () {
     $versionManager = Mockery::mock(VersionManager::class);
     $manager = new PluginManager($versionManager);
 
-    $pluginsPath = sys_get_temp_dir() . '/test_plugins_' . uniqid();
+    $pluginsPath = sys_get_temp_dir().'/test_plugins_'.uniqid();
     $pluginDir = "$pluginsPath/my-plugin";
     mkdir($pluginDir, 0755, true);
     file_put_contents("$pluginDir/plugin.json", json_encode([
@@ -656,7 +654,7 @@ test('getPluginReleaseUrl 无 release_url 时回退到系统地址', function ()
 
     $manager = new PluginManager($versionManager);
 
-    $pluginsPath = sys_get_temp_dir() . '/test_plugins_' . uniqid();
+    $pluginsPath = sys_get_temp_dir().'/test_plugins_'.uniqid();
     $pluginDir = "$pluginsPath/my-plugin";
     mkdir($pluginDir, 0755, true);
     file_put_contents("$pluginDir/plugin.json", json_encode([
@@ -673,4 +671,16 @@ test('getPluginReleaseUrl 无 release_url 时回退到系统地址', function ()
     expect($result)->toBe('https://releases.example.com/plugins/my-plugin');
 
     File::deleteDirectory($pluginsPath);
+});
+
+test('resolveExecutablePath 对不存在命令返回 null', function () {
+    $versionManager = Mockery::mock(VersionManager::class);
+    $manager = new PluginManager($versionManager);
+
+    $reflection = new ReflectionClass($manager);
+    $method = $reflection->getMethod('resolveExecutablePath');
+
+    $result = $method->invoke($manager, 'cmd-not-exists-'.uniqid());
+
+    expect($result)->toBeNull();
 });

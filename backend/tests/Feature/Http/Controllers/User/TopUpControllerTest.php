@@ -4,7 +4,6 @@ use App\Models\Fund;
 use App\Models\Setting;
 use App\Models\SettingGroup;
 use App\Models\User;
-use Yansongda\Pay\Pay;
 
 uses(Tests\Traits\ActsAsUser::class);
 

@@ -1,7 +1,7 @@
 {
     "version": "1.0",
     "mysql_version": "8.0.43",
-    "generated_at": "2026-02-26 22:22:20",
+    "generated_at": "2026-03-02 21:27:28",
     "database": {
         "name": "manager",
         "charset": "utf8mb4",
@@ -38,16 +38,8 @@
                     "extra": "",
                     "comment": "关联的订单ID"
                 },
-                "acme_account_id": {
-                    "position": 4,
-                    "type": "bigint unsigned",
-                    "nullable": true,
-                    "default": null,
-                    "extra": "",
-                    "comment": "连接的 ACME 服务的账户 ID"
-                },
                 "key_id": {
-                    "position": 5,
+                    "position": 4,
                     "type": "varchar(200)",
                     "nullable": false,
                     "default": null,
@@ -55,7 +47,7 @@
                     "comment": "公钥指纹(kid)"
                 },
                 "public_key": {
-                    "position": 6,
+                    "position": 5,
                     "type": "text",
                     "nullable": false,
                     "default": null,
@@ -63,7 +55,7 @@
                     "comment": "JWK 公钥"
                 },
                 "contact": {
-                    "position": 7,
+                    "position": 6,
                     "type": "varchar(500)",
                     "nullable": true,
                     "default": null,
@@ -71,7 +63,7 @@
                     "comment": "联系方式"
                 },
                 "status": {
-                    "position": 8,
+                    "position": 7,
                     "type": "enum('valid','deactivated','revoked')",
                     "nullable": false,
                     "default": "valid",
@@ -79,7 +71,7 @@
                     "comment": "状态"
                 },
                 "created_at": {
-                    "position": 9,
+                    "position": 8,
                     "type": "timestamp",
                     "nullable": true,
                     "default": null,
@@ -87,7 +79,7 @@
                     "comment": ""
                 },
                 "updated_at": {
-                    "position": 10,
+                    "position": 9,
                     "type": "timestamp",
                     "nullable": true,
                     "default": null,
@@ -3693,16 +3685,8 @@
                     "extra": "",
                     "comment": "EAB HMAC Key (加密存储)"
                 },
-                "acme_account_id": {
-                    "position": 20,
-                    "type": "bigint unsigned",
-                    "nullable": true,
-                    "default": null,
-                    "extra": "",
-                    "comment": "连接的 ACME 服务的账户 ID"
-                },
                 "eab_used_at": {
-                    "position": 21,
+                    "position": 20,
                     "type": "timestamp",
                     "nullable": true,
                     "default": null,
@@ -3710,7 +3694,7 @@
                     "comment": "EAB 使用时间（防重放）"
                 },
                 "auto_renew": {
-                    "position": 22,
+                    "position": 21,
                     "type": "tinyint(1)",
                     "nullable": true,
                     "default": null,
@@ -3718,7 +3702,7 @@
                     "comment": "自动续费"
                 },
                 "auto_reissue": {
-                    "position": 23,
+                    "position": 22,
                     "type": "tinyint(1)",
                     "nullable": true,
                     "default": null,
@@ -3726,7 +3710,7 @@
                     "comment": "自动重签"
                 },
                 "created_at": {
-                    "position": 24,
+                    "position": 23,
                     "type": "timestamp",
                     "nullable": true,
                     "default": null,
@@ -3734,7 +3718,7 @@
                     "comment": ""
                 },
                 "updated_at": {
-                    "position": 25,
+                    "position": 24,
                     "type": "timestamp",
                     "nullable": true,
                     "default": null,
@@ -3743,16 +3727,6 @@
                 }
             },
             "indexes": {
-                "orders_acme_account_id_index": {
-                    "unique": false,
-                    "type": "BTREE",
-                    "columns": [
-                        "acme_account_id"
-                    ],
-                    "sub_parts": [
-                        null
-                    ]
-                },
                 "orders_brand_index": {
                     "unique": false,
                     "type": "BTREE",

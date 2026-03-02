@@ -1,7 +1,6 @@
 <?php
 
 use App\Models\Admin;
-use App\Models\Cert;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\User;

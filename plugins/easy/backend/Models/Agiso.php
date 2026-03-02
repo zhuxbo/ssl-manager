@@ -98,14 +98,20 @@ class Agiso extends BaseModel
      */
     public static function platformToPayMethod(string $platform): string
     {
+        $normalizedPlatform = strtolower(trim($platform));
+
         $map = [
-            'TbAlds' => 'taobao',
-            'PddAlds' => 'pinduoduo',
-            'AldsJd' => 'jingdong',
-            'AldsDoudian' => 'douyin',
+            'tbalds' => 'taobao',
+            'taobao' => 'taobao',
+            'pddalds' => 'pinduoduo',
+            'pinduoduo' => 'pinduoduo',
+            'aldsjd' => 'jingdong',
+            'jingdong' => 'jingdong',
+            'aldsdoudian' => 'douyin',
+            'douyin' => 'douyin',
             'gift' => 'gift',
         ];
 
-        return $map[$platform] ?? 'other';
+        return $map[$normalizedPlatform] ?? 'other';
     }
 }

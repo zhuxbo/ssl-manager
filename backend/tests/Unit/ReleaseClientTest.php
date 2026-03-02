@@ -176,3 +176,15 @@ test('find package url no assets key', function () {
     expect($client->findUpgradePackageUrl($release))->toBeNull();
     expect($client->findFullPackageUrl($release))->toBeNull();
 });
+
+test('resolveExecutablePath 对不存在命令返回 null', function () {
+    $client = new ReleaseClient;
+
+    $reflection = new \ReflectionClass($client);
+    $method = $reflection->getMethod('resolveExecutablePath');
+    $method->setAccessible(true);
+
+    $result = $method->invoke($client, 'cmd-not-exists-'.uniqid());
+
+    expect($result)->toBeNull();
+});

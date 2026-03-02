@@ -5,7 +5,6 @@ use App\Models\CnameDelegation;
 use App\Models\User;
 use App\Services\Delegation\CnameDelegationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Mockery\MockInterface;
 
 uses(Tests\Traits\ActsAsAdmin::class);
 uses(RefreshDatabase::class);
@@ -129,7 +128,7 @@ test('管理员可以批量获取委托', function () {
     $delegations = CnameDelegation::factory()->count(3)->create(['user_id' => $this->user->id]);
     $ids = $delegations->pluck('id')->toArray();
 
-    $response = $this->actingAsAdmin($this->admin)->getJson('/api/admin/delegation/batch?ids[]=' . implode('&ids[]=', $ids));
+    $response = $this->actingAsAdmin($this->admin)->getJson('/api/admin/delegation/batch?ids[]='.implode('&ids[]=', $ids));
 
     $response->assertOk()->assertJson(['code' => 1]);
 });

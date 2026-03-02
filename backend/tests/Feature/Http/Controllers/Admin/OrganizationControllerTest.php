@@ -131,7 +131,7 @@ test('管理员可以批量获取组织', function () {
     $organizations = Organization::factory()->count(3)->create(['user_id' => $this->user->id]);
     $ids = $organizations->pluck('id')->toArray();
 
-    $response = $this->actingAsAdmin($this->admin)->getJson('/api/admin/organization/batch?ids[]=' . implode('&ids[]=', $ids));
+    $response = $this->actingAsAdmin($this->admin)->getJson('/api/admin/organization/batch?ids[]='.implode('&ids[]=', $ids));
 
     $response->assertOk()->assertJson(['code' => 1]);
 });

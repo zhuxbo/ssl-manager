@@ -287,9 +287,10 @@ class EasyController extends Controller
             }
         }
 
-        $from = in_array($order->pay_method, ['taobao', 'pinduoduo']) ? $order->pay_method : '';
+        // 通用来源规则：直接使用 pay_method 作为用户来源标识。
+        $source = trim((string) $order->pay_method);
 
-        $user = $this->getUserByEmail($params['email'], $from);
+        $user = $this->getUserByEmail($params['email'], $source);
 
         // 使用事务 充值并创建订单
         DB::beginTransaction();
@@ -523,17 +524,15 @@ class EasyController extends Controller
     /**
      * 根据邮箱获取或创建用户ID
      */
-    protected function getUserByEmail(string $email, string $from = ''): User
+    protected function getUserByEmail(string $email, string $source = ''): User
     {
         $user = User::where('email', $email)->first();
 
         // 根据 sourceLevel 设置确定目标等级，默认 platinum
         $targetLevel = 'platinum';
-        if ($from !== '') {
+        if ($source !== '') {
             $sourceLevel = get_system_setting('site', 'sourceLevel', []);
-            if (isset($sourceLevel[$from])) {
-                $targetLevel = $sourceLevel[$from];
-            }
+            $targetLevel = $this->resolveLevelFromSource($source, is_array($sourceLevel) ? $sourceLevel : []);
         }
 
         if (! $user) {
@@ -546,7 +545,7 @@ class EasyController extends Controller
                 'email' => $email,
                 'password' => $password,
                 'level_code' => $targetLevel,
-                'source' => $from,
+                'source' => $source,
                 'status' => 1,
                 'join_at' => now(),
                 'join_ip' => request()->ip(),
@@ -586,6 +585,23 @@ class EasyController extends Controller
         }
 
         return $user;
+    }
+
+    /**
+     * 根据来源获取等级；未配置或为空时默认 platinum。
+     */
+    protected function resolveLevelFromSource(string $source, array $sourceLevel): string
+    {
+        if (! isset($sourceLevel[$source])) {
+            return 'platinum';
+        }
+
+        $level = trim((string) $sourceLevel[$source]);
+        if ($level === '') {
+            return 'platinum';
+        }
+
+        return $level;
     }
 
     /**

@@ -5,6 +5,7 @@ namespace App\Providers;
 use App\Http\Controllers\PluginManifestController;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Support\Str;
 
 class PluginServiceProvider extends ServiceProvider
 {
@@ -57,7 +58,7 @@ class PluginServiceProvider extends ServiceProvider
             // 动态注册 PSR-4 命名空间
             $namespace = null;
             if (is_dir($backendDir)) {
-                $namespace = 'Plugins\\'.ucfirst($pluginName).'\\';
+                $namespace = 'Plugins\\'.Str::studly($pluginName).'\\';
                 $this->registerAutoload($namespace, $backendDir);
             }
 

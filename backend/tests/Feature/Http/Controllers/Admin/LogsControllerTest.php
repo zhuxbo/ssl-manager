@@ -2,12 +2,6 @@
 
 use App\Models\Admin;
 use App\Models\AdminLog;
-use App\Models\ApiLog;
-use App\Models\CallbackLog;
-use App\Models\CaLog;
-use App\Models\ErrorLog;
-use App\Models\UserLog;
-use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 uses(Tests\Traits\ActsAsAdmin::class);
@@ -78,7 +72,7 @@ test('管理员可以按IP筛选日志', function () {
 });
 
 test('管理员可以按日期范围筛选日志', function () {
-    $response = $this->actingAsAdmin($this->admin)->getJson('/api/admin/logs/admin?created_at[]=' . now()->subDay()->format('Y-m-d\TH:i:s.v\Z') . '&created_at[]=' . now()->format('Y-m-d\TH:i:s.v\Z'));
+    $response = $this->actingAsAdmin($this->admin)->getJson('/api/admin/logs/admin?created_at[]='.now()->subDay()->format('Y-m-d\TH:i:s.v\Z').'&created_at[]='.now()->format('Y-m-d\TH:i:s.v\Z'));
 
     $response->assertOk()->assertJson(['code' => 1]);
 });

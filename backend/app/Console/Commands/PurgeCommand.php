@@ -99,7 +99,7 @@ class PurgeCommand extends Command
                 $this->info("Purged $result $tableName");
             }
         } catch (\Throwable $e) {
-            $this->warn("Dynamic log cleanup failed: ".$e->getMessage());
+            $this->warn('Dynamic log cleanup failed: '.$e->getMessage());
         }
 
         // 预同步：距退款期限2-4天的处理中订单，24小时内无同步则创建sync任务

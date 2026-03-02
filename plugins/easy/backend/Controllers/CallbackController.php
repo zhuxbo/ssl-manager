@@ -123,7 +123,17 @@ class CallbackController extends Controller
             }
         }
 
-        if ($totalPrice !== '0.00') {
+        $amount = (string) ($params['data']['PayAmount'] ?? '0.00');
+        // 兼容外部测试推送 SKU 结构不含 "产品编码#周期" 的情况，避免返回成功但不落库。
+        if (bccomp($totalPrice, '0.00', 2) <= 0) {
+            $totalPrice = $amount;
+        }
+
+        if ($count <= 0) {
+            $count = 1;
+        }
+
+        if (bccomp($totalPrice, '0.00', 2) > 0) {
             Agiso::create([
                 'pay_method' => Agiso::platformToPayMethod($params['fromPlatform'] ?? $params['data']['Platform'] ?? ''),
                 'sign' => $params['sign'],
@@ -134,7 +144,7 @@ class CallbackController extends Controller
                 'period' => $isMixed ? null : $firstPeriod,
                 'price' => $totalPrice,
                 'count' => $count,
-                'amount' => (string) ($params['data']['PayAmount'] ?? '0.00'),
+                'amount' => $amount,
             ]);
         }
 
@@ -170,7 +180,16 @@ class CallbackController extends Controller
             }
         }
 
-        if ($totalPrice !== '0.00') {
+        // 兼容外部测试推送 SKU 结构不含 "产品编码#周期" 的情况，避免返回成功但不落库。
+        if (bccomp($totalPrice, '0.00', 2) <= 0) {
+            $totalPrice = $amount;
+        }
+
+        if ($count <= 0) {
+            $count = 1;
+        }
+
+        if (bccomp($totalPrice, '0.00', 2) > 0) {
             Agiso::create([
                 'pay_method' => Agiso::platformToPayMethod($params['fromPlatform'] ?? $params['data']['Platform'] ?? ''),
                 'sign' => $params['sign'],

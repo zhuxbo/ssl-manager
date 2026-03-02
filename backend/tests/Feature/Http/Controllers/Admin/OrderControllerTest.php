@@ -267,7 +267,7 @@ test('管理员可以批量获取订单', function () {
     [$order1, $cert1] = createOrderWithCert('pending');
     [$order2, $cert2] = createOrderWithCert('active');
 
-    $response = $this->actingAsAdmin($this->admin)->getJson('/api/admin/order/batch?ids[]=' . $order1->id . '&ids[]=' . $order2->id);
+    $response = $this->actingAsAdmin($this->admin)->getJson('/api/admin/order/batch?ids[]='.$order1->id.'&ids[]='.$order2->id);
 
     $response->assertOk()->assertJson(['code' => 1]);
     expect($response->json('data'))->toHaveCount(2);

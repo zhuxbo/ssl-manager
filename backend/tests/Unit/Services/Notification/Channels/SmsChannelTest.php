@@ -40,7 +40,8 @@ test('发送短信成功', function () {
     );
 
     // 通过匿名类注入 Mock Sms
-    $channel = new class($mockSms) extends SmsChannel {
+    $channel = new class($mockSms) extends SmsChannel
+    {
         private Sms $mockSms;
 
         public function __construct(Sms $mockSms)
@@ -94,7 +95,8 @@ test('短信配置不可用时返回失败', function () {
     $mockSms = Mockery::mock(Sms::class);
     $mockSms->configured = false;
 
-    $channel = new class($mockSms) extends SmsChannel {
+    $channel = new class($mockSms) extends SmsChannel
+    {
         private Sms $mockSms;
 
         public function __construct(Sms $mockSms)
@@ -150,7 +152,8 @@ test('短信模板不存在时返回失败', function () {
     $mockSms = Mockery::mock(Sms::class);
     $mockSms->configured = true;
 
-    $channel = new class($mockSms) extends SmsChannel {
+    $channel = new class($mockSms) extends SmsChannel
+    {
         private Sms $mockSms;
 
         public function __construct(Sms $mockSms)
@@ -186,7 +189,8 @@ test('短信模板不存在时返回失败', function () {
 });
 
 test('isAvailable 在 Sms 已配置时返回 true', function () {
-    $channel = new class extends SmsChannel {
+    $channel = new class extends SmsChannel
+    {
         public function isAvailable(): bool
         {
             return true;
@@ -197,7 +201,8 @@ test('isAvailable 在 Sms 已配置时返回 true', function () {
 });
 
 test('isAvailable 在 Sms 未配置时返回 false', function () {
-    $channel = new class extends SmsChannel {
+    $channel = new class extends SmsChannel
+    {
         public function isAvailable(): bool
         {
             return false;

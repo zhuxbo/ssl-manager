@@ -2,8 +2,8 @@
 
 use App\Http\Middleware\LogOperation;
 use App\Services\LogBuffer;
-use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 beforeEach(function () {
     LogBuffer::clear();

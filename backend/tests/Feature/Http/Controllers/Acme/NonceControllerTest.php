@@ -29,6 +29,7 @@ test('Nonce 每次请求都不同', function () {
     $mockNonce = Mockery::mock(NonceService::class);
     $mockNonce->shouldReceive('generate')->andReturnUsing(function () use (&$callCount) {
         $callCount++;
+
         return "nonce-$callCount";
     });
     app()->instance(NonceService::class, $mockNonce);

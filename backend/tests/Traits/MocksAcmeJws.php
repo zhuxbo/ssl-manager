@@ -45,7 +45,8 @@ trait MocksAcmeJws
         $trait = $this;
 
         $this->app->bind(AcmeJwsMiddleware::class, function () use ($trait) {
-            return new class($trait) {
+            return new class($trait)
+            {
                 private $trait;
 
                 public function __construct($trait)

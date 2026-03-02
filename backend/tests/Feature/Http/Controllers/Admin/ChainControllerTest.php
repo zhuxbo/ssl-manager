@@ -94,7 +94,7 @@ test('管理员可以批量获取证书链', function () {
     $chains = Chain::factory()->count(3)->create();
     $ids = $chains->pluck('id')->toArray();
 
-    $response = $this->actingAsAdmin($this->admin)->getJson('/api/admin/chain/batch?ids[]=' . implode('&ids[]=', $ids));
+    $response = $this->actingAsAdmin($this->admin)->getJson('/api/admin/chain/batch?ids[]='.implode('&ids[]=', $ids));
 
     $response->assertOk()->assertJson(['code' => 1]);
 });

@@ -5,7 +5,6 @@ use App\Models\NotificationTemplate;
 use App\Services\Notification\Channels\MailChannel;
 use App\Utils\Email;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\File;
 
 afterEach(function () {
     Mockery::close();
@@ -46,7 +45,8 @@ test('发送邮件成功', function () {
     $mockEmail->shouldReceive('send')->once()->andReturn(true);
 
     // 通过匿名类继承 MailChannel 来注入 Mock Email
-    $channel = new class($mockEmail) extends MailChannel {
+    $channel = new class($mockEmail) extends MailChannel
+    {
         private Email $mockEmail;
 
         public function __construct(Email $mockEmail)
@@ -106,7 +106,8 @@ test('邮件配置不可用时返回失败', function () {
     $mockEmail->shouldReceive('isSMTP')->once();
     $mockEmail->shouldReceive('isHTML')->once();
 
-    $channel = new class($mockEmail) extends MailChannel {
+    $channel = new class($mockEmail) extends MailChannel
+    {
         private Email $mockEmail;
 
         public function __construct(Email $mockEmail)
@@ -164,7 +165,7 @@ test('附件不存在时返回失败', function () {
                 'subject' => '测试',
                 'content' => 'Hello',
                 'attachments' => [
-                    ['path' => '/tmp/nonexistent_file_' . uniqid() . '.pdf', 'name' => 'test.pdf'],
+                    ['path' => '/tmp/nonexistent_file_'.uniqid().'.pdf', 'name' => 'test.pdf'],
                 ],
             ],
         ],
@@ -178,7 +179,8 @@ test('附件不存在时返回失败', function () {
     $mockEmail->shouldReceive('addAddress')->once();
     $mockEmail->shouldReceive('setSubject')->once();
 
-    $channel = new class($mockEmail) extends MailChannel {
+    $channel = new class($mockEmail) extends MailChannel
+    {
         private Email $mockEmail;
 
         public function __construct(Email $mockEmail)
@@ -230,7 +232,8 @@ test('附件不存在时返回失败', function () {
 
 test('isAvailable 在 Email 已配置时返回 true', function () {
     // 通过匿名类模拟 isAvailable 行为
-    $channel = new class extends MailChannel {
+    $channel = new class extends MailChannel
+    {
         public function isAvailable(): bool
         {
             return true; // 模拟已配置
@@ -241,7 +244,8 @@ test('isAvailable 在 Email 已配置时返回 true', function () {
 });
 
 test('isAvailable 在 Email 未配置时返回 false', function () {
-    $channel = new class extends MailChannel {
+    $channel = new class extends MailChannel
+    {
         public function isAvailable(): bool
         {
             return false; // 模拟未配置

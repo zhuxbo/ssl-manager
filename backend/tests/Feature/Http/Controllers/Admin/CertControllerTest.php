@@ -3,8 +3,6 @@
 use App\Models\Admin;
 use App\Models\Cert;
 use App\Models\Order;
-use App\Models\Product;
-use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 uses(Tests\Traits\ActsAsAdmin::class);
@@ -79,7 +77,7 @@ test('管理员可以批量获取证书', function () {
     $certs = Cert::factory()->count(3)->create(['order_id' => $order->id]);
     $ids = $certs->pluck('id')->toArray();
 
-    $response = $this->actingAsAdmin($this->admin)->getJson('/api/admin/cert/batch?ids[]=' . implode('&ids[]=', $ids));
+    $response = $this->actingAsAdmin($this->admin)->getJson('/api/admin/cert/batch?ids[]='.implode('&ids[]=', $ids));
 
     $response->assertOk()->assertJson(['code' => 1]);
 });

@@ -30,4 +30,3 @@ test('UserLevel 工厂批量创建不会命中 code 和 name 唯一索引', func
     expect(UserLevel::query()->distinct()->count('code'))->toBe(12);
     expect(UserLevel::query()->distinct()->count('name'))->toBe(12);
 });
-

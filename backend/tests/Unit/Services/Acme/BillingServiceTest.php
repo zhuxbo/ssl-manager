@@ -3,7 +3,6 @@
 use App\Models\Acme\Account;
 use App\Models\Order;
 use App\Models\ProductPrice;
-use App\Models\Transaction;
 use App\Services\Acme\BillingService;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;

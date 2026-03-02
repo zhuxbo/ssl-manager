@@ -1,11 +1,10 @@
 <?php
 
 use App\Models\NotificationTemplate;
-use App\Services\Notification\TemplateSelector;
 use App\Services\Notification\TemplateSelection;
+use App\Services\Notification\TemplateSelector;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use PHPUnit\Framework\Attributes\Group;
 
 uses(Tests\TestCase::class, RefreshDatabase::class)->group('database');
 
@@ -32,7 +31,7 @@ test('按代码查询模板返回匹配的模板', function () {
 });
 
 test('查询不存在的代码返回空选择', function () {
-    $selection = $this->selector->select('nonexistent_code_' . uniqid());
+    $selection = $this->selector->select('nonexistent_code_'.uniqid());
 
     expect($selection->isEmpty())->toBeTrue();
     expect($selection->channels())->toBeEmpty();
