@@ -19,11 +19,9 @@ function mockSystemSettings(object $app, string $url, string $key): void
         $ref = new \ReflectionClass($client);
 
         $baseUrlProp = $ref->getProperty('baseUrl');
-        $baseUrlProp->setAccessible(true);
         $baseUrlProp->setValue($client, rtrim($url, '/'));
 
         $apiKeyProp = $ref->getProperty('apiKey');
-        $apiKeyProp->setAccessible(true);
         $apiKeyProp->setValue($client, $key);
 
         return $client;

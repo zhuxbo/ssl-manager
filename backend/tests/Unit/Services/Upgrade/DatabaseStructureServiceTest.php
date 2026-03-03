@@ -27,7 +27,6 @@ test('is column different detects type change', function () {
 
     $reflection = new \ReflectionClass($this->service);
     $method = $reflection->getMethod('isColumnDifferent');
-    $method->setAccessible(true);
 
     expect($method->invoke($this->service, $standard, $current))->toBeTrue();
 });
@@ -50,7 +49,6 @@ test('is column different detects nullable change', function () {
 
     $reflection = new \ReflectionClass($this->service);
     $method = $reflection->getMethod('isColumnDifferent');
-    $method->setAccessible(true);
 
     expect($method->invoke($this->service, $standard, $current))->toBeTrue();
 });
@@ -73,7 +71,6 @@ test('is column different detects extra change', function () {
 
     $reflection = new \ReflectionClass($this->service);
     $method = $reflection->getMethod('isColumnDifferent');
-    $method->setAccessible(true);
 
     expect($method->invoke($this->service, $standard, $current))->toBeTrue();
 });
@@ -98,7 +95,6 @@ test('is column different ignores comment by default', function () {
 
     $reflection = new \ReflectionClass($this->service);
     $method = $reflection->getMethod('isColumnDifferent');
-    $method->setAccessible(true);
 
     expect($method->invoke($this->service, $standard, $current))->toBeFalse();
 });
@@ -123,7 +119,6 @@ test('is column different checks comment when strict', function () {
 
     $reflection = new \ReflectionClass($this->service);
     $method = $reflection->getMethod('isColumnDifferent');
-    $method->setAccessible(true);
 
     expect($method->invoke($this->service, $standard, $current))->toBeTrue();
 });
@@ -144,7 +139,6 @@ test('is index different detects column change', function () {
 
     $reflection = new \ReflectionClass($this->service);
     $method = $reflection->getMethod('isIndexDifferent');
-    $method->setAccessible(true);
 
     expect($method->invoke($this->service, $standard, $current))->toBeTrue();
 });
@@ -165,7 +159,6 @@ test('is index different detects unique change', function () {
 
     $reflection = new \ReflectionClass($this->service);
     $method = $reflection->getMethod('isIndexDifferent');
-    $method->setAccessible(true);
 
     expect($method->invoke($this->service, $standard, $current))->toBeTrue();
 });
@@ -186,7 +179,6 @@ test('is index different detects type change', function () {
 
     $reflection = new \ReflectionClass($this->service);
     $method = $reflection->getMethod('isIndexDifferent');
-    $method->setAccessible(true);
 
     expect($method->invoke($this->service, $standard, $current))->toBeTrue();
 });
@@ -207,7 +199,6 @@ test('is index different detects sub parts change', function () {
 
     $reflection = new \ReflectionClass($this->service);
     $method = $reflection->getMethod('isIndexDifferent');
-    $method->setAccessible(true);
 
     expect($method->invoke($this->service, $standard, $current))->toBeTrue();
 });
@@ -215,7 +206,6 @@ test('is index different detects sub parts change', function () {
 test('escape default value handles single quotes', function () {
     $reflection = new \ReflectionClass($this->service);
     $method = $reflection->getMethod('escapeDefaultValue');
-    $method->setAccessible(true);
 
     $result = $method->invoke($this->service, "it's a test");
     expect($result)->toBe("it''s a test");
@@ -227,7 +217,6 @@ test('escape default value handles single quotes', function () {
 test('escape default value handles multiple quotes', function () {
     $reflection = new \ReflectionClass($this->service);
     $method = $reflection->getMethod('escapeDefaultValue');
-    $method->setAccessible(true);
 
     $result = $method->invoke($this->service, "'''");
     expect($result)->toBe("''''''");
@@ -236,7 +225,6 @@ test('escape default value handles multiple quotes', function () {
 test('generate add column with special default', function () {
     $reflection = new \ReflectionClass($this->service);
     $method = $reflection->getMethod('generateAddColumnStatement');
-    $method->setAccessible(true);
 
     $columnDef = [
         'type' => 'varchar(255)',
@@ -280,7 +268,6 @@ test('compare table structure detects modified indexes', function () {
 
     $reflection = new \ReflectionClass($this->service);
     $method = $reflection->getMethod('compareTableStructure');
-    $method->setAccessible(true);
 
     $result = $method->invoke($this->service, $standard, $current);
 

@@ -31,7 +31,6 @@ test('validate backup id valid', function () {
     // 有效的备份 ID 应该不抛出异常
     $reflection = new \ReflectionClass($manager);
     $method = $reflection->getMethod('validateBackupId');
-    $method->setAccessible(true);
 
     // 不抛出异常即为通过
     $method->invoke($manager, '2025-01-15_120000');
@@ -45,7 +44,6 @@ test('validate backup id invalid format', function () {
 
     $reflection = new \ReflectionClass($manager);
     $method = $reflection->getMethod('validateBackupId');
-    $method->setAccessible(true);
 
     $method->invoke($manager, '../../../etc/passwd');
 })->throws(RuntimeException::class, '无效的备份 ID');
@@ -55,7 +53,6 @@ test('validate backup id path traversal', function () {
 
     $reflection = new \ReflectionClass($manager);
     $method = $reflection->getMethod('validateBackupId');
-    $method->setAccessible(true);
 
     $invalidIds = [
         '../2025-01-15_120000',

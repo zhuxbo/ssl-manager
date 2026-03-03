@@ -597,3 +597,18 @@ php artisan test --coverage --min=80                  # 覆盖率报告
 2. **集成测试**：需要数据库时，添加 `#[Group('database')]` 标记
 3. **使用 DataProvider**：参数化测试用例
 4. **Mock 策略**：外部服务（DNS、上游 API）使用 Mockery 模拟
+
+---
+
+## PHP 8.x 废弃函数
+
+项目要求 PHP 8.3+，以下函数已废弃，不要使用：
+
+| 废弃函数 | 替代方案 | 废弃版本 |
+|---------|---------|---------|
+| `curl_close($ch)` | `unset($ch)` 或不调用（PHP 8.0 起 curl handle 是对象，自动释放） | PHP 8.4 |
+| `$reflection->setAccessible(true)` | 直接删除（PHP 8.1 起反射默认可访问） | PHP 8.4 |
+
+### TencentCloud SDK
+
+`app/Services/Delegation/Sdk/TencentCloud/` 已从官方 SDK 复制为本地维护，需按当前 PHP 版本修复废弃调用。

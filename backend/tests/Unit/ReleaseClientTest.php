@@ -20,7 +20,6 @@ test('match channel main', function () {
 
     $reflection = new \ReflectionClass($client);
     $method = $reflection->getMethod('matchChannel');
-    $method->setAccessible(true);
 
     // main 通道：不带 -dev 后缀
     expect($method->invoke($client, 'v1.0.0', 'main'))->toBeTrue();
@@ -34,7 +33,6 @@ test('match channel dev', function () {
 
     $reflection = new \ReflectionClass($client);
     $method = $reflection->getMethod('matchChannel');
-    $method->setAccessible(true);
 
     // dev 通道：带 -dev 后缀
     expect($method->invoke($client, 'v1.0.0-dev', 'dev'))->toBeTrue();
@@ -48,7 +46,6 @@ test('normalize release', function () {
 
     $reflection = new \ReflectionClass($client);
     $method = $reflection->getMethod('normalizeRelease');
-    $method->setAccessible(true);
 
     $rawRelease = [
         'tag_name' => 'v1.2.3',
@@ -86,7 +83,6 @@ test('normalize release with v prefix', function () {
 
     $reflection = new \ReflectionClass($client);
     $method = $reflection->getMethod('normalizeRelease');
-    $method->setAccessible(true);
 
     $releases = [
         ['tag_name' => 'v1.0.0', 'expected' => '1.0.0'],
@@ -182,7 +178,6 @@ test('resolveExecutablePath 对不存在命令返回 null', function () {
 
     $reflection = new \ReflectionClass($client);
     $method = $reflection->getMethod('resolveExecutablePath');
-    $method->setAccessible(true);
 
     $result = $method->invoke($client, 'cmd-not-exists-'.uniqid());
 
