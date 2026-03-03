@@ -17,6 +17,7 @@ class ApiClient
     public function __construct()
     {
         $this->baseUrl = $this->resolveBaseUrl();
+        // 仅按 null（未设置）回落；设置项存在时由用户保证值正确。
         $this->apiKey = get_system_setting('ca', 'acmeToken')
             ?? get_system_setting('ca', 'token')
             ?? '';

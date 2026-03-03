@@ -40,10 +40,9 @@ class SettingSeeder extends Seeder
                 ['key' => 'url', 'type' => 'string', 'options' => null, 'is_multiple' => 0, 'value' => null, 'description' => '用户URL', 'weight' => 1],
                 ['key' => 'name', 'type' => 'string', 'options' => null, 'is_multiple' => 0, 'value' => null, 'description' => '站点名称', 'weight' => 2],
                 ['key' => 'callbackToken', 'type' => 'string', 'options' => null, 'is_multiple' => 0, 'value' => null, 'description' => '回调令牌', 'weight' => 3],
-                ['key' => 'adminEmail', 'type' => 'string', 'options' => null, 'is_multiple' => 0, 'value' => null, 'description' => '管理员邮箱（用于接收系统错误通知）', 'weight' => 4],
-                ['key' => 'dnsTools', 'type' => 'array', 'options' => null, 'is_multiple' => 0, 'value' => ['us' => 'https://dns-tools-us.cnssl.com', 'cn' => 'https://dns-tools-cn.cnssl.com'], 'description' => 'DNS工具', 'weight' => 5],
-                ['key' => 'delegation', 'type' => 'array', 'options' => null, 'is_multiple' => 0, 'value' => ['proxyZone' => '', 'secretId' => '', 'secretKey' => ''], 'description' => 'CNAME委托', 'weight' => 6],
-                ['key' => 'sourceLevel', 'type' => 'array', 'options' => null, 'is_multiple' => 0, 'value' => ['source1' => 'platinum', 'source2' => 'platinum'], 'description' => '用户来源对应级别', 'weight' => 7],
+                ['key' => 'dnsTools', 'type' => 'array', 'options' => null, 'is_multiple' => 0, 'value' => ['us' => 'https://dns-tools-us.cnssl.com', 'cn' => 'https://dns-tools-cn.cnssl.com'], 'description' => 'DNS工具', 'weight' => 6],
+                ['key' => 'delegation', 'type' => 'array', 'options' => null, 'is_multiple' => 0, 'value' => ['proxyZone' => '', 'secretId' => '', 'secretKey' => ''], 'description' => 'CNAME委托', 'weight' => 7],
+                ['key' => 'sourceLevel', 'type' => 'array', 'options' => null, 'is_multiple' => 0, 'value' => ['source1' => 'platinum', 'source2' => 'platinum'], 'description' => '用户来源对应级别', 'weight' => 8],
             ],
             'ca' => [
                 ['key' => 'sources', 'type' => 'array', 'options' => null, 'is_multiple' => 0, 'value' => ['default' => 'Default'], 'description' => '来源', 'weight' => 1],

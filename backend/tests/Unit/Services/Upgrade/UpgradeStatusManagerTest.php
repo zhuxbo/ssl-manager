@@ -133,18 +133,19 @@ test('get total steps uses config when no expected steps', function () {
     Config::set('upgrade.behavior.auto_migrate', true);
     Config::set('upgrade.behavior.clear_cache', true);
     Config::set('upgrade.behavior.auto_structure_check', true);
+    Config::set('upgrade.behavior.auto_seed', true);
 
     // 创建新实例以重置 expectedSteps
     $manager = new UpgradeStatusManager;
     $manager->start('v1.0.0');
 
-    // 基础步骤 7 + backup 1 + maintenance 2 + migrate 1 + cache 1 + structure_check 1 = 13
+    // 基础步骤 7 + backup 1 + maintenance 2 + migrate 1 + cache 1 + structure_check 1 + seed 1 = 14
     $reflection = new \ReflectionClass($manager);
     $method = $reflection->getMethod('getTotalSteps');
     $method->setAccessible(true);
 
     $totalSteps = $method->invoke($manager);
-    expect($totalSteps)->toBe(13);
+    expect($totalSteps)->toBe(14);
 });
 
 test('update step updates existing step', function () {
