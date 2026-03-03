@@ -62,4 +62,33 @@ return [
         'admin' => env('ADMIN_REFRESH_TOKEN_TTL', 1440),
         'user' => env('USER_REFRESH_TOKEN_TTL', 1440),
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | 登录限流配置
+    |--------------------------------------------------------------------------
+    |
+    | - max_attempts_per_window: 单个时间窗口内允许失败次数
+    | - decay_minutes: 窗口时长（分钟）
+    | - lockout_attempts: 达到该累计失败次数后锁定账号
+    | - lockout_minutes: 锁定时长（分钟）
+    | - lockout_counter_decay_minutes: 累计失败计数器有效期（分钟），建议 >= lockout_minutes，
+    |   否则锁定期内计数器可能提前过期，导致解锁后失去累计保护
+    |
+    | 可在 guards.{guard} 中覆盖默认配置
+    |
+    */
+    'login_rate_limiter' => [
+        'default' => [
+            'max_attempts_per_window' => (int) env('LOGIN_RATE_LIMIT_MAX_ATTEMPTS', 5),
+            'decay_minutes' => (int) env('LOGIN_RATE_LIMIT_DECAY_MINUTES', 10),
+            'lockout_attempts' => (int) env('LOGIN_RATE_LIMIT_LOCKOUT_ATTEMPTS', 10),
+            'lockout_minutes' => (int) env('LOGIN_RATE_LIMIT_LOCKOUT_MINUTES', 24 * 60),
+            'lockout_counter_decay_minutes' => (int) env('LOGIN_RATE_LIMIT_LOCKOUT_COUNTER_DECAY_MINUTES', 24 * 60),
+        ],
+        'guards' => [
+            'admin' => [],
+            'user' => [],
+        ],
+    ],
 ];
