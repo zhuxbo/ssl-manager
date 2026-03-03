@@ -96,7 +96,6 @@ frontend/           # Vue 3 前端
 backend/            # Laravel 11 后端
 build/              # 构建系统（见 build/README.md）
 deploy/             # 部署脚本
-develop/            # 开发环境（见 develop/README.md）
 ```
 
 | 组件 | 技术栈 |
@@ -166,7 +165,6 @@ certbot certonly --server https://your-platform.com/acme/directory \
 | 文档 | 说明 |
 |------|------|
 | [build/README.md](build/README.md) | 构建系统、版本发布 |
-| [develop/README.md](develop/README.md) | 开发环境搭建 |
 | [deploy/docker/README.md](deploy/docker/README.md) | Docker 部署详细说明 |
 
 ## License

@@ -6,10 +6,6 @@ vendor/
 dist/
 *.local
 
-# Docker develop environment
-develop/.env
-develop/data/
-
 
 # IDE
 .idea/

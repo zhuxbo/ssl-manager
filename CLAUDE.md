@@ -14,7 +14,6 @@ backend/        # Laravel 11 后端
 plugins/        # 插件目录（独立功能模块）
 build/          # 构建系统
 deploy/         # 部署脚本
-develop/        # 开发环境
 skills/         # 开发规范（详细文档）
 ```
 
