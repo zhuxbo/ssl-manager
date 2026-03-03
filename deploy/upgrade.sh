@@ -927,12 +927,22 @@ PYEOF
     # .env 文件敏感信息保护（root 和 web 用户可读）
     [ -f "$INSTALL_DIR/.env" ] && chmod 640 "$INSTALL_DIR/.env"
 
-    # Docker 环境重启服务以加载新配置
+    # 重启服务以加载新配置
     if [ "$DEPLOY_MODE" = "docker" ]; then
         log_step "重启服务..."
         cd "$INSTALL_DIR"
         $compose_cmd restart nginx php queue scheduler 2>/dev/null || true
         log_info "服务已重启"
+    else
+        # 宝塔环境：reload Nginx 以加载更新后的 manager.conf
+        log_step "重载 Nginx 配置..."
+        if command -v nginx &> /dev/null; then
+            nginx -t 2>/dev/null && nginx -s reload 2>/dev/null && log_info "Nginx 已重载" || log_warning "Nginx 重载失败，请手动执行: nginx -s reload"
+        elif [ -f /etc/init.d/nginx ]; then
+            /etc/init.d/nginx reload 2>/dev/null && log_info "Nginx 已重载" || log_warning "Nginx 重载失败"
+        else
+            log_warning "未找到 Nginx，请手动重载 Nginx 配置"
+        fi
     fi
 
     log_success "升级完成！版本: $target_version"
