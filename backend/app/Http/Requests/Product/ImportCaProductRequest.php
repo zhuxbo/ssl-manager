@@ -19,6 +19,15 @@ class ImportCaProductRequest extends UpdateRequest
         $rules['periods'] = 'required|array';
         unset($rules['code']); // code 由 prepareForCreate 生成
 
+        // 导入时这些字段允许 null，由 prepareForCreate 补默认值
+        $rules['alternative_name_types'] = 'nullable|array';
+        $rules['standard_min'] = 'nullable|integer|min:0';
+        $rules['standard_max'] = 'nullable|integer|min:0';
+        $rules['wildcard_min'] = 'nullable|integer|min:0';
+        $rules['wildcard_max'] = 'nullable|integer|min:0';
+        $rules['total_min'] = 'nullable|integer|min:0';
+        $rules['total_max'] = 'nullable|integer|min:0';
+
         return $rules;
     }
 
@@ -48,7 +57,14 @@ class ImportCaProductRequest extends UpdateRequest
         $data['encryption_alg'] = $data['encryption_alg'] ?? ['rsa'];
         $data['signature_digest_alg'] = $data['signature_digest_alg'] ?? ['sha256'];
         $data['common_name_types'] = $data['common_name_types'] ?? [];
+        $data['alternative_name_types'] = $data['alternative_name_types'] ?? [];
         $data['validation_methods'] = $data['validation_methods'] ?? [];
+        $data['standard_min'] = $data['standard_min'] ?? 0;
+        $data['standard_max'] = $data['standard_max'] ?? 0;
+        $data['wildcard_min'] = $data['wildcard_min'] ?? 0;
+        $data['wildcard_max'] = $data['wildcard_max'] ?? 0;
+        $data['total_min'] = $data['total_min'] ?? 0;
+        $data['total_max'] = $data['total_max'] ?? 0;
 
         $productType = $data['product_type'] ?? 'ssl';
         if ($productType !== 'ssl' && ! empty($productType)) {

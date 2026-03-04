@@ -100,8 +100,14 @@ class Product extends BaseModel
         return $this->getCost($cost);
     }
 
-    public function setCostAttribute(array $cost): void
+    public function setCostAttribute(?array $cost): void
     {
+        if ($cost === null) {
+            $this->attributes['cost'] = null;
+
+            return;
+        }
+
         $data = $this->getCost($cost);
         $this->attributes['cost'] = json_encode($data);
     }

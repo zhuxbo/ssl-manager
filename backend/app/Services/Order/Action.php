@@ -85,6 +85,9 @@ class Action
                     $updateRequest->setProductId($product->id);
                     $updateRequest->skipSslDomainValidation();
 
+                    // 过滤 null 值，避免上游未设置的字段覆盖本地数据
+                    $item = array_filter($item, fn ($value) => $value !== null);
+
                     // 将 $item 数据合并到请求中，以便 rules() 能正确判断产品类型
                     $updateRequest->merge($item);
 
