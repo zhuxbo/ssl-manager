@@ -4,7 +4,8 @@ use App\Models\Acme\Authorization;
 use App\Models\Cert;
 use App\Models\Order;
 use App\Models\ProductPrice;
-use App\Services\Acme\ApiClient;
+use App\Services\Acme\Api\AcmeSourceApiInterface;
+use App\Services\Acme\Api\Api as AcmeApiFactory;
 use App\Services\Acme\ApiService;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -16,10 +17,13 @@ beforeEach(function () {
     $this->seed = true;
     $this->seeder = DatabaseSeeder::class;
 
-    $this->mockApiClient = Mockery::mock(ApiClient::class);
-    $this->mockApiClient->shouldReceive('isConfigured')->andReturn(false)->byDefault();
+    $this->mockSourceApi = Mockery::mock(AcmeSourceApiInterface::class);
+    $this->mockSourceApi->shouldReceive('isConfigured')->andReturn(false)->byDefault();
 
-    $this->app->instance(ApiClient::class, $this->mockApiClient);
+    $this->mockSourceApiFactory = Mockery::mock(AcmeApiFactory::class);
+    $this->mockSourceApiFactory->shouldReceive('getSourceApi')->andReturn($this->mockSourceApi)->byDefault();
+
+    $this->app->instance(AcmeApiFactory::class, $this->mockSourceApiFactory);
     $this->service = app(ApiService::class);
 });
 
@@ -54,8 +58,8 @@ test('create order creates order and cert', function () {
     createApiServiceProductPrice($product->id, $user);
 
     // 配置上游
-    $this->mockApiClient->shouldReceive('isConfigured')->andReturn(true);
-    $this->mockApiClient->shouldReceive('createOrder')
+    $this->mockSourceApi->shouldReceive('isConfigured')->andReturn(true);
+    $this->mockSourceApi->shouldReceive('createOrder')
         ->once()
         ->withArgs(function ($customer, $productCode, $domains, $referId) {
             return $customer === 'acme_test@example.com'
@@ -128,8 +132,8 @@ test('create order reuses existing order', function () {
     ]);
     $existingCert = $this->createTestCert($existingOrder, ['channel' => 'acme']);
 
-    $this->mockApiClient->shouldReceive('isConfigured')->andReturn(true);
-    $this->mockApiClient->shouldReceive('createOrder')
+    $this->mockSourceApi->shouldReceive('isConfigured')->andReturn(true);
+    $this->mockSourceApi->shouldReceive('createOrder')
         ->once()
         ->andReturn([
             'code' => 1,
@@ -175,8 +179,8 @@ test('create order with upstream maps ids', function () {
     $cert->update(['api_id' => null, 'cert' => null]);
 
     // 上游应收到 email + product.api_id + domains
-    $this->mockApiClient->shouldReceive('isConfigured')->andReturn(true);
-    $this->mockApiClient->shouldReceive('createOrder')
+    $this->mockSourceApi->shouldReceive('isConfigured')->andReturn(true);
+    $this->mockSourceApi->shouldReceive('createOrder')
         ->once()
         ->withArgs(function ($customer, $productCode, $domains, $referId) {
             return $customer === 'upstream_order@example.com'
@@ -246,8 +250,8 @@ test('reissue order calls upstream reissue', function () {
     ]);
     $cert->update(['api_id' => 999]);
 
-    $this->mockApiClient->shouldReceive('isConfigured')->andReturn(true);
-    $this->mockApiClient->shouldReceive('reissueOrder')
+    $this->mockSourceApi->shouldReceive('isConfigured')->andReturn(true);
+    $this->mockSourceApi->shouldReceive('reissueOrder')
         ->once()
         ->withArgs(function ($orderId, $domains, $referId) {
             return $orderId === 999
@@ -295,7 +299,7 @@ test('reissue order fails when no upstream id', function () {
     ]);
     $cert->update(['api_id' => null]);
 
-    $this->mockApiClient->shouldReceive('isConfigured')->andReturn(true);
+    $this->mockSourceApi->shouldReceive('isConfigured')->andReturn(true);
 
     $result = $this->service->reissueOrder($order->id, ['example.com']);
 
@@ -325,8 +329,8 @@ test('respond to challenge with upstream maps challenge id', function () {
     ]);
 
     // 上游应收到 acme_challenge_id (555)，不是 authorization.id
-    $this->mockApiClient->shouldReceive('isConfigured')->andReturn(true);
-    $this->mockApiClient->shouldReceive('respondToChallenge')
+    $this->mockSourceApi->shouldReceive('isConfigured')->andReturn(true);
+    $this->mockSourceApi->shouldReceive('respondToChallenge')
         ->once()
         ->with(555)
         ->andReturn(['code' => 1, 'data' => ['status' => 'valid']]);
@@ -370,12 +374,12 @@ test('finalize order with upstream maps cert api id', function () {
     $selfSigned = $this->generateSelfSignedCert();
 
     // 上游应收到 cert.api_id (999)
-    $this->mockApiClient->shouldReceive('isConfigured')->andReturn(true);
-    $this->mockApiClient->shouldReceive('finalizeOrder')
+    $this->mockSourceApi->shouldReceive('isConfigured')->andReturn(true);
+    $this->mockSourceApi->shouldReceive('finalizeOrder')
         ->once()
         ->with(999, Mockery::type('string'))
         ->andReturn(['code' => 1, 'data' => []]);
-    $this->mockApiClient->shouldReceive('getCertificate')
+    $this->mockSourceApi->shouldReceive('getCertificate')
         ->once()
         ->with(999)
         ->andReturn(['code' => 1, 'data' => $selfSigned]);
@@ -389,6 +393,28 @@ test('finalize order with upstream maps cert api id', function () {
 
     expect($result['code'])->toBe(1);
     expect($result['data']['id'])->toBe($order->id);
+});
+
+test('revoke certificate passes reason to upstream', function () {
+    $user = $this->createTestUser(['email' => 'revoke_reason@example.com']);
+    $product = $this->createTestProduct(['support_acme' => 1, 'api_id' => 12345]);
+    $order = $this->createTestOrder($user, $product);
+    $cert = $this->createTestCert($order, [
+        'channel' => 'acme',
+        'status' => 'active',
+        'serial_number' => 'ABCD1234',
+    ]);
+
+    $this->mockSourceApi->shouldReceive('isConfigured')->andReturn(true);
+    $this->mockSourceApi->shouldReceive('revokeCertificate')
+        ->once()
+        ->with('ABCD1234', 'KEY_COMPROMISE')
+        ->andReturn(['code' => 1]);
+
+    $result = $this->service->revokeCertificate('ABCD1234', 'KEY_COMPROMISE');
+
+    expect($result['code'])->toBe(1);
+    expect($cert->fresh()->status)->toBe('revoked');
 });
 
 test('format order always returns local id', function () {

@@ -832,7 +832,10 @@ class Action
 
         // ACME 分支：CA 调用和本地清理在外层事务外执行
         if ($isAcme) {
-            app(\App\Services\Acme\BillingService::class)->executeCancel($order);
+            $result = app(\App\Services\Acme\BillingService::class)->executeCancel($order);
+            if ($result['code'] !== 1) {
+                $this->error($result['msg'] ?? '取消失败');
+            }
         }
 
         $this->success();

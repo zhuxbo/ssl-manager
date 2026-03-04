@@ -42,6 +42,10 @@ export const ActivatingStatusOptions: { label: string; value: string }[] = [
   {
     label: "待取消",
     value: "cancelling"
+  },
+  {
+    label: "待吊销",
+    value: "revoking"
   }
 ];
 
@@ -89,6 +93,7 @@ export const statusType: {
   active: "success",
   failed: "danger",
   cancelling: "danger",
+  revoking: "danger",
   cancelled: "danger",
   renewed: "info",
   replaced: "info",
@@ -104,6 +109,7 @@ export const status: { [key: string]: string } = {
   approving: "待审核",
   active: "已签发",
   cancelling: "待取消",
+  revoking: "待吊销",
   cancelled: "已取消",
   renewed: "已续期",
   replaced: "已替换",
@@ -137,6 +143,10 @@ export const statusOptions: { label: string; value: string }[] = [
   {
     label: "待取消",
     value: "cancelling"
+  },
+  {
+    label: "待吊销",
+    value: "revoking"
   },
   {
     label: "已取消",

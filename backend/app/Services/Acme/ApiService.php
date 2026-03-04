@@ -15,7 +15,6 @@ use Illuminate\Support\Str;
 class ApiService
 {
     public function __construct(
-        private ApiClient $apiClient,
         private OrderService $orderService
     ) {}
 
@@ -54,11 +53,12 @@ class ApiService
         }
 
         // 调上游（始终新建，不判断）
-        if (! $this->apiClient->isConfigured()) {
-            return ['code' => 0, 'msg' => 'Upstream gateway not configured'];
+        $sourceApi = app(Api\Api::class)->getSourceApi($product->source ?? '');
+        if (! $sourceApi->isConfigured()) {
+            return ['code' => 0, 'msg' => 'Upstream not configured'];
         }
 
-        $upstreamResult = $this->orderService->submitNewOrder($cert, $domains, $order);
+        $upstreamResult = $this->orderService->submitNewOrder($cert, $domains, $order, $sourceApi);
 
         if (isset($upstreamResult['error'])) {
             return ['code' => 0, 'msg' => $upstreamResult['error']];
@@ -105,12 +105,13 @@ class ApiService
             return ['code' => 0, 'msg' => 'No upstream order ID found'];
         }
 
-        if (! $this->apiClient->isConfigured()) {
-            return ['code' => 0, 'msg' => 'Upstream gateway not configured'];
+        $sourceApi = app(Api\Api::class)->getSourceApi($product->source ?? '');
+        if (! $sourceApi->isConfigured()) {
+            return ['code' => 0, 'msg' => 'Upstream not configured'];
         }
 
         // 调上游（始终重签，不判断）
-        $upstreamResult = $this->orderService->submitReissue($cert, $domains, $order, (int) $upstreamOrderId);
+        $upstreamResult = $this->orderService->submitReissue($cert, $domains, $order, (int) $upstreamOrderId, $sourceApi);
 
         if (isset($upstreamResult['error'])) {
             return ['code' => 0, 'msg' => $upstreamResult['error']];
@@ -133,14 +134,12 @@ class ApiService
             return ['code' => 0, 'msg' => 'Order not found'];
         }
 
-        $order = Order::find($cert->order_id);
+        $order = Order::with('latestCert')->find($cert->order_id);
         if (! $order) {
             return ['code' => 0, 'msg' => 'Order not found'];
         }
 
-        app(BillingService::class)->executeCancel($order);
-
-        return ['code' => 1];
+        return app(BillingService::class)->executeCancel($order);
     }
 
     /**
@@ -269,20 +268,17 @@ class ApiService
         }
 
         // 本地无证书 + 有上游 + 有 api_id → 从上游获取并存储
-        if ($this->apiClient->isConfigured() && $cert->api_id) {
-            $result = $this->apiClient->getCertificate((int) $cert->api_id);
-            if ($result['code'] === 1) {
-                $certData = $result['data'];
-                $this->orderService->saveCertificateFromUpstream($cert, $cert->csr ?? '', $certData);
+        $certData = $this->orderService->getCertificateFromUpstream($cert);
+        if ($certData) {
+            $this->orderService->saveCertificateFromUpstream($cert, $cert->csr ?? '', $certData);
 
-                return [
-                    'code' => 1,
-                    'data' => [
-                        'certificate' => $certData['certificate'] ?? '',
-                        'chain' => $certData['chain'] ?? '',
-                    ],
-                ];
-            }
+            return [
+                'code' => 1,
+                'data' => [
+                    'certificate' => $certData['certificate'] ?? '',
+                    'chain' => $certData['chain'] ?? '',
+                ],
+            ];
         }
 
         return ['code' => 0, 'msg' => 'Certificate not ready'];
@@ -305,17 +301,8 @@ class ApiService
             return ['code' => 1];
         }
 
-        // 有上游则转发
-        if ($this->apiClient->isConfigured()) {
-            $result = $this->apiClient->revokeCertificate($serialNumber, $reason);
-            if ($result['code'] !== 1) {
-                return $result;
-            }
-        }
-
-        $cert->update(['status' => 'revoked']);
-
-        return ['code' => 1];
+        // revoking 状态允许重试（上次上游失败未回退）
+        return $this->orderService->revokeCertificateUpstream($cert, $reason);
     }
 
     /**

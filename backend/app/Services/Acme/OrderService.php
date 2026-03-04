@@ -21,7 +21,6 @@ class OrderService
 {
     public function __construct(
         private BillingService $billingService,
-        private ApiClient $apiClient,
         private CnameDelegationService $cnameDelegationService,
         private DelegationDnsService $delegationDnsService
     ) {}
@@ -87,16 +86,19 @@ class OrderService
         }
 
         // 4. 调用上游 API
-        if (! $this->apiClient->isConfigured()) {
-            return ['error' => 'serverInternal', 'detail' => 'Upstream gateway not configured'];
+        $source = $product->source ?? '';
+        $sourceApi = app(Api\Api::class)->getSourceApi($source);
+
+        if (! $sourceApi->isConfigured()) {
+            return ['error' => 'serverInternal', 'detail' => 'Upstream not configured'];
         }
 
-        $upstreamOrderId = $order->latestCert?->api_id;
+        $upstreamOrderId = $currentLatestCert?->api_id;
 
         if ($cert->action === 'reissue' && $upstreamOrderId) {
-            $upstreamResult = $this->submitReissue($cert, $domains, $order, (int) $upstreamOrderId);
+            $upstreamResult = $this->submitReissue($cert, $domains, $order, (int) $upstreamOrderId, $sourceApi);
         } else {
-            $upstreamResult = $this->submitNewOrder($cert, $domains, $order);
+            $upstreamResult = $this->submitNewOrder($cert, $domains, $order, $sourceApi);
         }
 
         if (isset($upstreamResult['error'])) {
@@ -149,9 +151,12 @@ class OrderService
      */
     public function respondToChallenge(Authorization $authorization): array
     {
-        if ($this->apiClient->isConfigured() && $authorization->acme_challenge_id) {
+        $source = $authorization->cert?->order?->product?->source ?? '';
+        $sourceApi = app(Api\Api::class)->getSourceApi($source);
+
+        if ($sourceApi->isConfigured() && $authorization->acme_challenge_id) {
             try {
-                $result = $this->apiClient->respondToChallenge((int) $authorization->acme_challenge_id);
+                $result = $sourceApi->respondToChallenge((int) $authorization->acme_challenge_id);
 
                 if ($result['code'] === 1) {
                     $status = $result['data']['status'] ?? 'valid';
@@ -240,12 +245,15 @@ class OrderService
             }
         }
 
-        if (! $this->apiClient->isConfigured() || ! $cert->api_id) {
-            return ['error' => 'serverInternal', 'detail' => 'Upstream gateway not configured or no api_id'];
+        $source = $cert->order?->product?->source ?? '';
+        $sourceApi = app(Api\Api::class)->getSourceApi($source);
+
+        if (! $sourceApi->isConfigured() || ! $cert->api_id) {
+            return ['error' => 'serverInternal', 'detail' => 'Upstream not configured or no api_id'];
         }
 
         // 调用连接服务 finalize
-        $finalizeResult = $this->apiClient->finalizeOrder((int) $cert->api_id, $csrPem);
+        $finalizeResult = $sourceApi->finalizeOrder((int) $cert->api_id, $csrPem);
 
         if ($finalizeResult['code'] !== 1) {
             $msg = $finalizeResult['msg'] ?? 'Upstream finalization failed';
@@ -265,7 +273,7 @@ class OrderService
             return $result;
         }
 
-        // Gateway 返回 processing 表示 CA 仍在处理中
+        // 上游返回 processing 表示 CA 仍在处理中
         $upstreamStatus = $finalizeResult['data']['status'] ?? '';
         if ($upstreamStatus === 'processing') {
             $cert->csr = $csrPem;
@@ -276,7 +284,7 @@ class OrderService
         }
 
         // 获取证书
-        $certResult = $this->apiClient->getCertificate((int) $cert->api_id);
+        $certResult = $sourceApi->getCertificate((int) $cert->api_id);
 
         if ($certResult['code'] !== 1) {
             return ['error' => 'serverInternal', 'detail' => 'Failed to retrieve certificate'];
@@ -349,12 +357,15 @@ class OrderService
      */
     public function tryCompletePendingFinalize(Cert $cert): bool
     {
-        if (! $this->apiClient->isConfigured() || ! $cert->api_id) {
+        $source = $cert->order?->product?->source ?? '';
+        $sourceApi = app(Api\Api::class)->getSourceApi($source);
+
+        if (! $sourceApi->isConfigured() || ! $cert->api_id) {
             return false;
         }
 
         try {
-            $certResult = $this->apiClient->getCertificate((int) $cert->api_id);
+            $certResult = $sourceApi->getCertificate((int) $cert->api_id);
 
             if ($certResult['code'] !== 1) {
                 return false;
@@ -373,7 +384,7 @@ class OrderService
      */
     public function getAcmeStatus(Cert $cert): string
     {
-        if (in_array($cert->status, ['revoked', 'cancelled', 'failed'])) {
+        if (in_array($cert->status, ['revoked', 'revoking', 'cancelled', 'cancelling', 'failed'])) {
             return 'invalid';
         }
 
@@ -763,12 +774,13 @@ class OrderService
     /**
      * 提交新订单到上游
      */
-    public function submitNewOrder(Cert $cert, array $domains, Order $order): array
+    public function submitNewOrder(Cert $cert, array $domains, Order $order, ?Api\AcmeSourceApiInterface $sourceApi = null): array
     {
         $user = $order->user;
         $product = $order->product;
+        $sourceApi = $sourceApi ?? app(Api\Api::class)->getSourceApi($product->source ?? '');
 
-        $apiResult = $this->apiClient->createOrder(
+        $apiResult = $sourceApi->createOrder(
             $user->email ?? '',
             (string) $product->api_id,
             $domains,
@@ -785,9 +797,11 @@ class OrderService
     /**
      * 提交重签到上游
      */
-    public function submitReissue(Cert $cert, array $domains, Order $order, int $upstreamOrderId): array
+    public function submitReissue(Cert $cert, array $domains, Order $order, int $upstreamOrderId, ?Api\AcmeSourceApiInterface $sourceApi = null): array
     {
-        $apiResult = $this->apiClient->reissueOrder(
+        $sourceApi = $sourceApi ?? app(Api\Api::class)->getSourceApi($order->product->source ?? '');
+
+        $apiResult = $sourceApi->reissueOrder(
             $upstreamOrderId,
             $domains,
             $cert->refer_id
@@ -843,6 +857,82 @@ class OrderService
         $this->populateDcvAndValidation($cert->fresh('acmeAuthorizations'));
 
         return ['cert' => $cert->fresh('acmeAuthorizations')];
+    }
+
+    /**
+     * 通过上游吊销证书（供 CertificateController / ApiService 调用）
+     *
+     * 吊销策略（与取消策略一致）：
+     * - 调用上游前先标记 revoking，上游失败不回退，保持 revoking 便于系统发现并重试
+     * - 上游未配置时返回失败，由管理员排查配置问题，不可静默标记成功
+     * - 上游返回明确成功后才标记 revoked
+     */
+    public function revokeCertificateUpstream(Cert $cert, string $reason = 'UNSPECIFIED'): array
+    {
+        $source = $cert->order?->product?->source ?? '';
+        $sourceApi = app(Api\Api::class)->getSourceApi($source);
+
+        // 上游未配置时返回失败，由管理员排查配置问题，不可静默标记成功
+        if (! $sourceApi->isConfigured()) {
+            return ['code' => 0, 'msg' => 'Upstream not configured'];
+        }
+
+        if (! $cert->serial_number) {
+            return ['code' => 0, 'msg' => 'Certificate has no serial number'];
+        }
+
+        // 调用上游前先标记 revoking，上游失败不回退
+        $cert->update(['status' => 'revoking']);
+
+        $result = $sourceApi->revokeCertificate($cert->serial_number, $reason);
+
+        if ($result['code'] !== 1) {
+            $msg = $result['msg'] ?? 'Revocation failed';
+            // "already revoked" 视为成功
+            if (! str_contains(strtolower($msg), 'already revoked')) {
+                return $result;
+            }
+        }
+
+        $cert->update(['status' => 'revoked']);
+
+        return ['code' => 1];
+    }
+
+    /**
+     * 通过上游取消订单（供 BillingService 调用）
+     *
+     * 上游未配置时返回失败，不允许静默标记本地取消成功。
+     * 取消/吊销的必要约束：上游返回明确成功后才能标记状态，配置缺失应由管理员处理。
+     */
+    public function cancelOrderUpstream(Cert $cert): array
+    {
+        $source = $cert->order?->product?->source ?? '';
+        $sourceApi = app(Api\Api::class)->getSourceApi($source);
+
+        // 上游未配置时返回失败，由管理员排查配置问题，不可静默标记成功
+        if (! $sourceApi->isConfigured()) {
+            return ['code' => 0, 'msg' => 'Upstream not configured'];
+        }
+
+        return $sourceApi->cancelOrder((int) $cert->api_id);
+    }
+
+    /**
+     * 通过上游获取证书（供 ApiService 调用）
+     */
+    public function getCertificateFromUpstream(Cert $cert): ?array
+    {
+        $source = $cert->order?->product?->source ?? '';
+        $sourceApi = app(Api\Api::class)->getSourceApi($source);
+
+        if (! $sourceApi->isConfigured() || ! $cert->api_id) {
+            return null;
+        }
+
+        $result = $sourceApi->getCertificate((int) $cert->api_id);
+
+        return $result['code'] === 1 ? $result['data'] : null;
     }
 
     /**

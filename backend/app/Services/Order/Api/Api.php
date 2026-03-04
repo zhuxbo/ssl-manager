@@ -17,7 +17,6 @@ class Api
     public function getProducts(string $source = '', string $brand = '', string $code = ''): array
     {
         $api = $this->getSourceApi($source);
-        $this->checkMethodExists($api, 'getProducts');
 
         return $this->handleResult($api->getProducts($brand, $code));
     }
@@ -40,7 +39,6 @@ class Api
     {
         $source = $data['source'] ?? '';
         $api = $this->getSourceApi($source);
-        $this->checkMethodExists($api, 'new');
 
         return $this->handleResult($api->new($data));
     }
@@ -52,7 +50,6 @@ class Api
     {
         $source = $data['source'] ?? '';
         $api = $this->getSourceApi($source);
-        $this->checkMethodExists($api, 'renew');
 
         return $this->handleResult($api->renew($data));
     }
@@ -64,7 +61,6 @@ class Api
     {
         $source = $data['source'] ?? '';
         $api = $this->getSourceApi($source);
-        $this->checkMethodExists($api, 'reissue');
 
         return $this->handleResult($api->reissue($data));
     }
@@ -75,8 +71,7 @@ class Api
     public function get(int $orderId): array
     {
         $order = $this->findOrder($orderId);
-        $api = $this->getSourceApi($order->product->source ?? 'default');
-        $this->checkMethodExists($api, 'get');
+        $api = $this->getSourceApi($order->product->source ?? '');
 
         return $this->handleResult($api->get($order->latestCert->api_id, $order->latestCert->toArray()));
     }
@@ -88,7 +83,6 @@ class Api
     {
         $order = $this->findOrder($orderId);
         $api = $this->getSourceApi($order->product->source ?? '');
-        $this->checkMethodExists($api, 'cancel');
 
         return $this->handleResult($api->cancel($order->latestCert->api_id, $order->latestCert->toArray()));
     }
@@ -100,7 +94,6 @@ class Api
     {
         $order = $this->findOrder($orderId);
         $api = $this->getSourceApi($order->product->source ?? '');
-        $this->checkMethodExists($api, 'revalidate');
 
         return $this->handleResult($api->revalidate($order->latestCert->api_id, $order->latestCert->toArray()));
     }
@@ -112,7 +105,6 @@ class Api
     {
         $order = $this->findOrder($orderId);
         $api = $this->getSourceApi($order->product->source ?? '');
-        $this->checkMethodExists($api, 'updateDCV');
 
         return $this->handleResult($api->updateDCV($order->latestCert->api_id, $method, $order->latestCert->toArray()));
     }
@@ -120,7 +112,7 @@ class Api
     /**
      * 设置产品来源
      */
-    private function getSourceApi(string $source): mixed
+    private function getSourceApi(string $source): OrderSourceApiInterface
     {
         ! $source && $this->error('产品配置错误');
 

@@ -85,32 +85,29 @@ class BillingService
      * 执行 ACME 订单取消（通知上级 + 退费 + 清理）
      *
      * 由 Action::cancel()（task 执行）和 ApiService::cancelOrder()（协议端点）调用
+     * - 未提交上游（无 api_id）：直接删除清理 + 退费
+     * - 已提交上游（有 api_id）：要求上游明确成功，仅标记状态 + 退费，不删除订单和相关信息
      */
-    /**
-     * 执行 ACME 订单取消（通知上级 + 退费 + 清理）
-     *
-     * 由 Action::cancel()（task 执行）和 ApiService::cancelOrder()（协议端点）调用
-     * latestCert 必须存在，这是系统约束——不存在时应报错而非静默处理
-     */
-    public function executeCancel(Order $order): void
+    public function executeCancel(Order $order): array
     {
         $cert = $order->latestCert;
 
         // 先设为 cancelling，与传统 API 取消流程对齐
         $cert->update(['status' => 'cancelling']);
 
-        // 通知上级取消（best-effort，事务外执行避免 CA 成功但本地回滚的不一致）
-        $apiClient = app(ApiClient::class);
-        if ($cert->api_id && $apiClient->isConfigured()) {
-            try {
-                $apiClient->cancelOrder((int) $cert->api_id);
-            } catch (\Exception $e) {
-                // best-effort，不阻断本地清理
+        $submitted = (bool) $cert->api_id;
+
+        // 已提交上游的订单，必须上游明确返回成功
+        if ($submitted) {
+            $result = app(OrderService::class)->cancelOrderUpstream($cert);
+            if ($result['code'] !== 1) {
+                // 上游取消失败，保持 cancelling 状态，便于系统发现并重试
+                return ['code' => 0, 'msg' => $result['msg'] ?? '上游取消失败'];
             }
         }
 
         // 本地 DB 更新包在事务内保证原子性
-        DB::transaction(function () use ($order, $cert) {
+        DB::transaction(function () use ($order, $cert, $submitted) {
             // 创建取消交易退费
             $transaction = OrderUtil::getCancelTransaction($order->toArray());
             Transaction::create($transaction);
@@ -118,15 +115,17 @@ class BillingService
             // 标记 cert 为 cancelled
             $cert->update(['status' => 'cancelled']);
 
-            // 清理 ACME authorizations
-            $cert->acmeAuthorizations()->delete();
-
-            // 清理 ACME account 关联
-            Account::where('order_id', $order->id)->delete();
+            // 未提交上游的 pending 订单：清理关联数据
+            if (! $submitted) {
+                $cert->acmeAuthorizations()->delete();
+                Account::where('order_id', $order->id)->delete();
+            }
 
             // 保存取消时间
             $order->update(['cancelled_at' => now()]);
         });
+
+        return ['code' => 1];
     }
 
     /**

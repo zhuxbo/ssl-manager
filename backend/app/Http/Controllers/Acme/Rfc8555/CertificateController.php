@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Acme\Rfc8555;
 
 use App\Http\Controllers\Controller;
 use App\Models\Cert;
-use App\Services\Acme\ApiClient;
 use App\Services\Acme\JwsService;
 use App\Services\Acme\NonceService;
 use App\Services\Acme\OrderService;
@@ -17,7 +16,6 @@ class CertificateController extends Controller
     public function __construct(
         private OrderService $orderService,
         private NonceService $nonceService,
-        private ApiClient $apiClient,
         private JwsService $jwsService
     ) {}
 
@@ -133,21 +131,12 @@ class CertificateController extends Controller
             }
         }
 
-        // 调用连接的 ACME 服务吊销
-        if ($this->apiClient->isConfigured() && $cert->serial_number) {
-            $result = $this->apiClient->revokeCertificate($cert->serial_number);
+        // 调用上游 ACME 服务吊销 + 更新本地状态
+        $result = $this->orderService->revokeCertificateUpstream($cert);
 
-            if ($result['code'] !== 1) {
-                $msg = $result['msg'] ?? 'Revocation failed';
-                // "already revoked" 视为成功
-                if (! str_contains(strtolower($msg), 'already revoked')) {
-                    return $this->acmeError('serverInternal', $msg, 500);
-                }
-            }
+        if ($result['code'] !== 1) {
+            return $this->acmeError('serverInternal', $result['msg'] ?? 'Revocation failed', 500);
         }
-
-        // 更新 cert 状态
-        $cert->update(['status' => 'revoked']);
 
         $nonce = $this->nonceService->generate();
 

@@ -4,7 +4,8 @@ use App\Models\Acme\Account;
 use App\Models\Acme\Authorization;
 use App\Models\Cert;
 use App\Models\ProductPrice;
-use App\Services\Acme\ApiClient;
+use App\Services\Acme\Api\AcmeSourceApiInterface;
+use App\Services\Acme\Api\Api as AcmeApiFactory;
 use App\Services\Acme\BillingService;
 use App\Services\Acme\OrderService;
 use App\Services\Delegation\CnameDelegationService;
@@ -19,8 +20,11 @@ beforeEach(function () {
     $this->seed = true;
     $this->seeder = DatabaseSeeder::class;
 
-    $this->mockApiClient = Mockery::mock(ApiClient::class);
-    $this->mockApiClient->shouldReceive('isConfigured')->andReturn(true)->byDefault();
+    $this->mockSourceApi = Mockery::mock(AcmeSourceApiInterface::class);
+    $this->mockSourceApi->shouldReceive('isConfigured')->andReturn(true)->byDefault();
+    $this->mockSourceApiFactory = Mockery::mock(AcmeApiFactory::class);
+    $this->mockSourceApiFactory->shouldReceive('getSourceApi')->andReturn($this->mockSourceApi)->byDefault();
+    $this->app->instance(AcmeApiFactory::class, $this->mockSourceApiFactory);
 
     $this->mockCnameDelegationService = Mockery::mock(CnameDelegationService::class);
     $this->mockCnameDelegationService->shouldReceive('findValidDelegation')->andReturn(null)->byDefault();
@@ -30,7 +34,6 @@ beforeEach(function () {
     $billingService = app(BillingService::class);
     $this->service = new OrderService(
         $billingService,
-        $this->mockApiClient,
         $this->mockCnameDelegationService,
         $this->mockDelegationDnsService
     );
@@ -123,7 +126,7 @@ test('create charges additional san fee when exceeding purchased', function () {
     ]);
 
     // Mock API 返回成功（reissue 场景：已有签发证书 + api_id）
-    $this->mockApiClient->shouldReceive('reissueOrder')->once()->andReturn([
+    $this->mockSourceApi->shouldReceive('reissueOrder')->once()->andReturn([
         'code' => 1,
         'data' => [
             'id' => 999,
@@ -191,7 +194,7 @@ test('create does not add gift root domain', function () {
         'status' => 'valid',
     ]);
 
-    $this->mockApiClient->shouldReceive('createOrder')->once()->andReturn([
+    $this->mockSourceApi->shouldReceive('createOrder')->once()->andReturn([
         'code' => 1,
         'data' => [
             'id' => 888,
@@ -234,7 +237,7 @@ test('create stores api id in cert', function () {
         'status' => 'valid',
     ]);
 
-    $this->mockApiClient->shouldReceive('createOrder')->once()->andReturn([
+    $this->mockSourceApi->shouldReceive('createOrder')->once()->andReturn([
         'code' => 1,
         'data' => [
             'id' => 12345,
@@ -383,7 +386,7 @@ test('create prefers order id over user id lookup', function () {
         'status' => 'valid',
     ]);
 
-    $this->mockApiClient->shouldReceive('createOrder')->once()->andReturn([
+    $this->mockSourceApi->shouldReceive('createOrder')->once()->andReturn([
         'code' => 1,
         'data' => [
             'id' => 111,
@@ -442,7 +445,7 @@ test('create writes delegation txt for dns01 authorizations', function () {
         })
         ->andReturn(true);
 
-    $this->mockApiClient->shouldReceive('createOrder')->once()->andReturn([
+    $this->mockSourceApi->shouldReceive('createOrder')->once()->andReturn([
         'code' => 1,
         'data' => [
             'id' => 222,

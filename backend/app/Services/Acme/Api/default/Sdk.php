@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace App\Services\Acme;
+namespace App\Services\Acme\Api\default;
 
 use App\Models\CaLog;
 use App\Services\LogBuffer;
 use Illuminate\Support\Facades\Http;
 
-class ApiClient
+class Sdk
 {
     private string $baseUrl;
 
@@ -17,10 +17,8 @@ class ApiClient
     public function __construct()
     {
         $this->baseUrl = $this->resolveBaseUrl();
-        // 仅按 null（未设置）回落；设置项存在时由用户保证值正确。
-        $this->apiKey = get_system_setting('ca', 'acmeToken')
-            ?? get_system_setting('ca', 'token')
-            ?? '';
+        // 仅当 acmeToken 为 null 时回落到 token，空字符串不回落（设计意图：允许显式置空以禁用）
+        $this->apiKey = trim((string) (get_system_setting('ca', 'acmeToken') ?? get_system_setting('ca', 'token') ?? ''));
     }
 
     /**
@@ -41,9 +39,6 @@ class ApiClient
         return rtrim(preg_replace('#/api/v\d+#', '/api/acme', $url), '/');
     }
 
-    /**
-     * 创建订单（合并原 createAccount + createOrder）
-     */
     public function createOrder(string $customer, string $productCode, array $domains, ?string $referId = null): array
     {
         $data = [
@@ -58,9 +53,6 @@ class ApiClient
         return $this->request('POST', '/orders', $data);
     }
 
-    /**
-     * 重签订单
-     */
     public function reissueOrder(int $orderId, array $domains, ?string $referId = null): array
     {
         $data = [
@@ -73,33 +65,21 @@ class ApiClient
         return $this->request('POST', "/orders/reissue/$orderId", $data);
     }
 
-    /**
-     * 获取订单详情
-     */
     public function getOrder(int $orderId): array
     {
         return $this->request('GET', "/orders/$orderId");
     }
 
-    /**
-     * 获取授权列表
-     */
     public function getOrderAuthorizations(int $orderId): array
     {
         return $this->request('GET', "/orders/authorizations/$orderId");
     }
 
-    /**
-     * 响应验证挑战
-     */
     public function respondToChallenge(int $challengeId): array
     {
         return $this->request('POST', "/challenges/respond/$challengeId");
     }
 
-    /**
-     * 完成订单
-     */
     public function finalizeOrder(int $orderId, string $csr): array
     {
         return $this->request('POST', "/orders/finalize/$orderId", [
@@ -107,25 +87,16 @@ class ApiClient
         ]);
     }
 
-    /**
-     * 获取证书
-     */
     public function getCertificate(int $orderId): array
     {
         return $this->request('GET', "/orders/certificate/$orderId");
     }
 
-    /**
-     * 取消订单
-     */
     public function cancelOrder(int $orderId): array
     {
         return $this->request('DELETE', "/orders/$orderId");
     }
 
-    /**
-     * 吊销证书
-     */
     public function revokeCertificate(string $serialNumber, string $reason = 'UNSPECIFIED'): array
     {
         return $this->request('POST', '/certificates/revoke', [
@@ -134,17 +105,11 @@ class ApiClient
         ]);
     }
 
-    /**
-     * 是否已配置
-     */
     public function isConfigured(): bool
     {
         return $this->baseUrl !== '' && $this->apiKey !== '';
     }
 
-    /**
-     * 发送 HTTP 请求
-     */
     private function request(string $method, string $endpoint, array $data = []): array
     {
         if (! $this->isConfigured()) {
@@ -182,9 +147,6 @@ class ApiClient
         }
     }
 
-    /**
-     * 记录请求日志
-     */
     private function logRequest(string $method, string $url, array $params, array $response, int $statusCode, bool $success): void
     {
         LogBuffer::add(CaLog::class, [

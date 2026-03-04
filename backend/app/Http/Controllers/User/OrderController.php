@@ -40,13 +40,13 @@ class OrderController extends BaseController
         // 活动中的状态
         if ($statusSet === 'activating') {
             $query->whereHas('latestCert', function ($latestCertQuery) {
-                $latestCertQuery->whereIn('status', ['unpaid', 'pending', 'processing', 'active', 'approving', 'cancelling']);
+                $latestCertQuery->whereIn('status', ['unpaid', 'pending', 'processing', 'active', 'approving', 'cancelling', 'revoking']);
             });
         }
         // 已存档的状态
         if ($statusSet === 'archived') {
             $query->whereHas('latestCert', function ($latestCertQuery) {
-                $latestCertQuery->whereIn('status', ['cancelled', 'renewed', 'replaced', 'reissued', 'expired', 'revoked', 'failed']);
+                $latestCertQuery->whereIn('status', ['cancelled', 'renewed', 'reissued', 'expired', 'revoked', 'failed']);
             });
         }
 

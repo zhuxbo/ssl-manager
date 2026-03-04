@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Route;
 | ACME REST API Routes
 |--------------------------------------------------------------------------
 | 这些路由提供 REST API 端点，供下级 Manager 调用
-| 与 Gateway 的 API 接口保持一致
+| 各级 Manager 保持统一的 API 接口
 */
 
 Route::prefix('acme')->middleware('api.v2')->group(function () {

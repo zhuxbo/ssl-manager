@@ -54,6 +54,7 @@ return new class extends Migration
                 'failed',
                 'cancelling',
                 'cancelled',
+                'revoking',
                 'revoked',
                 'renewed',
                 'reissued',
