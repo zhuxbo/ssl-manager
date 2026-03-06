@@ -519,18 +519,13 @@ const getTitle = computed(() => {
 
 // 签发方式切换处理
 const handleIssueModeChange = () => {
-  // 先让 v-if 切换完成（此时产品数据还在，el-select 有有效选项）
+  const newMode = issueMode.value;
+  // 先让 v-if 切换完成，再重置表单
   nextTick(() => {
-    // DOM 稳定后再清空产品数据
-    formData.product_id = "";
-    formData.product = {};
-    periodOptions.value = [];
-    validationMethodOptions.value = [];
-    formData.period = "";
-    formData.validation_method = "";
+    initFormData();
+    issueMode.value = newMode;
     nextTick(() => {
       productRefreshKey.value++;
-      formRef.value?.clearValidate();
     });
   });
 };

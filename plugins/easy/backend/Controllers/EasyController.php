@@ -306,7 +306,10 @@ class EasyController extends Controller
                 $isPlatinum = true;
             }
 
-            // 实付部分充值
+            // 充值策略：
+            // 1. 实付部分（amount）全额充值，不受 price 限制
+            // 2. 赠送部分（price - amount）仅 platinum 用户享有
+            // 3. 当 amount >= price 时，赠送金额 <= 0，不产生赠送充值
             if (bccomp((string) $order->amount, '0.00', 2) > 0) {
                 Fund::create([
                     'user_id' => $user->id,
@@ -490,31 +493,24 @@ class EasyController extends Controller
      */
     protected function parseValidationMethods($validationMethods): array
     {
-        if (empty($validationMethods)) {
+        if (empty($validationMethods) || ! is_array($validationMethods)) {
             return [];
         }
 
+        // 按优先级排序的验证方法（与 admin/user 端一致）
+        $orderedLabels = [
+            'delegation' => '委托验证(自动续签)',
+            'txt' => '解析验证 TXT',
+            'cname' => '解析验证 CNAME',
+            'file' => '文件验证 FILE',
+            'http' => '文件验证 FILE',
+        ];
+
+        $methods = array_map('trim', $validationMethods);
         $result = [];
-        if (is_array($validationMethods)) {
-            foreach ($validationMethods as $method) {
-                $method = trim($method);
-                switch ($method) {
-                    case 'cname':
-                        $result['cname'] = '解析验证 CNAME';
-                        break;
-                    case 'txt':
-                        $result['txt'] = '解析验证 TXT';
-                        break;
-                    case 'http':
-                        $result['http'] = '文件验证 FILE';
-                        break;
-                    case 'file':
-                        $result['file'] = '文件验证 FILE';
-                        break;
-                    case 'delegation':
-                        $result['delegation'] = '委托验证(自动续签)';
-                        break;
-                }
+        foreach ($orderedLabels as $key => $label) {
+            if (in_array($key, $methods)) {
+                $result[$key] = $label;
             }
         }
 

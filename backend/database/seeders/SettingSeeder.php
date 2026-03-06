@@ -40,7 +40,7 @@ class SettingSeeder extends Seeder
                 ['key' => 'url', 'type' => 'string', 'options' => null, 'is_multiple' => 0, 'value' => null, 'description' => '用户URL', 'weight' => 1],
                 ['key' => 'name', 'type' => 'string', 'options' => null, 'is_multiple' => 0, 'value' => null, 'description' => '站点名称', 'weight' => 2],
                 ['key' => 'callbackToken', 'type' => 'string', 'options' => null, 'is_multiple' => 0, 'value' => null, 'description' => '回调令牌', 'weight' => 3],
-                ['key' => 'dnsTools', 'type' => 'array', 'options' => null, 'is_multiple' => 0, 'value' => ['us' => 'https://dns-tools-us.cnssl.com', 'cn' => 'https://dns-tools-cn.cnssl.com'], 'description' => 'DNS工具', 'weight' => 6],
+                ['key' => 'dnsTools', 'type' => 'array', 'options' => null, 'is_multiple' => 0, 'value' => ['cn' => 'https://dns-tools-cn.cnssl.com', 'us' => 'https://dns-tools-us.cnssl.com'], 'description' => 'DNS工具', 'weight' => 6],
                 ['key' => 'delegation', 'type' => 'array', 'options' => null, 'is_multiple' => 0, 'value' => ['proxyZone' => '', 'secretId' => '', 'secretKey' => ''], 'description' => 'CNAME委托', 'weight' => 7],
                 ['key' => 'sourceLevel', 'type' => 'array', 'options' => null, 'is_multiple' => 0, 'value' => ['source1' => 'platinum', 'source2' => 'platinum'], 'description' => '用户来源对应级别', 'weight' => 8],
             ],

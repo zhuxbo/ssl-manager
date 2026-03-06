@@ -8,6 +8,8 @@ interface OrderSourceApiInterface
 {
     public function getProducts(string $brand = '', string $code = ''): array;
 
+    public function getOrders(int $page = 1, int $pageSize = 100, string $status = 'active'): array;
+
     public function new(array $data): array;
 
     public function renew(array $data): array;

@@ -129,7 +129,7 @@
             </el-button>
           </td>
         </tr>
-        <tr>
+        <tr v-if="!isApiOrAcme">
           <td class="label">自动续费</td>
           <td class="content">
             <el-select
@@ -145,7 +145,7 @@
             </el-select>
           </td>
         </tr>
-        <tr v-if="!isAcme">
+        <tr v-if="!isApiOrAcme">
           <td class="label">自动重签</td>
           <td class="content">
             <el-select
@@ -166,7 +166,7 @@
   </el-card>
 </template>
 <script setup lang="ts">
-import { inject, reactive, ref } from "vue";
+import { computed, inject, reactive, ref } from "vue";
 import { buildUUID } from "@pureadmin/utils";
 import { ElMessageBox } from "element-plus";
 import * as OrderApi from "@/api/order";
@@ -176,6 +176,9 @@ import dayjs from "dayjs";
 
 const order = inject("order") as any;
 const isAcme = inject("isAcme", ref(false)) as any;
+const isApiOrAcme = computed(() =>
+  ["api", "acme"].includes(order.latest_cert?.channel)
+);
 
 const autoLoading = ref(false);
 

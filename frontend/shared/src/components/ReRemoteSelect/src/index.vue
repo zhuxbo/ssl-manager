@@ -114,7 +114,7 @@ function shouldProcessDefaultValue(): boolean {
 
   // 如果设置了refreshKey，则根据条件判断
   if (typeof props.refreshKey === "number") {
-    return props.refreshKey > 0;
+    return props.refreshKey >= 0;
   } else {
     return props.refreshKey !== "";
   }

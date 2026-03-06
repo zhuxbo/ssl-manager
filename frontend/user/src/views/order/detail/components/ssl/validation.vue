@@ -427,11 +427,16 @@
             {{ currentCheckItem.delegation_target }}
           </el-descriptions-item>
           <el-descriptions-item
-            v-if="currentCheckItem.delegation_cname_detected"
+            v-if="currentCheckItem.delegation_cname_checked !== undefined"
             label="实际指向"
             label-align="right"
           >
-            {{ currentCheckItem.delegation_cname_detected }}
+            <template v-if="currentCheckItem.delegation_cname_detected">
+              {{ currentCheckItem.delegation_cname_detected }}
+            </template>
+            <span v-else style="color: var(--el-text-color-placeholder)">
+              未检测到
+            </span>
           </el-descriptions-item>
           <el-descriptions-item
             v-if="currentCheckItem.delegation_cname_error"
@@ -515,11 +520,16 @@
             {{ currentCheckItem.value || cert.dcv?.dns?.value }}
           </el-descriptions-item>
           <el-descriptions-item
-            v-if="currentCheckItem.detected_value"
+            v-if="currentCheckItem.checked !== undefined"
             label="检测到的值"
             label-align="right"
           >
-            {{ currentCheckItem.detected_value }}
+            <template v-if="currentCheckItem.detected_value">
+              {{ currentCheckItem.detected_value }}
+            </template>
+            <span v-else style="color: var(--el-text-color-placeholder)">
+              未检测到
+            </span>
           </el-descriptions-item>
           <el-descriptions-item
             v-if="currentCheckItem.query_sub"
@@ -816,12 +826,16 @@ async function verifyCname(
         { timeout: 10000 }
       );
 
-      if (response.data?.data?.results) {
-        const result = response.data.data.results[domain] || {};
+      // code=1 时数据在 data.results，code=0 时在 errors 数组
+      let result = response.data?.data?.results?.[domain];
+      if (!result && response.data?.errors?.length) {
+        result = response.data.errors.find((e: any) => e.domain === domain);
+      }
+      if (result) {
         return {
           detected_value: result.value || "",
           checked: result.matched === "true",
-          error: result.matched === "false" ? "CNAME 记录不匹配" : ""
+          error: result.matched === "false" ? "验证未通过" : ""
         };
       }
       if (response.data?.msg)

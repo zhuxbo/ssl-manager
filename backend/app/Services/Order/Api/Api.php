@@ -70,7 +70,7 @@ class Api
      */
     public function get(int $orderId): array
     {
-        $order = $this->findOrder($orderId);
+        $order = $this->findOrder($orderId, requireApiId: true);
         $api = $this->getSourceApi($order->product->source ?? '');
 
         return $this->handleResult($api->get($order->latestCert->api_id, $order->latestCert->toArray()));
@@ -81,7 +81,7 @@ class Api
      */
     public function cancel(int $orderId): array
     {
-        $order = $this->findOrder($orderId);
+        $order = $this->findOrder($orderId, requireApiId: true);
         $api = $this->getSourceApi($order->product->source ?? '');
 
         return $this->handleResult($api->cancel($order->latestCert->api_id, $order->latestCert->toArray()));
@@ -92,7 +92,7 @@ class Api
      */
     public function revalidate(int $orderId): array
     {
-        $order = $this->findOrder($orderId);
+        $order = $this->findOrder($orderId, requireApiId: true);
         $api = $this->getSourceApi($order->product->source ?? '');
 
         return $this->handleResult($api->revalidate($order->latestCert->api_id, $order->latestCert->toArray()));
@@ -103,7 +103,7 @@ class Api
      */
     public function updateDCV(int $orderId, string $method): array
     {
-        $order = $this->findOrder($orderId);
+        $order = $this->findOrder($orderId, requireApiId: true);
         $api = $this->getSourceApi($order->product->source ?? '');
 
         return $this->handleResult($api->updateDCV($order->latestCert->api_id, $method, $order->latestCert->toArray()));
@@ -137,7 +137,7 @@ class Api
     /**
      * 根据API ID查找订单
      */
-    private function findOrder(int $orderId): Order
+    private function findOrder(int $orderId, bool $requireApiId = false): Order
     {
         $order = Order::with(['product', 'latestCert'])
             ->whereHas('user')
@@ -147,6 +147,10 @@ class Api
 
         if (! $order) {
             $this->error('未找到对应的订单');
+        }
+
+        if ($requireApiId && ! $order->latestCert->api_id) {
+            $this->error('订单尚未提交，无法执行此操作');
         }
 
         return $order;

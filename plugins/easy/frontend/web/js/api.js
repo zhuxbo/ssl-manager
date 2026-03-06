@@ -145,12 +145,16 @@ window.API = (function () {
         });
         if (response.ok) {
           const data = await response.json();
-          if (data.data?.results) {
-            const result = data.data.results[domain] || {};
+          // code=1 时数据在 data.results，code=0 时在 errors 数组
+          let result = data.data?.results?.[domain];
+          if (!result && data.errors?.length) {
+            result = data.errors.find(e => e.domain === domain);
+          }
+          if (result) {
             return {
               detected_value: result.value || "",
               checked: result.matched === "true",
-              error: result.matched === "false" ? "CNAME 记录不匹配" : ""
+              error: result.matched === "false" ? "验证未通过" : ""
             };
           }
           if (data.msg)
