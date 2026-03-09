@@ -307,6 +307,75 @@ test('reissue order fails when no upstream id', function () {
     expect($result['msg'])->toContain('No upstream order ID');
 });
 
+test('reissue order does not recover cert from another order with same user refer id', function () {
+    $user = $this->createTestUser(['balance' => '500.00', 'email' => 'reissue-scope@example.com']);
+    $product = $this->createTestProduct([
+        'support_acme' => 1,
+        'api_id' => 88888,
+        'standard_min' => 1,
+        'wildcard_min' => 0,
+        'total_min' => 1,
+        'reissue' => 1,
+    ]);
+    createApiServiceProductPrice($product->id, $user);
+
+    $targetOrder = $this->createTestOrder($user, $product, [
+        'period_till' => now()->addYear(),
+        'purchased_standard_count' => 1,
+    ]);
+    $targetCert = $this->createTestCert($targetOrder, [
+        'channel' => 'acme',
+        'status' => 'active',
+    ]);
+    $targetCert->update(['api_id' => 3001]);
+
+    $otherOrder = $this->createTestOrder($user, $product, [
+        'period_till' => now()->addYear(),
+        'purchased_standard_count' => 1,
+    ]);
+    $otherCert = $this->createTestCert($otherOrder, [
+        'channel' => 'acme',
+        'status' => 'processing',
+        // 这个 refer_id 属于同一用户的另一张订单，不能被当前 orderId 的恢复逻辑误命中。
+        'refer_id' => 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    ]);
+    $otherCert->update(['api_id' => 4001]);
+
+    $this->mockSourceApi->shouldReceive('isConfigured')->andReturn(true);
+    $this->mockSourceApi->shouldReceive('reissueOrder')
+        ->once()
+        ->withArgs(function ($orderId, $domains, $referId) {
+            return $orderId === 3001
+                && $domains === ['current.example.com']
+                && $referId !== 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+        })
+        ->andReturn([
+            'code' => 1,
+            'data' => [
+                'id' => 5001,
+                'authorizations' => [
+                    [
+                        'identifier' => ['type' => 'dns', 'value' => 'current.example.com'],
+                        'status' => 'pending',
+                        'challenges' => [
+                            ['id' => 6001, 'type' => 'dns-01', 'token' => 'target-token', 'key_authorization' => 'target-ka', 'status' => 'pending'],
+                        ],
+                    ],
+                ],
+            ],
+        ]);
+
+    $result = $this->service->reissueOrder(
+        $targetOrder->id,
+        ['current.example.com'],
+        'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+    );
+
+    expect($result['code'])->toBe(1);
+    expect($result['data']['id'])->toBe($targetOrder->id);
+    expect($result['data']['id'])->not->toBe($otherOrder->id);
+});
+
 test('respond to challenge with upstream maps challenge id', function () {
     $user = $this->createTestUser(['email' => 'challenge_map@example.com']);
     $product = $this->createTestProduct(['support_acme' => 1, 'api_id' => 12345]);

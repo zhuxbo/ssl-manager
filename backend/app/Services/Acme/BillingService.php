@@ -168,8 +168,6 @@ class BillingService
                     'channel' => 'acme',
                     'common_name' => '',
                     'email' => $user->email,
-                    'standard_count' => $product->standard_min,
-                    'wildcard_count' => $product->wildcard_min,
                     'amount' => '0.00',
                     'status' => 'pending',
                 ]);
@@ -251,15 +249,13 @@ class BillingService
                     'auto_renew' => true,
                 ]);
 
-                // 创建 Cert
+                // 创建 Cert（域名数量和金额在扣费时写入）
                 $cert = Cert::create([
                     'order_id' => $order->id,
                     'action' => 'new',
                     'channel' => 'acme',
                     'common_name' => '',
                     'email' => $user->email,
-                    'standard_count' => $product->standard_min,
-                    'wildcard_count' => $product->wildcard_min,
                     'amount' => '0.00',
                     'status' => 'pending',
                 ]);

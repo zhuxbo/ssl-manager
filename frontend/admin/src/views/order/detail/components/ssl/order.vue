@@ -69,7 +69,7 @@
             }}
           </td>
         </tr>
-        <tr v-if="!isAcme">
+        <tr>
           <td class="label">已购</td>
           <td class="content">
             {{

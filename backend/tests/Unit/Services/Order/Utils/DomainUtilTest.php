@@ -2,6 +2,8 @@
 
 use App\Services\Order\Utils\DomainUtil;
 
+uses(Tests\TestCase::class);
+
 // ==================== getRootDomain ====================
 
 test('get root domain', function (string $domain, string $expected) {

@@ -7,10 +7,12 @@ namespace App\Services\Acme;
 use App\Models\Acme\Account;
 use App\Models\Acme\Authorization;
 use App\Models\Cert;
+use App\Models\CnameDelegation;
 use App\Models\Order;
 use App\Models\Transaction;
 use App\Services\Delegation\CnameDelegationService;
 use App\Services\Delegation\DelegationDnsService;
+use App\Services\Order\Utils\DomainUtil;
 use App\Services\Order\Utils\OrderUtil;
 use App\Services\Order\Utils\ValidatorUtil;
 use Illuminate\Support\Facades\DB;
@@ -20,7 +22,6 @@ use Illuminate\Support\Str;
 class OrderService
 {
     public function __construct(
-        private BillingService $billingService,
         private CnameDelegationService $cnameDelegationService,
         private DelegationDnsService $delegationDnsService
     ) {}
@@ -31,35 +32,17 @@ class OrderService
     public function create(Account $account, array $identifiers): array
     {
         // 1. 查找有效 Order + Product + 当前 latestCert
-        // 优先通过 order_id 精确定位，为空时回落到 user_id 查询（兼容旧数据）
-        $user = $account->user;
-        $order = null;
-
-        if ($account->order_id) {
-            $order = Order::where('id', $account->order_id)
-                ->where('period_till', '>', now())
-                ->whereNull('cancelled_at')
-                ->first();
+        if (! $account->order_id) {
+            return ['error' => 'orderNotReady', 'detail' => 'Account has no associated order'];
         }
 
-        if (! $order) {
-            $order = Order::where('user_id', $user->id)
-                ->whereHas('product', fn ($q) => $q->where('support_acme', 1))
-                ->where('period_till', '>', now())
-                ->whereNull('cancelled_at')
-                ->orderBy('period_till', 'desc')
-                ->first();
-        }
+        $order = Order::where('id', $account->order_id)
+            ->where('period_till', '>', now())
+            ->whereNull('cancelled_at')
+            ->first();
 
         if (! $order) {
-            $billingCheck = $this->billingService->canIssueCertificate($account);
-            if (! $billingCheck['allowed']) {
-                return [
-                    'error' => $billingCheck['error'],
-                    'detail' => $billingCheck['detail'],
-                ];
-            }
-            $order = $billingCheck['order'];
+            return ['error' => 'orderNotReady', 'detail' => 'Associated order not found or expired'];
         }
 
         $product = $order->product;
@@ -78,7 +61,15 @@ class OrderService
             return ['error' => 'rejectedIdentifier', 'detail' => implode('; ', array_values($sanErrors))];
         }
 
-        // 3. prepareAndCharge：cert 复用/创建 + 扣费（事务内）
+        // 3. 幂等检查：Account 已通过 kid 关联到 Order，latestCert 已提交上游则直接返回
+        if ($currentLatestCert->channel === 'acme'
+            && $currentLatestCert->status === 'processing'
+            && $currentLatestCert->api_id
+            && empty($currentLatestCert->cert)) {
+            return ['order' => $currentLatestCert->fresh('acmeAuthorizations')];
+        }
+
+        // 4. prepareAndCharge：cert 复用/创建 + 扣费（事务内）
         try {
             $cert = $this->prepareAndCharge($order, $domains);
         } catch (\Exception $e) {
@@ -320,12 +311,9 @@ class OrderService
         $serialNumber = $certParsed['serialNumberHex'] ?? null;
         $issuerCn = $certParsed['issuer']['CN'] ?? null;
 
-        $issuedAt = isset($certParsed['validFrom_time_t'])
-            ? \Carbon\Carbon::createFromTimestamp($certParsed['validFrom_time_t'])
-            : now();
-        $expiresAt = isset($certParsed['validTo_time_t'])
-            ? \Carbon\Carbon::createFromTimestamp($certParsed['validTo_time_t'])
-            : now()->addMonths(12);
+        // 证书时间：使用原始时间戳，Eloquent datetime cast 会自动转换为系统时区（参考传统 API parseCert）
+        $issuedAt = $certParsed['validFrom_time_t'] ?? 0;
+        $expiresAt = $certParsed['validTo_time_t'] ?? 0;
 
         $encryption = $certParsed['signatureTypeSN'] ?? '';
         $encryption = explode('-', $encryption);
@@ -336,8 +324,8 @@ class OrderService
         $cert->csr_md5 = md5($csrPem);
         $cert->cert = $certificate;
         $cert->serial_number = $serialNumber;
-        $cert->issued_at = $issuedAt;
-        $cert->expires_at = $expiresAt;
+        $cert->issued_at = $issuedAt ?: now();
+        $cert->expires_at = $expiresAt ?: now()->addMonths(12);
         $cert->fingerprint = openssl_x509_fingerprint($certificate) ?: '';
         $cert->encryption_alg = $encryption[0] ?? '';
         $cert->encryption_bits = $keyDetails['bits'] ?? 0;
@@ -549,15 +537,27 @@ class OrderService
             if ($userId && $method !== 'txt') {
                 foreach ($authorizations as $authz) {
                     $domain = ltrim($authz->identifier_value, '*.');
-                    $delegation = $this->cnameDelegationService->findValidDelegation($userId, $domain, '_acme-challenge');
+
+                    if ($method === 'delegation') {
+                        // 用户主动选择委托：查找所有记录（含未验证的），让前端显示 CNAME 目标
+                        $delegation = CnameDelegation::where([
+                            'user_id' => $userId,
+                            'zone' => strtolower(DomainUtil::convertToUnicode($domain)),
+                            'prefix' => '_acme-challenge',
+                        ])->first();
+                    } else {
+                        // 自动检测：仅查找已验证的委托记录
+                        $delegation = $this->cnameDelegationService->findValidDelegation($userId, $domain, '_acme-challenge');
+                    }
+
                     if ($delegation) {
                         $delegations[$authz->identifier_value] = $delegation;
                     }
                 }
             }
 
-            // 自动检测：有委托记录则默认使用委托模式
-            $useDelegate = $method === 'delegation' || ($method === null && ! empty($delegations));
+            // 有实际委托记录时才启用委托模式（无记录时即使用户选择 delegation 也回退到 txt）
+            $useDelegate = ! empty($delegations) && ($method === null || $method === 'delegation');
 
             // 取第一个授权的 TXT 值作为 dcv 默认值
             $firstTxtValue = $first->key_authorization
@@ -639,15 +639,20 @@ class OrderService
      */
     public function acmeRevalidate(Cert $cert): void
     {
+        // 先写委托 TXT（用户可能在订单创建后才配置委托，确保挑战响应前 TXT 已写入）
+        $this->writeDelegationTxtForAuthorizations($cert);
+
         $authorizations = $cert->acmeAuthorizations()->where('status', '!=', 'valid')->get();
 
         foreach ($authorizations as $authorization) {
             $this->respondToChallenge($authorization);
         }
 
-        // 刷新 cert 的 validation 数据
+        // 更新申请状态，保留当前验证方式
+        $method = ($cert->dcv['is_delegate'] ?? false) ? 'delegation' : null;
         $cert->refresh();
-        $this->populateDcvAndValidation($cert);
+        $cert->updateQuietly(['cert_apply_status' => 2]);
+        $this->populateDcvAndValidation($cert, $method);
     }
 
     /**
@@ -655,6 +660,18 @@ class OrderService
      */
     public function acmeUpdateDCV(Cert $cert, ?string $method = null): void
     {
+        // 切换到委托验证时，自动创建缺失的委托记录
+        if ($method === 'delegation') {
+            $userId = $cert->order?->user_id;
+            if ($userId) {
+                $authorizations = $cert->acmeAuthorizations()->where('challenge_type', 'dns-01')->get();
+                foreach ($authorizations as $authz) {
+                    $domain = ltrim($authz->identifier_value, '*.');
+                    $this->cnameDelegationService->createOrGet($userId, $domain, '_acme-challenge');
+                }
+            }
+        }
+
         $this->populateDcvAndValidation($cert, $method);
     }
 
@@ -677,12 +694,6 @@ class OrderService
         $standardCount = $sans['standard_count'];
         $wildcardCount = $sans['wildcard_count'];
 
-        // 清理 stuck cert
-        if ($currentLatestCert->status === 'processing' && empty($currentLatestCert->cert)) {
-            $currentLatestCert->update(['status' => 'failed']);
-            $currentLatestCert->refresh();
-        }
-
         return DB::transaction(function () use ($order, $currentLatestCert, $product, $user, $domains, $standardCount, $wildcardCount) {
             $order = Order::lockForUpdate()->find($order->id);
 
@@ -690,10 +701,44 @@ class OrderService
                 ->whereNotNull('cert')
                 ->where('cert', '!=', '')
                 ->exists();
-            $isFirstOrder = ! $hasIssuedCert;
 
-            if (! $isFirstOrder && ! $product->reissue) {
+            if ($hasIssuedCert && ! $product->reissue) {
                 throw new \Exception('Product does not support reissue');
+            }
+
+            $action = $hasIssuedCert ? 'reissue' : 'new';
+
+            // 重签域名验证（参考传统 API 的 add_san/replace_san 规则）
+            if ($action === 'reissue') {
+                $lastIssuedCert = Cert::where('order_id', $order->id)
+                    ->whereNotNull('cert')
+                    ->where('cert', '!=', '')
+                    ->orderBy('id', 'desc')
+                    ->first();
+
+                if ($lastIssuedCert) {
+                    // 不支持增加 SAN：新域名数量不能超过上次签发的证书
+                    if (! $product->add_san) {
+                        if ($standardCount > ($lastIssuedCert->standard_count ?? 0)) {
+                            throw new \Exception('Standard domain count exceeds previous certificate');
+                        }
+                        if ($wildcardCount > ($lastIssuedCert->wildcard_count ?? 0)) {
+                            throw new \Exception('Wildcard domain count exceeds previous certificate');
+                        }
+                    }
+
+                    // 不支持替换 SAN：上次签发的域名必须全部包含在新域名列表中
+                    if (! $product->replace_san) {
+                        $oldDomains = array_filter(explode(',', $lastIssuedCert->alternative_names ?? ''));
+                        $missingDomains = array_diff(
+                            array_map('strtolower', $oldDomains),
+                            array_map('strtolower', $domains)
+                        );
+                        if (! empty($missingDomains)) {
+                            throw new \Exception('Cannot remove domains from previous certificate: '.implode(', ', $missingDomains));
+                        }
+                    }
+                }
             }
 
             $canReuse = $currentLatestCert->status === 'pending'
@@ -704,28 +749,30 @@ class OrderService
                 $cert = $currentLatestCert;
                 $cert->acmeAuthorizations()->delete();
 
-                $action = $isFirstOrder ? 'new' : 'reissue';
                 if ($cert->action !== $action) {
                     $cert->update(['action' => $action]);
                 }
             } else {
-                $action = $isFirstOrder ? 'new' : 'reissue';
-
                 $cert = Cert::create([
                     'order_id' => $order->id,
                     'last_cert_id' => $currentLatestCert->id,
                     'action' => $action,
                     'channel' => 'acme',
-                    'common_name' => $domains[0] ?? '',
                     'email' => $user->email,
-                    'standard_count' => $standardCount,
-                    'wildcard_count' => $wildcardCount,
                     'status' => 'pending',
                 ]);
 
                 $order->latest_cert_id = $cert->id;
                 $order->save();
             }
+
+            // 写入域名信息（无论复用还是新建）
+            $cert->update([
+                'common_name' => $domains[0] ?? '',
+                'alternative_names' => implode(',', $domains),
+                'standard_count' => $standardCount,
+                'wildcard_count' => $wildcardCount,
+            ]);
 
             // 幂等扣费
             $needCharge = $standardCount > ($order->purchased_standard_count ?? 0)
@@ -829,6 +876,7 @@ class OrderService
             'wildcard_count' => $sans['wildcard_count'],
             'api_id' => $apiData['id'],
             'status' => 'processing',
+            'cert_apply_status' => 2,
         ]);
 
         if (isset($apiData['authorizations'])) {

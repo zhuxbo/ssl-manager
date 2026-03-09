@@ -174,7 +174,7 @@ const configHome = computed(() => `~/.acme.sh/${order.eab_kid}`);
 const certbotCommand = computed(() => {
   const challengeMethod =
     method.value === "dns-01" ? "--manual" : "--standalone";
-  return `certbot certonly --config-dir ${configDir.value} --server ${order.server_url} --eab-kid ${order.eab_kid} --eab-hmac-key ${order.eab_hmac} --preferred-challenges ${method.value} ${challengeMethod} ${domainFlags.value}`;
+  return `certbot certonly --config-dir ${configDir.value} --server ${order.server_url} --eab-kid ${order.eab_kid} --eab-hmac-key ${order.eab_hmac} --preferred-challenges ${method.value} --key-type rsa ${challengeMethod} ${domainFlags.value}`;
 });
 
 const acmeRegisterCommand = computed(() => {
@@ -186,7 +186,7 @@ const acmeIssueCommand = computed(() => {
     method.value === "dns-01"
       ? "--dns --yes-I-know-dns-manual-mode-enough-go-ahead-please"
       : "-w /var/www/html";
-  return `acme.sh --issue --config-home ${configHome.value} --server ${order.server_url} ${issueMethod} ${domainFlags.value}`;
+  return `acme.sh --issue --config-home ${configHome.value} --server ${order.server_url} --keylength 2048 ${issueMethod} ${domainFlags.value}`;
 });
 
 const handleCopy = (text: string) => {

@@ -84,9 +84,11 @@ class AcmeController extends Controller
             'server_url' => $serverUrl,
             'certbot_command' => "certbot certonly --config-dir $configDir --server $serverUrl --eab-kid $order->eab_kid"
                 ." --eab-hmac-key $order->eab_hmac"
-                .' -d example.com --preferred-challenges dns-01',
-            'acmesh_command' => "acme.sh --register-account --config-home $configHome --server $serverUrl --eab-kid $order->eab_kid"
+                .' --preferred-challenges dns-01 --key-type rsa -d example.com',
+            'acmesh_register_command' => "acme.sh --register-account --config-home $configHome --server $serverUrl --eab-kid $order->eab_kid"
                 ." --eab-hmac-key $order->eab_hmac",
+            'acmesh_issue_command' => "acme.sh --issue --config-home $configHome --server $serverUrl --keylength 2048"
+                .' --dns --yes-I-know-dns-manual-mode-enough-go-ahead-please -d example.com',
         ]);
     }
 }

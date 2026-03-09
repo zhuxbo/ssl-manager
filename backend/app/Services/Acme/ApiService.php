@@ -28,6 +28,21 @@ class ApiService
             return ['code' => 0, 'msg' => 'User not found'];
         }
 
+        // 丢单恢复：refer_id 已存在且已提交上游，直接返回已有订单（限制用户 scope）
+        if ($referId) {
+            $existingCert = Cert::where('refer_id', $referId)
+                ->where('channel', 'acme')
+                ->whereNotNull('api_id')
+                ->whereHas('order', fn ($q) => $q->where('user_id', $user->id))
+                ->first();
+
+            if ($existingCert) {
+                $existingCert->load('acmeAuthorizations');
+
+                return ['code' => 1, 'data' => $this->formatOrder($existingCert)];
+            }
+        }
+
         $product = Product::where('api_id', $productCode)
             ->where('support_acme', 1)
             ->first();
@@ -78,6 +93,21 @@ class ApiService
         $order = Order::find($orderId);
         if (! $order) {
             return ['code' => 0, 'msg' => 'Order not found'];
+        }
+
+        // 丢单恢复：refer_id 已存在且已提交上游，直接返回已有订单（限制目标订单）
+        if ($referId) {
+            $existingCert = Cert::where('refer_id', $referId)
+                ->where('channel', 'acme')
+                ->where('order_id', $orderId)
+                ->whereNotNull('api_id')
+                ->first();
+
+            if ($existingCert) {
+                $existingCert->load('acmeAuthorizations');
+
+                return ['code' => 1, 'data' => $this->formatOrder($existingCert)];
+            }
         }
 
         $product = $order->product;
@@ -344,8 +374,6 @@ class ApiService
                 'common_name' => '',
                 'refer_id' => $referId ?? str_replace('-', '', Str::uuid()->toString()),
                 'email' => $user->email,
-                'standard_count' => $product->standard_min,
-                'wildcard_count' => $product->wildcard_min,
                 'amount' => '0.00',
                 'status' => 'pending',
             ]);
