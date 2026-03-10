@@ -13,24 +13,44 @@ class ApiController extends Controller
     ) {}
 
     /**
-     * 创建订单
-     * POST /api/acme/orders
+     * 准备订单（两步之一：创建订单结构 + 获取上游 api_id）
+     * POST /api/acme/orders/prepare
      */
-    public function createOrder(Request $request): void
+    public function prepareOrder(Request $request): void
     {
         $request->validate([
             'customer' => 'required|email|max:200',
             'product_code' => 'required|string|max:50',
-            'domains' => 'required|array|min:1',
-            'domains.*' => 'required|string|max:255',
             'refer_id' => 'sometimes|string|max:64',
         ]);
 
-        $result = $this->apiService->createOrder(
+        $result = $this->apiService->prepareOrder(
             $request->input('customer'),
             $request->input('product_code'),
-            $request->input('domains'),
             $request->input('refer_id')
+        );
+
+        if ($result['code'] === 1) {
+            $this->success($result['data']);
+        } else {
+            $this->error($result['msg']);
+        }
+    }
+
+    /**
+     * 提交域名（两步之二：提交域名 + 获取 authorizations）
+     * POST /api/acme/orders/{id}/domains
+     */
+    public function submitDomains(Request $request, int $id): void
+    {
+        $request->validate([
+            'domains' => 'required|array|min:1',
+            'domains.*' => 'required|string|max:255',
+        ]);
+
+        $result = $this->apiService->submitDomains(
+            $id,
+            $request->input('domains')
         );
 
         if ($result['code'] === 1) {

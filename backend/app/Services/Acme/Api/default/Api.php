@@ -15,9 +15,14 @@ class Api implements AcmeSourceApiInterface
         $this->sdk = new Sdk;
     }
 
-    public function createOrder(string $customer, string $productCode, array $domains, ?string $referId = null): array
+    public function prepareOrder(string $customer, string $productCode, ?string $referId = null): array
     {
-        return $this->sdk->createOrder($customer, $productCode, $domains, $referId);
+        return $this->sdk->prepareOrder($customer, $productCode, $referId);
+    }
+
+    public function submitDomains(int $orderId, array $domains): array
+    {
+        return $this->sdk->submitDomains($orderId, $domains);
     }
 
     public function reissueOrder(int $orderId, array $domains, ?string $referId = null): array

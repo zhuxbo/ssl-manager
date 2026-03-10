@@ -70,13 +70,13 @@ skills/         # 开发规范（详细文档）
 
 - **架构**：certbot → Manager A → Manager B → ... → Gateway → CA，每级都有系统 orders/certs 记录
 - **去掉 acme_orders 表**：订单/证书全部使用系统 `orders` + `certs` 表
-- **无 account 概念**：REST API 不暴露 account，合并为单步 `POST /orders`（新建）+ `POST /orders/reissue/{id}`（重签）。只有 RFC 8555 handler 做 new/reissue 判断
+- **两步创建（对齐 Gateway）**：REST API 拆为 `POST /orders/prepare`（prepareOrder，获取 api_id + EAB）+ `POST /orders/{id}/domains`（submitDomains，提交域名获取 authorizations），重签仍为一步 `POST /orders/reissue/{id}`。RFC 8555 handler 内部通过 `submitNewOrder` 调用同一组方法
 - **产品标识**：`products.support_acme = 1` 标识 ACME 产品（不新增 product_type）
 - **ID 映射**：一层映射 `certs.api_id → 上游 order.id`，`acme_authorizations.acme_challenge_id → 上游 challenge.id`。REST API 统一使用 order.id（通过 `findCertByOrderId()` 查找 latestCert）
 - **路由风格**：id 放在子操作后面，如 `/orders/finalize/{id}`、`/orders/reissue/{id}`、`/challenges/respond/{id}`
 - **AcmeAccount 精确关联**：`acme_accounts.order_id` 直接关联 Order，避免通过 user_id 查找错误（兼容旧数据回落到 user_id 查询）
-- **ApiService 核心原则**：所有方法「查本级 → 映射 ID → 调上游」，不能透传下游 ID 给上游。createOrder 始终调 submitNewOrder，reissueOrder 始终调 submitReissue
-- **OrderService 拆分**：`submitNewOrder`（新建）+ `submitReissue`（重签）+ `saveUpstreamResult`（共享保存逻辑）。RFC 8555 create 方法根据 `cert.action` 判断调用哪个
+- **ApiService 核心原则**：所有方法「查本级 → 映射 ID → 调上游」，不能透传下游 ID 给上游。prepareOrder 获取上游 api_id，submitDomains 提交域名，reissueOrder 调 submitReissue
+- **OrderService 拆分**：`prepareUpstreamOrder`（获取 api_id）+ `submitUpstreamDomains`（提交域名）+ `submitNewOrder`（组合三步供 RFC 8555 使用）+ `submitReissue`（重签）+ `saveUpstreamResult`（private 共享保存逻辑）。RFC 8555 create 方法根据 `cert.action` 判断调用哪个
 - **EAB 可复用**：同一 EAB 可多次注册 ACME 账户（Certum 订单级认证），`eab_used_at` 仅记录首次使用时间
 - **续费联动**：`BillingService::tryAutoRenew` 创建新 Order 后自动迁移 `AcmeAccount.order_id`，并通知上游创建新订单（best-effort）
 - **DNS 委托自动化**：创建 ACME Order 时自动尝试通过委托写 TXT 记录（best-effort，不阻塞）

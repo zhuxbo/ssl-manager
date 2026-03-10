@@ -13,7 +13,8 @@ use Illuminate\Support\Facades\Route;
 
 Route::prefix('acme')->middleware('api.v2')->group(function () {
     // 订单管理（具名子路径必须在通配路由之前）
-    Route::post('orders', [ApiController::class, 'createOrder']);
+    Route::post('orders/prepare', [ApiController::class, 'prepareOrder']);
+    Route::post('orders/{id}/domains', [ApiController::class, 'submitDomains'])->where('id', '[0-9]+');
     Route::post('orders/reissue/{id}', [ApiController::class, 'reissueOrder'])->where('id', '[0-9]+');
     Route::get('orders/authorizations/{id}', [ApiController::class, 'getOrderAuthorizations'])->where('id', '[0-9]+');
     Route::post('orders/finalize/{id}', [ApiController::class, 'finalizeOrder'])->where('id', '[0-9]+');

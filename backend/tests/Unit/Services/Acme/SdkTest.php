@@ -46,29 +46,6 @@ test('request uses system setting url and key', function () {
     });
 });
 
-test('create order sends correct payload', function () {
-    mockSystemSettings($this->app, 'https://gateway.test/api', 'test-key');
-
-    Http::fake([
-        'gateway.test/api/*' => Http::response(['code' => 1, 'data' => ['id' => 99]], 200),
-    ]);
-
-    $client = app(Sdk::class);
-    $result = $client->createOrder('test@example.com', 'DV_SSL', ['example.com', '*.example.com'], 'ref123');
-
-    expect($result['code'])->toBe(1);
-
-    Http::assertSent(function ($request) {
-        $body = $request->data();
-
-        return $request->url() === 'https://gateway.test/api/orders'
-            && $body['customer'] === 'test@example.com'
-            && $body['product_code'] === 'DV_SSL'
-            && $body['domains'] === ['example.com', '*.example.com']
-            && $body['refer_id'] === 'ref123';
-    });
-});
-
 test('reissue order sends correct payload', function () {
     mockSystemSettings($this->app, 'https://gateway.test/api', 'test-key');
 

@@ -19,16 +19,23 @@ class ApiService
     ) {}
 
     /**
-     * 创建订单 — 查找/创建 Order + 扣费 + 调上游新建
+     * 步骤一：准备订单 — 创建订单结构 + 获取上游 api_id
      */
-    public function createOrder(string $customer, string $productCode, array $domains, ?string $referId = null): array
+    public function prepareOrder(string $customer, string $productCode, ?string $referId = null): array
     {
         $user = User::where('email', $customer)->first();
         if (! $user) {
             return ['code' => 0, 'msg' => 'User not found'];
         }
 
-        // 丢单恢复：refer_id 已存在且已提交上游，直接返回已有订单（限制用户 scope）
+        $product = Product::where('api_id', $productCode)
+            ->where('support_acme', 1)
+            ->first();
+        if (! $product) {
+            return ['code' => 0, 'msg' => 'Product not found'];
+        }
+
+        // 丢单恢复：refer_id 已存在且已有 api_id → 返回已有订单
         if ($referId) {
             $existingCert = Cert::where('refer_id', $referId)
                 ->where('channel', 'acme')
@@ -37,15 +44,51 @@ class ApiService
                 ->first();
 
             if ($existingCert) {
-                $existingCert->load('acmeAuthorizations');
-
-                return ['code' => 1, 'data' => $this->formatOrder($existingCert)];
+                return ['code' => 1, 'data' => $this->formatPrepareResult($existingCert)];
             }
         }
 
-        $product = Product::where('api_id', $productCode)
-            ->where('support_acme', 1)
-            ->first();
+        // 复用已有 Order 或创建新 Order
+        $order = $this->findOrCreateOrder($user, $product, $referId);
+
+        // prepareCert + chargeCert（无域名阶段，仅确保 cert 就绪）
+        try {
+            $cert = $this->orderService->prepareCert($order, []);
+        } catch (\Exception $e) {
+            return ['code' => 0, 'msg' => $e->getMessage()];
+        }
+
+        $this->orderService->chargeCert($cert, $order);
+
+        // 调下游 prepareOrder，获取 api_id
+        $upstreamResult = $this->orderService->prepareUpstreamOrder($cert, $order);
+
+        if (isset($upstreamResult['error'])) {
+            return ['code' => 0, 'msg' => $upstreamResult['error']];
+        }
+
+        return [
+            'code' => 1,
+            'data' => $this->formatPrepareResult($cert->fresh()),
+        ];
+    }
+
+    /**
+     * 步骤二：提交域名 — SAN 验证 + 调上游 submitDomains
+     */
+    public function submitDomains(int $orderId, array $domains): array
+    {
+        $order = Order::find($orderId);
+        if (! $order) {
+            return ['code' => 0, 'msg' => 'Order not found'];
+        }
+
+        $cert = $this->findCertByOrderId($orderId);
+        if (! $cert) {
+            return ['code' => 0, 'msg' => 'Cert not found'];
+        }
+
+        $product = $order->product;
         if (! $product) {
             return ['code' => 0, 'msg' => 'Product not found'];
         }
@@ -57,23 +100,15 @@ class ApiService
             return ['code' => 0, 'msg' => implode('; ', array_values($sanErrors))];
         }
 
-        // 复用已有 Order 或创建新 Order
-        $order = $this->findOrCreateOrder($user, $product, $referId);
+        // 幂等：cert 已有 authorizations → 直接返回
+        if ($cert->acmeAuthorizations()->exists()) {
+            $cert->load('acmeAuthorizations');
 
-        // prepareAndCharge：cert 复用/创建 + 扣费
-        try {
-            $cert = $this->orderService->prepareAndCharge($order, $domains);
-        } catch (\Exception $e) {
-            return ['code' => 0, 'msg' => $e->getMessage()];
+            return ['code' => 1, 'data' => $this->formatOrder($cert)];
         }
 
-        // 调上游（始终新建，不判断）
-        $sourceApi = app(Api\Api::class)->getSourceApi($product->source ?? '');
-        if (! $sourceApi->isConfigured()) {
-            return ['code' => 0, 'msg' => 'Upstream not configured'];
-        }
-
-        $upstreamResult = $this->orderService->submitNewOrder($cert, $domains, $order, $sourceApi);
+        // 调下游 submitDomains，保存 authorizations
+        $upstreamResult = $this->orderService->submitUpstreamDomains($cert, $domains, $order);
 
         if (isset($upstreamResult['error'])) {
             return ['code' => 0, 'msg' => $upstreamResult['error']];
@@ -401,6 +436,21 @@ class ApiService
         return Cert::where('id', $order->latest_cert_id)
             ->where('channel', 'acme')
             ->first();
+    }
+
+    /**
+     * 格式化 prepareOrder 返回数据（无域名、无 authorizations）
+     */
+    private function formatPrepareResult(Cert $cert): array
+    {
+        $order = Order::find($cert->order_id);
+
+        return [
+            'id' => $cert->order_id,
+            'cert_id' => $cert->id,
+            'eab_kid' => $order?->eab_kid,
+            'eab_hmac' => $order?->eab_hmac,
+        ];
     }
 
     /**

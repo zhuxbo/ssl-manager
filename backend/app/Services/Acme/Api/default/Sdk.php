@@ -39,18 +39,24 @@ class Sdk
         return rtrim(preg_replace('#/api/v\d+#', '/api/acme', $url), '/');
     }
 
-    public function createOrder(string $customer, string $productCode, array $domains, ?string $referId = null): array
+    public function prepareOrder(string $customer, string $productCode, ?string $referId = null): array
     {
         $data = [
             'customer' => $customer,
             'product_code' => $productCode,
-            'domains' => $domains,
         ];
         if ($referId) {
             $data['refer_id'] = $referId;
         }
 
-        return $this->request('POST', '/orders', $data);
+        return $this->request('POST', '/orders/prepare', $data);
+    }
+
+    public function submitDomains(int $orderId, array $domains): array
+    {
+        return $this->request('POST', "/orders/$orderId/domains", [
+            'domains' => $domains,
+        ]);
     }
 
     public function reissueOrder(int $orderId, array $domains, ?string $referId = null): array

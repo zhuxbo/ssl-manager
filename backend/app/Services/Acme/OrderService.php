@@ -27,7 +27,10 @@ class OrderService
     ) {}
 
     /**
-     * 创建 ACME 订单 — SAN 验证 + 获取真实 challenge
+     * 创建 ACME 订单 — SAN 验证 + 两步提交上游
+     *
+     * 新建流程：prepareCert → prepareOrder(获取 api_id) → chargeCert → submitDomains → 保存
+     * 重签流程：prepareCert → chargeCert → submitReissue → 保存
      */
     public function create(Account $account, array $identifiers): array
     {
@@ -61,44 +64,55 @@ class OrderService
             return ['error' => 'rejectedIdentifier', 'detail' => implode('; ', array_values($sanErrors))];
         }
 
-        // 3. 幂等检查：Account 已通过 kid 关联到 Order，latestCert 已提交上游则直接返回
+        // 3. 幂等检查：cert 已提交上游（processing + api_id）且未签发
         if ($currentLatestCert->channel === 'acme'
             && $currentLatestCert->status === 'processing'
             && $currentLatestCert->api_id
             && empty($currentLatestCert->cert)) {
-            return ['order' => $currentLatestCert->fresh('acmeAuthorizations')];
+
+            // 已有 authorizations → 直接返回
+            if ($currentLatestCert->acmeAuthorizations()->exists()) {
+                return ['order' => $currentLatestCert->fresh('acmeAuthorizations')];
+            }
+
+            // 有 api_id 但无 authorizations → 重试 submitDomains
+            $result = $this->submitUpstreamDomains($currentLatestCert, $domains, $order);
+
+            if (isset($result['error'])) {
+                return ['error' => 'serverInternal', 'detail' => $result['error']];
+            }
+
+            return isset($result['cert']) ? ['order' => $result['cert']] : ['error' => 'serverInternal', 'detail' => 'Failed to save result'];
         }
 
-        // 4. prepareAndCharge：cert 复用/创建 + 扣费（事务内）
+        // 4. prepareCert：cert 复用/创建（不扣费）
         try {
-            $cert = $this->prepareAndCharge($order, $domains);
+            $cert = $this->prepareCert($order, $domains);
         } catch (\Exception $e) {
             return ['error' => 'orderNotReady', 'detail' => $e->getMessage()];
         }
 
-        // 4. 调用上游 API
-        $source = $product->source ?? '';
-        $sourceApi = app(Api\Api::class)->getSourceApi($source);
-
-        if (! $sourceApi->isConfigured()) {
-            return ['error' => 'serverInternal', 'detail' => 'Upstream not configured'];
-        }
-
+        // 5. 调用上游 API
         $upstreamOrderId = $currentLatestCert?->api_id;
 
         if ($cert->action === 'reissue' && $upstreamOrderId) {
-            $upstreamResult = $this->submitReissue($cert, $domains, $order, (int) $upstreamOrderId, $sourceApi);
+            // 重签：先扣费，再调上游 reissue
+            try {
+                $this->chargeCert($cert, $order);
+            } catch (\Exception $e) {
+                return ['error' => 'orderNotReady', 'detail' => $e->getMessage()];
+            }
+            $upstreamResult = $this->submitReissue($cert, $domains, $order, (int) $upstreamOrderId);
         } else {
-            $upstreamResult = $this->submitNewOrder($cert, $domains, $order, $sourceApi);
+            // 新建：submitNewOrder 内部执行 chargeCert → prepareUpstreamOrder → submitUpstreamDomains
+            $upstreamResult = $this->submitNewOrder($cert, $domains, $order);
         }
 
         if (isset($upstreamResult['error'])) {
             return ['error' => 'serverInternal', 'detail' => $upstreamResult['error']];
         }
 
-        $cert = $upstreamResult['cert'];
-
-        return ['order' => $cert];
+        return ['order' => $upstreamResult['cert']];
     }
 
     /**
@@ -676,10 +690,9 @@ class OrderService
     }
 
     /**
-     * 事务内完成 cert 复用/创建 + 扣费
-     * 返回 ['cert' => Cert] 或抛出异常
+     * cert 复用/创建（不扣费）
      */
-    public function prepareAndCharge(Order $order, array $domains): Cert
+    public function prepareCert(Order $order, array $domains): Cert
     {
         $product = $order->product;
         $user = $order->user;
@@ -717,7 +730,6 @@ class OrderService
                     ->first();
 
                 if ($lastIssuedCert) {
-                    // 不支持增加 SAN：新域名数量不能超过上次签发的证书
                     if (! $product->add_san) {
                         if ($standardCount > ($lastIssuedCert->standard_count ?? 0)) {
                             throw new \Exception('Standard domain count exceeds previous certificate');
@@ -727,7 +739,6 @@ class OrderService
                         }
                     }
 
-                    // 不支持替换 SAN：上次签发的域名必须全部包含在新域名列表中
                     if (! $product->replace_san) {
                         $oldDomains = array_filter(explode(',', $lastIssuedCert->alternative_names ?? ''));
                         $missingDomains = array_diff(
@@ -741,7 +752,7 @@ class OrderService
                 }
             }
 
-            $canReuse = $currentLatestCert->status === 'pending'
+            $canReuse = in_array($currentLatestCert->status, ['unpaid', 'pending'])
                 && empty($currentLatestCert->api_id)
                 && empty($currentLatestCert->cert);
 
@@ -759,7 +770,8 @@ class OrderService
                     'action' => $action,
                     'channel' => 'acme',
                     'email' => $user->email,
-                    'status' => 'pending',
+                    'common_name' => $domains[0] ?? '',
+                    'status' => 'unpaid',
                 ]);
 
                 $order->latest_cert_id = $cert->id;
@@ -774,16 +786,29 @@ class OrderService
                 'wildcard_count' => $wildcardCount,
             ]);
 
-            // 幂等扣费
-            $needCharge = $standardCount > ($order->purchased_standard_count ?? 0)
-                || $wildcardCount > ($order->purchased_wildcard_count ?? 0);
+            return $cert;
+        });
+    }
 
+    /**
+     * 扣费（幂等：仅当域名数量超过已购买数量时扣费）
+     * 完成后 cert 状态变为 pending（已支付，待提交域名）
+     */
+    public function chargeCert(Cert $cert, Order $order): void
+    {
+        $standardCount = $cert->standard_count;
+        $wildcardCount = $cert->wildcard_count;
+
+        $needCharge = $standardCount > ($order->purchased_standard_count ?? 0)
+            || $wildcardCount > ($order->purchased_wildcard_count ?? 0);
+
+        DB::transaction(function () use ($cert, $order, $standardCount, $wildcardCount, $needCharge) {
             if ($needCharge) {
-                $cert->update([
-                    'standard_count' => $standardCount,
-                    'wildcard_count' => $wildcardCount,
-                    'status' => 'unpaid',
-                ]);
+                $order = Order::lockForUpdate()->find($order->id);
+                $product = $order->product;
+                $user = $order->user;
+
+                $cert->update(['status' => 'unpaid']);
 
                 $amount = OrderUtil::getLatestCertAmount($order->fresh(['latestCert'])->toArray());
                 $cert->update(['amount' => $amount]);
@@ -810,43 +835,98 @@ class OrderService
                     $product->wildcard_min
                 );
                 $order->save();
-
-                $cert->update(['status' => 'pending']);
             }
 
-            return $cert;
+            $cert->update(['status' => 'pending']);
         });
     }
 
     /**
-     * 提交新订单到上游
+     * cert 复用/创建 + 扣费（兼容方法）
      */
-    public function submitNewOrder(Cert $cert, array $domains, Order $order, ?Api\AcmeSourceApiInterface $sourceApi = null): array
+    public function prepareAndCharge(Order $order, array $domains): Cert
+    {
+        $cert = $this->prepareCert($order, $domains);
+        $this->chargeCert($cert, $order);
+
+        return $cert;
+    }
+
+    /**
+     * 提交新订单到上游（三步：chargeCert → prepareUpstreamOrder → submitUpstreamDomains）
+     */
+    public function submitNewOrder(Cert $cert, array $domains, Order $order): array
+    {
+        // 步骤1：扣费（unpaid → pending）
+        $this->chargeCert($cert, $order);
+
+        // 步骤2：创建上游 ACME order，获取 api_id（pending → processing）
+        $prepareResult = $this->prepareUpstreamOrder($cert, $order);
+        if (isset($prepareResult['error'])) {
+            return $prepareResult;
+        }
+
+        // 步骤3：提交域名
+        return $this->submitUpstreamDomains($cert, $domains, $order);
+    }
+
+    /**
+     * 创建上游 ACME order，获取 api_id + EAB
+     */
+    public function prepareUpstreamOrder(Cert $cert, Order $order): array
     {
         $user = $order->user;
         $product = $order->product;
-        $sourceApi = $sourceApi ?? app(Api\Api::class)->getSourceApi($product->source ?? '');
+        $sourceApi = app(Api\Api::class)->getSourceApi($product->source ?? '');
 
-        $apiResult = $sourceApi->createOrder(
+        if (! $sourceApi->isConfigured()) {
+            return ['error' => 'Upstream not configured'];
+        }
+
+        $prepareResult = $sourceApi->prepareOrder(
             $user->email ?? '',
             (string) $product->api_id,
-            $domains,
             $cert->refer_id
         );
 
-        if ($apiResult['code'] !== 1) {
-            return ['error' => $apiResult['msg'] ?? 'Upstream order creation failed'];
+        if ($prepareResult['code'] !== 1) {
+            return ['error' => $prepareResult['msg'] ?? 'Upstream order preparation failed'];
         }
 
-        return $this->saveUpstreamResult($cert, $domains, $order, $apiResult['data']);
+        $cert->update([
+            'api_id' => $prepareResult['data']['id'],
+            'status' => 'processing',
+        ]);
+
+        return $prepareResult;
+    }
+
+    /**
+     * 提交域名到上游，保存 authorizations
+     */
+    public function submitUpstreamDomains(Cert $cert, array $domains, Order $order): array
+    {
+        $sourceApi = app(Api\Api::class)->getSourceApi($order->product->source ?? '');
+
+        if (! $sourceApi->isConfigured()) {
+            return ['error' => 'Upstream not configured'];
+        }
+
+        $submitResult = $sourceApi->submitDomains((int) $cert->api_id, $domains);
+
+        if ($submitResult['code'] !== 1) {
+            return ['error' => $submitResult['msg'] ?? 'Upstream domain submission failed'];
+        }
+
+        return $this->saveUpstreamResult($cert, $domains, $order, $submitResult['data']);
     }
 
     /**
      * 提交重签到上游
      */
-    public function submitReissue(Cert $cert, array $domains, Order $order, int $upstreamOrderId, ?Api\AcmeSourceApiInterface $sourceApi = null): array
+    public function submitReissue(Cert $cert, array $domains, Order $order, int $upstreamOrderId): array
     {
-        $sourceApi = $sourceApi ?? app(Api\Api::class)->getSourceApi($order->product->source ?? '');
+        $sourceApi = app(Api\Api::class)->getSourceApi($order->product->source ?? '');
 
         $apiResult = $sourceApi->reissueOrder(
             $upstreamOrderId,

@@ -6,7 +6,6 @@ use App\Models\Cert;
 use App\Models\ProductPrice;
 use App\Services\Acme\Api\AcmeSourceApiInterface;
 use App\Services\Acme\Api\Api as AcmeApiFactory;
-use App\Services\Acme\BillingService;
 use App\Services\Acme\OrderService;
 use App\Services\Delegation\CnameDelegationService;
 use App\Services\Delegation\DelegationDnsService;
@@ -31,9 +30,7 @@ beforeEach(function () {
 
     $this->mockDelegationDnsService = Mockery::mock(DelegationDnsService::class);
 
-    $billingService = app(BillingService::class);
     $this->service = new OrderService(
-        $billingService,
         $this->mockCnameDelegationService,
         $this->mockDelegationDnsService
     );
@@ -75,6 +72,7 @@ test('create validates san count against product limits', function () {
 
     $account = Account::create([
         'user_id' => $user->id,
+        'order_id' => $order->id,
         'key_id' => 'test_key_'.uniqid(),
         'public_key' => ['kty' => 'RSA'],
         'status' => 'valid',
@@ -120,6 +118,7 @@ test('create charges additional san fee when exceeding purchased', function () {
 
     $account = Account::create([
         'user_id' => $user->id,
+        'order_id' => $order->id,
         'key_id' => 'test_key_'.uniqid(),
         'public_key' => ['kty' => 'RSA'],
         'status' => 'valid',
@@ -189,12 +188,17 @@ test('create does not add gift root domain', function () {
 
     $account = Account::create([
         'user_id' => $user->id,
+        'order_id' => $order->id,
         'key_id' => 'test_key_'.uniqid(),
         'public_key' => ['kty' => 'RSA'],
         'status' => 'valid',
     ]);
 
-    $this->mockSourceApi->shouldReceive('createOrder')->once()->andReturn([
+    $this->mockSourceApi->shouldReceive('prepareOrder')->once()->andReturn([
+        'code' => 1,
+        'data' => ['id' => 888],
+    ]);
+    $this->mockSourceApi->shouldReceive('submitDomains')->once()->andReturn([
         'code' => 1,
         'data' => [
             'id' => 888,
@@ -232,12 +236,17 @@ test('create stores api id in cert', function () {
 
     $account = Account::create([
         'user_id' => $user->id,
+        'order_id' => $order->id,
         'key_id' => 'test_key_'.uniqid(),
         'public_key' => ['kty' => 'RSA'],
         'status' => 'valid',
     ]);
 
-    $this->mockSourceApi->shouldReceive('createOrder')->once()->andReturn([
+    $this->mockSourceApi->shouldReceive('prepareOrder')->once()->andReturn([
+        'code' => 1,
+        'data' => ['id' => 12345],
+    ]);
+    $this->mockSourceApi->shouldReceive('submitDomains')->once()->andReturn([
         'code' => 1,
         'data' => [
             'id' => 12345,
@@ -386,7 +395,11 @@ test('create prefers order id over user id lookup', function () {
         'status' => 'valid',
     ]);
 
-    $this->mockSourceApi->shouldReceive('createOrder')->once()->andReturn([
+    $this->mockSourceApi->shouldReceive('prepareOrder')->once()->andReturn([
+        'code' => 1,
+        'data' => ['id' => 111],
+    ]);
+    $this->mockSourceApi->shouldReceive('submitDomains')->once()->andReturn([
         'code' => 1,
         'data' => [
             'id' => 111,
@@ -445,7 +458,11 @@ test('create writes delegation txt for dns01 authorizations', function () {
         })
         ->andReturn(true);
 
-    $this->mockSourceApi->shouldReceive('createOrder')->once()->andReturn([
+    $this->mockSourceApi->shouldReceive('prepareOrder')->once()->andReturn([
+        'code' => 1,
+        'data' => ['id' => 222],
+    ]);
+    $this->mockSourceApi->shouldReceive('submitDomains')->once()->andReturn([
         'code' => 1,
         'data' => [
             'id' => 222,

@@ -6,7 +6,9 @@ namespace App\Services\Acme\Api;
 
 interface AcmeSourceApiInterface
 {
-    public function createOrder(string $customer, string $productCode, array $domains, ?string $referId = null): array;
+    public function prepareOrder(string $customer, string $productCode, ?string $referId = null): array;
+
+    public function submitDomains(int $orderId, array $domains): array;
 
     public function reissueOrder(int $orderId, array $domains, ?string $referId = null): array;
 

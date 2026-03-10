@@ -46,7 +46,9 @@ function createApiServiceProductPrice(int $productId, $user, string $price = '10
     ]);
 }
 
-test('create order creates order and cert', function () {
+// ==================== prepareOrder 测试 ====================
+
+test('prepare order creates order and cert', function () {
     $user = $this->createTestUser(['balance' => '500.00', 'email' => 'acme_test@example.com']);
     $product = $this->createTestProduct([
         'support_acme' => 1,
@@ -57,63 +59,51 @@ test('create order creates order and cert', function () {
     ]);
     createApiServiceProductPrice($product->id, $user);
 
-    // 配置上游
     $this->mockSourceApi->shouldReceive('isConfigured')->andReturn(true);
-    $this->mockSourceApi->shouldReceive('createOrder')
+    $this->mockSourceApi->shouldReceive('prepareOrder')
         ->once()
-        ->withArgs(function ($customer, $productCode, $domains, $referId) {
+        ->withArgs(function ($customer, $productCode, $referId) {
             return $customer === 'acme_test@example.com'
-                && $productCode === '12345'
-                && $domains === ['example.com'];
+                && $productCode === '12345';
         })
         ->andReturn([
             'code' => 1,
-            'data' => [
-                'id' => 777,
-                'authorizations' => [
-                    [
-                        'identifier' => ['type' => 'dns', 'value' => 'example.com'],
-                        'status' => 'pending',
-                        'challenges' => [
-                            ['id' => 888, 'type' => 'dns-01', 'token' => 'test-token', 'key_authorization' => 'test-key-auth', 'status' => 'pending'],
-                        ],
-                    ],
-                ],
-            ],
+            'data' => ['id' => 777],
         ]);
 
-    $result = $this->service->createOrder('acme_test@example.com', '12345', ['example.com']);
+    $result = $this->service->prepareOrder('acme_test@example.com', '12345');
 
     expect($result['code'])->toBe(1);
-    expect($result)->toHaveKey('data');
+    expect($result['data'])->toHaveKeys(['id', 'cert_id']);
 
     // 验证 Order 创建
     $order = Order::where('user_id', $user->id)->latest()->first();
     expect($order)->not->toBeNull();
 
-    // 验证 Cert 创建
+    // 验证 Cert 创建 + api_id 映射
     $cert = Cert::where('order_id', $order->id)->where('channel', 'acme')->latest()->first();
     expect($cert)->not->toBeNull();
     expect($cert->channel)->toBe('acme');
+    expect((int) $cert->api_id)->toBe(777);
 });
 
-test('create order fails when user not found', function () {
-    $result = $this->service->createOrder('nonexistent@example.com', '11111', ['example.com']);
+test('prepare order fails when user not found', function () {
+    $result = $this->service->prepareOrder('nonexistent@example.com', '11111');
 
     expect($result['code'])->toBe(0);
     expect($result['msg'])->toContain('User not found');
 });
 
-test('create order fails when product not found', function () {
+test('prepare order fails when product not found', function () {
     $this->createTestUser(['email' => 'product_test@example.com']);
 
-    $result = $this->service->createOrder('product_test@example.com', '99999', ['example.com']);
+    $result = $this->service->prepareOrder('product_test@example.com', '99999');
 
     expect($result['code'])->toBe(0);
     expect($result['msg'])->toContain('Product not found');
 });
 
-test('create order reuses existing order', function () {
+test('prepare order reuses existing order', function () {
     $user = $this->createTestUser(['balance' => '500.00', 'email' => 'reuse@example.com']);
     $product = $this->createTestProduct([
         'support_acme' => 1,
@@ -133,25 +123,11 @@ test('create order reuses existing order', function () {
     $existingCert = $this->createTestCert($existingOrder, ['channel' => 'acme']);
 
     $this->mockSourceApi->shouldReceive('isConfigured')->andReturn(true);
-    $this->mockSourceApi->shouldReceive('createOrder')
+    $this->mockSourceApi->shouldReceive('prepareOrder')
         ->once()
-        ->andReturn([
-            'code' => 1,
-            'data' => [
-                'id' => 777,
-                'authorizations' => [
-                    [
-                        'identifier' => ['type' => 'dns', 'value' => 'example.com'],
-                        'status' => 'pending',
-                        'challenges' => [
-                            ['id' => 888, 'type' => 'dns-01', 'token' => 'test-token', 'key_authorization' => 'ka', 'status' => 'pending'],
-                        ],
-                    ],
-                ],
-            ],
-        ]);
+        ->andReturn(['code' => 1, 'data' => ['id' => 777]]);
 
-    $result = $this->service->createOrder('reuse@example.com', '33333', ['example.com']);
+    $result = $this->service->prepareOrder('reuse@example.com', '33333');
     expect($result['code'])->toBe(1);
 
     // 应该复用已有 Order，不创建新的
@@ -159,8 +135,33 @@ test('create order reuses existing order', function () {
     expect($orderCount)->toBe(1);
 });
 
-test('create order with upstream maps ids', function () {
-    $user = $this->createTestUser(['balance' => '500.00', 'email' => 'upstream_order@example.com']);
+test('prepare order recovery returns existing when refer id has api id', function () {
+    $user = $this->createTestUser(['balance' => '500.00', 'email' => 'recover@example.com']);
+    $product = $this->createTestProduct([
+        'support_acme' => 1,
+        'api_id' => 44444,
+    ]);
+    $order = $this->createTestOrder($user, $product);
+    $cert = $this->createTestCert($order, [
+        'channel' => 'acme',
+        'refer_id' => 'existing-refer-id',
+    ]);
+    $cert->update(['api_id' => 999]);
+
+    // 不应调用上游
+    $this->mockSourceApi->shouldNotReceive('prepareOrder');
+
+    $result = $this->service->prepareOrder('recover@example.com', '44444', 'existing-refer-id');
+
+    expect($result['code'])->toBe(1);
+    expect($result['data']['id'])->toBe($order->id);
+    expect($result['data']['cert_id'])->toBe($cert->id);
+});
+
+// ==================== submitDomains 测试 ====================
+
+test('submit domains creates authorizations', function () {
+    $user = $this->createTestUser(['balance' => '500.00', 'email' => 'domains@example.com']);
     $product = $this->createTestProduct([
         'support_acme' => 1,
         'api_id' => 55555,
@@ -174,17 +175,120 @@ test('create order with upstream maps ids', function () {
     ]);
     $cert = $this->createTestCert($order, [
         'channel' => 'acme',
-        'status' => 'pending',
+        'status' => 'processing',
     ]);
-    $cert->update(['api_id' => null, 'cert' => null]);
+    $cert->update(['api_id' => 777, 'cert' => null]);
 
-    // 上游应收到 email + product.api_id + domains
     $this->mockSourceApi->shouldReceive('isConfigured')->andReturn(true);
-    $this->mockSourceApi->shouldReceive('createOrder')
+    $this->mockSourceApi->shouldReceive('submitDomains')
         ->once()
-        ->withArgs(function ($customer, $productCode, $domains, $referId) {
-            return $customer === 'upstream_order@example.com'
-                && $productCode === '55555'
+        ->withArgs(function ($orderId, $domains) {
+            return $orderId === 777
+                && $domains === ['example.com'];
+        })
+        ->andReturn([
+            'code' => 1,
+            'data' => [
+                'id' => 777,
+                'authorizations' => [
+                    [
+                        'identifier' => ['type' => 'dns', 'value' => 'example.com'],
+                        'status' => 'pending',
+                        'challenges' => [
+                            ['id' => 888, 'type' => 'dns-01', 'token' => 'test-token', 'key_authorization' => 'test-key-auth', 'status' => 'pending'],
+                        ],
+                    ],
+                ],
+            ],
+        ]);
+
+    $result = $this->service->submitDomains($order->id, ['example.com']);
+
+    expect($result['code'])->toBe(1);
+    expect($result['data']['id'])->toBe($order->id);
+    expect($result['data'])->toHaveKey('authorizations');
+
+    // 验证 authorization 创建 + challenge ID 映射
+    $updatedCert = Cert::find($order->fresh()->latest_cert_id);
+    $authorization = $updatedCert->acmeAuthorizations->first();
+    expect($authorization)->not->toBeNull();
+    expect((int) $authorization->acme_challenge_id)->toBe(888);
+});
+
+test('submit domains idempotent when authorizations exist', function () {
+    $user = $this->createTestUser(['email' => 'idempotent@example.com']);
+    $product = $this->createTestProduct(['support_acme' => 1, 'api_id' => 55555]);
+    $order = $this->createTestOrder($user, $product);
+    $cert = $this->createTestCert($order, [
+        'channel' => 'acme',
+        'status' => 'processing',
+    ]);
+    $cert->update(['api_id' => 777]);
+
+    Authorization::create([
+        'cert_id' => $cert->id,
+        'token' => 'existing-token',
+        'identifier_type' => 'dns',
+        'identifier_value' => 'example.com',
+        'wildcard' => false,
+        'status' => 'pending',
+        'expires_at' => now()->addDays(7),
+        'challenge_type' => 'dns-01',
+        'challenge_token' => 'chall-token',
+        'acme_challenge_id' => 888,
+        'key_authorization' => 'key-auth',
+        'challenge_status' => 'pending',
+    ]);
+
+    // 不应调用上游
+    $this->mockSourceApi->shouldNotReceive('submitDomains');
+
+    $result = $this->service->submitDomains($order->id, ['example.com']);
+
+    expect($result['code'])->toBe(1);
+    expect($result['data']['id'])->toBe($order->id);
+});
+
+test('submit domains fails when order not found', function () {
+    $result = $this->service->submitDomains(99999, ['example.com']);
+
+    expect($result['code'])->toBe(0);
+    expect($result['msg'])->toContain('Order not found');
+});
+
+// ==================== 两步集成测试 ====================
+
+test('prepare and submit domains two step flow maps ids', function () {
+    $user = $this->createTestUser(['balance' => '500.00', 'email' => 'twostep@example.com']);
+    $product = $this->createTestProduct([
+        'support_acme' => 1,
+        'api_id' => 55555,
+        'standard_min' => 1,
+        'wildcard_min' => 0,
+        'total_min' => 1,
+    ]);
+    createApiServiceProductPrice($product->id, $user);
+
+    // 步骤1：prepareOrder
+    $this->mockSourceApi->shouldReceive('isConfigured')->andReturn(true);
+    $this->mockSourceApi->shouldReceive('prepareOrder')
+        ->once()
+        ->withArgs(function ($customer, $productCode, $referId) {
+            return $customer === 'twostep@example.com'
+                && $productCode === '55555';
+        })
+        ->andReturn(['code' => 1, 'data' => ['id' => 777]]);
+
+    $prepareResult = $this->service->prepareOrder('twostep@example.com', '55555');
+    expect($prepareResult['code'])->toBe(1);
+
+    $orderId = $prepareResult['data']['id'];
+
+    // 步骤2：submitDomains
+    $this->mockSourceApi->shouldReceive('submitDomains')
+        ->once()
+        ->withArgs(function ($upstreamId, $domains) {
+            return $upstreamId === 777
                 && $domains === ['example.com'];
         })
         ->andReturn([
@@ -209,14 +313,15 @@ test('create order with upstream maps ids', function () {
             ],
         ]);
 
-    $result = $this->service->createOrder('upstream_order@example.com', '55555', ['example.com']);
+    $submitResult = $this->service->submitDomains($orderId, ['example.com']);
 
-    expect($result['code'])->toBe(1);
+    expect($submitResult['code'])->toBe(1);
     // 返回本级 order.id，不是上游 777
-    expect($result['data']['id'])->not->toBe(777);
+    expect($submitResult['data']['id'])->toBe($orderId);
+    expect($submitResult['data']['id'])->not->toBe(777);
 
     // cert.api_id 存储了上游 ID
-    $updatedOrder = Order::find($result['data']['id']);
+    $updatedOrder = Order::find($orderId);
     $updatedCert = Cert::find($updatedOrder->latest_cert_id);
     expect((int) $updatedCert->api_id)->toBe(777);
 
@@ -225,6 +330,8 @@ test('create order with upstream maps ids', function () {
     expect($authorization)->not->toBeNull();
     expect((int) $authorization->acme_challenge_id)->toBe(888);
 });
+
+// ==================== reissue / challenge / finalize / revoke ====================
 
 test('reissue order calls upstream reissue', function () {
     $user = $this->createTestUser(['balance' => '500.00', 'email' => 'reissue@example.com']);
