@@ -11,11 +11,11 @@
         <el-dropdown-item v-if="cert.status == 'active' && !isAcme" command="send">{{
           "发送"
         }}</el-dropdown-item>
-        <el-dropdown-item v-if="cert.status == 'pending' && !isAcme" command="commit">{{
+        <el-dropdown-item v-if="cert.status == 'pending'" command="commit">{{
           "提交"
         }}</el-dropdown-item>
         <el-dropdown-item
-          v-if="['processing', 'active', 'approving'].includes(cert.status) && !isAcme"
+          v-if="['processing', 'active', 'approving'].includes(cert.status)"
           command="sync"
           >{{ "同步" }}</el-dropdown-item
         >
@@ -28,13 +28,13 @@
           >{{ "撤回" }}</el-dropdown-item
         >
         <el-dropdown-item
-          v-if="cert.status == 'active' && !isAcme"
+          v-if="cert.status == 'active'"
           command="renew"
           divided
           >{{ "续费" }}</el-dropdown-item
         >
         <el-dropdown-item
-          v-if="['active', 'expired'].includes(cert.status) && !isAcme"
+          v-if="['active', 'expired'].includes(cert.status)"
           command="reissue"
           divided
           >{{ "重签" }}</el-dropdown-item

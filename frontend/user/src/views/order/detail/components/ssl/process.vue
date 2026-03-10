@@ -1,6 +1,5 @@
 <template>
   <el-card
-    v-if="!(isAcme && cert?.status === 'pending')"
     shadow="never"
     :style="{ border: 'none' }"
   >

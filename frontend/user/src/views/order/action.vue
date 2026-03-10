@@ -82,9 +82,9 @@
           />
         </el-form-item>
 
-        <!-- SSL 证书才需要域名（ACME 模式隐藏） -->
+        <!-- SSL 证书才需要域名 -->
         <el-form-item
-          v-if="isSSL && !isAcmeMode"
+          v-if="isSSL"
           label="域名"
           prop="domains"
           :rules="rules.domains"
@@ -378,11 +378,15 @@ const acmeIssueModeEnabled = computed(
 );
 // 签发方式
 const issueMode = ref<"manual" | "acme">("manual");
+// 是否从订单加载到的 ACME 订单（用于续费/重签）
+const isLoadedAcmeOrder = ref(false);
 // 是否 ACME 模式
 const isAcmeMode = computed(
   () =>
-    issueMode.value === "acme" &&
-    ["apply", "batchApply"].includes(props.actionType)
+    (issueMode.value === "acme" &&
+      ["apply", "batchApply"].includes(props.actionType)) ||
+    (isLoadedAcmeOrder.value &&
+      ["renew", "reissue"].includes(props.actionType))
 );
 // 产品列表刷新 key（延迟更新，避免与 v-if 切换冲突）
 const productRefreshKey = ref(0);
@@ -492,7 +496,11 @@ const encryptionOpen = ref(false);
 
 // 标题
 const getTitle = computed(() => {
-  if (isAcmeMode.value) return "申请 ACME 订阅";
+  if (isAcmeMode.value) {
+    if (props.actionType === "renew") return "续费 ACME 订阅";
+    if (props.actionType === "reissue") return "重签 ACME 证书";
+    return "申请 ACME 订阅";
+  }
   if (props.actionType === "apply") return "申请证书";
   if (props.actionType === "batchApply") return "批量申请";
   if (props.actionType === "renew") return "续费证书";
@@ -844,6 +852,12 @@ const loadOrderInfo = (id: number) => {
     // 设置order_id (原订单ID)
     formData.order_id = id;
 
+    // 检测 ACME 订单，自动进入 ACME 模式
+    if (data.latest_cert?.channel === "acme") {
+      isLoadedAcmeOrder.value = true;
+      issueMode.value = "acme";
+    }
+
     // 触发产品选择，加载产品相关配置
     productSelected(data.product_id);
   });
@@ -929,10 +943,28 @@ const handleSubmit = async () => {
 
     // ACME 模式提交
     if (isAcmeMode.value) {
+      // ACME 重签：使用标准重签 API，仅传域名
+      if (props.actionType === "reissue") {
+        await reissue({
+          order_id: formData.order_id,
+          domains: formData.domains?.replace(/\n/g, ","),
+          product_type: productType.value
+        });
+        message("提交成功", { type: "success" });
+        emit("success");
+        emit("update:visible", false);
+        return;
+      }
+
+      // ACME 申请/批量申请/续费：调用 acmeCreateOrder
       const params: any = {
         product_id: formData.product_id,
-        period: formData.period
+        period: formData.period,
+        domains: formData.domains?.replace(/\n/g, ",")
       };
+      if (props.actionType === "renew") {
+        params.order_id = formData.order_id;
+      }
       if (isBatchApply.value && formData.quantity > 1) {
         params.quantity = formData.quantity;
       }
@@ -1011,6 +1043,7 @@ const initFormData = () => {
 
   // 重置其他相关状态
   issueMode.value = "manual";
+  isLoadedAcmeOrder.value = false;
   disabledFields.value = [];
   periodOptions.value = [];
   validationMethodOptions.value = [];

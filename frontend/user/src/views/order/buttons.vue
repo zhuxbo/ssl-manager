@@ -21,7 +21,7 @@
       下载
     </el-button>
     <el-button
-      v-if="['pending'].includes(row.latest_cert?.status) && row.latest_cert?.channel !== 'acme'"
+      v-if="['pending'].includes(row.latest_cert?.status)"
       class="reset-margin !outline-none"
       type="success"
       link
@@ -40,7 +40,7 @@
       查看
     </el-button>
     <el-button
-      v-if="['processing'].includes(row.latest_cert?.status) && hasDcvInfo(row) && row.latest_cert?.channel !== 'acme'"
+      v-if="['processing'].includes(row.latest_cert?.status) && hasDcvInfo(row)"
       class="reset-margin !outline-none"
       type="primary"
       link
@@ -51,7 +51,7 @@
     </el-button>
     <el-button
       v-if="
-        ['processing', 'active', 'approving'].includes(row.latest_cert?.status) && row.latest_cert?.channel !== 'acme'
+        ['processing', 'active', 'approving'].includes(row.latest_cert?.status)
       "
       class="reset-margin !outline-none"
       type="primary"
