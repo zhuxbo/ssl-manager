@@ -195,3 +195,16 @@ test('convertNumericValues 递归处理嵌套数组', function () {
 test('convertNumericValues 空数组', function () {
     expect(OrderUtil::convertNumericValues([]))->toBe([]);
 });
+
+test('convertNumericValues 跳过含科学计数法格式的字符串', function () {
+    $result = OrderUtil::convertNumericValues([
+        'registration_number' => '12220102E674422865',
+        'code' => '3E8',
+        'normal_int' => '42',
+        'normal_float' => '3.14',
+    ]);
+    expect($result['registration_number'])->toBe('12220102E674422865')
+        ->and($result['code'])->toBe('3E8')
+        ->and($result['normal_int'])->toBe(42)
+        ->and($result['normal_float'])->toBe(3.14);
+});

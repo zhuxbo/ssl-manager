@@ -230,9 +230,8 @@ class OrderUtil
             if (is_array($value)) {
                 // 如果是数组，递归调用
                 $newArray[$key] = self::convertNumericValues($value);
-            } elseif (is_numeric($value)) {
-                // 检查是否为数字字符串并转换
-                $newArray[$key] = $value + 0; // 使用 + 运算符自动转换为整数或浮点数
+            } elseif (is_numeric($value) && (!is_string($value) || !preg_match('/[eE]/', $value))) {
+                $newArray[$key] = $value + 0;
             } else {
                 // 非数字保持原样
                 $newArray[$key] = $value;
