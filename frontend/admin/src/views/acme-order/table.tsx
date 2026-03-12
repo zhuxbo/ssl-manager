@@ -1,5 +1,11 @@
 import dayjs from "dayjs";
-import { status, statusType, action, actionType, validationMethod } from "./dictionary";
+import {
+  status,
+  statusType,
+  action,
+  actionType,
+  validationMethod
+} from "./dictionary";
 
 export function useAcmeOrderTable() {
   const tableColumns: TableColumnList = [

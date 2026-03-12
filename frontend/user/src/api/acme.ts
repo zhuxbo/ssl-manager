@@ -80,7 +80,7 @@ export function createOrder(data: {
   domains: string;
   validation_method: string;
 }): Promise<BaseResponse> {
-  return http.post<BaseResponse>("/acme/order", { data });
+  return http.post<BaseResponse<null>, typeof data>("/acme/order", { data });
 }
 
 /** 获取 ACME 订单列表 */
@@ -90,10 +90,10 @@ export function getAcmeOrders(params: AcmeOrderParams): Promise<BaseResponse> {
 
 /** 获取 ACME 订单详情 */
 export function getAcmeOrderDetail(id: number): Promise<BaseResponse> {
-  return http.get<BaseResponse>(`/acme/order/${id}`);
+  return http.get<BaseResponse<null>, null>(`/acme/order/${id}`);
 }
 
 /** 取消 ACME 订单 */
 export function cancelAcmeOrder(id: number): Promise<BaseResponse> {
-  return http.post<BaseResponse>(`/acme/order/commit-cancel/${id}`);
+  return http.post<BaseResponse<null>, null>(`/acme/order/commit-cancel/${id}`);
 }

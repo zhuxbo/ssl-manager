@@ -48,11 +48,7 @@ const tableColumns = useAcmeCertTable();
       />
     </div>
 
-    <PureTableBar
-      title="ACME 证书"
-      :columns="tableColumns"
-      @refresh="onSearch"
-    >
+    <PureTableBar title="ACME 证书" :columns="tableColumns" @refresh="onSearch">
       <template v-slot="{ size, dynamicColumns }">
         <pure-table
           ref="tableRef"

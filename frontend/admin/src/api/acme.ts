@@ -106,7 +106,7 @@ export function createOrder(data: {
   domains: string;
   validation_method: string;
 }): Promise<BaseResponse> {
-  return http.post<BaseResponse>("/acme/order", { data });
+  return http.post<BaseResponse<null>, typeof data>("/acme/order", { data });
 }
 
 /** 获取 ACME 订单列表 */
@@ -116,17 +116,17 @@ export function getAcmeOrders(params: AcmeOrderParams): Promise<BaseResponse> {
 
 /** 获取 ACME 订单详情 */
 export function getAcmeOrderDetail(id: number): Promise<BaseResponse> {
-  return http.get<BaseResponse>(`/acme/order/${id}`);
+  return http.get<BaseResponse<null>, null>(`/acme/order/${id}`);
 }
 
 /** 同步 ACME 订单 */
 export function syncAcmeOrder(id: number): Promise<BaseResponse> {
-  return http.post<BaseResponse>(`/acme/order/sync/${id}`);
+  return http.post<BaseResponse<null>, null>(`/acme/order/sync/${id}`);
 }
 
 /** 重新验证 ACME 订单 */
 export function revalidateAcmeOrder(id: number): Promise<BaseResponse> {
-  return http.post<BaseResponse>(`/acme/order/revalidate/${id}`);
+  return http.post<BaseResponse<null>, null>(`/acme/order/revalidate/${id}`);
 }
 
 /** 切换验证方式 */
@@ -134,14 +134,17 @@ export function updateAcmeDCV(
   id: number,
   data: { method: string }
 ): Promise<BaseResponse> {
-  return http.post<BaseResponse>(`/acme/order/update-dcv/${id}`, {
-    data
-  });
+  return http.post<BaseResponse<null>, { method: string }>(
+    `/acme/order/update-dcv/${id}`,
+    {
+      data
+    }
+  );
 }
 
 /** 取消 ACME 订单 */
 export function cancelAcmeOrder(id: number): Promise<BaseResponse> {
-  return http.post<BaseResponse>(`/acme/order/commit-cancel/${id}`);
+  return http.post<BaseResponse<null>, null>(`/acme/order/commit-cancel/${id}`);
 }
 
 /** 吊销 ACME 证书 */
@@ -149,14 +152,17 @@ export function revokeAcmeOrder(
   id: number,
   data?: { serial_number?: string }
 ): Promise<BaseResponse> {
-  return http.post<BaseResponse>(`/acme/order/commit-revoke/${id}`, {
-    data
-  });
+  return http.post<BaseResponse<null>, typeof data>(
+    `/acme/order/commit-revoke/${id}`,
+    {
+      data
+    }
+  );
 }
 
 /** 删除 ACME 订单 */
 export function deleteAcmeOrder(id: number): Promise<BaseResponse> {
-  return http.request<BaseResponse>("delete", `/acme/order/${id}`);
+  return http.request<BaseResponse<null>>("delete", `/acme/order/${id}`);
 }
 
 /** ACME 订单备注 */
@@ -164,7 +170,10 @@ export function remarkAcmeOrder(
   id: number,
   data: { remark: string }
 ): Promise<BaseResponse> {
-  return http.post<BaseResponse>(`/acme/order/remark/${id}`, { data });
+  return http.post<BaseResponse<null>, { remark: string }>(
+    `/acme/order/remark/${id}`,
+    { data }
+  );
 }
 
 /** 获取 ACME 证书列表 */
@@ -174,5 +183,5 @@ export function getAcmeCerts(params: AcmeCertParams): Promise<BaseResponse> {
 
 /** 获取 ACME 证书详情 */
 export function getAcmeCertDetail(id: number): Promise<BaseResponse> {
-  return http.get<BaseResponse>(`/acme/cert/${id}`);
+  return http.get<BaseResponse<null>, null>(`/acme/cert/${id}`);
 }

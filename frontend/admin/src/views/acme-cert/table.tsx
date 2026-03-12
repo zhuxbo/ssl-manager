@@ -1,6 +1,11 @@
 import dayjs from "dayjs";
 import { useRouter } from "vue-router";
-import { status, statusType, action, actionType } from "../acme-order/dictionary";
+import {
+  status,
+  statusType,
+  action,
+  actionType
+} from "../acme-order/dictionary";
 
 export function useAcmeCertTable() {
   const router = useRouter();
@@ -61,9 +66,7 @@ export function useAcmeCertTable() {
       prop: "issued_at",
       width: 180,
       formatter: ({ issued_at }) => {
-        return issued_at
-          ? dayjs(issued_at).format("YYYY-MM-DD HH:mm:ss")
-          : "-";
+        return issued_at ? dayjs(issued_at).format("YYYY-MM-DD HH:mm:ss") : "-";
       }
     },
     {

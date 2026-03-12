@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
@@ -86,6 +87,11 @@ return new class extends Migration
                     $table->dropForeign('acme_authorizations_cert_id_foreign');
                 });
             }
+
+            // 清理 cert_id 不在 acme_certs 中的孤儿数据（旧数据指向 certs 表）
+            DB::table('acme_authorizations')
+                ->whereNotIn('cert_id', DB::table('acme_certs')->select('id'))
+                ->delete();
 
             // 添加新 FK cert_id → acme_certs.id
             $newFkExists = collect(Schema::getForeignKeys('acme_authorizations'))->contains('name', 'acme_authorizations_cert_id_foreign');

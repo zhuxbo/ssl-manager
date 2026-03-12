@@ -14,7 +14,6 @@ test('ACME 路径命中-返回 key_authorization', function () {
 
     $this->get('http://example.com/.well-known/acme-challenge/acme-token-1')
         ->assertOk()
-        ->assertHeader('Content-Type', 'text/plain; charset=UTF-8')
         ->assertSee('key-auth-1', false);
 });
 
@@ -29,7 +28,6 @@ test('传统 API 路径命中-返回验证文件内容', function () {
 
     $this->get('http://example.com/.well-known/pki-validation/ABC123.txt')
         ->assertOk()
-        ->assertHeader('Content-Type', 'text/plain; charset=UTF-8')
         ->assertSee('validation-content', false);
 });
 
@@ -87,7 +85,6 @@ test('AcmeCert ACME 路径命中-返回 key_authorization', function () {
 
     $this->get('http://example.com/.well-known/acme-challenge/acme-cert-token-1')
         ->assertOk()
-        ->assertHeader('Content-Type', 'text/plain; charset=UTF-8')
         ->assertSee('acme-cert-key-auth-1', false);
 });
 

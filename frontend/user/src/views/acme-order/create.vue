@@ -172,7 +172,7 @@ const handleSubmit = async () => {
   try {
     const res = await createOrder({
       product_id: formData.product_id,
-      period: formData.period,
+      period: Number(formData.period),
       domains: formData.domains.replace(/\n/g, ","),
       validation_method: formData.validation_method
     });
