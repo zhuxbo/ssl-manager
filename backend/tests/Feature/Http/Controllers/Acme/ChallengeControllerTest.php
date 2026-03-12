@@ -1,8 +1,8 @@
 <?php
 
 use App\Models\Acme\Account;
+use App\Models\Acme\AcmeCert;
 use App\Models\Acme\Authorization;
-use App\Models\Cert;
 use App\Models\User;
 use App\Services\Acme\NonceService;
 use App\Services\Acme\OrderService;
@@ -41,7 +41,7 @@ test('响应挑战-成功', function () {
         'status' => 'valid',
     ]);
 
-    $cert = Cert::factory()->create();
+    $cert = AcmeCert::factory()->create();
     $authorization = Authorization::create([
         'cert_id' => $cert->id,
         'token' => 'chall-token',
@@ -88,7 +88,7 @@ test('响应挑战-不属于当前账户', function () {
         'status' => 'valid',
     ]);
 
-    $cert = Cert::factory()->create();
+    $cert = AcmeCert::factory()->create();
     $authorization = Authorization::create([
         'cert_id' => $cert->id,
         'token' => 'other-chall',

@@ -19,6 +19,17 @@ export default {
       }
     },
     {
+      path: "/acme-cert",
+      name: "AcmeCert",
+      component: () => import("@/views/acme-cert/index.vue"),
+      meta: {
+        icon: "ri:robot-2-line",
+        title: "ACME证书",
+        keepAlive: true,
+        showLink: false
+      }
+    },
+    {
       path: "/chain",
       name: "Chain",
       component: () => import("@/views/chain/index.vue"),

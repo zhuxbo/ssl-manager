@@ -1,7 +1,7 @@
 <?php
 
 use App\Models\Acme\Account;
-use App\Models\Order;
+use App\Models\Acme\AcmeOrder;
 use App\Models\ProductPrice;
 use App\Services\Acme\BillingService;
 use Database\Seeders\DatabaseSeeder;
@@ -33,11 +33,11 @@ function createBillingProductPrice(int $productId, $user, string $price = '100.0
 
 test('can issue certificate finds valid order with support acme', function () {
     $user = $this->createTestUser(['balance' => '500.00']);
-    $product = $this->createTestProduct(['support_acme' => 1]);
-    $order = $this->createTestOrder($user, $product, [
+    $product = $this->createTestProduct(['product_type' => 'acme']);
+    $order = $this->createTestAcmeOrder($user, $product, [
         'period_till' => now()->addYear(),
     ]);
-    $this->createTestCert($order, ['channel' => 'acme']);
+    $this->createTestAcmeCert($order);
 
     $account = Account::create([
         'user_id' => $user->id,
@@ -53,14 +53,14 @@ test('can issue certificate finds valid order with support acme', function () {
     expect($result['order']->id)->toBe($order->id);
 });
 
-test('can issue certificate rejects non support acme product', function () {
+test('can issue certificate rejects non acme product', function () {
     $user = $this->createTestUser(['balance' => '500.00']);
-    // 不设置 support_acme=1
-    $product = $this->createTestProduct(['support_acme' => 0]);
-    $order = $this->createTestOrder($user, $product, [
+    // 默认 product_type 为 ssl，非 ACME 产品
+    $product = $this->createTestProduct();
+    $order = $this->createTestAcmeOrder($user, $product, [
         'period_till' => now()->addYear(),
     ]);
-    $this->createTestCert($order, ['channel' => 'acme']);
+    $this->createTestAcmeCert($order);
 
     $account = Account::create([
         'user_id' => $user->id,
@@ -77,24 +77,24 @@ test('can issue certificate rejects non support acme product', function () {
 test('try auto renew uses standard transaction flow', function () {
     $user = $this->createTestUser(['balance' => '500.00']);
     $product = $this->createTestProduct([
-        'support_acme' => 1,
+        'product_type' => 'acme',
         'standard_min' => 1,
         'total_min' => 1,
     ]);
     createBillingProductPrice($product->id, $user);
 
-    $lastOrder = $this->createTestOrder($user, $product, [
+    $lastOrder = $this->createTestAcmeOrder($user, $product, [
         'period_till' => now()->subDays(1),
         'auto_renew' => true,
     ]);
-    $this->createTestCert($lastOrder, ['channel' => 'acme']);
+    $this->createTestAcmeCert($lastOrder);
 
     $initialBalance = (float) $user->balance;
 
     $result = $this->service->tryAutoRenew($user, $lastOrder);
 
     expect($result['code'])->toBe(1);
-    expect($result['data']['order'])->toBeInstanceOf(Order::class);
+    expect($result['data']['order'])->toBeInstanceOf(AcmeOrder::class);
 
     // 验证新订单有 EAB
     $newOrder = $result['data']['order']->fresh();
@@ -107,14 +107,14 @@ test('try auto renew fails when user has no email', function () {
     $user->update(['email' => '']);
     $user->refresh();
 
-    $product = $this->createTestProduct(['support_acme' => 1]);
+    $product = $this->createTestProduct(['product_type' => 'acme']);
     createBillingProductPrice($product->id, $user, '100.00');
 
-    $lastOrder = $this->createTestOrder($user, $product, [
+    $lastOrder = $this->createTestAcmeOrder($user, $product, [
         'period_till' => now()->subDays(1),
         'auto_renew' => true,
     ]);
-    $this->createTestCert($lastOrder, ['channel' => 'acme']);
+    $this->createTestAcmeCert($lastOrder);
 
     $result = $this->service->tryAutoRenew($user, $lastOrder);
 

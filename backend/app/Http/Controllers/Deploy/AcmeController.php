@@ -3,10 +3,11 @@
 namespace App\Http\Controllers\Deploy;
 
 use App\Http\Controllers\Controller;
-use App\Models\Order;
+use App\Models\Acme\AcmeOrder;
 use App\Models\Product;
 use App\Models\User;
 use App\Services\Acme\BillingService;
+use App\Services\Acme\OrderService;
 use Illuminate\Http\Request;
 
 class AcmeController extends Controller
@@ -19,6 +20,8 @@ class AcmeController extends Controller
         $request->validate([
             'product_code' => 'required|string|max:50',
             'period' => 'required|integer',
+            'domains' => 'required|string|max:5000',
+            'validation_method' => 'required|string|in:delegation,txt,file_proxy,file',
         ]);
 
         $userId = $request->attributes->get('authenticated_user_id');
@@ -28,7 +31,7 @@ class AcmeController extends Controller
         }
 
         $product = Product::where('code', $request->input('product_code'))
-            ->where('support_acme', 1)
+            ->where('product_type', Product::TYPE_ACME)
             ->first();
 
         if (! $product) {
@@ -46,11 +49,22 @@ class AcmeController extends Controller
 
         $order = $result['data']['order'];
 
+        // 提交到 ACME 上游
+        $domains = array_filter(array_map('trim', explode(',', $request->input('domains'))));
+        $validationMethod = $request->input('validation_method');
+        $acmeResult = app(OrderService::class)->commitOrder($order->fresh(['latestCert', 'product', 'user']), $domains, $validationMethod);
+
+        if ($acmeResult['code'] !== 1) {
+            $this->error($acmeResult['msg']);
+        }
+
         $this->success([
             'order_id' => $order->id,
             'eab_kid' => $result['data']['eab_kid'],
             'eab_hmac' => $result['data']['eab_hmac'],
             'server_url' => $result['data']['server_url'],
+            'dcv' => $acmeResult['data']['dcv'] ?? null,
+            'validation' => $acmeResult['data']['validation'] ?? null,
         ]);
     }
 
@@ -65,7 +79,7 @@ class AcmeController extends Controller
             $this->error('Unauthorized');
         }
 
-        $order = Order::where('id', $orderId)
+        $order = AcmeOrder::where('id', $orderId)
             ->where('user_id', $userId)
             ->whereNotNull('eab_kid')
             ->first();

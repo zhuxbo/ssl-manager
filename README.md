@@ -160,6 +160,20 @@ certbot certonly --server https://your-platform.com/acme/directory \
 
 配合 CNAME 委托，ACME 证书申请时自动完成 DNS-01 验证。
 
+Web 端支持两步创建：先建立订阅（pending），再从详情页提交到上游。同步按钮通过 ACME REST API 获取状态，不依赖 SOAP 接口。
+
+### 文件代理验证
+
+支持 HTTP 文件验证代理，用户配置 Nginx 将域名的 `/.well-known/` 请求转发到 Manager，系统自动响应 CA 的验证请求：
+
+```nginx
+location /.well-known/ {
+    proxy_pass http://manager-backend;
+}
+```
+
+同时支持 ACME http-01 和传统 API 文件验证。
+
 ## 文档
 
 | 文档 | 说明 |

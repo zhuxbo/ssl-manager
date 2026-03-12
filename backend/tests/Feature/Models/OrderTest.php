@@ -131,19 +131,6 @@ test('cancelled_at 字段正确转换为 datetime', function () {
     expect($order->cancelled_at)->toBeInstanceOf(\Illuminate\Support\Carbon::class);
 });
 
-test('eab_hmac 字段加密存储', function () {
-    $user = User::factory()->create();
-    $product = Product::factory()->create();
-    $order = Order::factory()->acme()->create([
-        'user_id' => $user->id,
-        'product_id' => $product->id,
-    ]);
-
-    // eab_hmac 是 hidden 字段
-    $array = $order->toArray();
-    expect($array)->not->toHaveKey('eab_hmac');
-});
-
 test('period 字段为整数', function () {
     $user = User::factory()->create();
     $product = Product::factory()->create();

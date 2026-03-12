@@ -23,18 +23,12 @@
           <td class="label">产品</td>
           <td class="content">{{ order.product.name }}</td>
         </tr>
-        <tr v-if="isAcme">
-          <td class="label">签发方式</td>
-          <td class="content">
-            <el-tag size="small" type="success">ACME</el-tag>
-          </td>
-        </tr>
         <tr>
           <td class="label">金额</td>
           <td class="content">
             {{ order.amount }}
             <el-button
-              v-if="order.latest_cert?.status === 'unpaid' && !isAcme"
+              v-if="order.latest_cert?.status === 'unpaid'"
               style="padding: 0 5px 2px; margin: 0"
               type="primary"
               link
@@ -129,7 +123,7 @@
             </el-button>
           </td>
         </tr>
-        <tr v-if="!isApiOrAcme">
+        <tr v-if="!isApi">
           <td class="label">自动续费</td>
           <td class="content">
             <el-select
@@ -145,7 +139,7 @@
             </el-select>
           </td>
         </tr>
-        <tr v-if="!isApiOrAcme">
+        <tr v-if="!isApi">
           <td class="label">自动重签</td>
           <td class="content">
             <el-select
@@ -175,10 +169,7 @@ import { brandLabels, periodLabels } from "@/views/system/dictionary";
 import dayjs from "dayjs";
 
 const order = inject("order") as any;
-const isAcme = inject("isAcme", ref(false)) as any;
-const isApiOrAcme = computed(() =>
-  ["api", "acme"].includes(order.latest_cert?.channel)
-);
+const isApi = computed(() => order.latest_cert?.channel === "api");
 
 const autoLoading = ref(false);
 

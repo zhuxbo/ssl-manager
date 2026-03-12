@@ -2,11 +2,9 @@
 
 namespace App\Models;
 
-use App\Models\Acme\Authorization;
 use App\Models\Traits\HasSnowflakeId;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Cert extends BaseModel
 {
@@ -113,14 +111,6 @@ class Cert extends BaseModel
     public function order(): BelongsTo
     {
         return $this->belongsTo(Order::class);
-    }
-
-    /**
-     * 获取 ACME 授权
-     */
-    public function acmeAuthorizations(): HasMany
-    {
-        return $this->hasMany(Authorization::class, 'cert_id');
     }
 
     /**

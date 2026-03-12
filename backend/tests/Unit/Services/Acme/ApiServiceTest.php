@@ -1,8 +1,8 @@
 <?php
 
+use App\Models\Acme\AcmeCert;
+use App\Models\Acme\AcmeOrder;
 use App\Models\Acme\Authorization;
-use App\Models\Cert;
-use App\Models\Order;
 use App\Models\ProductPrice;
 use App\Services\Acme\Api\AcmeSourceApiInterface;
 use App\Services\Acme\Api\Api as AcmeApiFactory;
@@ -51,7 +51,7 @@ function createApiServiceProductPrice(int $productId, $user, string $price = '10
 test('prepare order creates order and cert', function () {
     $user = $this->createTestUser(['balance' => '500.00', 'email' => 'acme_test@example.com']);
     $product = $this->createTestProduct([
-        'support_acme' => 1,
+        'product_type' => 'acme',
         'api_id' => 12345,
         'standard_min' => 1,
         'wildcard_min' => 0,
@@ -77,13 +77,13 @@ test('prepare order creates order and cert', function () {
     expect($result['data'])->toHaveKeys(['id', 'cert_id']);
 
     // 验证 Order 创建
-    $order = Order::where('user_id', $user->id)->latest()->first();
+    $order = AcmeOrder::where('user_id', $user->id)->latest()->first();
     expect($order)->not->toBeNull();
 
     // 验证 Cert 创建 + api_id 映射
-    $cert = Cert::where('order_id', $order->id)->where('channel', 'acme')->latest()->first();
+    $cert = AcmeCert::where('order_id', $order->id)->latest()->first();
     expect($cert)->not->toBeNull();
-    expect($cert->channel)->toBe('acme');
+    expect($cert->channel)->toBe('api');
     expect((int) $cert->api_id)->toBe(777);
 });
 
@@ -106,7 +106,7 @@ test('prepare order fails when product not found', function () {
 test('prepare order reuses existing order', function () {
     $user = $this->createTestUser(['balance' => '500.00', 'email' => 'reuse@example.com']);
     $product = $this->createTestProduct([
-        'support_acme' => 1,
+        'product_type' => 'acme',
         'api_id' => 33333,
         'standard_min' => 1,
         'wildcard_min' => 0,
@@ -115,12 +115,12 @@ test('prepare order reuses existing order', function () {
     createApiServiceProductPrice($product->id, $user);
 
     // 创建已有 Order
-    $existingOrder = $this->createTestOrder($user, $product, [
+    $existingOrder = $this->createTestAcmeOrder($user, $product, [
         'period_till' => now()->addYear(),
         'purchased_standard_count' => 1,
         'purchased_wildcard_count' => 0,
     ]);
-    $existingCert = $this->createTestCert($existingOrder, ['channel' => 'acme']);
+    $existingCert = $this->createTestAcmeCert($existingOrder, ['channel' => 'api']);
 
     $this->mockSourceApi->shouldReceive('isConfigured')->andReturn(true);
     $this->mockSourceApi->shouldReceive('prepareOrder')
@@ -131,19 +131,19 @@ test('prepare order reuses existing order', function () {
     expect($result['code'])->toBe(1);
 
     // 应该复用已有 Order，不创建新的
-    $orderCount = Order::where('user_id', $user->id)->where('product_id', $product->id)->count();
+    $orderCount = AcmeOrder::where('user_id', $user->id)->where('product_id', $product->id)->count();
     expect($orderCount)->toBe(1);
 });
 
 test('prepare order recovery returns existing when refer id has api id', function () {
     $user = $this->createTestUser(['balance' => '500.00', 'email' => 'recover@example.com']);
     $product = $this->createTestProduct([
-        'support_acme' => 1,
+        'product_type' => 'acme',
         'api_id' => 44444,
     ]);
-    $order = $this->createTestOrder($user, $product);
-    $cert = $this->createTestCert($order, [
-        'channel' => 'acme',
+    $order = $this->createTestAcmeOrder($user, $product);
+    $cert = $this->createTestAcmeCert($order, [
+        'channel' => 'api',
         'refer_id' => 'existing-refer-id',
     ]);
     $cert->update(['api_id' => 999]);
@@ -163,18 +163,18 @@ test('prepare order recovery returns existing when refer id has api id', functio
 test('submit domains creates authorizations', function () {
     $user = $this->createTestUser(['balance' => '500.00', 'email' => 'domains@example.com']);
     $product = $this->createTestProduct([
-        'support_acme' => 1,
+        'product_type' => 'acme',
         'api_id' => 55555,
         'standard_min' => 1,
         'wildcard_min' => 0,
         'total_min' => 1,
     ]);
-    $order = $this->createTestOrder($user, $product, [
+    $order = $this->createTestAcmeOrder($user, $product, [
         'purchased_standard_count' => 10,
         'purchased_wildcard_count' => 10,
     ]);
-    $cert = $this->createTestCert($order, [
-        'channel' => 'acme',
+    $cert = $this->createTestAcmeCert($order, [
+        'channel' => 'api',
         'status' => 'processing',
     ]);
     $cert->update(['api_id' => 777, 'cert' => null]);
@@ -209,7 +209,7 @@ test('submit domains creates authorizations', function () {
     expect($result['data'])->toHaveKey('authorizations');
 
     // 验证 authorization 创建 + challenge ID 映射
-    $updatedCert = Cert::find($order->fresh()->latest_cert_id);
+    $updatedCert = AcmeCert::find($order->fresh()->latest_cert_id);
     $authorization = $updatedCert->acmeAuthorizations->first();
     expect($authorization)->not->toBeNull();
     expect((int) $authorization->acme_challenge_id)->toBe(888);
@@ -217,10 +217,10 @@ test('submit domains creates authorizations', function () {
 
 test('submit domains idempotent when authorizations exist', function () {
     $user = $this->createTestUser(['email' => 'idempotent@example.com']);
-    $product = $this->createTestProduct(['support_acme' => 1, 'api_id' => 55555]);
-    $order = $this->createTestOrder($user, $product);
-    $cert = $this->createTestCert($order, [
-        'channel' => 'acme',
+    $product = $this->createTestProduct(['product_type' => 'acme', 'api_id' => 55555]);
+    $order = $this->createTestAcmeOrder($user, $product);
+    $cert = $this->createTestAcmeCert($order, [
+        'channel' => 'api',
         'status' => 'processing',
     ]);
     $cert->update(['api_id' => 777]);
@@ -261,7 +261,7 @@ test('submit domains fails when order not found', function () {
 test('prepare and submit domains two step flow maps ids', function () {
     $user = $this->createTestUser(['balance' => '500.00', 'email' => 'twostep@example.com']);
     $product = $this->createTestProduct([
-        'support_acme' => 1,
+        'product_type' => 'acme',
         'api_id' => 55555,
         'standard_min' => 1,
         'wildcard_min' => 0,
@@ -321,8 +321,8 @@ test('prepare and submit domains two step flow maps ids', function () {
     expect($submitResult['data']['id'])->not->toBe(777);
 
     // cert.api_id 存储了上游 ID
-    $updatedOrder = Order::find($orderId);
-    $updatedCert = Cert::find($updatedOrder->latest_cert_id);
+    $updatedOrder = AcmeOrder::find($orderId);
+    $updatedCert = AcmeCert::find($updatedOrder->latest_cert_id);
     expect((int) $updatedCert->api_id)->toBe(777);
 
     // AcmeAuthorization.acme_challenge_id 存储了上游 challenge ID
@@ -336,7 +336,7 @@ test('prepare and submit domains two step flow maps ids', function () {
 test('reissue order calls upstream reissue', function () {
     $user = $this->createTestUser(['balance' => '500.00', 'email' => 'reissue@example.com']);
     $product = $this->createTestProduct([
-        'support_acme' => 1,
+        'product_type' => 'acme',
         'api_id' => 66666,
         'standard_min' => 1,
         'wildcard_min' => 0,
@@ -345,14 +345,14 @@ test('reissue order calls upstream reissue', function () {
     ]);
     createApiServiceProductPrice($product->id, $user);
 
-    $order = $this->createTestOrder($user, $product, [
+    $order = $this->createTestAcmeOrder($user, $product, [
         'period_till' => now()->addYear(),
         'purchased_standard_count' => 3,
         'purchased_wildcard_count' => 0,
     ]);
     // 已签发的 cert（有 api_id）
-    $cert = $this->createTestCert($order, [
-        'channel' => 'acme',
+    $cert = $this->createTestAcmeCert($order, [
+        'channel' => 'api',
         'status' => 'active',
     ]);
     $cert->update(['api_id' => 999]);
@@ -389,19 +389,19 @@ test('reissue order calls upstream reissue', function () {
 test('reissue order fails when no upstream id', function () {
     $user = $this->createTestUser(['balance' => '500.00', 'email' => 'noid@example.com']);
     $product = $this->createTestProduct([
-        'support_acme' => 1,
+        'product_type' => 'acme',
         'api_id' => 77777,
         'reissue' => 1,
     ]);
     createApiServiceProductPrice($product->id, $user);
 
-    $order = $this->createTestOrder($user, $product, [
+    $order = $this->createTestAcmeOrder($user, $product, [
         'period_till' => now()->addYear(),
         'purchased_standard_count' => 1,
     ]);
     // cert 没有 api_id
-    $cert = $this->createTestCert($order, [
-        'channel' => 'acme',
+    $cert = $this->createTestAcmeCert($order, [
+        'channel' => 'api',
         'status' => 'pending',
     ]);
     $cert->update(['api_id' => null]);
@@ -417,7 +417,7 @@ test('reissue order fails when no upstream id', function () {
 test('reissue order does not recover cert from another order with same user refer id', function () {
     $user = $this->createTestUser(['balance' => '500.00', 'email' => 'reissue-scope@example.com']);
     $product = $this->createTestProduct([
-        'support_acme' => 1,
+        'product_type' => 'acme',
         'api_id' => 88888,
         'standard_min' => 1,
         'wildcard_min' => 0,
@@ -426,22 +426,22 @@ test('reissue order does not recover cert from another order with same user refe
     ]);
     createApiServiceProductPrice($product->id, $user);
 
-    $targetOrder = $this->createTestOrder($user, $product, [
+    $targetOrder = $this->createTestAcmeOrder($user, $product, [
         'period_till' => now()->addYear(),
         'purchased_standard_count' => 1,
     ]);
-    $targetCert = $this->createTestCert($targetOrder, [
-        'channel' => 'acme',
+    $targetCert = $this->createTestAcmeCert($targetOrder, [
+        'channel' => 'api',
         'status' => 'active',
     ]);
     $targetCert->update(['api_id' => 3001]);
 
-    $otherOrder = $this->createTestOrder($user, $product, [
+    $otherOrder = $this->createTestAcmeOrder($user, $product, [
         'period_till' => now()->addYear(),
         'purchased_standard_count' => 1,
     ]);
-    $otherCert = $this->createTestCert($otherOrder, [
-        'channel' => 'acme',
+    $otherCert = $this->createTestAcmeCert($otherOrder, [
+        'channel' => 'api',
         'status' => 'processing',
         // 这个 refer_id 属于同一用户的另一张订单，不能被当前 orderId 的恢复逻辑误命中。
         'refer_id' => 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
@@ -485,9 +485,9 @@ test('reissue order does not recover cert from another order with same user refe
 
 test('respond to challenge with upstream maps challenge id', function () {
     $user = $this->createTestUser(['email' => 'challenge_map@example.com']);
-    $product = $this->createTestProduct(['support_acme' => 1, 'api_id' => 12345]);
-    $order = $this->createTestOrder($user, $product);
-    $cert = $this->createTestCert($order, ['channel' => 'acme']);
+    $product = $this->createTestProduct(['product_type' => 'acme', 'api_id' => 12345]);
+    $order = $this->createTestAcmeOrder($user, $product);
+    $cert = $this->createTestAcmeCert($order, ['channel' => 'api']);
 
     $authorization = Authorization::create([
         'cert_id' => $cert->id,
@@ -522,10 +522,10 @@ test('respond to challenge with upstream maps challenge id', function () {
 
 test('finalize order with upstream maps cert api id', function () {
     $user = $this->createTestUser(['email' => 'finalize_map@example.com']);
-    $product = $this->createTestProduct(['support_acme' => 1, 'api_id' => 12345]);
-    $order = $this->createTestOrder($user, $product);
-    $cert = $this->createTestCert($order, [
-        'channel' => 'acme',
+    $product = $this->createTestProduct(['product_type' => 'acme', 'api_id' => 12345]);
+    $order = $this->createTestAcmeOrder($user, $product);
+    $cert = $this->createTestAcmeCert($order, [
+        'channel' => 'api',
         'status' => 'pending',
     ]);
     $cert->update(['api_id' => 999, 'csr' => null, 'cert' => null]);
@@ -573,10 +573,10 @@ test('finalize order with upstream maps cert api id', function () {
 
 test('revoke certificate passes reason to upstream', function () {
     $user = $this->createTestUser(['email' => 'revoke_reason@example.com']);
-    $product = $this->createTestProduct(['support_acme' => 1, 'api_id' => 12345]);
-    $order = $this->createTestOrder($user, $product);
-    $cert = $this->createTestCert($order, [
-        'channel' => 'acme',
+    $product = $this->createTestProduct(['product_type' => 'acme', 'api_id' => 12345]);
+    $order = $this->createTestAcmeOrder($user, $product);
+    $cert = $this->createTestAcmeCert($order, [
+        'channel' => 'api',
         'status' => 'active',
         'serial_number' => 'ABCD1234',
     ]);
@@ -595,10 +595,10 @@ test('revoke certificate passes reason to upstream', function () {
 
 test('format order always returns local id', function () {
     $user = $this->createTestUser(['email' => 'format_id@example.com']);
-    $product = $this->createTestProduct(['support_acme' => 1, 'api_id' => 12345]);
-    $order = $this->createTestOrder($user, $product);
-    $cert = $this->createTestCert($order, [
-        'channel' => 'acme',
+    $product = $this->createTestProduct(['product_type' => 'acme', 'api_id' => 12345]);
+    $order = $this->createTestAcmeOrder($user, $product);
+    $cert = $this->createTestAcmeCert($order, [
+        'channel' => 'api',
         'status' => 'pending',
     ]);
     $cert->update(['api_id' => 777]);

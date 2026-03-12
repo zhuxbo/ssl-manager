@@ -15,6 +15,7 @@ class AutoRenewCommand extends Command
 {
     protected $signature = 'schedule:auto-renew';
 
+    // 注意：不处理 ACME 订单。ACME 续签由客户端（certbot）主动发起，服务端不主动续费/重签
     protected $description = '自动续费/重签即将到期的证书';
 
     /**
@@ -59,8 +60,9 @@ class AutoRenewCommand extends Command
                 $query->where('status', 'active')
                     ->where('expires_at', '>', now()->subDays(15))
                     ->where('expires_at', '<', now()->addDays(14))
+                    // API 订单由下游系统自行处理续费/重签
                     ->where(function ($q) {
-                        $q->whereNull('channel')->orWhereNotIn('channel', ['acme', 'api']);
+                        $q->whereNull('channel')->orWhere('channel', '!=', 'api');
                     });
             })
             // 订单级 auto_renew=true，或订单未设置时回落到用户设置
@@ -96,8 +98,9 @@ class AutoRenewCommand extends Command
                 $query->where('status', 'active')
                     ->where('expires_at', '>', now()->subDays(15))
                     ->where('expires_at', '<', now()->addDays(14))
+                    // API 订单由下游系统自行处理续费/重签
                     ->where(function ($q) {
-                        $q->whereNull('channel')->orWhereNotIn('channel', ['acme', 'api']);
+                        $q->whereNull('channel')->orWhere('channel', '!=', 'api');
                     });
             })
             // 订单级 auto_reissue=true，或订单未设置时回落到用户设置
@@ -141,8 +144,7 @@ class AutoRenewCommand extends Command
 
         // 检查委托有效性，无有效委托则跳过
         $ca = strtolower($product->ca ?? '');
-        $channel = $cert->channel ?? '';
-        if (! $this->checkDelegationValidity($user->id, $cert->alternative_names, $ca, $channel)) {
+        if (! $this->checkDelegationValidity($user->id, $cert->alternative_names, $ca)) {
             $this->warn("订单 #{$order->id} 跳过：无有效委托记录");
 
             return;
@@ -251,8 +253,8 @@ class AutoRenewCommand extends Command
     /**
      * 检查所有域名是否都有有效委托记录（即时验证）
      */
-    private function checkDelegationValidity(int $userId, string $domains, string $ca, string $channel = ''): bool
+    private function checkDelegationValidity(int $userId, string $domains, string $ca): bool
     {
-        return app(AutoRenewService::class)->checkDelegationValidity($userId, $domains, $ca, $channel);
+        return app(AutoRenewService::class)->checkDelegationValidity($userId, $domains, $ca);
     }
 }

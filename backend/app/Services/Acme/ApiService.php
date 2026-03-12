@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Services\Acme;
 
-use App\Models\Cert;
-use App\Models\Order;
+use App\Models\Acme\AcmeCert;
+use App\Models\Acme\AcmeOrder;
 use App\Models\Product;
 use App\Models\User;
 use App\Services\Order\Utils\ValidatorUtil;
@@ -29,7 +29,7 @@ class ApiService
         }
 
         $product = Product::where('api_id', $productCode)
-            ->where('support_acme', 1)
+            ->where('product_type', Product::TYPE_ACME)
             ->first();
         if (! $product) {
             return ['code' => 0, 'msg' => 'Product not found'];
@@ -37,8 +37,7 @@ class ApiService
 
         // 丢单恢复：refer_id 已存在且已有 api_id → 返回已有订单
         if ($referId) {
-            $existingCert = Cert::where('refer_id', $referId)
-                ->where('channel', 'acme')
+            $existingCert = AcmeCert::where('refer_id', $referId)
                 ->whereNotNull('api_id')
                 ->whereHas('order', fn ($q) => $q->where('user_id', $user->id))
                 ->first();
@@ -78,7 +77,7 @@ class ApiService
      */
     public function submitDomains(int $orderId, array $domains): array
     {
-        $order = Order::find($orderId);
+        $order = AcmeOrder::find($orderId);
         if (! $order) {
             return ['code' => 0, 'msg' => 'Order not found'];
         }
@@ -125,15 +124,14 @@ class ApiService
      */
     public function reissueOrder(int $orderId, array $domains, ?string $referId = null): array
     {
-        $order = Order::find($orderId);
+        $order = AcmeOrder::find($orderId);
         if (! $order) {
             return ['code' => 0, 'msg' => 'Order not found'];
         }
 
         // 丢单恢复：refer_id 已存在且已提交上游，直接返回已有订单（限制目标订单）
         if ($referId) {
-            $existingCert = Cert::where('refer_id', $referId)
-                ->where('channel', 'acme')
+            $existingCert = AcmeCert::where('refer_id', $referId)
                 ->where('order_id', $orderId)
                 ->whereNotNull('api_id')
                 ->first();
@@ -176,7 +174,7 @@ class ApiService
         }
 
         // 调上游（始终重签，不判断）
-        $upstreamResult = $this->orderService->submitReissue($cert, $domains, $order, (int) $upstreamOrderId, $sourceApi);
+        $upstreamResult = $this->orderService->submitReissue($cert, $domains, $order, (int) $upstreamOrderId);
 
         if (isset($upstreamResult['error'])) {
             return ['code' => 0, 'msg' => $upstreamResult['error']];
@@ -199,7 +197,7 @@ class ApiService
             return ['code' => 0, 'msg' => 'Order not found'];
         }
 
-        $order = Order::with('latestCert')->find($cert->order_id);
+        $order = AcmeOrder::with('latestCert')->find($cert->order_id);
         if (! $order) {
             return ['code' => 0, 'msg' => 'Order not found'];
         }
@@ -354,8 +352,7 @@ class ApiService
      */
     public function revokeCertificate(string $serialNumber, string $reason = 'UNSPECIFIED'): array
     {
-        $cert = Cert::where('serial_number', $serialNumber)
-            ->where('channel', 'acme')
+        $cert = AcmeCert::where('serial_number', $serialNumber)
             ->first();
 
         if (! $cert) {
@@ -373,10 +370,10 @@ class ApiService
     /**
      * 查找或创建 Order（复用已有 ACME 订阅或创建新订阅）
      */
-    private function findOrCreateOrder(User $user, Product $product, ?string $referId = null): Order
+    private function findOrCreateOrder(User $user, Product $product, ?string $referId = null): AcmeOrder
     {
         // 复用已有 Order：同产品、未过期、未取消
-        $existingOrder = Order::where('user_id', $user->id)
+        $existingOrder = AcmeOrder::where('user_id', $user->id)
             ->where('product_id', $product->id)
             ->where('period_till', '>', now())
             ->whereNull('cancelled_at')
@@ -391,7 +388,7 @@ class ApiService
         return DB::transaction(function () use ($user, $product, $referId) {
             $period = $product->periods[0] ?? 12;
 
-            $order = Order::create([
+            $order = AcmeOrder::create([
                 'user_id' => $user->id,
                 'product_id' => $product->id,
                 'brand' => $product->brand,
@@ -402,10 +399,10 @@ class ApiService
                 'auto_renew' => true,
             ]);
 
-            $cert = Cert::create([
+            $cert = AcmeCert::create([
                 'order_id' => $order->id,
                 'action' => 'new',
-                'channel' => 'acme',
+                'channel' => 'api',
                 'common_name' => '',
                 'refer_id' => $referId ?? str_replace('-', '', Str::uuid()->toString()),
                 'email' => $user->email,
@@ -426,24 +423,23 @@ class ApiService
     /**
      * 通过 order.id 查找最新的 ACME cert
      */
-    private function findCertByOrderId(int $orderId): ?Cert
+    private function findCertByOrderId(int $orderId): ?AcmeCert
     {
-        $order = Order::find($orderId);
+        $order = AcmeOrder::find($orderId);
         if (! $order || ! $order->latest_cert_id) {
             return null;
         }
 
-        return Cert::where('id', $order->latest_cert_id)
-            ->where('channel', 'acme')
+        return AcmeCert::where('id', $order->latest_cert_id)
             ->first();
     }
 
     /**
      * 格式化 prepareOrder 返回数据（无域名、无 authorizations）
      */
-    private function formatPrepareResult(Cert $cert): array
+    private function formatPrepareResult(AcmeCert $cert): array
     {
-        $order = Order::find($cert->order_id);
+        $order = AcmeOrder::find($cert->order_id);
 
         return [
             'id' => $cert->order_id,
@@ -456,7 +452,7 @@ class ApiService
     /**
      * 格式化订单数据
      */
-    private function formatOrder(Cert $cert): array
+    private function formatOrder(AcmeCert $cert): array
     {
         $data = [
             'id' => $cert->order_id,

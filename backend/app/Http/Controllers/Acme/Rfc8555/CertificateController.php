@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Acme\Rfc8555;
 
 use App\Http\Controllers\Controller;
-use App\Models\Cert;
+use App\Models\Acme\AcmeCert;
 use App\Services\Acme\JwsService;
 use App\Services\Acme\NonceService;
 use App\Services\Acme\OrderService;
@@ -92,9 +92,7 @@ class CertificateController extends Controller
         }
 
         // 在 certs 表查找
-        $cert = Cert::where('channel', 'acme')
-            ->where('serial_number', $serialNumber)
-            ->first();
+        $cert = AcmeCert::where('serial_number', $serialNumber)->first();
 
         if (! $cert) {
             return $this->acmeError('about:blank', 'Certificate not found', 404);

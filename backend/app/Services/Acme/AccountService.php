@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Acme;
 
 use App\Models\Acme\Account;
-use App\Models\Order;
+use App\Models\Acme\AcmeOrder;
 use App\Models\User;
 
 class AccountService
@@ -33,7 +33,7 @@ class AccountService
         // 查找 EAB 对应的用户
         $user = null;
         if ($eabKid) {
-            $order = Order::where('eab_kid', $eabKid)->first();
+            $order = AcmeOrder::where('eab_kid', $eabKid)->first();
             if ($order) {
                 $user = User::find($order->user_id);
             }

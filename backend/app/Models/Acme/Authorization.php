@@ -3,7 +3,6 @@
 namespace App\Models\Acme;
 
 use App\Models\BaseModel;
-use App\Models\Cert;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Authorization extends BaseModel
@@ -37,6 +36,6 @@ class Authorization extends BaseModel
 
     public function cert(): BelongsTo
     {
-        return $this->belongsTo(Cert::class);
+        return $this->belongsTo(AcmeCert::class);
     }
 }

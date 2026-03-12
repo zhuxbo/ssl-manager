@@ -26,6 +26,9 @@ class RouteServiceProvider extends ServiceProvider
 
             // ACME RFC 8555 路由
             Route::middleware('global')->group($routePath.'/acme.php');
+
+            // 文件代理验证路由（无 global 中间件，公开端点无需路由绑定）
+            require $routePath.'/file-proxy.php';
         });
     }
 }

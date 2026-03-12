@@ -3,7 +3,6 @@
 namespace App\Models\Acme;
 
 use App\Models\BaseModel;
-use App\Models\Order;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -35,6 +34,6 @@ class Account extends BaseModel
 
     public function order(): BelongsTo
     {
-        return $this->belongsTo(Order::class);
+        return $this->belongsTo(AcmeOrder::class, 'order_id');
     }
 }

@@ -40,6 +40,16 @@ class Api implements AcmeSourceApiInterface
         return $this->sdk->finalizeOrder($orderId, $csr);
     }
 
+    public function getOrder(int $orderId): array
+    {
+        return $this->sdk->getOrder($orderId);
+    }
+
+    public function getOrderAuthorizations(int $orderId): array
+    {
+        return $this->sdk->getOrderAuthorizations($orderId);
+    }
+
     public function getCertificate(int $orderId): array
     {
         return $this->sdk->getCertificate($orderId);

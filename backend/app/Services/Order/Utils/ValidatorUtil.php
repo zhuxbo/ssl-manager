@@ -52,7 +52,8 @@ class ValidatorUtil
             'basic' => [
                 'rules' => [
                     'action' => ['required', 'in:new,renew,reissue'],
-                    'channel' => ['required', 'in:web,admin,api,acme,deploy'],
+                    // ACME 使用独立表，传统订单 channel 不含 acme
+                    'channel' => ['required', 'in:web,admin,api,deploy'],
                     'plus' => ['in:0,1'],
                     'issue_verify' => ['in:0,1'],
                     'refer_id' => ['alpha_num', 'size:32', 'unique:certs,refer_id'],
@@ -93,7 +94,7 @@ class ValidatorUtil
             'organization' => [
                 'rules' => [
                     'name' => ['required', 'between:2,64'],
-                    'registration_number' => ['required', 'between:6,32'],
+                    'registration_number' => ['required', 'string', 'between:6,32'],
                     'phone' => ['required', 'numeric', 'digits_between:5,15'],
                     'address' => ['required', 'between:2,64'],
                     'city' => ['required', 'between:2,64'],

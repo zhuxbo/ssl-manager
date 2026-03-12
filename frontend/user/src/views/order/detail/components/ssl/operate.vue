@@ -8,7 +8,7 @@
     </el-button>
     <template #dropdown>
       <el-dropdown-menu>
-        <el-dropdown-item v-if="cert.status == 'active' && !isAcme" command="send">{{
+        <el-dropdown-item v-if="cert.status == 'active'" command="send">{{
           "发送"
         }}</el-dropdown-item>
         <el-dropdown-item v-if="cert.status == 'pending'" command="commit">{{
@@ -87,7 +87,6 @@ const params = route.params;
 
 const order = inject("order") as any;
 const cert = inject("cert") as any;
-const isAcme = inject("isAcme", ref(false)) as any;
 const sync = inject("sync") as Function;
 const get = inject("get") as Function;
 

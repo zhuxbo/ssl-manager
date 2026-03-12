@@ -14,7 +14,7 @@ class ImportCaProductRequest extends UpdateRequest
         $rules['source'] = 'required|string|max:20';
         $rules['brand'] = 'required|string|max:50';
         $rules['ca'] = 'required|string|max:200';
-        $rules['product_type'] = 'required|string|in:ssl,codesign,smime,docsign';
+        $rules['product_type'] = 'required|string|in:ssl,codesign,smime,docsign,acme';
         $rules['validation_type'] = 'required|string|max:50';
         $rules['periods'] = 'required|array';
         unset($rules['code']); // code 由 prepareForCreate 生成

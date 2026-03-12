@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Acme\Rfc8555;
 
 use App\Http\Controllers\Controller;
-use App\Models\Order;
+use App\Models\Acme\AcmeOrder;
 use App\Services\Acme\AccountService;
 use App\Services\Acme\JwsService;
 use App\Services\Acme\NonceService;
@@ -60,7 +60,7 @@ class AccountController extends Controller
         }
 
         // 查找 EAB 对应的订单（EAB 可复用，不拒绝已使用的 EAB）
-        $order = Order::where('eab_kid', $eabKid)->first();
+        $order = AcmeOrder::where('eab_kid', $eabKid)->first();
 
         if (! $order) {
             return $this->acmeError('unauthorized', 'Invalid EAB credentials', 401);

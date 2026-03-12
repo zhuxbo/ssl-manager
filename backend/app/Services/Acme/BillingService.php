@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace App\Services\Acme;
 
 use App\Models\Acme\Account;
-use App\Models\Cert;
-use App\Models\Order;
+use App\Models\Acme\AcmeCert;
+use App\Models\Acme\AcmeOrder;
 use App\Models\Product;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Services\Order\Utils\OrderUtil;
+use App\Services\Order\Utils\ValidatorUtil;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -72,7 +74,7 @@ class BillingService
     /**
      * 取消 ACME 订单（清理 ACME 特有数据，由 cancelPending 调用）
      */
-    public function cancelOrder(Order $order): void
+    public function cancelOrder(AcmeOrder $order): void
     {
         $cert = $order->latestCert;
         if ($cert) {
@@ -88,7 +90,7 @@ class BillingService
      * - 未提交上游（无 api_id）：直接删除清理 + 退费
      * - 已提交上游（有 api_id）：要求上游明确成功，仅标记状态 + 退费，不删除订单和相关信息
      */
-    public function executeCancel(Order $order): array
+    public function executeCancel(AcmeOrder $order): array
     {
         $cert = $order->latestCert;
 
@@ -109,7 +111,7 @@ class BillingService
         // 本地 DB 更新包在事务内保证原子性
         DB::transaction(function () use ($order, $cert, $submitted) {
             // 创建取消交易退费
-            $transaction = OrderUtil::getCancelTransaction($order->toArray());
+            $transaction = OrderUtil::getCancelTransaction($order->toArray(), Transaction::TYPE_ACME_CANCEL);
             Transaction::create($transaction);
 
             // 标记 cert 为 cancelled
@@ -129,12 +131,22 @@ class BillingService
     }
 
     /**
-     * Web 端创建 ACME 订阅
+     * 创建 ACME 订阅
+     *
+     * @param  array|null  $domains  域名列表（Web 端传入，创建 unpaid 订单；不传则 pending，用于 Deploy/自动续费）
+     * @param  string|null  $validationMethod  验证方式（delegation/txt/file_proxy/file）
      */
-    public function createSubscription(User $user, int $productId, int $period): array
+    public function createSubscription(User $user, int $productId, int $period, ?array $domains = null, ?string $validationMethod = null): array
     {
+        // 防重复创建（10 秒内相同参数）
+        $cacheKey = 'acme_create_'.md5(json_encode([$user->id, $productId, $period, $domains]));
+        if (Cache::has($cacheKey)) {
+            return ['code' => 0, 'msg' => '请勿重复提交，请稍后再试'];
+        }
+        Cache::put($cacheKey, time(), 10);
+
         $product = Product::where('id', $productId)
-            ->where('support_acme', 1)
+            ->where('product_type', Product::TYPE_ACME)
             ->first();
 
         if (! $product) {
@@ -149,9 +161,18 @@ class BillingService
             return ['code' => 0, 'msg' => '请先设置用户邮箱，ACME 账户注册需要邮箱地址'];
         }
 
+        // 有域名时做 SAN 验证
+        if ($domains) {
+            $domainsString = implode(',', $domains);
+            $sanErrors = ValidatorUtil::validateSansMaxCount($product->toArray(), $domainsString);
+            if (! empty($sanErrors)) {
+                return ['code' => 0, 'msg' => implode('; ', array_values($sanErrors))];
+            }
+        }
+
         try {
-            $result = DB::transaction(function () use ($user, $product, $period) {
-                $order = Order::create([
+            $result = DB::transaction(function () use ($user, $product, $period, $domains, $validationMethod) {
+                $order = AcmeOrder::create([
                     'user_id' => $user->id,
                     'product_id' => $product->id,
                     'brand' => $product->brand,
@@ -162,21 +183,44 @@ class BillingService
                     'auto_renew' => true,
                 ]);
 
-                $cert = Cert::create([
+                // 有域名 → unpaid（Web 端，用户需点击支付）；无域名 → pending（Deploy/自动续费）
+                $certData = [
                     'order_id' => $order->id,
                     'action' => 'new',
-                    'channel' => 'acme',
+                    'channel' => 'api',
                     'common_name' => '',
                     'email' => $user->email,
                     'amount' => '0.00',
-                    'status' => 'pending',
-                ]);
+                    'status' => $domains ? 'unpaid' : 'pending',
+                ];
+
+                if ($domains) {
+                    $domainsString = implode(',', $domains);
+                    $sans = OrderUtil::getSansFromDomains($domainsString, $product->gift_root_domain ?? false);
+                    $certData['common_name'] = $domains[0] ?? '';
+                    $certData['alternative_names'] = $domainsString;
+                    $certData['standard_count'] = $sans['standard_count'];
+                    $certData['wildcard_count'] = $sans['wildcard_count'];
+                    $certData['validation_method'] = $validationMethod ?? 'txt';
+                    $certData['validation'] = array_map(fn ($d) => [
+                        'domain' => $d,
+                        'method' => in_array($validationMethod, ['delegation', 'txt']) ? 'txt' : ($validationMethod ?? 'txt'),
+                        'verified' => 0,
+                    ], $domains);
+                }
+
+                $cert = AcmeCert::create($certData);
 
                 $order->latest_cert_id = $cert->id;
                 $order->amount = '0.00';
-                $order->purchased_standard_count = 0;
-                $order->purchased_wildcard_count = 0;
-                $order->save();
+
+                if ($domains) {
+                    $order->purchased_standard_count = $cert->standard_count ?? 0;
+                    $order->purchased_wildcard_count = $cert->wildcard_count ?? 0;
+                } else {
+                    $order->purchased_standard_count = 0;
+                    $order->purchased_wildcard_count = 0;
+                }
 
                 $order->eab_kid = Str::uuid()->toString();
                 $order->eab_hmac = rtrim(strtr(base64_encode(random_bytes(32)), '+/', '-_'), '=');
@@ -204,7 +248,7 @@ class BillingService
     /**
      * 尝试自动续费 — 标准 Transaction 流程
      */
-    public function tryAutoRenew(User $user, Order $lastOrder): array
+    public function tryAutoRenew(User $user, AcmeOrder $lastOrder): array
     {
         if (empty($user->email)) {
             return ['code' => 0, 'msg' => 'User has no email for ACME account'];
@@ -221,7 +265,7 @@ class BillingService
         try {
             $newOrder = DB::transaction(function () use ($user, $product, $period, $lastOrder) {
                 // M7: 锁定 lastOrder 防止并发续费
-                $locked = Order::where('id', $lastOrder->id)->lockForUpdate()->first();
+                $locked = AcmeOrder::where('id', $lastOrder->id)->lockForUpdate()->first();
 
                 // 检查该 Account 是否已迁移到新 Order（说明已续费过）
                 $account = Account::where('order_id', $lastOrder->id)->lockForUpdate()->first();
@@ -237,8 +281,8 @@ class BillingService
                     }
                 }
 
-                // 创建 Order
-                $order = Order::create([
+                // 创建 AcmeOrder
+                $order = AcmeOrder::create([
                     'user_id' => $user->id,
                     'product_id' => $product->id,
                     'brand' => $product->brand,
@@ -249,11 +293,11 @@ class BillingService
                     'auto_renew' => true,
                 ]);
 
-                // 创建 Cert（域名数量和金额在扣费时写入）
-                $cert = Cert::create([
+                // 创建 AcmeCert（域名数量和金额在扣费时写入）
+                $cert = AcmeCert::create([
                     'order_id' => $order->id,
                     'action' => 'new',
-                    'channel' => 'acme',
+                    'channel' => 'api',
                     'common_name' => '',
                     'email' => $user->email,
                     'amount' => '0.00',
@@ -264,9 +308,6 @@ class BillingService
                 $order->amount = '0.00';
                 $order->purchased_standard_count = 0;
                 $order->purchased_wildcard_count = 0;
-                $order->save();
-
-                // 生成 EAB
                 $order->eab_kid = Str::uuid()->toString();
                 $order->eab_hmac = rtrim(strtr(base64_encode(random_bytes(32)), '+/', '-_'), '=');
                 $order->save();

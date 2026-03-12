@@ -1,8 +1,8 @@
 <?php
 
 use App\Models\Acme\Account;
+use App\Models\Acme\AcmeCert;
 use App\Models\Acme\Authorization;
-use App\Models\Cert;
 use App\Models\User;
 use App\Services\Acme\NonceService;
 use App\Services\Acme\OrderService;
@@ -41,7 +41,7 @@ test('获取授权-成功', function () {
         'status' => 'valid',
     ]);
 
-    $cert = Cert::factory()->create();
+    $cert = AcmeCert::factory()->create();
     $authorization = Authorization::create([
         'cert_id' => $cert->id,
         'token' => 'valid-token',
@@ -83,7 +83,7 @@ test('获取授权-不属于当前账户', function () {
         'status' => 'valid',
     ]);
 
-    $cert = Cert::factory()->create();
+    $cert = AcmeCert::factory()->create();
     $authorization = Authorization::create([
         'cert_id' => $cert->id,
         'token' => 'other-token',
@@ -113,7 +113,7 @@ test('获取授权-不属于当前账户', function () {
 
 test('GET 获取授权-成功', function () {
     $authorization = Authorization::create([
-        'cert_id' => Cert::factory()->create()->id,
+        'cert_id' => AcmeCert::factory()->create()->id,
         'token' => 'get-token',
         'identifier_type' => 'dns',
         'identifier_value' => 'example.com',

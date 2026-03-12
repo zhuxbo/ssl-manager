@@ -1,8 +1,8 @@
 <?php
 
 use App\Models\Acme\Account;
+use App\Models\Acme\AcmeCert;
 use App\Models\Acme\Authorization;
-use App\Models\Cert;
 use App\Models\ProductPrice;
 use App\Services\Acme\Api\AcmeSourceApiInterface;
 use App\Services\Acme\Api\Api as AcmeApiFactory;
@@ -58,17 +58,17 @@ function createOrderServiceProductPrice(int $productId, $user): void
 test('create validates san count against product limits', function () {
     $user = $this->createTestUser(['balance' => '1000.00']);
     $product = $this->createTestProduct([
-        'support_acme' => 1,
+        'product_type' => 'acme',
         'standard_max' => 2,
         'wildcard_max' => 0,
         'total_max' => 2,
     ]);
     createOrderServiceProductPrice($product->id, $user);
 
-    $order = $this->createTestOrder($user, $product, [
+    $order = $this->createTestAcmeOrder($user, $product, [
         'period_till' => now()->addYear(),
     ]);
-    $cert = $this->createTestCert($order, ['channel' => 'acme']);
+    $cert = $this->createTestAcmeCert($order);
 
     $account = Account::create([
         'user_id' => $user->id,
@@ -94,7 +94,7 @@ test('create validates san count against product limits', function () {
 test('create charges additional san fee when exceeding purchased', function () {
     $user = $this->createTestUser(['balance' => '1000.00']);
     $product = $this->createTestProduct([
-        'support_acme' => 1,
+        'product_type' => 'acme',
         'standard_min' => 1,
         'standard_max' => 10,
         'total_min' => 1,
@@ -102,14 +102,13 @@ test('create charges additional san fee when exceeding purchased', function () {
     ]);
     createOrderServiceProductPrice($product->id, $user);
 
-    $order = $this->createTestOrder($user, $product, [
+    $order = $this->createTestAcmeOrder($user, $product, [
         'period_till' => now()->addYear(),
         'purchased_standard_count' => 1,
         'purchased_wildcard_count' => 0,
     ]);
     // 设置 api_id + cert 内容使其不可复用，触发创建新的 reissue cert
-    $cert = $this->createTestCert($order, [
-        'channel' => 'acme',
+    $cert = $this->createTestAcmeCert($order, [
         'standard_count' => 1,
         'api_id' => 100,
         'cert' => '-----BEGIN CERTIFICATE-----\ntest\n-----END CERTIFICATE-----',
@@ -161,7 +160,7 @@ test('create charges additional san fee when exceeding purchased', function () {
     expect($result)->toHaveKey('order');
 
     // 验证创建了 reissue cert
-    $newCert = Cert::where('order_id', $order->id)
+    $newCert = AcmeCert::where('order_id', $order->id)
         ->where('action', 'reissue')
         ->first();
     expect($newCert)->not->toBeNull();
@@ -171,7 +170,7 @@ test('create charges additional san fee when exceeding purchased', function () {
 test('create does not add gift root domain', function () {
     $user = $this->createTestUser(['balance' => '1000.00']);
     $product = $this->createTestProduct([
-        'support_acme' => 1,
+        'product_type' => 'acme',
         'gift_root_domain' => 1,
         'standard_min' => 1,
         'standard_max' => 10,
@@ -180,11 +179,11 @@ test('create does not add gift root domain', function () {
     ]);
     createOrderServiceProductPrice($product->id, $user);
 
-    $order = $this->createTestOrder($user, $product, [
+    $order = $this->createTestAcmeOrder($user, $product, [
         'period_till' => now()->addYear(),
         'purchased_standard_count' => 1,
     ]);
-    $cert = $this->createTestCert($order, ['channel' => 'acme']);
+    $cert = $this->createTestAcmeCert($order);
 
     $account = Account::create([
         'user_id' => $user->id,
@@ -226,13 +225,13 @@ test('create does not add gift root domain', function () {
 
 test('create stores api id in cert', function () {
     $user = $this->createTestUser(['balance' => '1000.00']);
-    $product = $this->createTestProduct(['support_acme' => 1]);
+    $product = $this->createTestProduct(['product_type' => 'acme']);
     createOrderServiceProductPrice($product->id, $user);
 
-    $order = $this->createTestOrder($user, $product, [
+    $order = $this->createTestAcmeOrder($user, $product, [
         'period_till' => now()->addYear(),
     ]);
-    $cert = $this->createTestCert($order, ['channel' => 'acme']);
+    $cert = $this->createTestAcmeCert($order);
 
     $account = Account::create([
         'user_id' => $user->id,
@@ -269,18 +268,18 @@ test('create stores api id in cert', function () {
 
 test('get acme status derives correctly', function () {
     $user = $this->createTestUser();
-    $product = $this->createTestProduct(['support_acme' => 1]);
-    $order = $this->createTestOrder($user, $product);
+    $product = $this->createTestProduct(['product_type' => 'acme']);
+    $order = $this->createTestAcmeOrder($user, $product);
 
     // 状态 revoked → invalid
-    $cert1 = $this->createTestCert($order, ['channel' => 'acme', 'status' => 'revoked']);
+    $cert1 = $this->createTestAcmeCert($order, ['status' => 'revoked']);
     expect($this->service->getAcmeStatus($cert1))->toBe('invalid');
 
     // 有证书内容 → valid
-    $cert2 = Cert::create([
+    $cert2 = AcmeCert::create([
         'order_id' => $order->id,
         'action' => 'new',
-        'channel' => 'acme',
+        'channel' => 'api',
         'common_name' => 'test.com',
         'status' => 'active',
         'cert' => '-----BEGIN CERTIFICATE-----\ntest\n-----END CERTIFICATE-----',
@@ -289,10 +288,10 @@ test('get acme status derives correctly', function () {
     expect($this->service->getAcmeStatus($cert2))->toBe('valid');
 
     // 有 CSR 无证书 → processing
-    $cert3 = Cert::create([
+    $cert3 = AcmeCert::create([
         'order_id' => $order->id,
         'action' => 'new',
-        'channel' => 'acme',
+        'channel' => 'api',
         'common_name' => 'test.com',
         'status' => 'pending',
         'csr' => $this->generateTestCsr(),
@@ -300,10 +299,10 @@ test('get acme status derives correctly', function () {
     expect($this->service->getAcmeStatus($cert3))->toBe('processing');
 
     // 所有授权 valid → ready
-    $cert4 = Cert::create([
+    $cert4 = AcmeCert::create([
         'order_id' => $order->id,
         'action' => 'new',
-        'channel' => 'acme',
+        'channel' => 'api',
         'common_name' => 'test.com',
         'status' => 'pending',
     ]);
@@ -319,10 +318,10 @@ test('get acme status derives correctly', function () {
     expect($this->service->getAcmeStatus($cert4))->toBe('ready');
 
     // 有授权但未全部 valid → pending
-    $cert5 = Cert::create([
+    $cert5 = AcmeCert::create([
         'order_id' => $order->id,
         'action' => 'new',
-        'channel' => 'acme',
+        'channel' => 'api',
         'common_name' => 'test.com',
         'status' => 'pending',
     ]);
@@ -349,10 +348,9 @@ test('get acme status derives correctly', function () {
 
 test('get finds cert by refer id', function () {
     $user = $this->createTestUser();
-    $product = $this->createTestProduct(['support_acme' => 1]);
-    $order = $this->createTestOrder($user, $product);
-    $cert = $this->createTestCert($order, [
-        'channel' => 'acme',
+    $product = $this->createTestProduct(['product_type' => 'acme']);
+    $order = $this->createTestAcmeOrder($user, $product);
+    $cert = $this->createTestAcmeCert($order, [
         'refer_id' => 'test_refer_id_12345678901234',
     ]);
 
@@ -365,7 +363,7 @@ test('get finds cert by refer id', function () {
 test('create prefers order id over user id lookup', function () {
     $user = $this->createTestUser(['balance' => '1000.00']);
     $product = $this->createTestProduct([
-        'support_acme' => 1,
+        'product_type' => 'acme',
         'standard_min' => 1,
         'standard_max' => 10,
         'total_min' => 1,
@@ -374,17 +372,17 @@ test('create prefers order id over user id lookup', function () {
     createOrderServiceProductPrice($product->id, $user);
 
     // 创建两个有效 Order
-    $order1 = $this->createTestOrder($user, $product, [
+    $order1 = $this->createTestAcmeOrder($user, $product, [
         'period_till' => now()->addYear(),
         'purchased_standard_count' => 1,
     ]);
-    $cert1 = $this->createTestCert($order1, ['channel' => 'acme']);
+    $cert1 = $this->createTestAcmeCert($order1);
 
-    $order2 = $this->createTestOrder($user, $product, [
+    $order2 = $this->createTestAcmeOrder($user, $product, [
         'period_till' => now()->addMonths(6),
         'purchased_standard_count' => 1,
     ]);
-    $cert2 = $this->createTestCert($order2, ['channel' => 'acme']);
+    $cert2 = $this->createTestAcmeCert($order2);
 
     // AcmeAccount 绑定 order2
     $account = Account::create([
@@ -423,14 +421,14 @@ test('create prefers order id over user id lookup', function () {
 
 test('create writes delegation txt for dns01 authorizations', function () {
     $user = $this->createTestUser(['balance' => '1000.00']);
-    $product = $this->createTestProduct(['support_acme' => 1]);
+    $product = $this->createTestProduct(['product_type' => 'acme']);
     createOrderServiceProductPrice($product->id, $user);
 
-    $order = $this->createTestOrder($user, $product, [
+    $order = $this->createTestAcmeOrder($user, $product, [
         'period_till' => now()->addYear(),
         'purchased_standard_count' => 1,
     ]);
-    $cert = $this->createTestCert($order, ['channel' => 'acme']);
+    $cert = $this->createTestAcmeCert($order);
 
     $account = Account::create([
         'user_id' => $user->id,
@@ -494,4 +492,85 @@ test('get returns null for non acme cert', function () {
     $found = $this->service->get('non_acme_refer_id_1234567890');
 
     expect($found)->toBeNull();
+});
+
+test('populateValidation http-01 每域名独立 token/content', function () {
+    $user = $this->createTestUser();
+    $product = $this->createTestProduct(['product_type' => 'acme']);
+    $order = $this->createTestAcmeOrder($user, $product);
+    $cert = $this->createTestAcmeCert($order, ['status' => 'processing']);
+
+    // 创建两个 http-01 authorization，不同域名、不同 token/key_authorization
+    Authorization::create([
+        'cert_id' => $cert->id,
+        'token' => 'auth_token_'.uniqid(),
+        'identifier_type' => 'dns',
+        'identifier_value' => 'a.example.com',
+        'status' => 'pending',
+        'challenge_type' => 'http-01',
+        'challenge_status' => 'pending',
+        'challenge_token' => 'token-aaa',
+        'key_authorization' => 'keyauth-aaa',
+    ]);
+    Authorization::create([
+        'cert_id' => $cert->id,
+        'token' => 'auth_token_'.uniqid(),
+        'identifier_type' => 'dns',
+        'identifier_value' => 'b.example.com',
+        'status' => 'pending',
+        'challenge_type' => 'http-01',
+        'challenge_status' => 'pending',
+        'challenge_token' => 'token-bbb',
+        'key_authorization' => 'keyauth-bbb',
+    ]);
+
+    $this->service->populateValidation($cert);
+    $cert->refresh();
+
+    // validation_method 默认 file
+    expect($cert->validation_method)->toBe('file');
+
+    // validation 每个域名都有独立的 name/content/path
+    $validation = $cert->validation;
+    expect($validation)->toHaveCount(2);
+
+    $itemA = collect($validation)->firstWhere('domain', 'a.example.com');
+    expect($itemA['method'])->toBe('file');
+    expect($itemA['name'])->toBe('token-aaa');
+    expect($itemA['content'])->toBe('keyauth-aaa');
+    expect($itemA['path'])->toBe('/.well-known/acme-challenge/token-aaa');
+
+    $itemB = collect($validation)->firstWhere('domain', 'b.example.com');
+    expect($itemB['method'])->toBe('file');
+    expect($itemB['name'])->toBe('token-bbb');
+    expect($itemB['content'])->toBe('keyauth-bbb');
+    expect($itemB['path'])->toBe('/.well-known/acme-challenge/token-bbb');
+});
+
+test('populateValidation http-01 保留用户选择的 file 方式', function () {
+    $user = $this->createTestUser();
+    $product = $this->createTestProduct(['product_type' => 'acme']);
+    $order = $this->createTestAcmeOrder($user, $product);
+    $cert = $this->createTestAcmeCert($order, ['status' => 'processing']);
+
+    Authorization::create([
+        'cert_id' => $cert->id,
+        'token' => 'auth_token_'.uniqid(),
+        'identifier_type' => 'dns',
+        'identifier_value' => 'c.example.com',
+        'status' => 'pending',
+        'challenge_type' => 'http-01',
+        'challenge_status' => 'pending',
+        'challenge_token' => 'token-ccc',
+        'key_authorization' => 'keyauth-ccc',
+    ]);
+
+    // 传入 method=file，应保留为 file
+    $this->service->populateValidation($cert, 'file');
+    $cert->refresh();
+
+    expect($cert->validation_method)->toBe('file');
+    expect($cert->validation[0]['method'])->toBe('file');
+    expect($cert->validation[0]['name'])->toBe('token-ccc');
+    expect($cert->validation[0]['content'])->toBe('keyauth-ccc');
 });

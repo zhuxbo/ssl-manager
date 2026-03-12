@@ -1,8 +1,8 @@
 <?php
 
 use App\Models\Acme\Account;
-use App\Models\Cert;
-use App\Models\Order;
+use App\Models\Acme\AcmeCert;
+use App\Models\Acme\AcmeOrder;
 use App\Models\Product;
 use App\Models\User;
 use App\Services\Acme\NonceService;
@@ -70,7 +70,7 @@ test('创建新订单-不支持的标识符类型', function () {
 
 test('创建新订单-成功', function () {
     $user = User::factory()->create();
-    $product = Product::factory()->create(['support_acme' => 1]);
+    $product = Product::factory()->create(['product_type' => 'acme']);
     $account = Account::create([
         'user_id' => $user->id,
         'key_id' => 'test-key',
@@ -78,11 +78,11 @@ test('创建新订单-成功', function () {
         'status' => 'valid',
     ]);
 
-    $order = Order::factory()->acme()->create([
+    $order = AcmeOrder::factory()->create([
         'user_id' => $user->id,
         'product_id' => $product->id,
     ]);
-    $cert = Cert::factory()->acme()->create([
+    $cert = AcmeCert::factory()->create([
         'order_id' => $order->id,
         'refer_id' => 'test-refer-id',
     ]);
@@ -140,8 +140,8 @@ test('获取订单详情-成功', function () {
         'status' => 'valid',
     ]);
 
-    $order = Order::factory()->create(['user_id' => $user->id]);
-    $cert = Cert::factory()->active()->create([
+    $order = AcmeOrder::factory()->create(['user_id' => $user->id]);
+    $cert = AcmeCert::factory()->active()->create([
         'order_id' => $order->id,
         'refer_id' => 'test-refer',
     ]);
@@ -175,7 +175,7 @@ test('finalize 订单-缺少 CSR', function () {
         'status' => 'valid',
     ]);
 
-    $cert = Cert::factory()->create(['refer_id' => 'fin-refer']);
+    $cert = AcmeCert::factory()->create(['refer_id' => 'fin-refer']);
 
     $this->withAcmeAccount($account);
     $this->withAcmeJws([
@@ -207,7 +207,7 @@ test('finalize 订单-成功', function () {
         'status' => 'valid',
     ]);
 
-    $cert = Cert::factory()->create(['refer_id' => 'fin-ok-refer']);
+    $cert = AcmeCert::factory()->create(['refer_id' => 'fin-ok-refer']);
 
     $this->withAcmeAccount($account);
     $this->withAcmeJws([
@@ -244,7 +244,7 @@ test('finalize 订单-不属于当前账户', function () {
         'status' => 'valid',
     ]);
 
-    $cert = Cert::factory()->create(['refer_id' => 'not-mine']);
+    $cert = AcmeCert::factory()->create(['refer_id' => 'not-mine']);
 
     $this->withAcmeAccount($account);
     $this->withAcmeJws([

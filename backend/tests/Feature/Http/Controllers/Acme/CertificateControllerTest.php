@@ -1,7 +1,7 @@
 <?php
 
 use App\Models\Acme\Account;
-use App\Models\Cert;
+use App\Models\Acme\AcmeCert;
 use App\Models\User;
 use App\Services\Acme\NonceService;
 use App\Services\Acme\OrderService;
@@ -40,7 +40,7 @@ test('下载证书-证书未就绪', function () {
         'status' => 'valid',
     ]);
 
-    $cert = Cert::factory()->create([
+    $cert = AcmeCert::factory()->create([
         'refer_id' => 'not-ready',
         'cert' => null,
         'csr' => null,
@@ -82,7 +82,7 @@ test('下载证书-成功', function () {
         'intermediate_cert' => $intermediatePem,
     ]);
 
-    $cert = Cert::factory()->active()->create([
+    $cert = AcmeCert::factory()->active()->create([
         'refer_id' => 'ready-cert',
         'cert' => $certPem,
         'issuer' => 'Test CA',
@@ -118,7 +118,7 @@ test('下载证书-不属于当前账户', function () {
         'status' => 'valid',
     ]);
 
-    $cert = Cert::factory()->active()->create([
+    $cert = AcmeCert::factory()->active()->create([
         'refer_id' => 'other-cert',
         'cert' => 'test',
     ]);

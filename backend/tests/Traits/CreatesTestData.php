@@ -2,6 +2,8 @@
 
 namespace Tests\Traits;
 
+use App\Models\Acme\AcmeCert;
+use App\Models\Acme\AcmeOrder;
 use App\Models\Cert;
 use App\Models\CnameDelegation;
 use App\Models\Order;
@@ -74,6 +76,50 @@ trait CreatesTestData
             'wildcard_count' => $overrides['wildcard_count'] ?? 0,
             'csr' => $overrides['csr'] ?? $this->generateTestCsr(),
             'dcv' => $overrides['dcv'] ?? ['method' => 'txt', 'dns' => ['host' => '_acme-challenge']],
+            'validation' => $overrides['validation'] ?? [],
+            'expires_at' => $overrides['expires_at'] ?? now()->addDays(90),
+        ], $overrides));
+
+        // 更新订单的 latest_cert_id
+        $order->update(['latest_cert_id' => $cert->id]);
+
+        return $cert;
+    }
+
+    /**
+     * 创建测试 ACME 订单
+     */
+    protected function createTestAcmeOrder(User $user, Product $product, array $overrides = []): AcmeOrder
+    {
+        return AcmeOrder::create(array_merge([
+            'user_id' => $user->id,
+            'product_id' => $product->id,
+            'brand' => $product->brand ?? 'Test Brand',
+            'period' => $overrides['period'] ?? 12,
+            'amount' => $overrides['amount'] ?? '100.00',
+            'period_from' => $overrides['period_from'] ?? now(),
+            'period_till' => $overrides['period_till'] ?? now()->addYear(),
+            'eab_kid' => $overrides['eab_kid'] ?? 'test-eab-kid-'.uniqid(),
+            'eab_hmac' => $overrides['eab_hmac'] ?? rtrim(strtr(base64_encode(random_bytes(32)), '+/', '-_'), '='),
+        ], $overrides));
+    }
+
+    /**
+     * 创建测试 ACME 证书
+     */
+    protected function createTestAcmeCert(AcmeOrder $order, array $overrides = []): AcmeCert
+    {
+        $cert = AcmeCert::create(array_merge([
+            'order_id' => $order->id,
+            'action' => $overrides['action'] ?? 'new',
+            'channel' => $overrides['channel'] ?? 'api',
+            'status' => $overrides['status'] ?? 'pending',
+            'common_name' => $overrides['common_name'] ?? 'example.com',
+            'alternative_names' => $overrides['alternative_names'] ?? 'example.com',
+            'standard_count' => $overrides['standard_count'] ?? 1,
+            'wildcard_count' => $overrides['wildcard_count'] ?? 0,
+            'csr' => $overrides['csr'] ?? $this->generateTestCsr(),
+            'validation_method' => $overrides['validation_method'] ?? 'txt',
             'validation' => $overrides['validation'] ?? [],
             'expires_at' => $overrides['expires_at'] ?? now()->addDays(90),
         ], $overrides));

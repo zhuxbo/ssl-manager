@@ -110,14 +110,6 @@ class CertFactory extends Factory
     }
 
     /**
-     * ACME 通道
-     */
-    public function acme(): static
-    {
-        return $this->state(['channel' => 'acme']);
-    }
-
-    /**
      * 通配符证书
      */
     public function wildcard(): static

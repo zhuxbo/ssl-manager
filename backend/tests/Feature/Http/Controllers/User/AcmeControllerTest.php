@@ -1,6 +1,6 @@
 <?php
 
-use App\Models\Order;
+use App\Models\Acme\AcmeOrder;
 use App\Models\Product;
 use App\Models\User;
 use App\Services\Acme\BillingService;
@@ -9,83 +9,86 @@ uses(Tests\Traits\ActsAsUser::class);
 
 test('创建 ACME 订阅订单', function () {
     $user = User::factory()->withBalance('1000.00')->create();
-    $product = Product::factory()->create(['support_acme' => 1]);
+    $product = Product::factory()->create(['product_type' => 'acme']);
 
-    $mockBilling = Mockery::mock(BillingService::class);
-    $mockBilling->shouldReceive('createSubscription')
+    $order = AcmeOrder::factory()->create([
+        'user_id' => $user->id,
+        'product_id' => $product->id,
+    ]);
+
+    $mockBillingService = Mockery::mock(BillingService::class);
+    $mockBillingService->shouldReceive('createSubscription')
         ->once()
         ->andReturn([
             'code' => 1,
             'data' => [
-                'order' => Order::factory()->acme()->create([
-                    'user_id' => $user->id,
-                    'product_id' => $product->id,
-                ]),
+                'order' => $order,
                 'eab_kid' => 'test_kid',
                 'eab_hmac' => 'test_hmac',
-                'server_url' => 'https://example.com/acme/directory',
             ],
         ]);
-    app()->instance(BillingService::class, $mockBilling);
+    app()->instance(BillingService::class, $mockBillingService);
 
     $this->actingAsUser($user)
         ->postJson('/api/acme/order', [
             'product_id' => $product->id,
             'period' => 12,
+            'domains' => 'example.com',
+            'validation_method' => 'txt',
         ])
         ->assertOk()
         ->assertJson(['code' => 1])
-        ->assertJsonStructure(['data' => ['created']]);
-});
-
-test('创建 ACME 订阅订单-批量', function () {
-    $user = User::factory()->withBalance('5000.00')->create();
-    $product = Product::factory()->create(['support_acme' => 1]);
-
-    $mockBilling = Mockery::mock(BillingService::class);
-    $mockBilling->shouldReceive('createSubscription')
-        ->times(3)
-        ->andReturn([
-            'code' => 1,
-            'data' => [
-                'order' => Order::factory()->acme()->create([
-                    'user_id' => $user->id,
-                    'product_id' => $product->id,
-                ]),
-                'eab_kid' => 'test_kid',
-                'eab_hmac' => 'test_hmac',
-                'server_url' => 'https://example.com/acme/directory',
-            ],
-        ]);
-    app()->instance(BillingService::class, $mockBilling);
-
-    $this->actingAsUser($user)
-        ->postJson('/api/acme/order', [
-            'product_id' => $product->id,
-            'period' => 12,
-            'quantity' => 3,
-        ])
-        ->assertOk()
-        ->assertJson(['code' => 1, 'data' => ['created' => 3]]);
+        ->assertJsonStructure(['data' => ['order_id', 'eab_kid', 'eab_hmac']]);
 });
 
 test('创建 ACME 订阅订单-余额不足', function () {
     $user = User::factory()->create(['balance' => '0.00']);
-    $product = Product::factory()->create(['support_acme' => 1]);
+    $product = Product::factory()->create(['product_type' => 'acme']);
 
-    $mockBilling = Mockery::mock(BillingService::class);
-    $mockBilling->shouldReceive('createSubscription')
+    $mockBillingService = Mockery::mock(BillingService::class);
+    $mockBillingService->shouldReceive('createSubscription')
         ->once()
         ->andReturn([
             'code' => 0,
             'msg' => '余额不足',
         ]);
-    app()->instance(BillingService::class, $mockBilling);
+    app()->instance(BillingService::class, $mockBillingService);
 
     $this->actingAsUser($user)
         ->postJson('/api/acme/order', [
             'product_id' => $product->id,
             'period' => 12,
+            'domains' => 'example.com',
+            'validation_method' => 'txt',
+        ])
+        ->assertOk()
+        ->assertJson(['code' => 0]);
+});
+
+test('创建 ACME 订阅订单-缺少 domains 返回验证错误', function () {
+    $user = User::factory()->create();
+    $product = Product::factory()->create(['product_type' => 'acme']);
+
+    $this->actingAsUser($user)
+        ->postJson('/api/acme/order', [
+            'product_id' => $product->id,
+            'period' => 12,
+            'validation_method' => 'txt',
+        ])
+        ->assertOk()
+        ->assertJson(['code' => 0]);
+});
+
+test('创建 ACME 订阅订单-无效 validation_method 返回验证错误', function () {
+    $user = User::factory()->create();
+    $product = Product::factory()->create(['product_type' => 'acme']);
+
+    $this->actingAsUser($user)
+        ->postJson('/api/acme/order', [
+            'product_id' => $product->id,
+            'period' => 12,
+            'domains' => 'example.com',
+            'validation_method' => 'invalid',
         ])
         ->assertOk()
         ->assertJson(['code' => 0]);
@@ -93,8 +96,8 @@ test('创建 ACME 订阅订单-余额不足', function () {
 
 test('获取 EAB 凭据', function () {
     $user = User::factory()->create();
-    $product = Product::factory()->create(['support_acme' => 1]);
-    $order = Order::factory()->acme()->create([
+    $product = Product::factory()->create(['product_type' => 'acme']);
+    $order = AcmeOrder::factory()->create([
         'user_id' => $user->id,
         'product_id' => $product->id,
     ]);
@@ -109,8 +112,8 @@ test('获取 EAB 凭据', function () {
 test('获取 EAB 凭据-订单不属于当前用户', function () {
     $user = User::factory()->create();
     $otherUser = User::factory()->create();
-    $product = Product::factory()->create(['support_acme' => 1]);
-    $order = Order::factory()->acme()->create([
+    $product = Product::factory()->create(['product_type' => 'acme']);
+    $order = AcmeOrder::factory()->create([
         'user_id' => $otherUser->id,
         'product_id' => $product->id,
     ]);
@@ -124,6 +127,8 @@ test('ACME 订单-未认证', function () {
     $this->postJson('/api/acme/order', [
         'product_id' => 1,
         'period' => 12,
+        'domains' => 'example.com',
+        'validation_method' => 'txt',
     ])
         ->assertUnauthorized();
 });

@@ -123,32 +123,7 @@
         />
       </el-form-item>
       <el-form-item label="记录值：" label-width="82px">
-        <table v-if="isAcme && cert.validation?.length > 1" style="width: 100%">
-          <tbody>
-            <tr v-for="(item, index) in cert.validation" :key="index">
-              <td
-                v-if="['txt'].includes(item.method?.toLowerCase())"
-                style="padding: 0"
-              >
-                <el-input
-                  :model-value="item.value || cert.dcv?.dns?.value"
-                  spellcheck="false"
-                  :style="{ width: '100%' }"
-                >
-                  <template #suffix>
-                    <Copy :copied="item.value || cert.dcv?.dns?.value" />
-                  </template>
-                  <template #append
-                    >.{{
-                      getRootDomain(item.domain.replace("*.", ""))
-                    }}</template
-                  >
-                </el-input>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-        <el-input v-else :model-value="cert.dcv?.dns?.value" spellcheck="false">
+        <el-input :model-value="cert.dcv?.dns?.value" spellcheck="false">
           <template #suffix>
             <Copy :copied="cert.dcv?.dns?.value" />
           </template>
@@ -158,7 +133,7 @@
   </div>
   <div
     v-if="
-      ['file', 'http', 'https'].includes(cert.dcv?.method) &&
+      ['file_proxy', 'file', 'http', 'https'].includes(cert.dcv?.method) &&
       cert.dcv?.file?.content
     "
     class="descriptions"
@@ -189,7 +164,7 @@
           <template #suffix>
             <Copy :copied="cert.dcv?.file?.path" />
           </template>
-          <template #prepend>
+          <template v-if="cert.dcv?.method !== 'file_proxy'" #prepend>
             <el-button
               type="primary"
               @click="OrderApi.downloadValidateFile(order.id)"
@@ -197,6 +172,12 @@
             >
           </template>
         </el-input>
+        <el-tag
+          v-if="cert.dcv?.method === 'file_proxy'"
+          type="success"
+          style="margin-left: 8px"
+          >已代理</el-tag
+        >
       </el-form-item>
     </div>
   </div>
@@ -207,9 +188,7 @@
     <div style="margin: 10px 0">
       <ValidationMethods
         v-model="validationMethod"
-        :methods="
-          isAcme ? acmeValidationMethods : order.product.validation_methods
-        "
+        :methods="order.product.validation_methods"
       />
       <el-button
         :disabled="
@@ -226,9 +205,7 @@
       >
       <el-button
         v-if="
-          (isAcme
-            ? ['pending', 'processing'].includes(cert.status)
-            : ['processing'].includes(cert.status)) &&
+          ['processing'].includes(cert.status) &&
           ![
             'admin',
             'administrator',
@@ -259,7 +236,7 @@
       <el-button
         v-if="
           cert.validation?.length > 1 &&
-          (['cname', 'txt', 'file', 'http', 'https'].includes(
+          (['cname', 'txt', 'file_proxy', 'file', 'http', 'https'].includes(
             cert.dcv?.method
           ) ||
             cert.dcv?.is_delegate) &&
@@ -618,8 +595,6 @@ import { getConfig } from "@/config";
 const get = inject("get") as Function;
 const order = inject("order") as any;
 const cert = inject("cert") as any;
-const isAcme = inject("isAcme", ref(false)) as any;
-
 const hostIncludeSubDomain = computed(() => {
   let includeSubDomain = false;
   cert.value?.validation &&
@@ -630,6 +605,7 @@ const hostIncludeSubDomain = computed(() => {
   return includeSubDomain;
 });
 
+// 空列表时返回 true（无需验证的订单不禁用操作按钮）
 const allVerified = computed(() => {
   let verified = true;
   cert.value.validation &&
@@ -640,8 +616,7 @@ const allVerified = computed(() => {
 });
 
 // 获取委托验证前缀
-const getDelegationPrefix = (ca?: string, channel?: string) => {
-  if (channel === "acme") return "_acme-challenge";
+const getDelegationPrefix = (ca?: string) => {
   const caLower = (ca || "").toLowerCase();
   switch (caLower) {
     case "sectigo":
@@ -663,10 +638,7 @@ const getDelegationPrefix = (ca?: string, channel?: string) => {
 
 // 委托验证前缀
 const delegationPrefix = computed(() =>
-  getDelegationPrefix(
-    cert.value.dcv?.ca || order.product?.ca,
-    cert.value.channel
-  )
+  getDelegationPrefix(cert.value.dcv?.ca || order.product?.ca)
 );
 
 // 获取委托验证的域名部分
@@ -697,12 +669,6 @@ const getDisplayMethod = (dcv: any) => {
   if (dcv?.is_delegate) return "delegation";
   return dcv?.method;
 };
-
-// ACME 可用的验证方式（dns-01: delegation/txt，http-01: file）
-const acmeValidationMethods = computed(() => {
-  if (cert.value.dcv?.file?.content) return ["file"];
-  return ["delegation", "txt"];
-});
 
 const validationMethod = ref(getDisplayMethod(cert.value.dcv));
 
@@ -1190,7 +1156,7 @@ const debouncedVerifyItem = debounce(verifyItem, 500);
 async function startBatchVerify() {
   if (
     !cert.value?.validation?.length ||
-    (!["cname", "txt", "file", "http", "https"].includes(
+    (!["cname", "txt", "file_proxy", "file", "http", "https"].includes(
       cert.value.dcv?.method
     ) &&
       !cert.value.dcv?.is_delegate) ||

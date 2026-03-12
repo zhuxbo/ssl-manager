@@ -16,6 +16,10 @@ interface AcmeSourceApiInterface
 
     public function finalizeOrder(int $orderId, string $csr): array;
 
+    public function getOrder(int $orderId): array;
+
+    public function getOrderAuthorizations(int $orderId): array;
+
     public function getCertificate(int $orderId): array;
 
     public function cancelOrder(int $orderId): array;

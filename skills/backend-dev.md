@@ -198,9 +198,41 @@ php artisan queue:work --queue Task  # 队列
 
 ## 迁移规范
 
-- **不用 enum**：需要插件扩展的字段使用 `string` 而非 `enum`，方便插件写入自定义值
-- **幂等检查**：修改表结构的迁移必须先检查当前状态（表是否存在、字段类型是否已符合预期），避免重复执行报错
+- **enum vs string**：系统核心字段用 `enum` 保证约束（如 `product_type`、`status`）；插件可扩展的字段用 `string`，方便插件写入自定义值
+- **up 幂等**：修改表结构的迁移必须先检查当前状态（`Schema::hasColumn`/`Schema::hasTable`），避免重复执行报错
+- **不写 down**：迁移只写 `up()`，不写 `down()`。生产环境不做回滚，回滚用新迁移前进修复
 - **structure.json 不手动改**：迁移变动后发布前通过 `php artisan db:structure --export` 重新导出
+
+### 迁移幂等示例
+
+```php
+// 添加字段
+if (! Schema::hasColumn('orders', 'new_field')) {
+    Schema::table('orders', function (Blueprint $table) {
+        $table->string('new_field')->nullable()->after('existing_field');
+    });
+}
+
+// 删除字段
+$columns = ['col_a', 'col_b'];
+$toDrop = array_filter($columns, fn ($col) => Schema::hasColumn('orders', $col));
+if (! empty($toDrop)) {
+    Schema::table('orders', function (Blueprint $table) use ($toDrop) {
+        $table->dropColumn($toDrop);
+    });
+}
+
+// 创建表
+if (Schema::hasTable('new_table')) {
+    return;
+}
+Schema::create('new_table', function (Blueprint $table) { ... });
+
+// 修改 enum 值（扩展/缩减）
+Schema::table('products', function (Blueprint $table) {
+    $table->enum('product_type', ['ssl', 'codesign', 'smime', 'docsign', 'acme'])->default('ssl')->change();
+});
+```
 
 ---
 

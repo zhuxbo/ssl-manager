@@ -24,13 +24,12 @@ test('get delegation prefix for ca', function (string $ca, string $expected) {
 ]);
 
 /**
- * ACME 渠道：无论 CA 是什么，都返回 _acme-challenge
+ * 未知 CA 返回 _acme-challenge（ACME 使用独立表，不再通过 channel 判断）
  */
-test('acme channel always returns acme challenge', function (string $ca, string $channel) {
-    expect(CnameDelegationService::getDelegationPrefixForCa($ca, $channel))->toBe('_acme-challenge');
+test('unknown ca returns acme challenge prefix', function (string $ca) {
+    expect(CnameDelegationService::getDelegationPrefixForCa($ca))->toBe('_acme-challenge');
 })->with([
-    'Certum+acme' => ['Certum', 'acme'],
-    'Sectigo+acme' => ['Sectigo', 'acme'],
-    'DigiCert+acme' => ['DigiCert', 'acme'],
-    '空CA+acme' => ['', 'acme'],
+    'LetsEncrypt' => ['LetsEncrypt'],
+    'ZeroSSL' => ['ZeroSSL'],
+    '空CA' => [''],
 ]);

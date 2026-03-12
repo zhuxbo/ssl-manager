@@ -154,6 +154,13 @@ Route::middleware('api.user')->group(function () {
     Route::prefix('acme')->group(function () {
         Route::get('eab/{orderId}', [AcmeController::class, 'getEab'])->where('orderId', '[0-9]+');
         Route::post('order', [AcmeController::class, 'createOrder']);
+
+        // ACME 订单管理
+        Route::prefix('order')->group(function () {
+            Route::get('/', [AcmeController::class, 'index']);
+            Route::get('{id}', [AcmeController::class, 'show'])->where('id', '[0-9]+');
+            Route::post('commit-cancel/{id}', [AcmeController::class, 'commitCancel'])->where('id', '[0-9]+');
+        });
     });
 
     // CNAME 委托管理路由

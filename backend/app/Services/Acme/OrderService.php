@@ -5,16 +5,17 @@ declare(strict_types=1);
 namespace App\Services\Acme;
 
 use App\Models\Acme\Account;
+use App\Models\Acme\AcmeCert;
+use App\Models\Acme\AcmeOrder;
 use App\Models\Acme\Authorization;
-use App\Models\Cert;
 use App\Models\CnameDelegation;
-use App\Models\Order;
 use App\Models\Transaction;
 use App\Services\Delegation\CnameDelegationService;
 use App\Services\Delegation\DelegationDnsService;
 use App\Services\Order\Utils\DomainUtil;
 use App\Services\Order\Utils\OrderUtil;
 use App\Services\Order\Utils\ValidatorUtil;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -39,7 +40,7 @@ class OrderService
             return ['error' => 'orderNotReady', 'detail' => 'Account has no associated order'];
         }
 
-        $order = Order::where('id', $account->order_id)
+        $order = AcmeOrder::where('id', $account->order_id)
             ->where('period_till', '>', now())
             ->whereNull('cancelled_at')
             ->first();
@@ -65,13 +66,28 @@ class OrderService
         }
 
         // 3. 幂等检查：cert 已提交上游（processing + api_id）且未签发
-        if ($currentLatestCert->channel === 'acme'
-            && $currentLatestCert->status === 'processing'
+        if ($currentLatestCert->status === 'processing'
             && $currentLatestCert->api_id
             && empty($currentLatestCert->cert)) {
 
-            // 已有 authorizations → 直接返回
+            // 已有 authorizations → 校验域名匹配后返回
             if ($currentLatestCert->acmeAuthorizations()->exists()) {
+                $existingDomains = $currentLatestCert->acmeAuthorizations()
+                    ->pluck('identifier_value')
+                    ->map(fn ($v) => strtolower($v))
+                    ->sort()
+                    ->values()
+                    ->toArray();
+                $requestDomains = collect($domains)
+                    ->map(fn ($v) => strtolower($v))
+                    ->sort()
+                    ->values()
+                    ->toArray();
+
+                if ($existingDomains !== $requestDomains) {
+                    return ['error' => 'rejectedIdentifier', 'detail' => 'Domains do not match existing authorizations'];
+                }
+
                 return ['order' => $currentLatestCert->fresh('acmeAuthorizations')];
             }
 
@@ -118,7 +134,7 @@ class OrderService
     /**
      * 验证资源归属：cert 所属 order 的 user_id 是否与 account 的 user_id 一致
      */
-    public function verifyOwnership(Cert $cert, ?Account $account): bool
+    public function verifyOwnership(AcmeCert $cert, ?Account $account): bool
     {
         if (! $account) {
             return false;
@@ -135,10 +151,9 @@ class OrderService
     /**
      * 通过 refer_id 获取订单
      */
-    public function get(string $referId): ?Cert
+    public function get(string $referId): ?AcmeCert
     {
-        return Cert::where('refer_id', $referId)
-            ->where('channel', 'acme')
+        return AcmeCert::where('refer_id', $referId)
             ->with('acmeAuthorizations')
             ->first();
     }
@@ -205,7 +220,7 @@ class OrderService
     /**
      * 完成订单 — 调用连接服务签发 + 写入系统 Cert
      */
-    public function finalize(Cert $cert, string $csr): array
+    public function finalize(AcmeCert $cert, string $csr): array
     {
         $acmeStatus = $this->getAcmeStatus($cert);
 
@@ -303,7 +318,7 @@ class OrderService
     /**
      * 保存上游返回的证书数据到 cert
      */
-    public function saveCertificateFromUpstream(Cert $cert, string $csrPem, array $certData): void
+    public function saveCertificateFromUpstream(AcmeCert $cert, string $csrPem, array $certData): void
     {
         $certificate = $certData['certificate'] ?? '';
         $chain = $certData['chain'] ?? '';
@@ -357,7 +372,7 @@ class OrderService
     /**
      * 尝试完成挂起的 finalize：向上游查询证书是否已签发
      */
-    public function tryCompletePendingFinalize(Cert $cert): bool
+    public function tryCompletePendingFinalize(AcmeCert $cert): bool
     {
         $source = $cert->order?->product?->source ?? '';
         $sourceApi = app(Api\Api::class)->getSourceApi($source);
@@ -384,7 +399,7 @@ class OrderService
     /**
      * 推导 ACME 状态
      */
-    public function getAcmeStatus(Cert $cert): string
+    public function getAcmeStatus(AcmeCert $cert): string
     {
         if (in_array($cert->status, ['revoked', 'revoking', 'cancelled', 'cancelling', 'failed'])) {
             return 'invalid';
@@ -413,7 +428,7 @@ class OrderService
     /**
      * 生成订单 URL
      */
-    public function getOrderUrl(Cert $cert): string
+    public function getOrderUrl(AcmeCert $cert): string
     {
         return url("/acme/order/$cert->refer_id");
     }
@@ -421,7 +436,7 @@ class OrderService
     /**
      * 生成 Finalize URL
      */
-    public function getFinalizeUrl(Cert $cert): string
+    public function getFinalizeUrl(AcmeCert $cert): string
     {
         return url("/acme/order/$cert->refer_id/finalize");
     }
@@ -429,7 +444,7 @@ class OrderService
     /**
      * 生成证书 URL
      */
-    public function getCertificateUrl(Cert $cert): string
+    public function getCertificateUrl(AcmeCert $cert): string
     {
         return url("/acme/cert/$cert->refer_id");
     }
@@ -453,7 +468,7 @@ class OrderService
     /**
      * 格式化订单响应（接收 Cert）
      */
-    public function formatOrderResponse(Cert $cert): array
+    public function formatOrderResponse(AcmeCert $cert): array
     {
         $status = $this->getAcmeStatus($cert);
 
@@ -527,11 +542,88 @@ class OrderService
     }
 
     /**
-     * 将 ACME 挑战数据映射为标准 dcv/validation 格式
+     * 同步 ACME 订单状态（从上游 REST API 获取）
+     *
+     * 替代传统 SOAP sync 路径，通过 getOrderAuthorizations + getCertificate 获取最新状态
+     */
+    public function syncOrder(AcmeCert $cert): void
+    {
+        $source = $cert->order?->product?->source ?? '';
+        $sourceApi = app(Api\Api::class)->getSourceApi($source);
+
+        if (! $sourceApi->isConfigured() || ! $cert->api_id) {
+            throw new \RuntimeException('上游未配置或订单未提交');
+        }
+
+        // 获取授权状态
+        $authzResult = $sourceApi->getOrderAuthorizations((int) $cert->api_id);
+
+        if ($authzResult['code'] === 1 && ! empty($authzResult['data']['authorizations'])) {
+            foreach ($authzResult['data']['authorizations'] as $authzData) {
+                $identifier = $authzData['identifier'] ?? [];
+                $identifierValue = $identifier['value'] ?? '';
+                $status = $authzData['status'] ?? 'pending';
+
+                if (! $identifierValue) {
+                    continue;
+                }
+
+                // 更新本地 authorization 状态
+                $localAuthz = $cert->acmeAuthorizations()
+                    ->where('identifier_value', $identifierValue)
+                    ->first();
+
+                if ($localAuthz && $localAuthz->status !== $status) {
+                    $localAuthz->update(['status' => $status]);
+
+                    if ($status === 'valid' && ! $localAuthz->challenge_validated) {
+                        $localAuthz->update([
+                            'challenge_status' => 'valid',
+                            'challenge_validated' => now(),
+                        ]);
+                    }
+                }
+            }
+        }
+
+        // 刷新 validation（保留当前验证方式）
+        $method = $cert->validation_method;
+        $cert->refresh();
+        $this->populateValidation($cert, $method);
+
+        // 检查是否所有授权都已 valid → 尝试获取证书
+        $allValid = $cert->acmeAuthorizations()->count() > 0
+            && $cert->acmeAuthorizations()->where('status', '!=', 'valid')->doesntExist();
+
+        if ($allValid && empty($cert->cert) && ! empty($cert->csr)) {
+            // CSR 已提交（finalize 过），尝试获取证书
+            $certResult = $sourceApi->getCertificate((int) $cert->api_id);
+
+            if ($certResult['code'] === 1 && ! empty($certResult['data']['certificate'])) {
+                $order = $cert->order;
+
+                $this->saveCertificateFromUpstream($cert, $cert->csr, $certResult['data']);
+                $cert->refresh();
+
+                // 更新订单有效期
+                if ($order && $cert->issued_at && $cert->expires_at) {
+                    if (! $order->period_from) {
+                        $order->period_from = $cert->issued_at;
+                    }
+                    $periodTill = now()->addMonths((int) $order->period);
+                    $order->period_till = max($cert->expires_at, $periodTill);
+                    $order->save();
+                }
+            }
+        }
+    }
+
+    /**
+     * 将 ACME 挑战数据映射为 validation 格式
      *
      * @param  string|null  $method  验证方式：null=自动检测, delegation=委托, txt=直接TXT
      */
-    public function populateDcvAndValidation(Cert $cert, ?string $method = null): void
+    public function populateValidation(AcmeCert $cert, ?string $method = null): void
     {
         $authorizations = $cert->relationLoaded('acmeAuthorizations')
             ? $cert->acmeAuthorizations
@@ -572,26 +664,7 @@ class OrderService
 
             // 有实际委托记录时才启用委托模式（无记录时即使用户选择 delegation 也回退到 txt）
             $useDelegate = ! empty($delegations) && ($method === null || $method === 'delegation');
-
-            // 取第一个授权的 TXT 值作为 dcv 默认值
-            $firstTxtValue = $first->key_authorization
-                ? rtrim(strtr(base64_encode(hash('sha256', $first->key_authorization, true)), '+/', '-_'), '=')
-                : '';
-
-            $dcv = [
-                'method' => 'txt',
-                'dns' => [
-                    'host' => '_acme-challenge',
-                    'type' => 'TXT',
-                    'value' => $firstTxtValue,
-                ],
-            ];
-
-            if ($useDelegate) {
-                $dcv['is_delegate'] = true;
-                $dcv['ca'] = strtolower($cert->order?->product?->ca ?? '');
-                $dcv['channel'] = 'acme';
-            }
+            $validationMethod = $useDelegate ? 'delegation' : 'txt';
 
             $validation = $authorizations->map(function ($authz) use ($useDelegate, $delegations) {
                 $txtValue = $authz->key_authorization
@@ -620,18 +693,14 @@ class OrderService
             })->values()->toArray();
         } else {
             // http-01
-            $dcv = [
-                'method' => 'file',
-                'file' => [
-                    'name' => $first->challenge_token,
-                    'path' => "/.well-known/acme-challenge/$first->challenge_token",
-                    'content' => $first->key_authorization,
-                ],
-            ];
+            $validationMethod = $method ?? 'file';
 
             $validation = $authorizations->map(fn ($authz) => [
                 'domain' => $authz->identifier_value,
                 'method' => 'file',
+                'name' => $authz->challenge_token,
+                'content' => $authz->key_authorization,
+                'path' => "/.well-known/acme-challenge/$authz->challenge_token",
                 'verified' => $authz->status === 'valid' ? 1 : 0,
             ])->values()->toArray();
         }
@@ -642,7 +711,7 @@ class OrderService
         $domainVerifyStatus = $validCount === $totalCount ? 2 : ($validCount > 0 ? 1 : 0);
 
         $cert->update([
-            'dcv' => $dcv,
+            'validation_method' => $validationMethod,
             'validation' => $validation,
             'domain_verify_status' => $domainVerifyStatus,
         ]);
@@ -651,7 +720,7 @@ class OrderService
     /**
      * ACME 手工验证签发
      */
-    public function acmeRevalidate(Cert $cert): void
+    public function acmeRevalidate(AcmeCert $cert): void
     {
         // 先写委托 TXT（用户可能在订单创建后才配置委托，确保挑战响应前 TXT 已写入）
         $this->writeDelegationTxtForAuthorizations($cert);
@@ -663,17 +732,25 @@ class OrderService
         }
 
         // 更新申请状态，保留当前验证方式
-        $method = ($cert->dcv['is_delegate'] ?? false) ? 'delegation' : null;
+        $method = $cert->validation_method;
         $cert->refresh();
         $cert->updateQuietly(['cert_apply_status' => 2]);
-        $this->populateDcvAndValidation($cert, $method);
+        $this->populateValidation($cert, $method);
     }
 
     /**
      * ACME 切换/刷新 DCV 验证方式
      */
-    public function acmeUpdateDCV(Cert $cert, ?string $method = null): void
+    public function acmeUpdateDCV(AcmeCert $cert, ?string $method = null): void
     {
+        // pending 且无 authorizations → 直接更新验证方式
+        if ($cert->status === 'pending' && ! $cert->acmeAuthorizations()->exists()) {
+            $cert->validation_method = $method ?? $cert->validation_method ?? 'txt';
+            $cert->save();
+
+            return;
+        }
+
         // 切换到委托验证时，自动创建缺失的委托记录
         if ($method === 'delegation') {
             $userId = $cert->order?->user_id;
@@ -686,13 +763,88 @@ class OrderService
             }
         }
 
-        $this->populateDcvAndValidation($cert, $method);
+        $this->populateValidation($cert, $method);
+    }
+
+    /**
+     * Web/Deploy/API 端提交 ACME 订单（替代传统 commit 流程）
+     *
+     * 复用 ACME 核心链路：prepareCert → chargeCert → submitNewOrder/submitReissue
+     * 根据 validationMethod 选择正确的 challenge 类型（dns-01 / http-01）
+     */
+    public function commitOrder(AcmeOrder $order, array $domains, ?string $validationMethod = null): array
+    {
+        // 防重复提交（10 秒内相同参数）
+        $cacheKey = 'acme_commit_'.md5(json_encode([$order->id, $domains]));
+        if (Cache::has($cacheKey)) {
+            return ['code' => 0, 'msg' => '请勿重复提交，请稍后再试'];
+        }
+        Cache::put($cacheKey, time(), 10);
+
+        $cert = $order->latestCert;
+
+        if (! $cert) {
+            return ['code' => 0, 'msg' => '证书不存在'];
+        }
+
+        if (empty($domains)) {
+            return ['code' => 0, 'msg' => '域名不能为空'];
+        }
+
+        // 映射验证方式 → ACME challenge 类型
+        $preferredChallengeType = match ($validationMethod) {
+            'delegation', 'txt' => 'dns-01',
+            'file_proxy', 'file' => 'http-01',
+            default => null,
+        };
+
+        // SAN 验证
+        $product = $order->product;
+        $domainsString = implode(',', $domains);
+        $sanErrors = ValidatorUtil::validateSansMaxCount($product->toArray(), $domainsString);
+        if (! empty($sanErrors)) {
+            return ['code' => 0, 'msg' => implode('; ', array_values($sanErrors))];
+        }
+
+        // 复用 ACME 核心流程
+        $cert = $this->prepareCert($order, $domains);
+
+        // 提交上游
+        $upstreamOrderId = $order->latestCert?->api_id;
+
+        if ($cert->action === 'reissue' && $upstreamOrderId) {
+            $result = $this->submitReissue($cert, $domains, $order, (int) $upstreamOrderId, $preferredChallengeType);
+        } else {
+            $result = $this->submitNewOrder($cert, $domains, $order, $preferredChallengeType);
+        }
+
+        if (isset($result['error'])) {
+            return ['code' => 0, 'msg' => $result['error']];
+        }
+
+        $cert = $result['cert'];
+
+        // 应用用户选择的验证方式（saveUpstreamResult 内部默认 auto-detect）
+        if ($validationMethod) {
+            $this->acmeUpdateDCV($cert, $validationMethod);
+            $cert->refresh();
+        }
+
+        return [
+            'code' => 1,
+            'data' => [
+                'order_id' => $order->id,
+                'cert_apply_status' => $cert->cert_apply_status,
+                'validation_method' => $cert->validation_method,
+                'validation' => $cert->validation,
+            ],
+        ];
     }
 
     /**
      * cert 复用/创建（不扣费）
      */
-    public function prepareCert(Order $order, array $domains): Cert
+    public function prepareCert(AcmeOrder $order, array $domains): AcmeCert
     {
         $product = $order->product;
         $user = $order->user;
@@ -708,9 +860,9 @@ class OrderService
         $wildcardCount = $sans['wildcard_count'];
 
         return DB::transaction(function () use ($order, $currentLatestCert, $product, $user, $domains, $standardCount, $wildcardCount) {
-            $order = Order::lockForUpdate()->find($order->id);
+            $order = AcmeOrder::lockForUpdate()->find($order->id);
 
-            $hasIssuedCert = Cert::where('order_id', $order->id)
+            $hasIssuedCert = AcmeCert::where('order_id', $order->id)
                 ->whereNotNull('cert')
                 ->where('cert', '!=', '')
                 ->exists();
@@ -723,7 +875,7 @@ class OrderService
 
             // 重签域名验证（参考传统 API 的 add_san/replace_san 规则）
             if ($action === 'reissue') {
-                $lastIssuedCert = Cert::where('order_id', $order->id)
+                $lastIssuedCert = AcmeCert::where('order_id', $order->id)
                     ->whereNotNull('cert')
                     ->where('cert', '!=', '')
                     ->orderBy('id', 'desc')
@@ -764,11 +916,11 @@ class OrderService
                     $cert->update(['action' => $action]);
                 }
             } else {
-                $cert = Cert::create([
+                $cert = AcmeCert::create([
                     'order_id' => $order->id,
                     'last_cert_id' => $currentLatestCert->id,
                     'action' => $action,
-                    'channel' => 'acme',
+                    'channel' => 'api',
                     'email' => $user->email,
                     'common_name' => $domains[0] ?? '',
                     'status' => 'unpaid',
@@ -794,7 +946,7 @@ class OrderService
      * 扣费（幂等：仅当域名数量超过已购买数量时扣费）
      * 完成后 cert 状态变为 pending（已支付，待提交域名）
      */
-    public function chargeCert(Cert $cert, Order $order): void
+    public function chargeCert(AcmeCert $cert, AcmeOrder $order): void
     {
         $standardCount = $cert->standard_count;
         $wildcardCount = $cert->wildcard_count;
@@ -804,7 +956,7 @@ class OrderService
 
         DB::transaction(function () use ($cert, $order, $standardCount, $wildcardCount, $needCharge) {
             if ($needCharge) {
-                $order = Order::lockForUpdate()->find($order->id);
+                $order = AcmeOrder::lockForUpdate()->find($order->id);
                 $product = $order->product;
                 $user = $order->user;
 
@@ -814,7 +966,7 @@ class OrderService
                 $cert->update(['amount' => $amount]);
 
                 if (bccomp($amount, '0.00', 2) !== 0) {
-                    $transaction = OrderUtil::getOrderTransaction($order->fresh(['latestCert'])->toArray());
+                    $transaction = OrderUtil::getOrderTransaction($order->fresh(['latestCert'])->toArray(), Transaction::TYPE_ACME_ORDER);
 
                     $balanceAfter = bcadd((string) $user->balance, (string) $transaction['amount'], 2);
                     if (bccomp($balanceAfter, (string) ($user->credit_limit ?? '0'), 2) === -1) {
@@ -844,7 +996,7 @@ class OrderService
     /**
      * cert 复用/创建 + 扣费（兼容方法）
      */
-    public function prepareAndCharge(Order $order, array $domains): Cert
+    public function prepareAndCharge(AcmeOrder $order, array $domains): AcmeCert
     {
         $cert = $this->prepareCert($order, $domains);
         $this->chargeCert($cert, $order);
@@ -855,7 +1007,7 @@ class OrderService
     /**
      * 提交新订单到上游（三步：chargeCert → prepareUpstreamOrder → submitUpstreamDomains）
      */
-    public function submitNewOrder(Cert $cert, array $domains, Order $order): array
+    public function submitNewOrder(AcmeCert $cert, array $domains, AcmeOrder $order, ?string $preferredChallengeType = null): array
     {
         // 步骤1：扣费（unpaid → pending）
         $this->chargeCert($cert, $order);
@@ -867,13 +1019,13 @@ class OrderService
         }
 
         // 步骤3：提交域名
-        return $this->submitUpstreamDomains($cert, $domains, $order);
+        return $this->submitUpstreamDomains($cert, $domains, $order, $preferredChallengeType);
     }
 
     /**
      * 创建上游 ACME order，获取 api_id + EAB
      */
-    public function prepareUpstreamOrder(Cert $cert, Order $order): array
+    public function prepareUpstreamOrder(AcmeCert $cert, AcmeOrder $order): array
     {
         $user = $order->user;
         $product = $order->product;
@@ -904,7 +1056,7 @@ class OrderService
     /**
      * 提交域名到上游，保存 authorizations
      */
-    public function submitUpstreamDomains(Cert $cert, array $domains, Order $order): array
+    public function submitUpstreamDomains(AcmeCert $cert, array $domains, AcmeOrder $order, ?string $preferredChallengeType = null): array
     {
         $sourceApi = app(Api\Api::class)->getSourceApi($order->product->source ?? '');
 
@@ -918,13 +1070,13 @@ class OrderService
             return ['error' => $submitResult['msg'] ?? 'Upstream domain submission failed'];
         }
 
-        return $this->saveUpstreamResult($cert, $domains, $order, $submitResult['data']);
+        return $this->saveUpstreamResult($cert, $domains, $order, $submitResult['data'], $preferredChallengeType);
     }
 
     /**
      * 提交重签到上游
      */
-    public function submitReissue(Cert $cert, array $domains, Order $order, int $upstreamOrderId): array
+    public function submitReissue(AcmeCert $cert, array $domains, AcmeOrder $order, int $upstreamOrderId, ?string $preferredChallengeType = null): array
     {
         $sourceApi = app(Api\Api::class)->getSourceApi($order->product->source ?? '');
 
@@ -938,13 +1090,29 @@ class OrderService
             return ['error' => $apiResult['msg'] ?? 'Upstream reissue failed'];
         }
 
-        return $this->saveUpstreamResult($cert, $domains, $order, $apiResult['data']);
+        return $this->saveUpstreamResult($cert, $domains, $order, $apiResult['data'], $preferredChallengeType);
+    }
+
+    /**
+     * 从 challenges 数组中按偏好类型选择 challenge
+     */
+    private function selectChallenge(array $challenges, ?string $preferredType): array
+    {
+        if ($preferredType) {
+            foreach ($challenges as $ch) {
+                if (($ch['type'] ?? '') === $preferredType) {
+                    return $ch;
+                }
+            }
+        }
+
+        return $challenges[0] ?? [];
     }
 
     /**
      * 保存上游返回结果（共享逻辑）
      */
-    private function saveUpstreamResult(Cert $cert, array $domains, Order $order, array $apiData): array
+    private function saveUpstreamResult(AcmeCert $cert, array $domains, AcmeOrder $order, array $apiData, ?string $preferredChallengeType = null): array
     {
         $domainsString = implode(',', $domains);
         $sans = OrderUtil::getSansFromDomains($domainsString, $order->product->gift_root_domain ?? false);
@@ -962,7 +1130,7 @@ class OrderService
         if (isset($apiData['authorizations'])) {
             foreach ($apiData['authorizations'] as $authzData) {
                 $identifier = $authzData['identifier'] ?? [];
-                $challenge = $authzData['challenges'][0] ?? [];
+                $challenge = $this->selectChallenge($authzData['challenges'] ?? [], $preferredChallengeType);
 
                 Authorization::create([
                     'cert_id' => $cert->id,
@@ -982,7 +1150,7 @@ class OrderService
         }
 
         $this->writeDelegationTxtForAuthorizations($cert->fresh('acmeAuthorizations'));
-        $this->populateDcvAndValidation($cert->fresh('acmeAuthorizations'));
+        $this->populateValidation($cert->fresh('acmeAuthorizations'));
 
         return ['cert' => $cert->fresh('acmeAuthorizations')];
     }
@@ -995,7 +1163,7 @@ class OrderService
      * - 上游未配置时返回失败，由管理员排查配置问题，不可静默标记成功
      * - 上游返回明确成功后才标记 revoked
      */
-    public function revokeCertificateUpstream(Cert $cert, string $reason = 'UNSPECIFIED'): array
+    public function revokeCertificateUpstream(AcmeCert $cert, string $reason = 'UNSPECIFIED'): array
     {
         $source = $cert->order?->product?->source ?? '';
         $sourceApi = app(Api\Api::class)->getSourceApi($source);
@@ -1033,7 +1201,7 @@ class OrderService
      * 上游未配置时返回失败，不允许静默标记本地取消成功。
      * 取消/吊销的必要约束：上游返回明确成功后才能标记状态，配置缺失应由管理员处理。
      */
-    public function cancelOrderUpstream(Cert $cert): array
+    public function cancelOrderUpstream(AcmeCert $cert): array
     {
         $source = $cert->order?->product?->source ?? '';
         $sourceApi = app(Api\Api::class)->getSourceApi($source);
@@ -1049,7 +1217,7 @@ class OrderService
     /**
      * 通过上游获取证书（供 ApiService 调用）
      */
-    public function getCertificateFromUpstream(Cert $cert): ?array
+    public function getCertificateFromUpstream(AcmeCert $cert): ?array
     {
         $source = $cert->order?->product?->source ?? '';
         $sourceApi = app(Api\Api::class)->getSourceApi($source);
@@ -1094,7 +1262,7 @@ class OrderService
     /**
      * 尝试为 dns-01 授权写入委托 TXT 记录（best-effort）
      */
-    public function writeDelegationTxtForAuthorizations(Cert $cert): void
+    public function writeDelegationTxtForAuthorizations(AcmeCert $cert): void
     {
         $authorizations = $cert->relationLoaded('acmeAuthorizations')
             ? $cert->acmeAuthorizations

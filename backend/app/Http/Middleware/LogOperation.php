@@ -29,6 +29,7 @@ class LogOperation
         'api/V1/*/health',
         'api/v2/*/health',
         'acme/*',
+        '.well-known/*',
         '_debugger/*',
         '_ignition/*',
     ];

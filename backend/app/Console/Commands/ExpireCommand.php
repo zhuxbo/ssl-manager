@@ -2,6 +2,8 @@
 
 namespace App\Console\Commands;
 
+use App\Models\Acme\AcmeCert;
+use App\Models\Acme\AcmeOrder;
 use App\Models\Cert;
 use App\Models\Order;
 use App\Models\User;
@@ -36,30 +38,43 @@ class ExpireCommand extends Command
      */
     public function handle(): void
     {
-        // 先更改所有到期证书的状态
+        // 先更改所有到期证书的状态（传统 + ACME）
         Cert::where('status', 'active')
             ->where('expires_at', '<', now())
             ->update(['status' => 'expired']);
 
-        // 分区段查询，避免每天都发通知（第 14/7/3/1 天当天）
-        $user_ids = Order::with(['latestCert'])
-            ->whereHas('latestCert', function ($query) {
-                $query->where('status', 'active')
-                    ->where(function ($query) {
-                        $query->whereBetween('expires_at', [now()->addDays(13), now()->addDays(14)])
-                            ->orWhereBetween('expires_at', [now()->addDays(6), now()->addDays(7)])
-                            ->orWhereBetween('expires_at', [now()->addDays(2), now()->addDays(3)])
-                            ->orWhereBetween('expires_at', [now(), now()->addDays(1)]);
-                    })
-                    ->orderBy('expires_at');
-            })
+        AcmeCert::where('status', 'active')
+            ->where('expires_at', '<', now())
+            ->update(['status' => 'expired']);
+
+        // 到期通知时间窗口查询条件（第 14/7/3/1 天当天）
+        $expireWindowQuery = function ($query) {
+            $query->where('status', 'active')
+                ->where(function ($query) {
+                    $query->whereBetween('expires_at', [now()->addDays(13), now()->addDays(14)])
+                        ->orWhereBetween('expires_at', [now()->addDays(6), now()->addDays(7)])
+                        ->orWhereBetween('expires_at', [now()->addDays(2), now()->addDays(3)])
+                        ->orWhereBetween('expires_at', [now(), now()->addDays(1)]);
+                })
+                ->orderBy('expires_at');
+        };
+
+        // 传统订单到期用户
+        $user_ids = Order::whereHas('latestCert', $expireWindowQuery)
             ->pluck('user_id')
             ->toArray();
+
+        // ACME 订单到期用户
+        $acmeUserIds = AcmeOrder::whereHas('latestCert', $expireWindowQuery)
+            ->pluck('user_id')
+            ->toArray();
+
+        $user_ids = array_unique(array_merge($user_ids, $acmeUserIds));
 
         $this->info(get_system_setting('site', 'name', 'SSL证书管理系统'));
         $notificationCenter = app(NotificationCenter::class);
 
-        foreach (array_unique($user_ids) as $user_id) {
+        foreach ($user_ids as $user_id) {
             $user = User::find($user_id);
             if ($user && $user->email) {
                 $notificationCenter->dispatch(new NotificationIntent(
