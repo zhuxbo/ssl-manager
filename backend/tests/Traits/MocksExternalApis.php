@@ -2,7 +2,6 @@
 
 namespace Tests\Traits;
 
-use App\Services\Acme\Api\AcmeSourceApiInterface;
 use App\Services\Acme\Api\Api as AcmeApiFactory;
 use App\Services\Delegation\DelegationDnsService;
 use App\Services\Order\Api\default\Sdk;
@@ -59,27 +58,18 @@ trait MocksExternalApis
     }
 
     /**
-     * Mock ACME Source API（上游 ACME REST API）
+     * Mock ACME 路由器（上游 ACME REST API）
      */
     protected function mockAcmeClient(array $methods = []): MockInterface
     {
-        $mock = Mockery::mock(AcmeSourceApiInterface::class);
+        $mock = Mockery::mock(AcmeApiFactory::class);
 
         foreach ($methods as $method => $returnValue) {
             $mock->shouldReceive($method)
                 ->andReturn($returnValue);
         }
 
-        $mock->shouldReceive('isConfigured')
-            ->andReturn(true)
-            ->byDefault();
-
-        $factory = Mockery::mock(AcmeApiFactory::class);
-        $factory->shouldReceive('getSourceApi')
-            ->andReturn($mock)
-            ->byDefault();
-
-        $this->app->instance(AcmeApiFactory::class, $factory);
+        $this->app->instance(AcmeApiFactory::class, $mock);
 
         return $mock;
     }

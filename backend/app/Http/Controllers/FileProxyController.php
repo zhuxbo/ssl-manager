@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Acme\AcmeCert;
 use App\Models\Cert;
 
 class FileProxyController extends Controller
@@ -27,15 +26,7 @@ class FileProxyController extends Controller
             ->limit(100)
             ->get();
 
-        $acmeCerts = AcmeCert::where('status', 'processing')
-            ->whereNotNull('validation')
-            ->where(fn ($q) => $q->where('common_name', $domain)->orWhere('alternative_names', 'like', "%$domain%"))
-            ->limit(100)
-            ->get();
-
-        $allCerts = $certs->concat($acmeCerts);
-
-        foreach ($allCerts as $cert) {
+        foreach ($certs as $cert) {
             foreach ($cert->validation as $item) {
                 if (($item['name'] ?? '') === $name
                     && strcasecmp($item['domain'] ?? '', $domain) === 0) {

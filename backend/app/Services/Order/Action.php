@@ -12,6 +12,7 @@ use App\Models\Cert;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\Transaction;
+use App\Services\Acme\Api\Api as AcmeApi;
 use App\Services\Delegation\AutoDcvTxtService;
 use App\Services\Notification\DTOs\NotificationIntent;
 use App\Services\Notification\NotificationCenter;
@@ -56,15 +57,33 @@ class Action
      */
     public function importProduct(string $source = '', string $brand = '', string $api_id = '', string $type = 'new'): void
     {
-        $products = $this->api->getProducts($source, $brand, $api_id);
+        $allProducts = [];
 
-        if ($products['code'] !== 1) {
-            $this->error($products['msg'] ?? '获取产品失败');
+        // 查询传统 Order 产品
+        try {
+            $orderProducts = $this->api->getProducts($source, $brand, $api_id);
+            if ($orderProducts['code'] === 1 && ! empty($orderProducts['data'])) {
+                $allProducts = array_merge($allProducts, $orderProducts['data']);
+            }
+        } catch (ApiResponseException) {
+            // 源不存在于 Order API，忽略
         }
 
-        if (empty($products['data'])) {
+        // 查询 ACME 产品
+        try {
+            $acmeProducts = (new AcmeApi)->getProducts($source, $brand, $api_id);
+            if ($acmeProducts['code'] === 1 && ! empty($acmeProducts['data'])) {
+                $allProducts = array_merge($allProducts, $acmeProducts['data']);
+            }
+        } catch (ApiResponseException) {
+            // 源不存在于 ACME API，忽略
+        }
+
+        if (empty($allProducts)) {
             $this->error('没有获取到产品');
         }
+
+        $products = ['code' => 1, 'data' => $allProducts];
 
         foreach ($products['data'] as $item) {
             $item['source'] = $source;

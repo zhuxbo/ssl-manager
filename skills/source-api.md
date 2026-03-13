@@ -104,7 +104,7 @@ OrderService 集中封装上游调用方法（供其他 Service 复用）：
 - `cancelOrderUpstream(Cert)` — best-effort 取消
 - `getCertificateFromUpstream(Cert)` — 获取证书数据
 
-BillingService 用 `app(OrderService::class)` 调用（非构造器注入，避免循环依赖）。
+Action 用 `app(OrderService::class)` 调用（非构造器注入，避免循环依赖）。
 
 Source 获取统一模式：
 

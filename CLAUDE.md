@@ -66,58 +66,34 @@ skills/         # 开发规范（详细文档）
 - **更新地址优先级**：`plugin.json.release_url`（第三方）→ `{主系统 release_url}/plugins/{name}`（官方）
 - **插件 API**：`GET /api/admin/plugin/installed`、`GET /api/admin/plugin/check-updates`、`POST /api/admin/plugin/install`、`POST /api/admin/plugin/update`、`POST /api/admin/plugin/uninstall`
 
-### ACME 多级代理
+### ACME 订阅管理
 
-- **架构**：certbot → Manager A → Manager B → ... → Gateway → CA，每级都有独立的 ACME 记录
-- **独立表**：ACME 使用独立的 `acme_orders` + `acme_certs` 表，模型为 `AcmeOrder`、`AcmeCert`（位于 `App\Models\Acme` 命名空间），与传统 `orders`/`certs` 完全隔离
-- **channel 值**：ACME 证书统一使用 `channel='api'`（enum 仅支持 api/admin），不再使用 `'acme'`
-- **validation_method 字段**：替代旧的 `dcv` JSON 字段，直接存储验证方式（delegation/txt/file_proxy/file）；验证详情存储在 `validation` JSON 字段
-- **Transaction 类型**：ACME 订单使用 `acme_order`/`acme_cancel` 类型（常量定义在 `Transaction` 模型）。`OrderUtil::getOrderTransaction()` 和 `getCancelTransaction()` 通过 `$transactionType` 参数支持 ACME 类型，默认值保持传统类型向后兼容
-- **两步创建（对齐 Gateway）**：REST API 拆为 `POST /orders/prepare`（prepareOrder，获取 api_id + EAB）+ `POST /orders/{id}/domains`（submitDomains，提交域名获取 authorizations），重签仍为一步 `POST /orders/reissue/{id}`。RFC 8555 handler 内部通过 `submitNewOrder` 调用同一组方法
-- **产品标识**：`products.product_type = 'acme'` 标识 ACME 产品，通过 `Product::isAcme()` 判断
-- **ID 映射**：一层映射 `acme_certs.api_id → 上游 order.id`，`acme_authorizations.acme_challenge_id → 上游 challenge.id`。REST API 统一使用 order.id（通过 `findCertByOrderId()` 查找 latestCert）
-- **路由风格**：id 放在子操作后面，如 `/orders/finalize/{id}`、`/orders/reissue/{id}`、`/challenges/respond/{id}`
-- **AcmeAccount 精确关联**：`acme_accounts.order_id` 直接关联 `AcmeOrder`，避免通过 user_id 查找错误
-- **ApiService 核心原则**：所有方法「查本级 → 映射 ID → 调上游」，不能透传下游 ID 给上游。prepareOrder 获取上游 api_id，submitDomains 提交域名，reissueOrder 调 submitReissue
-- **OrderService 拆分**：`prepareUpstreamOrder`（获取 api_id）+ `submitUpstreamDomains`（提交域名）+ `submitNewOrder`（组合三步供 RFC 8555 使用）+ `submitReissue`（重签）+ `saveUpstreamResult`（private 共享保存逻辑）。RFC 8555 create 方法根据 `cert.action` 判断调用哪个
-- **EAB 可复用**：同一 EAB 可多次注册 ACME 账户（Certum 订单级认证），`eab_used_at` 仅记录首次使用时间
-- **续费联动**：`BillingService::tryAutoRenew` 创建新 AcmeOrder 后自动迁移 `Account.order_id`，并通知上游创建新订单（best-effort）
-- **DNS 委托自动化**：创建 ACME Order 时自动尝试通过委托写 TXT 记录（best-effort，不阻塞）
-- **URL 标识**：使用 `cert.refer_id`（随机唯一字符串）替代 token
-- **ACME 状态推导**：不存储状态字段，从 cert.status + acme_authorizations 推导
-- **延迟扣费**：创建订阅时不扣费（cert.amount=0，purchased_count=0），推迟到 `new-order` 提交域名后按实际域名精确计费
-- **ACME 取消**：cancel 端点（`DELETE /orders/{id}`）支持三种场景：pending（未扣费，快速清理）、processing（已扣费，通知上游+退费）、active（退费周期内通知上游+退费）。由 `BillingService::executeCancel()` 处理
-- **SAN 验证**：`ValidatorUtil::validateSansMaxCount()` + purchased count 追踪
-- **不自动补齐根域名**：ACME 产品不调用 `DomainUtil::addGiftDomain()`
-- **配置**：优先 `ca.acmeUrl`/`ca.acmeToken`，未设置时回落到 `ca.url`（路径替换为 `/api/acme`）/`ca.token`
-- **EAB 获取方式**：Deploy Token（`GET /api/deploy/acme/eab/{orderId}`）、用户端 API（`GET /api/user/acme/eab`）
-- **Web 端 ACME 订阅**：`BillingService::createSubscription()` 供 Web 表单创建 ACME 订单
-- **ACME 订单创建路由**：Deploy `POST /api/deploy/acme/order`（一步到位）、User `POST /api/user/acme/order`、Admin `POST /api/admin/acme/order` + `GET /api/admin/acme/eab/{orderId}`。创建时必须传 `domains`（逗号分隔）和 `validation_method`（delegation/txt/file_proxy/file）
-- **Web 端两步流程**：Admin/User `createOrder` 调用 `BillingService::createSubscription($user, $productId, $period, $domains, $validationMethod)` 创建 unpaid 订单（含域名/验证方式），用户从详情页点击"支付"走 `Action::pay(commit=true)` → 扣费 → 提交。Deploy 端保持一步到位（无 domains 参数，cert 为 pending）
-- **ACME 防重复提交**：`commitOrder()` 和 `createSubscription()` 各有 10 秒缓存防重复
-- **统一 ACME 提交**：所有 ACME 订单提交统一走 `OrderService::commitOrder()`，接受显式 `domains` 和 `validationMethod` 参数。根据 `validationMethod` 映射 `preferredChallengeType`（delegation/txt→dns-01, file_proxy/file→http-01），传递到 `saveUpstreamResult` 选择匹配的 challenge 类型。certbot 路径通过 `create()` 不指定 challenge 类型
-- **传统流程完全隔离**：传统 `Action.php`、`OrderController.php`、`action.vue` 不包含任何 ACME 逻辑，ACME 通过独立控制器（`Acme\*Controller`）、服务（`Services\Acme\*`）和独立前端模块（`acme-order/`）处理
-- **ACME 创建入口**：Admin/User 端 `acme-order/create.vue` 对话框，从 ACME 订单列表页"创建订阅"按钮打开
-- **Server URL 统一**：使用 `get_system_setting('site', 'url')` 替代 `config('app.url')`
-- **不支持 EAB 重置**：上游 gateway 不支持，已移除 `resetEab` 方法和路由
-- **RFC 8555 路由兼容**：order/authz/cert 路由同时支持 GET 和 POST（certbot finalize 后用 GET 轮询 order）
-- **ACME 异常处理**：`ApiExceptions` 对 ACME 路由返回 RFC 7807 格式（`urn:ietf:params:acme:error:*`），避免通用 `{"code":0}` 格式
-- **ACME 日志排除**：`LogOperation` 排除 `acme/*` 和 `.well-known/*` 路由，避免非标准请求格式干扰
-- **文件代理验证**：`file_proxy` 验证方式，Manager 通过 `FileProxyController` 自动响应 CA 的 http-01 和传统文件验证请求。用户配置 Nginx 将 `/.well-known/` 代理到 Manager 即可。路由无 global 中间件，公开端点。ACME 验证方式切换规则：dns-01 组（delegation ↔ txt），http-01 组（file_proxy ↔ file），不可跨组切换
-- **E2E 测试**：Docker certbot → Manager → 上级系统 → CA，详见 `skills/acme-e2e-test/SKILL.md`
+- **模型**：单一 `Acme` 模型（`App\Models\Acme`，表 `acmes`），`eab_hmac` 加密存储且默认 hidden
+- **计费流程**：`Action` 三步流程：`new`（unpaid/待支付）→ `pay`（pending/待提交）→ `commit`（提交 Gateway → active）
+- **取消流程**：`commitCancel`（标记 cancelling + 创建 Task `cancel_acme` + TaskJob 延时 123s）→ `cancel`（由 TaskJob 调用，调 Api->cancel() + 退费），与传统订单共用 Task + TaskJob 机制
+- **Transaction 类型**：`acme_order`/`acme_cancel`
+- **产品标识**：`products.product_type = 'acme'`
+- **Source API 层**：`Services/Acme/Api/` 按 `product.source` 路由，`AcmeSourceApiInterface` 统一 `new`/`get`/`cancel`/`getProducts` 接口，通过 SDK 代理调用 Gateway `/api/acme/*` 端点
+- **产品导入**：`Action::importProduct()` 同时查询 Order 和 ACME 两端产品（分别从传统 `Order\Api` 和 `Acme\Api` 获取）
+- **控制器路由**：
+  - Admin：`/api/admin/acme/` — index, show, new, pay, commit, sync, commit-cancel, remark
+  - User：`/api/acme/` — index, show, new, pay, commit, commit-cancel（限当前用户）
+  - Deploy：`/api/deploy/acme/` — new（一步到位：创建+支付+提交）, get（含 EAB）
+- **传统流程完全隔离**：ACME 通过独立控制器、服务和前端模块处理，与传统订单无交集
 
 ## 系统架构约定
 
 - **`$order->latestCert` 非空保证**：由系统架构保证 latestCert 关系非空，查询时加 `with('latestCert')` 预加载即可，无需额外空值判断
 - **`$this->error()` 方法**：来自 `ApiResponse` trait，调用后抛出异常终止执行，不会继续后续代码
 - **取消/吊销不静默成功**：上游接口未返回明确成功时，一律返回失败；不允许跳过上游调用直接标记本地状态
-- **ACME 取消策略**：`BillingService::executeCancel(AcmeOrder)` 处理。提交取消前先标记 `cancelling`；未提交上游（无 api_id）的 pending 订单可直接删除清理 + 退费；已提交上游的订单必须上游明确成功后，仅标记 `cancelled` + 退费，不删除订单和相关信息。上游取消失败保持 `cancelling` 不回退，便于系统发现并重试
-- **ACME 来源由产品控制**：只有 `products.product_type = 'acme'` 的产品才调用 ACME 接口；source 是否支持 ACME 由系统使用人员在产品设置中控制，代码层不限制
+- **ACME 计费流程**：`Action` 三步流程 `new→pay→commit` 详见"ACME 订阅管理"章节
+- **ACME 取消策略**：未提交上游（无 api_id）的 pending 订单直接退费取消；已提交上游的订单通过延时任务调 Api->cancel() 后退费
+- **ACME Action 统一封装上游 API 调用**：所有上游 API 调用（new/get/cancel 等）必须通过 `Services/Acme/Action`，不允许控制器直接调 `Api`。Action 构造函数接收 `userId`（对齐 `Order\Action`），操作方法接收 ID，创建方法接收参数数组。内部负责模型查询、参数过滤、返回值校正、重复提交防护、状态入库。控制器仅做请求验证 + 一行调用 Action
 
 ### 自动续费/重签
 
-- `orders.auto_renew` / `acme_orders.auto_renew`: 订单级自动续费开关（null 时回落到用户设置）
-- `orders.auto_reissue` / `acme_orders.auto_reissue`: 订单级自动重签开关（null 时回落到用户设置）
+- `orders.auto_renew`: 订单级自动续费开关（null 时回落到用户设置）
+- `orders.auto_reissue`: 订单级自动重签开关（null 时回落到用户设置）
 - `users.auto_settings`: 用户级默认设置 `{"auto_renew": false, "auto_reissue": false}`
 - `AutoRenewCommand` 同时处理续费和重签，根据订单周期与证书到期时间差判断
 
@@ -131,5 +107,5 @@ skills/         # 开发规范（详细文档）
 
 - **Commands**（8 文件 40 用例）：AutoRenew、Expire、DelegationCheck、DelegationCleanup、Validate、Purge、ResetAdminPassword、ClearAllCache
 - **Models**（15 文件 163 用例）：Order、User、Cert、Admin、Product、Notification、NotificationTemplate、Contact、Organization、Fund、Invoice、Transaction、CnameDelegation、ApiToken、Task
-- **Middleware**（9 文件 67 用例）：AdminAuthenticate、UserAuthenticate、ApiAuthenticate、DeployAuthenticate、AcmeJwsMiddleware、LogOperation、RateLimiter、LoginRateLimiter、FlushLogs
+- **Middleware**（8 文件）：AdminAuthenticate、UserAuthenticate、ApiAuthenticate、DeployAuthenticate、LogOperation、RateLimiter、LoginRateLimiter、FlushLogs
 - 已有 Unit/Models 测试（DeployToken、OrderAutoFields、UserAutoSettings）不重复覆盖

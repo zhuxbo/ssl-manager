@@ -2,8 +2,8 @@
 
 namespace App\Http\Controllers\User;
 
-use App\Models\Acme\AcmeOrder;
-use App\Services\Acme\BillingService;
+use App\Models\Acme;
+use App\Services\Acme\Action;
 use Illuminate\Http\Request;
 
 class AcmeController extends BaseController
@@ -16,19 +16,17 @@ class AcmeController extends BaseController
         $currentPage = (int) ($request->input('currentPage', 1));
         $pageSize = (int) ($request->input('pageSize', 10));
 
-        $query = AcmeOrder::where('user_id', $this->guard->id());
+        $query = Acme::where('user_id', $this->guard->id());
 
         if ($request->filled('brand')) {
             $query->where('brand', $request->input('brand'));
         }
         if ($request->filled('status')) {
-            $query->whereHas('latestCert', function ($q) use ($request) {
-                $q->where('status', $request->input('status'));
-            });
+            $query->where('status', $request->input('status'));
         }
 
         $total = $query->count();
-        $items = $query->with(['latestCert', 'product'])
+        $items = $query->with(['product'])
             ->orderByDesc('id')
             ->offset(($currentPage - 1) * $pageSize)
             ->limit($pageSize)
@@ -47,7 +45,7 @@ class AcmeController extends BaseController
      */
     public function show(int $id): void
     {
-        $order = AcmeOrder::with(['latestCert.acmeAuthorizations', 'product'])
+        $order = Acme::with(['product'])
             ->where('user_id', $this->guard->id())
             ->find($id);
 
@@ -55,7 +53,59 @@ class AcmeController extends BaseController
             $this->error('订单不存在');
         }
 
-        $this->success($order->toArray());
+        $this->success($order->makeVisible('eab_hmac')->toArray());
+    }
+
+    /**
+     * 创建 ACME 订单（unpaid 状态）
+     */
+    public function new(Request $request): void
+    {
+        $request->validate([
+            'product_id' => 'required|integer|exists:products,id',
+            'period' => 'required|integer',
+            'purchased_standard_count' => 'integer|min:0',
+            'purchased_wildcard_count' => 'integer|min:0',
+        ]);
+
+        $user = $this->guard->user();
+
+        $acme = (new Action($user->id))->new(
+            $user,
+            $request->input('product_id'),
+            $request->input('period'),
+            (int) $request->input('purchased_standard_count', 0),
+            (int) $request->input('purchased_wildcard_count', 0),
+        );
+
+        $this->success(['order_id' => $acme->id]);
+    }
+
+    /**
+     * 支付订单（限当前用户）
+     */
+    public function pay(int $id): void
+    {
+        $acme = Acme::where('user_id', $this->guard->id())->findOrFail($id);
+        (new Action($this->guard->id()))->pay($acme);
+        $this->success();
+    }
+
+    /**
+     * 提交订单到 Gateway（限当前用户）
+     */
+    public function commit(int $id): void
+    {
+        $acme = Acme::where('user_id', $this->guard->id())->findOrFail($id);
+        $acme = (new Action($this->guard->id()))->commit($acme);
+
+        $acme->makeVisible('eab_hmac');
+
+        $this->success([
+            'order_id' => $acme->id,
+            'eab_kid' => $acme->eab_kid,
+            'eab_hmac' => $acme->eab_hmac,
+        ]);
     }
 
     /**
@@ -63,81 +113,8 @@ class AcmeController extends BaseController
      */
     public function commitCancel(int $id): void
     {
-        $order = AcmeOrder::with('latestCert')
-            ->where('user_id', $this->guard->id())
-            ->findOrFail($id);
-
-        $result = app(BillingService::class)->executeCancel($order);
-
-        if ($result['code'] === 1) {
-            $this->success();
-        } else {
-            $this->error($result['msg']);
-        }
-    }
-
-    /**
-     * 创建 ACME 订阅订单（unpaid 状态，用户从详情页支付+提交）
-     */
-    public function createOrder(Request $request): void
-    {
-        $request->validate([
-            'product_id' => 'required|integer',
-            'period' => 'required|integer',
-            'domains' => 'required|string|max:5000',
-            'validation_method' => 'required|string|in:delegation,txt,file_proxy,file',
-        ]);
-
-        $user = $this->guard->user();
-        $domains = array_filter(array_map('trim', explode(',', $request->input('domains'))));
-
-        $result = app(BillingService::class)->createSubscription(
-            $user,
-            $request->input('product_id'),
-            $request->input('period'),
-            $domains,
-            $request->input('validation_method'),
-        );
-
-        if ($result['code'] !== 1) {
-            $this->error($result['msg']);
-        }
-
-        $this->success([
-            'order_id' => $result['data']['order']->id,
-            'eab_kid' => $result['data']['eab_kid'],
-            'eab_hmac' => $result['data']['eab_hmac'],
-        ]);
-    }
-
-    /**
-     * 查询 EAB 状态（按 orderId 精确查询）
-     */
-    public function getEab(Request $request, int $orderId): void
-    {
-        $order = AcmeOrder::where('id', $orderId)
-            ->where('user_id', $this->guard->id())
-            ->whereNotNull('eab_kid')
-            ->firstOrFail();
-
-        $serverUrl = rtrim(get_system_setting('site', 'url', config('app.url')), '/').'/acme/directory';
-        $configDir = "/etc/letsencrypt/$order->eab_kid";
-        $configHome = "~/.acme.sh/$order->eab_kid";
-
-        $data = [
-            'eab_kid' => $order->eab_kid,
-            'eab_hmac' => $order->eab_hmac,
-            'eab_used' => $order->eab_used_at !== null,
-            'server_url' => $serverUrl,
-        ];
-
-        $data['certbot_command'] = "certbot certonly --config-dir $configDir --server $serverUrl --eab-kid $order->eab_kid"
-            ." --eab-hmac-key $order->eab_hmac"
-            .' -d example.com --preferred-challenges dns-01';
-
-        $data['acmesh_command'] = "acme.sh --register-account --config-home $configHome --server $serverUrl --eab-kid $order->eab_kid"
-            ." --eab-hmac-key $order->eab_hmac";
-
-        $this->success($data);
+        $acme = Acme::where('user_id', $this->guard->id())->findOrFail($id);
+        (new Action($this->guard->id()))->commitCancel($acme);
+        $this->success();
     }
 }

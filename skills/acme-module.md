@@ -1,153 +1,95 @@
 ---
-description: ACME 模块 - RFC 8555 协议服务端、上游对接、订阅计费、安全机制。修改 ACME 相关代码时自动加载。
+description: ACME 模块 - 封装下单 + 交付 EAB 模式、订阅计费、取消流程。修改 ACME 相关代码时自动加载。
 ---
 
 # ACME 模块
 
-Manager 作为 ACME RFC 8555 协议服务端，供 certbot 等客户端使用，并通过 REST API 连接上游（Gateway/上级 Manager）。
+Manager 作为 ACME 订阅管理平台，通过 REST API 连接 Gateway，向用户交付 EAB 凭据（eab_kid + eab_hmac）。
 
 ## 架构
 
 ```
-certbot → Manager (ACME 服务) → Gateway/上级 Manager (REST API) → Certum
+用户/Deploy API → Manager (ACME 订阅) → Gateway REST API → Certum
 ```
 
-### 多级代理架构
-
-```
-certbot → Manager A (ACME 服务端) → Manager B / 上级系统 (REST API) → ... → CA
-```
-
-每一级都使用独立的 `acme_orders` + `acme_certs` 表（`App\Models\Acme` 命名空间）。连接的 ACME 服务返回的订单 ID 存入 `acme_certs.api_id`。
-
-## ACME 端点 (`/acme/*`)
-
-| 方法 | 端点 | 功能 |
-|------|------|------|
-| GET | `/acme/directory` | 目录 |
-| HEAD/GET | `/acme/new-nonce` | 获取 Nonce |
-| POST | `/acme/new-acct` | 注册账户（需 EAB） |
-| POST | `/acme/new-order` | 创建订单 |
-| POST | `/acme/authz/{token}` | 获取授权 |
-| POST | `/acme/chall/{token}` | 响应验证 |
-| POST | `/acme/order/{referId}/finalize` | 完成订单（cert.refer_id） |
-| POST | `/acme/cert/{referId}` | 下载证书（cert.refer_id） |
-| POST | `/acme/revoke-cert` | 吊销证书 |
-
-## REST API 端点 (`/api/acme/*`)
-
-供下级 Manager 调用，无 account 概念，路由风格 id 放后面：
-
-- `POST /api/acme/orders` - 创建订单（参数：customer, product_code, domains, refer_id）
-- `POST /api/acme/orders/reissue/{id}` - 重签订单（参数：domains, refer_id）
-- `GET /api/acme/orders/{id}` - 获取订单
-- `DELETE /api/acme/orders/{id}` - 取消订单
-- `GET /api/acme/orders/authorizations/{id}` - 获取授权列表
-- `POST /api/acme/orders/finalize/{id}` - 完成订单
-- `GET /api/acme/orders/certificate/{id}` - 下载证书
-- `POST /api/acme/challenges/respond/{id}` - 响应验证
-- `POST /api/acme/certificates/revoke` - 吊销证书（by serial_number）
-
-## 关键服务
-
-| 服务 | 职责 |
-|------|------|
-| `JwsService` | JWS 解析和验证 |
-| `NonceService` | Nonce 管理（Redis Cache::pull 原子操作） |
-| `AccountService` | 账户管理 |
-| `OrderService` | 订单管理（操作 Cert 代替 AcmeOrder） |
-| `ApiService` | 订单创建 + 重签 + 取消（REST API 端点逻辑） |
-| `BillingService` | 订阅创建（延迟扣费）、自动续费 |
-| `ApiClient` | 连接的 ACME REST API 调用 |
+简化为"封装下单 + 交付 EAB"模式，不再实现 RFC 8555 协议服务端。
 
 ## 数据模型
 
-- ACME 使用独立的 `acme_orders` + `acme_certs` 表（`App\Models\Acme\AcmeOrder` / `AcmeCert`），与传统 `orders`/`certs` 完全隔离
+- 单一 `Acme` 模型（`App\Models\Acme`，表 `acmes`），替代旧的 `acme_orders`/`acme_certs`/`acme_authorizations` 多表
+- `eab_hmac` 加密存储（`encrypted` cast），默认 hidden
 - `products.product_type = 'acme'`（`Product::TYPE_ACME`）标识 ACME 产品
-- `acme_certs.api_id` 存储连接的 ACME 服务的订单 ID
-- `acme_certs.refer_id` 随机唯一字符串用于 ACME URL
-- `acme_authorizations.cert_id` FK → acme_certs.id
-- `acme_authorizations.acme_challenge_id` 连接的服务 challenge ID
-- ACME 状态从 cert.status + acme_authorizations 推导，不存储；有 CSR 无证书 → processing
-- `cert.status = 'processing'` 由 createOrder 上游成功后设置（区别于 ACME 协议状态推导，用于 commitCancel 区分取消场景）
-- `OrderService::tryCompletePendingFinalize()` — processing 状态时向上游查询证书是否已签发
+- Transaction 类型：`acme_order`（下单扣费）/ `acme_cancel`（取消退费）
 
-## 证书状态流转
+## 状态流转
 
 ```
-pending ──[提交到上游成功]──→ processing ──[上游签发]──→ active
-   │                            │                       │
-   │                            ├──[取消]──→ cancelling ──[上游成功]──→ cancelled + 退费
-   │                            │              │
-   │                            │              └──[上游失败]──→ 保持 cancelling（系统重试）
-   │                            │
-   │                            └──[上游拒绝/异常]──→ failed
+unpaid ──[pay]──→ pending ──[commit]──→ active ──[到期]──→ expired
+   │                │                      │
+   │                │                      └──[commitCancel]──→ cancelling ──[cancel 成功]──→ cancelled + 退费
+   │                │                                              │
+   │                │                                              ├──[上游返回 revoked]──→ revoked + 退费
+   │                │                                              └──[上游失败]──→ 保持 cancelling（Job 重试）
+   │                │
+   │                └──[commitCancel, 无 api_id]──→ cancelled + 直接退费
    │
-   └──[取消]──→ 直接删除清理 + 退费（未提交上游，无 api_id）
-
-                              active ──[取消]──→ cancelling ──[上游成功]──→ cancelled + 退费
-                                     │              └──[上游失败]──→ 保持 cancelling
-                                     │
-                                     └──[吊销]──→ revoking ──[上游成功]──→ revoked
-                                                    └──[上游失败]──→ 保持 revoking（系统重试）
+   └──[前端删除]──→ 删除记录（未支付无需退费）
 ```
 
-**关键规则**：
-- `cert.status = 'processing'` 由 createOrder 上游成功后设置
-- 取消前先标记 `cancelling`；上游失败不回退，保持 `cancelling` 便于系统发现并重试
-- 吊销前先标记 `revoking`；上游失败不回退，保持 `revoking` 便于系统发现并重试
-- 未提交上游（无 api_id）的 pending 订单：直接删除 acme_authorizations + AcmeAccount + 退费
-- 已提交上游的订单：必须上游明确成功后，才标记 `cancelled` / `revoked` + 退费，不删除订单和相关信息
+## 计费流程（Action）
 
-## 订单取消
+三步流程：
 
-- **cancel 端点**：`DELETE /api/acme/orders/{id}`（ApiService::cancelOrder → BillingService::executeCancel）
-- **pending 取消**（未提交域名、未扣费、无 api_id）：直接清理 acme_authorizations + AcmeAccount + 标记 cancelled
-- **processing/active 取消**（已提交、已扣费、有 api_id）：先标记 cancelling → 通知上游 → 上游成功后标记 cancelled + 退费
-- **上游失败**：保持 cancelling 状态，便于系统发现并重试
+1. **`new`**（创建 unpaid 订单）：计算金额，不扣费
+2. **`pay`**（支付 → pending）：扣费 + 创建 `acme_order` 交易记录
+3. **`commit`**（提交 Gateway → active）：调 `Api->new()`，成功后写入 `api_id`/`eab_kid`/`eab_hmac`/`period_from`/`period_till`，状态 → active。**失败保持 pending，不退费**（用户可重试或取消）
 
-## 扣费时机
+## 取消流程
 
-- **延迟扣费**：创建订阅（BillingService::createSubscription / tryAutoRenew / ApiService::createOrder）时不扣费，cert.amount='0.00'，purchased_count=0
-- **首次扣费**：new-order 提交域名时按实际域名精确计费（OrderService::create / ApiService::createOrder）
-- **action 判断**：purchased_standard_count==0 && purchased_wildcard_count==0 → action='new'（含基础价格），否则 → action='reissue'（只计增购）
-- **幂等扣费**：通过 purchased count 判断是否需要增购，避免重复扣费
+1. **`commitCancel`**：
+   - 无 `api_id` 的 pending 订单 → 直接退费 + 标记 cancelled
+   - 有 `api_id` 的订单 → 标记 cancelling + 创建 Task（action=`cancel_acme`，延迟 120s）+ dispatch `TaskJob`（延迟 123s）
+2. **`cancel`**（由 TaskJob 调用）：
+   - 调 `Api->cancel()` → 上游返回 revoked → 状态 revoked + 退费
+   - 调 `Api->cancel()` → 上游返回其他成功 → 状态 cancelled + 退费
+   - 上游失败 → 保持 cancelling，不退费（等待下次重试）
 
-## 配置
+## API 层架构
 
-```
-# system_settings ca 组（优先使用专用配置，未设置时回落到通用配置）
-acmeUrl  = ACME REST API 地址      ← 回落: url（路径 /api/v\w+ 替换为 /api/acme）
-acmeToken = ACME API 认证 Token    ← 回落: token
-```
+`Services/Acme/Api/Api.php` — 路由器，按 `product.source` 分发：
 
-## 安全机制
+- `certum/Api.php` → `certum/Sdk.php`（HTTP 调用 Gateway）
+- `certumcnssl/Api.php`（继承 certum）
+- `certumtest/Api.php`（继承 certum）
 
-- **JWS 签名验证** - 支持 RS256/384/512、ES256/384/512
-- **算法混淆防护** - 严格验证 alg 与密钥类型，EC 验证曲线
-- **Nonce 防重放** - `Cache::pull()` 原子操作
-- **EAB 强制要求** - 必须提供有效凭证
-- **时序攻击防护** - HMAC 使用 `hash_equals()`
+统一接口 `AcmeSourceApiInterface`：`new`/`get`/`cancel`
 
-## 数据流
+Gateway 端点（RPC 风格，通过 `order_id` 传参）：
+- `POST /api/acme/new` — 创建订单
+- `GET /api/acme/get?order_id=` — 查询订单
+- `POST /api/acme/sync` — 同步订单
+- `POST /api/acme/cancel` — 取消订单
 
-```
-1. certbot register  → Manager /acme/new-acct  → 验证 EAB + JWS → 创建 AcmeAccount
-2. certbot certonly  → Manager /acme/new-order → AcmeApiService.createOrder → 上级 REST API
-3. Manager 返回 DNS challenge → 用户添加 _acme-challenge TXT 记录
-4. certbot 通知验证  → Manager /acme/chall     → OrderService.respondToChallenge → 上级触发验证
-5. 验证通过          → Manager /acme/order/.../finalize → OrderService.finalize → 上级签发（可能返回 processing）
-5a. 如果 processing  → certbot 轮询 /acme/order/{referId} → OrderController.getOrder → tryCompletePendingFinalize 检查上游
-6. certbot 下载证书  → Manager /acme/cert      → 返回证书 + 中间证书
-```
+## 控制器端点
 
-## E2E 测试
+### Admin（`/api/admin/acme/`）
 
-完整链路：certbot (Docker) → Manager → 上级系统 → CA
+| 方法 | 端点 | 功能 |
+|------|------|------|
+| GET | `/acme` | 列表（支持 user_id/brand/status 筛选） |
+| GET | `/acme/{id}` | 详情（含 EAB） |
+| POST | `/acme/new` | 创建订单 |
+| POST | `/acme/pay/{id}` | 支付 |
+| POST | `/acme/commit/{id}` | 提交 Gateway |
+| POST | `/acme/sync/{id}` | 同步状态（status 白名单校验） |
+| POST | `/acme/commit-cancel/{id}` | 取消 |
+| POST | `/acme/remark/{id}` | 管理员备注 |
 
-验证要点：
-- Manager `acme_certs` 表出现新记录
-- 上级系统 `acme_certs` 表出现对应记录
-- 完整流程：EAB → 注册 → 创建订单 → DNS 验证 → Finalize → 下载证书
+### User（`/api/acme/`）
 
-详细操作步骤见 `skills/acme-e2e-test/SKILL.md`。
+与 Admin 类似但限当前用户，无 remark 端点。
+
+### Deploy（`/api/deploy/acme/`）
+
+- `POST /new` — 一步到位：创建 + 支付 + 提交
+- `GET /get/{id}` — 获取详情（含 EAB）

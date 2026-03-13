@@ -10,6 +10,7 @@ class Task extends BaseModel
 
     protected $fillable = [
         'order_id',
+        'user_id',
         'action',
         'result',
         'attempts',

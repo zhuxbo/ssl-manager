@@ -2,7 +2,6 @@
 
 namespace App\Bootstrap;
 
-use App\Http\Middleware\AcmeJwsMiddleware;
 use App\Http\Middleware\AdminAuthenticate;
 use App\Http\Middleware\AdminRefreshTokenAuthenticate;
 use App\Http\Middleware\ApiAuthenticate;
@@ -69,12 +68,6 @@ class ApiMiddleware
         $middleware->group('api.deploy', [
             RateLimiter::class.':deploy',
             DeployAuthenticate::class,
-        ]);
-
-        // ACME 中间件组
-        $middleware->group('api.acme', [
-            RateLimiter::class.':acme',
-            AcmeJwsMiddleware::class,
         ]);
 
         // 管理员中间件组

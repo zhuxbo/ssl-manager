@@ -184,27 +184,14 @@ Route::prefix('admin')->middleware('api.admin')->group(function () {
 
     // ACME 路由
     Route::prefix('acme')->group(function () {
-        Route::post('order', [AcmeController::class, 'createOrder']);
-        Route::get('eab/{orderId}', [AcmeController::class, 'getEab'])->where('orderId', '[0-9]+');
-
-        // ACME 订单管理
-        Route::prefix('order')->group(function () {
-            Route::get('/', [AcmeController::class, 'index']);
-            Route::get('{id}', [AcmeController::class, 'show'])->where('id', '[0-9]+');
-            Route::post('sync/{id}', [AcmeController::class, 'syncOrder'])->where('id', '[0-9]+');
-            Route::post('revalidate/{id}', [AcmeController::class, 'revalidate'])->where('id', '[0-9]+');
-            Route::post('update-dcv/{id}', [AcmeController::class, 'updateDCV'])->where('id', '[0-9]+');
-            Route::post('commit-cancel/{id}', [AcmeController::class, 'commitCancel'])->where('id', '[0-9]+');
-            Route::post('commit-revoke/{id}', [AcmeController::class, 'commitRevoke'])->where('id', '[0-9]+');
-            Route::delete('{id}', [AcmeController::class, 'destroy'])->where('id', '[0-9]+');
-            Route::post('remark/{id}', [AcmeController::class, 'remark'])->where('id', '[0-9]+');
-        });
-
-        // ACME 证书管理
-        Route::prefix('cert')->group(function () {
-            Route::get('/', [AcmeController::class, 'certIndex']);
-            Route::get('{id}', [AcmeController::class, 'certShow'])->where('id', '[0-9]+');
-        });
+        Route::get('/', [AcmeController::class, 'index']);
+        Route::get('{id}', [AcmeController::class, 'show'])->where('id', '[0-9]+');
+        Route::post('new', [AcmeController::class, 'new']);
+        Route::post('pay/{id}', [AcmeController::class, 'pay'])->where('id', '[0-9]+');
+        Route::post('commit/{id}', [AcmeController::class, 'commit'])->where('id', '[0-9]+');
+        Route::post('sync/{id}', [AcmeController::class, 'sync'])->where('id', '[0-9]+');
+        Route::post('commit-cancel/{id}', [AcmeController::class, 'commitCancel'])->where('id', '[0-9]+');
+        Route::post('remark/{id}', [AcmeController::class, 'remark'])->where('id', '[0-9]+');
     });
 
     // CNAME 委托管理路由

@@ -12,6 +12,6 @@ Route::prefix('deploy')->middleware('api.deploy')->group(function () {
     Route::post('callback', [ApiController::class, 'callback']); // 部署回调
 
     // ACME
-    Route::post('acme/order', [AcmeController::class, 'createOrder']);
-    Route::get('acme/eab/{orderId}', [AcmeController::class, 'getEab']);
+    Route::post('acme/new', [AcmeController::class, 'new']);
+    Route::get('acme/{id}', [AcmeController::class, 'get'])->where('id', '[0-9]+');
 });

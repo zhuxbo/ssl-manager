@@ -2,8 +2,6 @@
 
 namespace App\Console\Commands;
 
-use App\Models\Acme\AcmeCert;
-use App\Models\Acme\AcmeOrder;
 use App\Models\Cert;
 use App\Models\Order;
 use App\Models\User;
@@ -38,12 +36,8 @@ class ExpireCommand extends Command
      */
     public function handle(): void
     {
-        // 先更改所有到期证书的状态（传统 + ACME）
+        // 更改所有到期证书的状态
         Cert::where('status', 'active')
-            ->where('expires_at', '<', now())
-            ->update(['status' => 'expired']);
-
-        AcmeCert::where('status', 'active')
             ->where('expires_at', '<', now())
             ->update(['status' => 'expired']);
 
@@ -62,14 +56,8 @@ class ExpireCommand extends Command
         // 传统订单到期用户
         $user_ids = Order::whereHas('latestCert', $expireWindowQuery)
             ->pluck('user_id')
+            ->unique()
             ->toArray();
-
-        // ACME 订单到期用户
-        $acmeUserIds = AcmeOrder::whereHas('latestCert', $expireWindowQuery)
-            ->pluck('user_id')
-            ->toArray();
-
-        $user_ids = array_unique(array_merge($user_ids, $acmeUserIds));
 
         $this->info(get_system_setting('site', 'name', 'SSL证书管理系统'));
         $notificationCenter = app(NotificationCenter::class);

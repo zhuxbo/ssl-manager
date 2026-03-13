@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Acme\Api;
 
+use App\Models\Acme;
 use App\Traits\ApiResponse;
 
 class Api
@@ -11,17 +12,90 @@ class Api
     use ApiResponse;
 
     /**
-     * 按来源获取 ACME API 实现（与传统 Order\Api\Api 一致的模式）
+     * 下单
      */
-    public function getSourceApi(string $source): AcmeSourceApiInterface
+    public function new(array $data): array
     {
-        ! $source && $this->error('ACME 来源配置错误');
+        $source = $data['source'] ?? '';
+        $api = $this->getSourceApi($source);
+
+        return $this->handleResult($api->new($data));
+    }
+
+    /**
+     * 查询/同步订单信息
+     */
+    public function get(int $orderId): array
+    {
+        $order = $this->findOrder($orderId);
+        $api = $this->getSourceApi($order->product->source ?? '');
+
+        return $this->handleResult($api->get($order->api_id, $order->toArray()));
+    }
+
+    /**
+     * 取消订单
+     */
+    public function cancel(int $orderId): array
+    {
+        $order = $this->findOrder($orderId);
+        $api = $this->getSourceApi($order->product->source ?? '');
+
+        return $this->handleResult($api->cancel($order->api_id, $order->toArray()));
+    }
+
+    /**
+     * 获取产品列表
+     */
+    public function getProducts(string $source, string $brand = '', string $code = ''): array
+    {
+        $api = $this->getSourceApi($source);
+
+        return $this->handleResult($api->getProducts($brand, $code));
+    }
+
+    /**
+     * 获取来源 API 实例
+     */
+    private function getSourceApi(string $source): AcmeSourceApiInterface
+    {
+        ! $source && $this->error('产品配置错误');
 
         $class = __NAMESPACE__.'\\'.strtolower($source).'\\Api';
         if (! class_exists($class)) {
-            $this->error('ACME 来源配置错误');
+            $this->error('产品配置错误');
         }
 
         return new $class;
+    }
+
+    /**
+     * 查找 ACME 订单
+     */
+    private function findOrder(int $orderId): Acme
+    {
+        $order = Acme::with(['product'])
+            ->whereHas('user')
+            ->whereHas('product')
+            ->find($orderId);
+
+        if (! $order) {
+            $this->error('未找到对应的订单');
+        }
+
+        return $order;
+    }
+
+    /**
+     * 统一处理返回结果
+     */
+    private function handleResult(array $result): array
+    {
+        if ($result['code'] !== 1) {
+            $errors = config('app.debug') ? ($result['errors'] ?? null) : null;
+            $this->error($result['msg'] ?? 'CA 接口调用失败', $errors);
+        }
+
+        return $result;
     }
 }

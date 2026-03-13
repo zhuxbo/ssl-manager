@@ -73,13 +73,8 @@ getPlatformConfig(app).then(async config => {
   window.__deps.http = sharedHttp;
   // ACME 菜单配置控制
   if (config.Acme === true) {
-    const acmeMenu = constantMenus.find((r: any) => r.name === "AcmeOrders") as any;
+    const acmeMenu = constantMenus.find((r: any) => r.name === "Acmes") as any;
     if (acmeMenu?.meta) acmeMenu.meta.showLink = true;
-    const certMenu = constantMenus.find((r: any) => r.name === "Certs") as any;
-    const acmeCert = certMenu?.children?.find(
-      (c: any) => c.name === "AcmeCert"
-    );
-    if (acmeCert?.meta) acmeCert.meta.showLink = true;
   }
   // 加载插件（在 router 安装之前，确保菜单数据就绪）
   await loadPlugins(router, "admin", constantMenus);

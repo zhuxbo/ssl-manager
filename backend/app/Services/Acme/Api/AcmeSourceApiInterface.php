@@ -6,25 +6,23 @@ namespace App\Services\Acme\Api;
 
 interface AcmeSourceApiInterface
 {
-    public function prepareOrder(string $customer, string $productCode, ?string $referId = null): array;
+    /**
+     * 下单
+     */
+    public function new(array $data): array;
 
-    public function submitDomains(int $orderId, array $domains): array;
+    /**
+     * 查询/同步（返回含 EAB）
+     */
+    public function get(string|int $apiId, array $order = []): array;
 
-    public function reissueOrder(int $orderId, array $domains, ?string $referId = null): array;
+    /**
+     * 取消（内部处理已签发->吊销）
+     */
+    public function cancel(string|int $apiId, array $order = []): array;
 
-    public function respondToChallenge(int $challengeId): array;
-
-    public function finalizeOrder(int $orderId, string $csr): array;
-
-    public function getOrder(int $orderId): array;
-
-    public function getOrderAuthorizations(int $orderId): array;
-
-    public function getCertificate(int $orderId): array;
-
-    public function cancelOrder(int $orderId): array;
-
-    public function revokeCertificate(string $serialNumber, string $reason = 'UNSPECIFIED'): array;
-
-    public function isConfigured(): bool;
+    /**
+     * 获取产品列表
+     */
+    public function getProducts(string $brand = '', string $code = ''): array;
 }

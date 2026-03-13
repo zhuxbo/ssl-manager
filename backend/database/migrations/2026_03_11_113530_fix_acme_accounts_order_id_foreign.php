@@ -9,6 +9,10 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (! Schema::hasTable('acme_accounts')) {
+            return;
+        }
+
         // acme_accounts.order_id 外键应指向 acme_orders 而非 orders
         $fkExists = collect(Schema::getForeignKeys('acme_accounts'))->contains('name', 'acme_accounts_order_id_foreign');
 

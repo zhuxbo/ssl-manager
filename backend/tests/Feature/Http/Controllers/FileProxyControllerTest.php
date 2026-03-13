@@ -1,6 +1,5 @@
 <?php
 
-use App\Models\Acme\AcmeCert;
 use App\Models\Cert;
 
 test('ACME 路径命中-返回 key_authorization', function () {
@@ -72,30 +71,4 @@ test('域名大小写不敏感', function () {
     $this->get('http://example.com/.well-known/acme-challenge/acme-token-4')
         ->assertOk()
         ->assertSee('key-auth-4', false);
-});
-
-test('AcmeCert ACME 路径命中-返回 key_authorization', function () {
-    AcmeCert::factory()->create([
-        'common_name' => 'example.com',
-        'status' => 'processing',
-        'validation' => [
-            ['domain' => 'example.com', 'method' => 'file_proxy', 'name' => 'acme-cert-token-1', 'content' => 'acme-cert-key-auth-1', 'path' => '/.well-known/acme-challenge/acme-cert-token-1', 'verified' => 0],
-        ],
-    ]);
-
-    $this->get('http://example.com/.well-known/acme-challenge/acme-cert-token-1')
-        ->assertOk()
-        ->assertSee('acme-cert-key-auth-1', false);
-});
-
-test('AcmeCert 已签发证书不应命中-返回 404', function () {
-    AcmeCert::factory()->create([
-        'status' => 'active',
-        'validation' => [
-            ['domain' => 'example.com', 'method' => 'file_proxy', 'name' => 'acme-cert-token-2', 'content' => 'acme-cert-key-auth-2', 'verified' => 0],
-        ],
-    ]);
-
-    $this->get('http://example.com/.well-known/acme-challenge/acme-cert-token-2')
-        ->assertNotFound();
 });

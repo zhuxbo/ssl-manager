@@ -1,170 +1,130 @@
 <?php
 
-use App\Services\Acme\Api\default\Sdk;
+use App\Services\Acme\Api\certum\Sdk;
 use Illuminate\Support\Facades\Http;
 
 uses(Tests\TestCase::class);
 
-/**
- * 模拟 system_settings
- */
-function mockSystemSettings(object $app, string $url, string $key): void
-{
-    // 因为 Sdk 构造函数中直接调用 get_system_setting，
-    // 我们需要在容器中重新绑定
-    $app->bind(Sdk::class, function () use ($url, $key) {
-        $client = new Sdk;
+beforeEach(function () {
+    config([
+        'acme.api.base_url' => 'https://gateway.test',
+        'acme.api.api_key' => 'test-api-key-123',
+    ]);
+});
 
-        // 使用反射设置私有属性
-        $ref = new \ReflectionClass($client);
-
-        $baseUrlProp = $ref->getProperty('baseUrl');
-        $baseUrlProp->setValue($client, rtrim($url, '/'));
-
-        $apiKeyProp = $ref->getProperty('apiKey');
-        $apiKeyProp->setValue($client, $key);
-
-        return $client;
-    });
-}
-
-test('request uses system setting url and key', function () {
-    mockSystemSettings($this->app, 'https://gateway.test/api', 'test-api-key-123');
-
+test('new sends POST to gateway', function () {
     Http::fake([
-        'gateway.test/api/*' => Http::response(['code' => 1, 'data' => ['id' => 1]], 200),
+        'gateway.test/api/acme/new' => Http::response(['code' => 1, 'data' => ['id' => 1]], 200),
     ]);
 
-    $client = app(Sdk::class);
-    $result = $client->getOrder(1);
+    $sdk = new Sdk;
+    $result = $sdk->new(['customer' => 'test@example.com', 'product_code' => '12345']);
 
     expect($result['code'])->toBe(1);
 
     Http::assertSent(function ($request) {
-        return str_contains($request->url(), 'gateway.test/api')
-            && $request->hasHeader('Authorization', 'Bearer test-api-key-123');
+        return $request->url() === 'https://gateway.test/api/acme/new'
+            && $request->method() === 'POST'
+            && $request->hasHeader('Authorization', 'Bearer test-api-key-123')
+            && $request->data()['customer'] === 'test@example.com';
     });
 });
 
-test('reissue order sends correct payload', function () {
-    mockSystemSettings($this->app, 'https://gateway.test/api', 'test-key');
-
+test('get sends GET to gateway', function () {
     Http::fake([
-        'gateway.test/api/*' => Http::response(['code' => 1, 'data' => ['id' => 99]], 200),
+        'gateway.test/api/acme/get*' => Http::response(['code' => 1, 'data' => ['id' => 42]], 200),
     ]);
 
-    $client = app(Sdk::class);
-    $result = $client->reissueOrder(42, ['new.example.com'], 'ref456');
+    $sdk = new Sdk;
+    $result = $sdk->get(42);
 
     expect($result['code'])->toBe(1);
 
     Http::assertSent(function ($request) {
-        $body = $request->data();
-
-        return $request->url() === 'https://gateway.test/api/orders/reissue/42'
-            && $body['domains'] === ['new.example.com']
-            && $body['refer_id'] === 'ref456';
+        return str_contains($request->url(), 'https://gateway.test/api/acme/get')
+            && $request->method() === 'GET'
+            && $request['order_id'] == 42;
     });
 });
 
-test('respond to challenge sends correct endpoint', function () {
-    mockSystemSettings($this->app, 'https://gateway.test/api', 'test-key');
-
+test('cancel sends POST to gateway', function () {
     Http::fake([
-        'gateway.test/api/*' => Http::response(['code' => 1, 'data' => ['status' => 'valid']], 200),
+        'gateway.test/api/acme/cancel' => Http::response(['code' => 1, 'data' => []], 200),
     ]);
 
-    $client = app(Sdk::class);
-    $result = $client->respondToChallenge(42);
+    $sdk = new Sdk;
+    $result = $sdk->cancel(42);
+
+    expect($result['code'])->toBe(1);
 
     Http::assertSent(function ($request) {
-        return $request->url() === 'https://gateway.test/api/challenges/respond/42';
+        return $request->url() === 'https://gateway.test/api/acme/cancel'
+            && $request->method() === 'POST'
+            && $request->data()['order_id'] == 42;
     });
 });
 
-test('finalize order sends csr', function () {
-    mockSystemSettings($this->app, 'https://gateway.test/api', 'test-key');
-
+test('sync sends POST to gateway', function () {
     Http::fake([
-        'gateway.test/api/*' => Http::response(['code' => 1, 'data' => ['status' => 'valid']], 200),
+        'gateway.test/api/acme/sync' => Http::response(['code' => 1, 'data' => []], 200),
     ]);
 
-    $client = app(Sdk::class);
-    $result = $client->finalizeOrder(10, 'test-csr-pem');
+    $sdk = new Sdk;
+    $result = $sdk->sync(42);
+
+    expect($result['code'])->toBe(1);
 
     Http::assertSent(function ($request) {
-        return $request->url() === 'https://gateway.test/api/orders/finalize/10'
-            && $request->data()['csr'] === 'test-csr-pem';
+        return $request->url() === 'https://gateway.test/api/acme/sync'
+            && $request->method() === 'POST'
+            && $request->data()['order_id'] == 42;
     });
 });
 
-test('get order authorizations sends correct endpoint', function () {
-    mockSystemSettings($this->app, 'https://gateway.test/api', 'test-key');
-
-    Http::fake([
-        'gateway.test/api/*' => Http::response(['code' => 1, 'data' => []], 200),
+test('returns error when not configured', function () {
+    config([
+        'acme.api.base_url' => '',
+        'acme.api.api_key' => '',
     ]);
 
-    $client = app(Sdk::class);
-    $client->getOrderAuthorizations(15);
-
-    Http::assertSent(function ($request) {
-        return $request->url() === 'https://gateway.test/api/orders/authorizations/15';
-    });
-});
-
-test('get certificate sends correct endpoint', function () {
-    mockSystemSettings($this->app, 'https://gateway.test/api', 'test-key');
-
-    Http::fake([
-        'gateway.test/api/*' => Http::response(['code' => 1, 'data' => []], 200),
-    ]);
-
-    $client = app(Sdk::class);
-    $client->getCertificate(20);
-
-    Http::assertSent(function ($request) {
-        return $request->url() === 'https://gateway.test/api/orders/certificate/20';
-    });
-});
-
-test('is configured returns false when not set', function () {
-    mockSystemSettings($this->app, '', '');
-
-    $client = app(Sdk::class);
-    expect($client->isConfigured())->toBeFalse();
-});
-
-test('is configured returns true when set', function () {
-    mockSystemSettings($this->app, 'https://gateway.test/api', 'key');
-
-    $client = app(Sdk::class);
-    expect($client->isConfigured())->toBeTrue();
-});
-
-test('request returns error when not configured', function () {
-    mockSystemSettings($this->app, '', '');
-
-    $client = app(Sdk::class);
-    $result = $client->getOrder(1);
+    $sdk = new Sdk;
+    $result = $sdk->get(1);
 
     expect($result['code'])->toBe(0);
-    expect($result['msg'])->toContain('not configured');
+    expect($result['msg'])->toContain('未配置');
 });
 
-test('revoke certificate sends serial number', function () {
-    mockSystemSettings($this->app, 'https://gateway.test/api', 'test-key');
+test('returns error on connection failure', function () {
+    Http::fake(function () {
+        throw new \Illuminate\Http\Client\ConnectionException('Connection refused');
+    });
 
+    $sdk = new Sdk;
+    $result = $sdk->get(1);
+
+    expect($result['code'])->toBe(0);
+    expect($result['msg'])->toContain('连接失败');
+});
+
+test('returns error when response has no code', function () {
     Http::fake([
-        'gateway.test/api/*' => Http::response(['code' => 1], 200),
+        'gateway.test/api/acme/get*' => Http::response(['data' => []], 200),
     ]);
 
-    $client = app(Sdk::class);
-    $result = $client->revokeCertificate('ABCD1234');
+    $sdk = new Sdk;
+    $result = $sdk->get(1);
 
-    Http::assertSent(function ($request) {
-        return $request->url() === 'https://gateway.test/api/certificates/revoke'
-            && $request->data()['serial_number'] === 'ABCD1234'
-            && $request->data()['reason'] === 'UNSPECIFIED';
-    });
+    expect($result['code'])->toBe(0);
+    expect($result['msg'])->toContain('格式错误');
+});
+
+test('returns error on http failure', function () {
+    Http::fake([
+        'gateway.test/api/acme/get*' => Http::response(['msg' => '服务器错误'], 500),
+    ]);
+
+    $sdk = new Sdk;
+    $result = $sdk->get(1);
+
+    expect($result['code'])->toBe(0);
 });

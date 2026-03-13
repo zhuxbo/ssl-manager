@@ -1,30 +1,30 @@
 export default {
-  path: "/acme-orders",
-  name: "AcmeOrders",
-  redirect: "/acme-order",
+  path: "/acmes",
+  name: "Acmes",
+  redirect: "/acme",
   meta: {
     icon: "ri:robot-2-fill",
-    title: "ACME订单",
+    title: "ACME订阅",
     rank: 3.5,
     showLink: false
   },
   children: [
     {
-      path: "/acme-order",
-      name: "AcmeOrder",
-      component: () => import("@/views/acme-order/index.vue"),
+      path: "/acme",
+      name: "Acme",
+      component: () => import("@/views/acme/index.vue"),
       meta: {
-        title: "ACME订单",
+        title: "ACME订阅",
         keepAlive: true
       }
     },
     {
-      path: "/acme-order/details/:ids",
-      name: "AcmeOrderDetails",
-      component: () => import("@/views/acme-order/details.vue"),
+      path: "/acme/details/:ids",
+      name: "AcmeDetails",
+      component: () => import("@/views/acme/details.vue"),
       meta: {
-        title: "ACME订单详情",
-        activePath: "/acme-order",
+        title: "ACME订阅详情",
+        activePath: "/acme",
         showLink: false
       }
     }
