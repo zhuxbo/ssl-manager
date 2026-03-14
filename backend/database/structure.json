@@ -1,7 +1,7 @@
 {
     "version": "1.0",
     "mysql_version": "8.0.43",
-    "generated_at": "2026-03-14 01:48:15",
+    "generated_at": "2026-03-14 21:36:11",
     "database": {
         "name": "manager",
         "charset": "utf8mb4",
@@ -4673,16 +4673,8 @@
                     "extra": "",
                     "comment": "订单ID"
                 },
-                "user_id": {
-                    "position": 3,
-                    "type": "bigint unsigned",
-                    "nullable": true,
-                    "default": null,
-                    "extra": "",
-                    "comment": ""
-                },
                 "action": {
-                    "position": 4,
+                    "position": 3,
                     "type": "varchar(50)",
                     "nullable": false,
                     "default": null,
@@ -4690,7 +4682,7 @@
                     "comment": "任务动作"
                 },
                 "result": {
-                    "position": 5,
+                    "position": 4,
                     "type": "text",
                     "nullable": true,
                     "default": null,
@@ -4698,7 +4690,7 @@
                     "comment": "执行结果"
                 },
                 "attempts": {
-                    "position": 6,
+                    "position": 5,
                     "type": "int",
                     "nullable": false,
                     "default": "0",
@@ -4706,7 +4698,7 @@
                     "comment": "执行次数"
                 },
                 "started_at": {
-                    "position": 7,
+                    "position": 6,
                     "type": "timestamp",
                     "nullable": true,
                     "default": null,
@@ -4714,7 +4706,7 @@
                     "comment": "开始执行时间"
                 },
                 "last_execute_at": {
-                    "position": 8,
+                    "position": 7,
                     "type": "timestamp",
                     "nullable": true,
                     "default": null,
@@ -4722,7 +4714,7 @@
                     "comment": "最后执行时间"
                 },
                 "source": {
-                    "position": 9,
+                    "position": 8,
                     "type": "varchar(50)",
                     "nullable": true,
                     "default": null,
@@ -4730,7 +4722,7 @@
                     "comment": "来源"
                 },
                 "weight": {
-                    "position": 10,
+                    "position": 9,
                     "type": "int",
                     "nullable": false,
                     "default": "0",
@@ -4738,7 +4730,7 @@
                     "comment": "权重"
                 },
                 "status": {
-                    "position": 11,
+                    "position": 10,
                     "type": "enum('executing','successful','failed','stopped')",
                     "nullable": false,
                     "default": "executing",
@@ -4746,7 +4738,7 @@
                     "comment": "状态:executing=待执行,successful=已成功,failed=已失败,stopped=已停止"
                 },
                 "created_at": {
-                    "position": 12,
+                    "position": 11,
                     "type": "timestamp",
                     "nullable": true,
                     "default": null,
@@ -4754,7 +4746,7 @@
                     "comment": ""
                 },
                 "updated_at": {
-                    "position": 13,
+                    "position": 12,
                     "type": "timestamp",
                     "nullable": true,
                     "default": null,
@@ -4798,16 +4790,6 @@
                     "type": "BTREE",
                     "columns": [
                         "status"
-                    ],
-                    "sub_parts": [
-                        null
-                    ]
-                },
-                "tasks_user_id_index": {
-                    "unique": false,
-                    "type": "BTREE",
-                    "columns": [
-                        "user_id"
                     ],
                     "sub_parts": [
                         null

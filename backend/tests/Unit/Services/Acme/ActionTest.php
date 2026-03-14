@@ -305,7 +305,6 @@ test('commitCancel sets cancelling status for active order', function () {
         ->where('status', 'executing')
         ->first();
     expect($task)->not->toBeNull();
-    expect($task->user_id)->toBe($user->id);
     expect($task->started_at)->toBeGreaterThan(now());
 
     Queue::assertPushed(TaskJob::class);

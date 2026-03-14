@@ -6,6 +6,7 @@ use App\Models\Acme;
 use App\Models\Admin;
 use App\Models\ApiToken;
 use App\Models\Callback;
+use App\Models\CnameDelegation;
 use App\Models\Contact;
 use App\Models\Fund;
 use App\Models\Invoice;
@@ -77,6 +78,7 @@ abstract class Authenticate
                 Acme::class,
                 ApiToken::class,
                 Callback::class,
+                CnameDelegation::class,
                 Order::class,
                 Fund::class,
                 Transaction::class,

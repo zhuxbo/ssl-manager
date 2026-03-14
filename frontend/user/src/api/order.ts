@@ -199,19 +199,6 @@ export function sendActive(id: number, email?: string): Promise<BaseResponse> {
   );
 }
 
-/** 发送过期提醒 */
-export function sendExpire(
-  userId: number,
-  email?: string
-): Promise<BaseResponse> {
-  return http.get<BaseResponse<null>, { userId: number; email?: string }>(
-    `/order/send-expire/${userId}`,
-    {
-      params: { email }
-    }
-  );
-}
-
 /** 批量支付订单 */
 export function batchPay(
   ids: string | number | number[]

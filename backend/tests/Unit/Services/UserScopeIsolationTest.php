@@ -2,11 +2,11 @@
 
 use App\Exceptions\ApiResponseException;
 use App\Models\Acme;
+use App\Models\CnameDelegation;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\ProductPrice;
 use App\Models\Scopes\UserScope;
-use App\Models\Task;
 use App\Services\Acme\Action as AcmeAction;
 use App\Services\Order\Action as OrderAction;
 use Database\Seeders\DatabaseSeeder;
@@ -28,6 +28,7 @@ afterEach(function () {
     // UserScope 通过 Model::addGlobalScope 添加是静态的，测试间会残留，需要手动清理
     Acme::clearBootedModels();
     Order::clearBootedModels();
+    CnameDelegation::clearBootedModels();
 });
 
 function createAcmeWithPrice(string $price = '100.00'): array
@@ -280,30 +281,96 @@ test('UserScope 注册后 Order\Action::initParams reissue 查不到其他用户
     }
 });
 
-// ==================== createTask user_id 来源 ====================
+// ==================== UserScope 零值防护 ====================
 
-test('Acme commitCancel 创建的 Task 记录包含正确的 user_id', function () {
-    Queue::fake();
+test('UserScope(0) 仍会添加 where 条件，不会跳过', function () {
+    // 验证 user_id=0 时 UserScope 仍然生效，SQL 中包含 where user_id = 0
+    UserScope::addScopeToModels(0, [Order::class]);
 
-    [$user, $product] = createAcmeWithPrice();
+    $sql = Order::query()->toRawSql();
 
-    $acme = Acme::factory()->active()->create([
-        'user_id' => $user->id,
-        'product_id' => $product->id,
-        'api_id' => 'upstream-task-test',
-        'amount' => '100.00',
-    ]);
+    // 确认 SQL 包含 user_id = 0 的过滤条件
+    expect($sql)->toContain('user_id')
+        ->and($sql)->toMatch('/user_id.*=.*0/');
+});
 
-    try {
-        $this->acmeAction->commitCancel($acme->id);
-    } catch (ApiResponseException $e) {
-        expect($e->getApiResponse()['code'])->toBe(1);
-    }
+test('UserScope(0) 注册后查不到任何正常用户的记录', function () {
+    // 创建一条正常用户的订单记录
+    $user = $this->createTestUser(['balance' => '100.00']);
+    $product = $this->createTestProduct();
+    $order = $this->createTestOrder($user, $product);
 
-    $task = Task::where('order_id', $acme->id)
-        ->where('action', 'cancel_acme')
-        ->first();
+    // 确认记录存在（无 UserScope）
+    expect(Order::withoutGlobalScopes()->where('id', $order->id)->exists())->toBeTrue();
 
-    expect($task)->not->toBeNull();
-    expect($task->user_id)->toBe($user->id);
+    // 注册 user_id=0 的 UserScope
+    UserScope::addScopeToModels(0, [Order::class]);
+
+    // user_id=0 不匹配任何正常用户，所有记录都应被过滤
+    expect(Order::query()->where('id', $order->id)->exists())->toBeFalse()
+        ->and(Order::query()->count())->toBe(0);
+});
+
+// ==================== CnameDelegation + UserScope 隔离 ====================
+
+test('UserScope 注册后 CnameDelegation::query() 只能查到自己的记录', function () {
+    $userA = $this->createTestUser();
+    $userB = $this->createTestUser();
+
+    // 各创建 2 条委托记录
+    $delegationsA = CnameDelegation::factory()->count(2)->create(['user_id' => $userA->id]);
+    $delegationsB = CnameDelegation::factory()->count(2)->create(['user_id' => $userB->id]);
+
+    // 注册 userA 的 UserScope
+    UserScope::addScopeToModels($userA->id, [CnameDelegation::class]);
+
+    // userA 只能查到自己的 2 条记录
+    $results = CnameDelegation::query()->get();
+    expect($results)->toHaveCount(2)
+        ->and($results->pluck('user_id')->unique()->values()->all())->toBe([$userA->id]);
+
+    // userB 的记录在数据库中仍存在（通过 withoutGlobalScopes 验证）
+    $allResults = CnameDelegation::withoutGlobalScopes()->get();
+    expect($allResults)->toHaveCount(4);
+});
+
+test('UserScope 注册后 CnameDelegation::find() 找不到其他用户的记录', function () {
+    $userA = $this->createTestUser();
+    $userB = $this->createTestUser();
+
+    // userA 的委托记录
+    $delegationA = CnameDelegation::factory()->create(['user_id' => $userA->id]);
+    // userB 的委托记录
+    $delegationB = CnameDelegation::factory()->create(['user_id' => $userB->id]);
+
+    // 注册 userA 的 UserScope
+    UserScope::addScopeToModels($userA->id, [CnameDelegation::class]);
+
+    // userA 能找到自己的记录
+    expect(CnameDelegation::find($delegationA->id))->not->toBeNull()
+        ->and(CnameDelegation::find($delegationA->id)->id)->toBe($delegationA->id);
+
+    // userA 找不到 userB 的记录
+    expect(CnameDelegation::find($delegationB->id))->toBeNull();
+});
+
+test('UserScope 注册后 CnameDelegation::destroy() 不影响其他用户的记录', function () {
+    $userA = $this->createTestUser();
+    $userB = $this->createTestUser();
+
+    // 各创建委托记录
+    $delegationA = CnameDelegation::factory()->create(['user_id' => $userA->id]);
+    $delegationB = CnameDelegation::factory()->create(['user_id' => $userB->id]);
+
+    // 注册 userA 的 UserScope
+    UserScope::addScopeToModels($userA->id, [CnameDelegation::class]);
+
+    // userA 尝试 destroy userB 的记录 — 不应删除
+    CnameDelegation::destroy($delegationB->id);
+
+    // userB 的记录仍然存在
+    expect(CnameDelegation::withoutGlobalScopes()->find($delegationB->id))->not->toBeNull();
+
+    // userA 的记录也仍然存在
+    expect(CnameDelegation::withoutGlobalScopes()->find($delegationA->id))->not->toBeNull();
 });

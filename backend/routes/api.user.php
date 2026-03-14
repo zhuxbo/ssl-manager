@@ -2,7 +2,6 @@
 
 use App\Http\Controllers\User\AcmeController;
 use App\Http\Controllers\User\AuthController;
-use App\Http\Controllers\User\CertController;
 use App\Http\Controllers\User\ContactController;
 use App\Http\Controllers\User\DashboardController;
 use App\Http\Controllers\User\DelegationController;
@@ -83,7 +82,6 @@ Route::middleware('api.user')->group(function () {
         Route::get('download', [OrderController::class, 'download']);
         Route::get('download-validate-file/{id}', [OrderController::class, 'downloadValidateFile'])->where('id', '[0-9]+');
         Route::get('send-active/{id}', [OrderController::class, 'sendActive'])->where('id', '[0-9]+');
-        Route::get('send-expire/{userId}', [OrderController::class, 'sendExpire'])->where('userId', '[0-9]+');
         Route::post('batch-pay', [OrderController::class, 'batchPay']);
         Route::post('batch-commit', [OrderController::class, 'batchCommit']);
         Route::post('batch-revalidate', [OrderController::class, 'batchRevalidate']);
@@ -91,13 +89,6 @@ Route::middleware('api.user')->group(function () {
         Route::post('batch-commit-cancel', [OrderController::class, 'batchCommitCancel']);
         Route::post('batch-revoke-cancel', [OrderController::class, 'batchRevokeCancel']);
         Route::patch('auto-settings/{id}', [OrderController::class, 'updateAutoSettings'])->where('id', '[0-9]+');
-    });
-
-    // 证书路由
-    Route::prefix('cert')->group(function () {
-        Route::get('/', [CertController::class, 'index']);
-        Route::get('{id}', [CertController::class, 'show'])->where('id', '[0-9]+');
-        Route::get('batch', [CertController::class, 'batchShow']);
     });
 
     // 联系人路由

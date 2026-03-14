@@ -127,6 +127,71 @@ test('批量删除委托', function () {
     expect(CnameDelegation::whereIn('id', $ids)->count())->toBe(0);
 });
 
+test('批量删除委托-只删除当前用户的记录', function () {
+    $userA = User::factory()->create();
+    $userB = User::factory()->create();
+
+    // userA 和 userB 各创建委托记录
+    $delegationsA = CnameDelegation::factory()->count(2)->create(['user_id' => $userA->id]);
+    $delegationsB = CnameDelegation::factory()->count(2)->create(['user_id' => $userB->id]);
+
+    $idsA = $delegationsA->pluck('id')->toArray();
+
+    // userA 删除自己的记录
+    $this->actingAsUser($userA)
+        ->deleteJson('/api/delegation/batch', ['ids' => $idsA])
+        ->assertOk()
+        ->assertJson(['code' => 1]);
+
+    // userA 的记录已删除
+    expect(CnameDelegation::withoutGlobalScopes()->whereIn('id', $idsA)->count())->toBe(0);
+
+    // userB 的记录不受影响
+    $idsB = $delegationsB->pluck('id')->toArray();
+    expect(CnameDelegation::withoutGlobalScopes()->whereIn('id', $idsB)->count())->toBe(2);
+});
+
+test('批量删除委托-传入其他用户的 ids 不会删除', function () {
+    $userA = User::factory()->create();
+    $userB = User::factory()->create();
+
+    // userB 的委托记录
+    $delegationsB = CnameDelegation::factory()->count(3)->create(['user_id' => $userB->id]);
+    $idsB = $delegationsB->pluck('id')->toArray();
+
+    // userA 尝试删除 userB 的记录 — 应被拒绝
+    $this->actingAsUser($userA)
+        ->deleteJson('/api/delegation/batch', ['ids' => $idsB])
+        ->assertOk()
+        ->assertJson(['code' => 0]); // error 返回 code=0
+
+    // userB 的记录全部保留
+    expect(CnameDelegation::withoutGlobalScopes()->whereIn('id', $idsB)->count())->toBe(3);
+});
+
+test('批量删除委托-混合自己和他人的 ids 只删除自己的', function () {
+    $userA = User::factory()->create();
+    $userB = User::factory()->create();
+
+    // 各创建委托记录
+    $delegationA = CnameDelegation::factory()->create(['user_id' => $userA->id]);
+    $delegationB = CnameDelegation::factory()->create(['user_id' => $userB->id]);
+
+    $mixedIds = [$delegationA->id, $delegationB->id];
+
+    // userA 传入混合 ids
+    $this->actingAsUser($userA)
+        ->deleteJson('/api/delegation/batch', ['ids' => $mixedIds])
+        ->assertOk()
+        ->assertJson(['code' => 1]);
+
+    // userA 自己的记录被删除
+    expect(CnameDelegation::withoutGlobalScopes()->find($delegationA->id))->toBeNull();
+
+    // userB 的记录仍然存在
+    expect(CnameDelegation::withoutGlobalScopes()->find($delegationB->id))->not->toBeNull();
+});
+
 test('委托列表-未认证', function () {
     $this->getJson('/api/delegation')
         ->assertUnauthorized();

@@ -5,7 +5,6 @@ namespace App\Http\Traits;
 use App\Http\Requests\Order\GetIdsRequest;
 use App\Models\DomainValidationRecord;
 use App\Models\Order;
-use App\Models\User;
 use App\Services\Notification\DTOs\NotificationIntent;
 use App\Services\Notification\NotificationCenter;
 use App\Services\Order\Action;
@@ -144,34 +143,6 @@ trait OrderController
             $order->user->id,
             [
                 'order_id' => $order->id,
-                'email' => $targetEmail,
-            ],
-            ['mail']
-        ));
-        $this->success();
-    }
-
-    /**
-     * 发送过期邮件
-     */
-    public function sendExpire(string $userId): void
-    {
-        $email = request()->string('email', '')->trim();
-        $user = User::find((int) $userId);
-        if (! $user) {
-            $this->error('用户不存在');
-        }
-
-        $targetEmail = $email ?: $user->email;
-        if (! $targetEmail) {
-            $this->error('邮箱为空');
-        }
-
-        app(NotificationCenter::class)->dispatch(new NotificationIntent(
-            'cert_expire',
-            'user',
-            $user->id,
-            [
                 'email' => $targetEmail,
             ],
             ['mail']

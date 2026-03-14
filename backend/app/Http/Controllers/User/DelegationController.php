@@ -243,7 +243,7 @@ class DelegationController extends BaseController
             $this->error('委托记录不存在');
         }
 
-        CnameDelegation::destroy($ids);
+        $delegations->each->delete();
 
         $this->success();
     }

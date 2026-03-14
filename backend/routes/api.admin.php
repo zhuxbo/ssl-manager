@@ -118,7 +118,6 @@ Route::prefix('admin')->middleware('api.admin')->group(function () {
         Route::get('download', [OrderController::class, 'download']);
         Route::get('download-validate-file/{id}', [OrderController::class, 'downloadValidateFile'])->where('id', '[0-9]+');
         Route::get('send-active/{id}', [OrderController::class, 'sendActive'])->where('id', '[0-9]+');
-        Route::get('send-expire/{userId}', [OrderController::class, 'sendExpire'])->where('userId', '[0-9]+');
         Route::post('batch-pay', [OrderController::class, 'batchPay']);
         Route::post('batch-commit', [OrderController::class, 'batchCommit']);
         Route::post('batch-revalidate', [OrderController::class, 'batchRevalidate']);

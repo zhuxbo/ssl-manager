@@ -109,7 +109,6 @@ class Action
         if (! $existingTask) {
             $task = Task::create([
                 'order_id' => $acme->id,
-                'user_id' => $acme->user_id,
                 'action' => 'cancel_acme',
                 'started_at' => now()->addSeconds(120),
                 'status' => 'executing',
