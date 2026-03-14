@@ -260,14 +260,7 @@ trait OrderController
             'auto_reissue' => 'nullable',
         ]);
 
-        $order = Order::where('id', $id);
-
-        // 用户端只能更新自己的订单
-        if ($this->action->getUserId()) {
-            $order->where('user_id', $this->action->getUserId());
-        }
-
-        $order = $order->first();
+        $order = Order::find($id);
         if (! $order) {
             $this->error('订单不存在');
         }

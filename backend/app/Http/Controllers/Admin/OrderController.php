@@ -289,6 +289,15 @@ class OrderController extends BaseController
     }
 
     /**
+     * 备注订单（Admin 写入 admin_remark）
+     */
+    public function remark(int $id): void
+    {
+        $remark = request()->string('remark')->trim()->limit(255);
+        $this->action->remark($id, $remark, 'admin_remark');
+    }
+
+    /**
      * 导入证书
      *
      * @throws Throwable

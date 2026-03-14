@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Jobs;
 
 use App\Exceptions\ApiResponseException;
-use App\Models\Acme;
 use App\Models\Admin;
 use App\Models\Task as TaskModel;
 use App\Services\Acme\Action as AcmeAction;
@@ -47,15 +46,10 @@ class TaskJob implements ShouldQueue
 
             try {
                 if ($action === 'cancel_acme') {
-                    $acme = Acme::find($task->order_id);
-                    if (! $acme) {
-                        throw new ApiResponseException('ACME 订单不存在');
-                    }
-                    $result = (new AcmeAction($task->user_id ?? 0))->cancel($acme);
-                    throw new ApiResponseException($result['msg'] ?? '', code: $result['code']);
+                    (new AcmeAction)->cancel($task->order_id);
                 }
 
-                (new Action($task->user_id ?? 0))->$action($task->order_id);
+                (new Action)->$action($task->order_id);
             } catch (ApiResponseException $e) {
                 $response = $e->getApiResponse();
                 $data['result'] = $response;

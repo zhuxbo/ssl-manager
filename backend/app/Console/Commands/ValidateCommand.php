@@ -76,7 +76,7 @@ class ValidateCommand extends Command
                 // 检查是否到了验证时间
                 if ($record->next_check_at->timestamp <= time()) {
                     $cert = $order->latestCert;
-                    $action = new Action($order->user_id);
+                    $action = app(Action::class);
 
                     // 对于需要验证内容的方法，优先检查 validation 是否就绪
                     $method = $cert->dcv['method'] ?? '';
@@ -136,7 +136,7 @@ class ValidateCommand extends Command
                         }
                     } else {
                         // 其他状态：直接创建同步任务（如approving状态等待CA处理）
-                        $action = new Action($order->user_id);
+                        $action = app(Action::class);
                         $action->createTask($order->id, 'sync');
                         $this->info("订单 #$order->id: 已创建同步任务");
                     }

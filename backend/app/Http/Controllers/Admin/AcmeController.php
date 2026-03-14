@@ -3,12 +3,19 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Models\Acme;
-use App\Models\User;
 use App\Services\Acme\Action;
 use Illuminate\Http\Request;
 
 class AcmeController extends BaseController
 {
+    protected Action $action;
+
+    public function __construct()
+    {
+        parent::__construct();
+        $this->action = app(Action::class);
+    }
+
     /**
      * ACME 订单列表
      */
@@ -61,7 +68,7 @@ class AcmeController extends BaseController
     }
 
     /**
-     * 创建 ACME 订单（unpaid 状态）
+     * 创建 ACME 订单
      */
     public function new(Request $request): void
     {
@@ -73,17 +80,10 @@ class AcmeController extends BaseController
             'purchased_wildcard_count' => 'integer|min:0',
         ]);
 
-        $user = User::findOrFail($request->input('user_id'));
-
-        $acme = app(Action::class)->new(
-            $user,
-            $request->input('product_id'),
-            $request->input('period'),
-            (int) $request->input('purchased_standard_count', 0),
-            (int) $request->input('purchased_wildcard_count', 0),
-        );
-
-        $this->success(['order_id' => $acme->id]);
+        $this->action->new($request->only([
+            'user_id', 'product_id', 'period',
+            'purchased_standard_count', 'purchased_wildcard_count', 'remark',
+        ]));
     }
 
     /**
@@ -91,9 +91,7 @@ class AcmeController extends BaseController
      */
     public function pay(int $id): void
     {
-        $acme = Acme::findOrFail($id);
-        app(Action::class)->pay($acme);
-        $this->success();
+        $this->action->pay($id);
     }
 
     /**
@@ -101,16 +99,7 @@ class AcmeController extends BaseController
      */
     public function commit(int $id): void
     {
-        $acme = Acme::findOrFail($id);
-        $acme = app(Action::class)->commit($acme);
-
-        $acme->makeVisible('eab_hmac');
-
-        $this->success([
-            'order_id' => $acme->id,
-            'eab_kid' => $acme->eab_kid,
-            'eab_hmac' => $acme->eab_hmac,
-        ]);
+        $this->action->commit($id);
     }
 
     /**
@@ -118,7 +107,7 @@ class AcmeController extends BaseController
      */
     public function sync(int $id): void
     {
-        app(Action::class)->sync($id);
+        $this->action->sync($id);
     }
 
     /**
@@ -126,9 +115,7 @@ class AcmeController extends BaseController
      */
     public function commitCancel(int $id): void
     {
-        $acme = Acme::findOrFail($id);
-        app(Action::class)->commitCancel($acme);
-        $this->success();
+        $this->action->commitCancel($id);
     }
 
     /**
@@ -136,8 +123,6 @@ class AcmeController extends BaseController
      */
     public function remark(int $id, Request $request): void
     {
-        $acme = Acme::findOrFail($id);
-        $acme->update(['admin_remark' => $request->string('remark')->trim()->limit(255)]);
-        $this->success();
+        $this->action->remark($id, $request->string('remark')->trim()->limit(255), 'admin_remark');
     }
 }

@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\Acme;
 use App\Models\Admin;
 use App\Models\ApiToken;
 use App\Models\Callback;
@@ -73,6 +74,7 @@ abstract class Authenticate
         // 限制查询当前用户的数据
         if ($this->guardName() === 'user' && $guard->id()) {
             UserScope::addScopeToModels($guard->id(), [
+                Acme::class,
                 ApiToken::class,
                 Callback::class,
                 Order::class,

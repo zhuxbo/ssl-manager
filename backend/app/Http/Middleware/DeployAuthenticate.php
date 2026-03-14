@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\Acme;
 use App\Models\DeployToken;
 use App\Models\Order;
 use App\Models\Scopes\UserScope;
@@ -55,6 +56,7 @@ class DeployAuthenticate
         // 注意：Cert 表没有 user_id 字段，通过 Order 关联限制
         if ($deployToken->user_id) {
             UserScope::addScopeToModels($deployToken->user_id, [
+                Acme::class,
                 Order::class,
             ]);
         }

@@ -39,17 +39,9 @@ class Action
 
     protected mixed $api;
 
-    protected int $userId;
-
-    public function __construct(int $userId = 0)
+    public function __construct()
     {
-        $this->userId = $userId;
         $this->api = new Api;
-    }
-
-    public function getUserId(): int
-    {
-        return $this->userId;
     }
 
     /**
@@ -169,7 +161,7 @@ class Action
      */
     public function new(array $params): void
     {
-        $later = $this->checkDuplicate('new', [$params, $this->userId], 10);
+        $later = $this->checkDuplicate('new', [$params], 10);
         $later && $this->error('参数重复，请在 '.$later.' 秒后再提交申请');
 
         $params = $this->initParams($params);
@@ -206,7 +198,7 @@ class Action
      */
     public function batchNew(array $params): void
     {
-        $later = $this->checkDuplicate('batchNew', [$params, $this->userId], 10);
+        $later = $this->checkDuplicate('batchNew', [$params], 10);
         $later && $this->error('参数重复，请在 '.$later.' 秒后再提交批量申请');
 
         $domains = explode(',', $params['domains'] ?? '');
@@ -248,7 +240,7 @@ class Action
      */
     public function renew(array $params): void
     {
-        $later = $this->checkDuplicate('renew', [$params, $this->userId], 10);
+        $later = $this->checkDuplicate('renew', [$params], 10);
         $later && $this->error('参数重复，请在 '.$later.' 秒后再提交续费');
 
         $this->new($params);
@@ -261,7 +253,7 @@ class Action
      */
     public function reissue(array $params): void
     {
-        $later = $this->checkDuplicate('reissue', [$params, $this->userId], 10);
+        $later = $this->checkDuplicate('reissue', [$params], 10);
         $later && $this->error('参数重复，请在 '.$later.' 秒后再提交重签');
 
         $params = $this->initParams($params);
@@ -425,7 +417,7 @@ class Action
     public function sync(int $orderId, bool $force = false): void
     {
         // 10秒内仅请求一次 API 避免重复请求
-        if ($this->checkDuplicate('sync', [$orderId, $this->userId], 10)) {
+        if ($this->checkDuplicate('sync', [$orderId], 10)) {
             if ($force) {
                 return;
             } else {
@@ -627,7 +619,7 @@ class Action
      */
     public function revalidate(int $orderId): void
     {
-        $later = $this->checkDuplicate('revalidate', [$orderId, $this->userId]);
+        $later = $this->checkDuplicate('revalidate', [$orderId]);
         $later && $this->error('请在 '.$later.' 秒后再提交验证');
 
         $order = FindUtil::Order($orderId);
@@ -693,7 +685,7 @@ class Action
      */
     public function updateDCV(int $orderId, string $method): void
     {
-        $later = $this->checkDuplicate('updateDCV', [$orderId, $this->userId]);
+        $later = $this->checkDuplicate('updateDCV', [$orderId]);
         $later && $this->error('请在 '.$later.' 秒后再提交修改');
 
         $order = FindUtil::Order($orderId);
@@ -849,11 +841,9 @@ class Action
     /**
      * 备注
      */
-    public function remark(int $orderId, string $remark): void
+    public function remark(int $orderId, string $remark, string $field = 'remark'): void
     {
         $order = FindUtil::Order($orderId);
-
-        $field = $this->userId ? 'remark' : 'admin_remark';
         $order->update([$field => $remark]);
 
         $this->success();

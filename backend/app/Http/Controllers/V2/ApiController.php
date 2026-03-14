@@ -44,7 +44,7 @@ class ApiController extends Controller
 
         $this->user_id = $apiToken->user_id;
         $this->model = new Order;
-        $this->action = new Action($this->user_id);
+        $this->action = app(Action::class);
     }
 
     /**

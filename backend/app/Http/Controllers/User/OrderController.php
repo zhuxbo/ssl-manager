@@ -17,7 +17,7 @@ class OrderController extends BaseController
         parent::__construct();
 
         $this->guard->id() || $this->error('用户不存在');
-        $this->action = new Action($this->guard->id());
+        $this->action = app(Action::class);
     }
 
     use \App\Http\Traits\OrderController;
@@ -222,6 +222,7 @@ class OrderController extends BaseController
     public function new(): void
     {
         $params = request()->post();
+        $params['user_id'] = $this->guard->id();
         $params['action'] = 'new';
         $params['channel'] = 'web';
         $this->action->new($params);
@@ -235,6 +236,7 @@ class OrderController extends BaseController
     public function batchNew(): void
     {
         $params = request()->post();
+        $params['user_id'] = $this->guard->id();
         $params['action'] = 'new';
         $params['channel'] = 'web';
         $params['is_batch'] = true;

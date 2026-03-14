@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\Acme;
 use App\Models\ApiToken;
 use App\Models\Callback;
 use App\Models\Contact;
@@ -60,6 +61,7 @@ class ApiAuthenticate
 
         if ($apiToken->user_id) {
             UserScope::addScopeToModels($apiToken->user_id, [
+                Acme::class,
                 ApiToken::class,
                 Callback::class,
                 Order::class,

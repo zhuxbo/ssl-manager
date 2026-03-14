@@ -194,7 +194,7 @@ test('管理员可以添加订单备注', function () {
     $mockAction = Mockery::mock(Action::class);
     $mockAction->shouldReceive('remark')
         ->once()
-        ->with($order->id, '测试备注');
+        ->with($order->id, '测试备注', 'admin_remark');
     $this->app->instance(Action::class, $mockAction);
 
     $response = $this->actingAsAdmin($this->admin)->postJson("/api/admin/order/remark/$order->id", [

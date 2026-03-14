@@ -71,7 +71,7 @@ trait ActionTrait
         $params['params'] = $params;
 
         if ($params['action'] == 'new') {
-            $params['user_id'] = $this->userId ?: (int) ($params['user_id'] ?? 0);
+            $params['user_id'] = (int) ($params['user_id'] ?? 0);
             FindUtil::User($params['user_id'], true);
 
             $product = FindUtil::Product((int) ($params['product_id'] ?? 0), true);
@@ -91,14 +91,12 @@ trait ActionTrait
         } else {
             isset($params['order_id']) || $this->error('订单ID不能为空');
 
-            $whereUser = $this->userId ? ['user_id' => $this->userId] : [];
             $orderId = $params['order_id'];
 
             $order = Order::with(['product', 'latestCert'])
                 ->whereHas('user')
                 ->whereHas('product')
                 ->whereHas('latestCert')
-                ->where($whereUser)
                 ->where('id', $orderId)
                 ->first();
 
@@ -818,13 +816,10 @@ trait ActionTrait
         $result = [];
         DB::beginTransaction();
         try {
-            $whereUser = $this->userId ? ['orders.user_id' => $this->userId] : [];
-
             // 查询订单并加锁 不查询产品 避免锁定产品
             $order = Order::with(['user', 'latestCert'])
                 ->whereHas('user')
                 ->whereHas('latestCert')
-                ->where($whereUser)
                 ->lock()
                 ->find($order_id);
 
@@ -837,10 +832,10 @@ trait ActionTrait
             // 获取交易信息 订单金额为负数
             $transaction = OrderUtil::getOrderTransaction($order->toArray());
 
-            // 会员提交时验证余额是否足够
+            // 验证余额是否足够
             $balance_after = bcadd((string) $order->user->balance, (string) $transaction['amount'], 2);
             if (bccomp($balance_after, (string) $order->user->credit_limit, 2) === -1) {
-                $this->userId && $this->error('余额不足');
+                $this->error('余额不足');
             }
 
             // 创建交易记录并扣费

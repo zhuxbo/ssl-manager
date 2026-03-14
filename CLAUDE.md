@@ -69,8 +69,8 @@ skills/         # 开发规范（详细文档）
 ### ACME 订阅管理
 
 - **模型**：单一 `Acme` 模型（`App\Models\Acme`，表 `acmes`），`eab_hmac` 加密存储且默认 hidden
-- **计费流程**：`Action` 三步流程：`new`（unpaid/待支付）→ `pay`（pending/待提交）→ `commit`（提交 Gateway → active）
-- **取消流程**：`commitCancel`（标记 cancelling + 创建 Task `cancel_acme` + TaskJob 延时 123s）→ `cancel`（由 TaskJob 调用，调 Api->cancel() + 退费），与传统订单共用 Task + TaskJob 机制
+- **计费流程**：`Action` 三步流程：`new(array $params)`（unpaid/待支付）→ `pay(int $id)`（pending/待提交）→ `commit(int $id)`（提交 Gateway → active）；`deployNew(array $params)` 一步完成三步
+- **取消流程**：`commitCancel(int $id)`（标记 cancelling + 创建 Task `cancel_acme` + TaskJob 延时 123s）→ `cancel(int $id)`（由 TaskJob 调用，调 Api->cancel() + 退费），与传统订单共用 Task + TaskJob 机制
 - **Transaction 类型**：`acme_order`/`acme_cancel`
 - **产品标识**：`products.product_type = 'acme'`
 - **Source API 层**：`Services/Acme/Api/` 按 `product.source` 路由，`AcmeSourceApiInterface` 统一 `new`/`get`/`cancel`/`getProducts` 接口，通过 SDK 代理调用 Gateway `/api/acme/*` 端点
@@ -88,7 +88,8 @@ skills/         # 开发规范（详细文档）
 - **取消/吊销不静默成功**：上游接口未返回明确成功时，一律返回失败；不允许跳过上游调用直接标记本地状态
 - **ACME 计费流程**：`Action` 三步流程 `new→pay→commit` 详见"ACME 订阅管理"章节
 - **ACME 取消策略**：未提交上游（无 api_id）的 pending 订单直接退费取消；已提交上游的订单通过延时任务调 Api->cancel() 后退费
-- **ACME Action 统一封装上游 API 调用**：所有上游 API 调用（new/get/cancel 等）必须通过 `Services/Acme/Action`，不允许控制器直接调 `Api`。Action 构造函数接收 `userId`（对齐 `Order\Action`），操作方法接收 ID，创建方法接收参数数组。内部负责模型查询、参数过滤、返回值校正、重复提交防护、状态入库。控制器仅做请求验证 + 一行调用 Action
+- **Action 无 userId 构造参数**：`Acme\Action` 和 `Order\Action` 均无 `userId` 构造参数，通过 `app(Action::class)` 获取实例。用户隔离由 UserScope 全局作用域保证（User/API/Deploy 中间件注册），控制器在创建方法的 params 中传入 `user_id`
+- **ACME Action 统一封装上游 API 调用**：所有上游 API 调用（new/get/cancel 等）必须通过 `Services/Acme/Action`，不允许控制器直接调 `Api`。操作方法接收 ID（int），创建方法接收参数数组。内部负责模型查询、参数过滤、返回值校正、重复提交防护、状态入库。控制器仅做请求验证 + 一行调用 Action
 
 ### 自动续费/重签
 
@@ -108,4 +109,5 @@ skills/         # 开发规范（详细文档）
 - **Commands**（8 文件 40 用例）：AutoRenew、Expire、DelegationCheck、DelegationCleanup、Validate、Purge、ResetAdminPassword、ClearAllCache
 - **Models**（15 文件 163 用例）：Order、User、Cert、Admin、Product、Notification、NotificationTemplate、Contact、Organization、Fund、Invoice、Transaction、CnameDelegation、ApiToken、Task
 - **Middleware**（8 文件）：AdminAuthenticate、UserAuthenticate、ApiAuthenticate、DeployAuthenticate、LogOperation、RateLimiter、LoginRateLimiter、FlushLogs
+- **ACME**：Unit/Services/Acme/ActionTest（27 用例）、Feature/Controllers/Admin/AcmeControllerTest（11 用例）、Feature/Controllers/User/AcmeControllerTest（9 用例）、Feature/Controllers/Deploy/AcmeControllerTest（5 用例）
 - 已有 Unit/Models 测试（DeployToken、OrderAutoFields、UserAutoSettings）不重复覆盖
