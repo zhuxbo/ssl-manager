@@ -1,18 +1,33 @@
 <?php
 
-use App\Services\Acme\Api\certum\Sdk;
+use App\Models\Setting;
+use App\Models\SettingGroup;
+use App\Services\Acme\Api\default\Sdk;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 
-uses(Tests\TestCase::class);
+uses(Tests\TestCase::class, RefreshDatabase::class)->group('database');
 
-beforeEach(function () {
-    config([
-        'acme.api.base_url' => 'https://gateway.test',
-        'acme.api.api_key' => 'test-api-key-123',
-    ]);
-});
+/**
+ * 创建 ACME SDK 所需的系统设置
+ */
+function createAcmeSdkSettings(string $acmeUrl = '', string $acmeToken = '', string $caUrl = '', string $caToken = ''): void
+{
+    $group = SettingGroup::firstOrCreate(['name' => 'ca'], ['title' => '证书接口', 'weight' => 2]);
+
+    foreach (['acme_url' => $acmeUrl, 'acme_token' => $acmeToken, 'url' => $caUrl, 'token' => $caToken] as $key => $value) {
+        $setting = Setting::firstOrCreate(
+            ['group_id' => $group->id, 'key' => $key],
+            ['type' => 'string', 'value' => null, 'weight' => 0]
+        );
+        $setting->value = $value ?: null;
+        $setting->save();
+    }
+}
 
 test('new sends POST to gateway', function () {
+    createAcmeSdkSettings(acmeUrl: 'https://gateway.test/api/acme', acmeToken: 'test-acme-token');
+
     Http::fake([
         'gateway.test/api/acme/new' => Http::response(['code' => 1, 'data' => ['id' => 1]], 200),
     ]);
@@ -25,12 +40,14 @@ test('new sends POST to gateway', function () {
     Http::assertSent(function ($request) {
         return $request->url() === 'https://gateway.test/api/acme/new'
             && $request->method() === 'POST'
-            && $request->hasHeader('Authorization', 'Bearer test-api-key-123')
+            && $request->hasHeader('Authorization', 'Bearer test-acme-token')
             && $request->data()['customer'] === 'test@example.com';
     });
 });
 
 test('get sends GET to gateway', function () {
+    createAcmeSdkSettings(acmeUrl: 'https://gateway.test/api/acme', acmeToken: 'test-acme-token');
+
     Http::fake([
         'gateway.test/api/acme/get*' => Http::response(['code' => 1, 'data' => ['id' => 42]], 200),
     ]);
@@ -48,6 +65,8 @@ test('get sends GET to gateway', function () {
 });
 
 test('cancel sends POST to gateway', function () {
+    createAcmeSdkSettings(acmeUrl: 'https://gateway.test/api/acme', acmeToken: 'test-acme-token');
+
     Http::fake([
         'gateway.test/api/acme/cancel' => Http::response(['code' => 1, 'data' => []], 200),
     ]);
@@ -65,6 +84,8 @@ test('cancel sends POST to gateway', function () {
 });
 
 test('sync sends POST to gateway', function () {
+    createAcmeSdkSettings(acmeUrl: 'https://gateway.test/api/acme', acmeToken: 'test-acme-token');
+
     Http::fake([
         'gateway.test/api/acme/sync' => Http::response(['code' => 1, 'data' => []], 200),
     ]);
@@ -82,10 +103,7 @@ test('sync sends POST to gateway', function () {
 });
 
 test('returns error when not configured', function () {
-    config([
-        'acme.api.base_url' => '',
-        'acme.api.api_key' => '',
-    ]);
+    createAcmeSdkSettings();
 
     $sdk = new Sdk;
     $result = $sdk->get(1);
@@ -95,6 +113,8 @@ test('returns error when not configured', function () {
 });
 
 test('returns error on connection failure', function () {
+    createAcmeSdkSettings(acmeUrl: 'https://gateway.test/api/acme', acmeToken: 'test-acme-token');
+
     Http::fake(function () {
         throw new \Illuminate\Http\Client\ConnectionException('Connection refused');
     });
@@ -107,6 +127,8 @@ test('returns error on connection failure', function () {
 });
 
 test('returns error when response has no code', function () {
+    createAcmeSdkSettings(acmeUrl: 'https://gateway.test/api/acme', acmeToken: 'test-acme-token');
+
     Http::fake([
         'gateway.test/api/acme/get*' => Http::response(['data' => []], 200),
     ]);
@@ -119,6 +141,8 @@ test('returns error when response has no code', function () {
 });
 
 test('returns error on http failure', function () {
+    createAcmeSdkSettings(acmeUrl: 'https://gateway.test/api/acme', acmeToken: 'test-acme-token');
+
     Http::fake([
         'gateway.test/api/acme/get*' => Http::response(['msg' => '服务器错误'], 500),
     ]);
@@ -127,4 +151,22 @@ test('returns error on http failure', function () {
     $result = $sdk->get(1);
 
     expect($result['code'])->toBe(0);
+});
+
+test('falls back to ca url when acme_url not set', function () {
+    createAcmeSdkSettings(caUrl: 'https://gateway.test/api/v2', caToken: 'fallback-token');
+
+    Http::fake([
+        'gateway.test/api/acme/get-products*' => Http::response(['code' => 1, 'data' => []], 200),
+    ]);
+
+    $sdk = new Sdk;
+    $result = $sdk->getProducts();
+
+    expect($result['code'])->toBe(1);
+
+    Http::assertSent(function ($request) {
+        return str_contains($request->url(), 'https://gateway.test/api/acme/get-products')
+            && $request->hasHeader('Authorization', 'Bearer fallback-token');
+    });
 });

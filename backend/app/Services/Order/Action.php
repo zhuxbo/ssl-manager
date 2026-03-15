@@ -75,7 +75,13 @@ class Action
             $this->error('没有获取到产品');
         }
 
-        $products = ['code' => 1, 'data' => $allProducts];
+        // 按 code（api_id）去重，后出现的覆盖前面的
+        $unique = [];
+        foreach ($allProducts as $item) {
+            $unique[$item['code']] = $item;
+        }
+
+        $products = ['code' => 1, 'data' => array_values($unique)];
 
         foreach ($products['data'] as $item) {
             $item['source'] = $source;

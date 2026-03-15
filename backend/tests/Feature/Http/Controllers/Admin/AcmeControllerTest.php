@@ -5,6 +5,8 @@ use App\Models\Acme;
 use App\Models\Admin;
 use App\Models\Product;
 use App\Models\ProductPrice;
+use App\Models\Setting;
+use App\Models\SettingGroup;
 use App\Models\User;
 use App\Services\Acme\Action;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -17,6 +19,25 @@ uses(RefreshDatabase::class);
 beforeEach(function () {
     $this->admin = Admin::factory()->create();
 });
+
+/**
+ * 创建 Gateway 系统设置
+ */
+function setupAdminGatewaySettings(string $url = 'https://fake-gateway.test/api/v2', string $token = 'fake-key'): void
+{
+    $group = SettingGroup::firstOrCreate(['name' => 'ca'], ['title' => '证书接口', 'weight' => 2]);
+
+    foreach (['url' => $url, 'token' => $token, 'acme_url' => null, 'acme_token' => null] as $key => $value) {
+        $setting = Setting::firstOrCreate(
+            ['group_id' => $group->id, 'key' => $key],
+            ['type' => 'string', 'value' => null, 'weight' => 0]
+        );
+        if ($value !== null) {
+            $setting->value = $value;
+            $setting->save();
+        }
+    }
+}
 
 /**
  * 创建 ACME 产品及价格
@@ -178,7 +199,7 @@ test('pay 成功支付', function () {
 
 test('commit 成功提交', function () {
     $user = User::factory()->create(['balance' => '500.00']);
-    $product = createAcmeProduct(['source' => 'certumcnssl']);
+    $product = createAcmeProduct(['source' => 'default']);
     createProductPrice($product, $user);
 
     $acme = createAcmeViaAction($user, $product);
@@ -194,7 +215,7 @@ test('commit 成功提交', function () {
     expect($acme->status)->toBe(Acme::STATUS_PENDING);
 
     // Mock Gateway HTTP
-    config(['acme.api.base_url' => 'https://fake-gateway.test', 'acme.api.api_key' => 'fake-key']);
+    setupAdminGatewaySettings();
     Http::fake([
         'fake-gateway.test/*' => Http::response([
             'code' => 1,
@@ -221,13 +242,13 @@ test('commit 成功提交', function () {
 // ==================== sync ====================
 
 test('sync 成功同步', function () {
-    $product = createAcmeProduct(['source' => 'certumcnssl']);
+    $product = createAcmeProduct(['source' => 'default']);
     $acme = Acme::factory()->active()->create([
         'product_id' => $product->id,
         'api_id' => 'gw-sync-test',
     ]);
 
-    config(['acme.api.base_url' => 'https://fake-gateway.test', 'acme.api.api_key' => 'fake-key']);
+    setupAdminGatewaySettings();
     Http::fake([
         'fake-gateway.test/*' => Http::response([
             'code' => 1,

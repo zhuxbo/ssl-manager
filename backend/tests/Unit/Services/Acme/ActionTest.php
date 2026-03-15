@@ -5,6 +5,8 @@ use App\Jobs\TaskJob;
 use App\Models\Acme;
 use App\Models\Product;
 use App\Models\ProductPrice;
+use App\Models\Setting;
+use App\Models\SettingGroup;
 use App\Models\Task;
 use App\Models\Transaction;
 use App\Services\Acme\Action;
@@ -22,6 +24,25 @@ beforeEach(function () {
     $this->seeder = DatabaseSeeder::class;
     $this->service = app(Action::class);
 });
+
+/**
+ * 创建 Gateway 系统设置（ACME SDK 通过回落机制使用 ca.url/token）
+ */
+function setupGatewaySettings(string $url = 'https://fake-gateway.test/api/v2', string $token = 'fake-key'): void
+{
+    $group = SettingGroup::firstOrCreate(['name' => 'ca'], ['title' => '证书接口', 'weight' => 2]);
+
+    foreach (['url' => $url, 'token' => $token, 'acme_url' => null, 'acme_token' => null] as $key => $value) {
+        $setting = Setting::firstOrCreate(
+            ['group_id' => $group->id, 'key' => $key],
+            ['type' => 'string', 'value' => null, 'weight' => 0]
+        );
+        if ($value !== null) {
+            $setting->value = $value;
+            $setting->save();
+        }
+    }
+}
 
 /**
  * 创建产品价格
@@ -213,13 +234,13 @@ test('pay rejects when balance insufficient', function () {
 
 test('commit 成功调用 API 转 active 返回 eab 数据', function () {
     $user = $this->createTestUser(['balance' => '500.00']);
-    $product = $this->createTestProduct(['product_type' => Product::TYPE_ACME, 'source' => 'certumcnssl']);
+    $product = $this->createTestProduct(['product_type' => Product::TYPE_ACME, 'source' => 'default']);
     createAcmeProductPrice($product->id, $user);
 
     $acme = createAcmeOrder($user, $product);
     expectApiSuccess(fn () => $this->service->pay($acme->id));
 
-    config(['acme.api.base_url' => 'https://fake-gateway.test', 'acme.api.api_key' => 'fake-key']);
+    setupGatewaySettings();
     Http::fake([
         'fake-gateway.test/*' => Http::response([
             'code' => 1,
@@ -257,13 +278,13 @@ test('commit 非 pending 状态报错', function () {
 
 test('commit API 返回失败保持 pending', function () {
     $user = $this->createTestUser(['balance' => '500.00']);
-    $product = $this->createTestProduct(['product_type' => Product::TYPE_ACME, 'source' => 'certumcnssl']);
+    $product = $this->createTestProduct(['product_type' => Product::TYPE_ACME, 'source' => 'default']);
     createAcmeProductPrice($product->id, $user);
 
     $acme = createAcmeOrder($user, $product);
     expectApiSuccess(fn () => $this->service->pay($acme->id));
 
-    config(['acme.api.base_url' => 'https://fake-gateway.test', 'acme.api.api_key' => 'fake-key']);
+    setupGatewaySettings();
     Http::fake([
         'fake-gateway.test/*' => Http::response(['code' => 0, 'msg' => '上游提交失败'], 500),
     ]);
@@ -375,7 +396,7 @@ test('cancel rejects non-cancelling order', function () {
 
 test('cancel with api_id upstream returns revoked → status revoked + refund', function () {
     $user = $this->createTestUser(['balance' => '500.00']);
-    $product = $this->createTestProduct(['product_type' => Product::TYPE_ACME, 'source' => 'certumcnssl']);
+    $product = $this->createTestProduct(['product_type' => Product::TYPE_ACME, 'source' => 'default']);
     createAcmeProductPrice($product->id, $user);
 
     $acme = createAcmeOrder($user, $product);
@@ -387,7 +408,7 @@ test('cancel with api_id upstream returns revoked → status revoked + refund', 
         'api_id' => 'upstream-revoke-test',
     ]);
 
-    config(['acme.api.base_url' => 'https://fake-gateway.test', 'acme.api.api_key' => 'fake-key']);
+    setupGatewaySettings();
     Http::fake([
         'fake-gateway.test/*' => Http::response(['code' => 1, 'data' => ['status' => 'revoked']]),
     ]);
@@ -405,7 +426,7 @@ test('cancel with api_id upstream returns revoked → status revoked + refund', 
 
 test('cancel with api_id upstream returns cancelled → status cancelled + refund', function () {
     $user = $this->createTestUser(['balance' => '500.00']);
-    $product = $this->createTestProduct(['product_type' => Product::TYPE_ACME, 'source' => 'certumcnssl']);
+    $product = $this->createTestProduct(['product_type' => Product::TYPE_ACME, 'source' => 'default']);
     createAcmeProductPrice($product->id, $user);
 
     $acme = createAcmeOrder($user, $product);
@@ -417,7 +438,7 @@ test('cancel with api_id upstream returns cancelled → status cancelled + refun
         'api_id' => 'upstream-cancel-test',
     ]);
 
-    config(['acme.api.base_url' => 'https://fake-gateway.test', 'acme.api.api_key' => 'fake-key']);
+    setupGatewaySettings();
     Http::fake([
         'fake-gateway.test/*' => Http::response(['code' => 1, 'data' => ['status' => 'cancelled']]),
     ]);
@@ -435,7 +456,7 @@ test('cancel with api_id upstream returns cancelled → status cancelled + refun
 
 test('cancel with api_id upstream error → stays cancelling, no refund', function () {
     $user = $this->createTestUser(['balance' => '500.00']);
-    $product = $this->createTestProduct(['product_type' => Product::TYPE_ACME, 'source' => 'certumcnssl']);
+    $product = $this->createTestProduct(['product_type' => Product::TYPE_ACME, 'source' => 'default']);
     createAcmeProductPrice($product->id, $user);
 
     $acme = createAcmeOrder($user, $product);
@@ -447,7 +468,7 @@ test('cancel with api_id upstream error → stays cancelling, no refund', functi
         'api_id' => 'upstream-error-test',
     ]);
 
-    config(['acme.api.base_url' => 'https://fake-gateway.test', 'acme.api.api_key' => 'fake-key']);
+    setupGatewaySettings();
     Http::fake([
         'fake-gateway.test/*' => Http::response(['code' => 0, 'msg' => '上游取消失败'], 500),
     ]);
@@ -470,7 +491,7 @@ test('cancel with api_id upstream error → stays cancelling, no refund', functi
 
 test('sync 成功同步状态', function () {
     $user = $this->createTestUser(['balance' => '500.00']);
-    $product = $this->createTestProduct(['product_type' => Product::TYPE_ACME, 'source' => 'certumcnssl']);
+    $product = $this->createTestProduct(['product_type' => Product::TYPE_ACME, 'source' => 'default']);
 
     $acme = Acme::factory()->active()->create([
         'user_id' => $user->id,
@@ -478,7 +499,7 @@ test('sync 成功同步状态', function () {
         'api_id' => 'gw-sync-test',
     ]);
 
-    config(['acme.api.base_url' => 'https://fake-gateway.test', 'acme.api.api_key' => 'fake-key']);
+    setupGatewaySettings();
     Http::fake([
         'fake-gateway.test/*' => Http::response([
             'code' => 1,
@@ -495,7 +516,7 @@ test('sync 成功同步状态', function () {
 
 test('sync 10秒内缓存不重复请求', function () {
     $user = $this->createTestUser(['balance' => '500.00']);
-    $product = $this->createTestProduct(['product_type' => Product::TYPE_ACME, 'source' => 'certumcnssl']);
+    $product = $this->createTestProduct(['product_type' => Product::TYPE_ACME, 'source' => 'default']);
 
     $acme = Acme::factory()->active()->create([
         'user_id' => $user->id,
@@ -567,14 +588,14 @@ test('remark 更新 admin_remark 字段', function () {
     expect($acme->admin_remark)->toBe('管理员备注');
 });
 
-// ==================== deployNew ====================
+// ==================== newAndCommit ====================
 
-test('deployNew 一步完成 new+pay+commit', function () {
+test('newAndCommit 一步完成 new+pay+commit', function () {
     $user = $this->createTestUser(['balance' => '500.00']);
-    $product = $this->createTestProduct(['product_type' => Product::TYPE_ACME, 'source' => 'certumcnssl']);
+    $product = $this->createTestProduct(['product_type' => Product::TYPE_ACME, 'source' => 'default']);
     createAcmeProductPrice($product->id, $user);
 
-    config(['acme.api.base_url' => 'https://fake-gateway.test', 'acme.api.api_key' => 'fake-key']);
+    setupGatewaySettings();
     Http::fake([
         'fake-gateway.test/*' => Http::response([
             'code' => 1,
@@ -587,7 +608,7 @@ test('deployNew 一步完成 new+pay+commit', function () {
         ]),
     ]);
 
-    $response = expectApiSuccess(fn () => $this->service->deployNew([
+    $response = expectApiSuccess(fn () => $this->service->newAndCommit([
         'user_id' => $user->id,
         'product_id' => $product->id,
         'period' => 12,
@@ -603,13 +624,13 @@ test('deployNew 一步完成 new+pay+commit', function () {
     expect($acme->api_id)->toBe('gw-deploy');
 });
 
-test('deployNew 余额不足报错', function () {
+test('newAndCommit 余额不足报错', function () {
     $user = $this->createTestUser(['balance' => '0.00']);
     $product = $this->createTestProduct(['product_type' => Product::TYPE_ACME]);
     createAcmeProductPrice($product->id, $user, '500.00');
 
     expectApiError(
-        fn () => $this->service->deployNew([
+        fn () => $this->service->newAndCommit([
             'user_id' => $user->id,
             'product_id' => $product->id,
             'period' => 12,
@@ -620,11 +641,11 @@ test('deployNew 余额不足报错', function () {
     );
 });
 
-test('deployNew 产品不存在报错', function () {
+test('newAndCommit 产品不存在报错', function () {
     $user = $this->createTestUser(['balance' => '500.00']);
 
     expectApiError(
-        fn () => $this->service->deployNew([
+        fn () => $this->service->newAndCommit([
             'user_id' => $user->id,
             'product_id' => 99999,
             'period' => 12,

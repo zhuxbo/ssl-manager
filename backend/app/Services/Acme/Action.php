@@ -56,13 +56,16 @@ class Action
     }
 
     /**
-     * Deploy 一步到位：创建 + 支付 + 提交
+     * 一步到位：创建 + 支付 + 提交，失败时回滚全部记录
      */
-    public function deployNew(array $params): void
+    public function newAndCommit(array $params): void
     {
-        $acme = $this->createOrder($params);
-        $acme = $this->payOrder($acme);
-        $acme = $this->commitOrder($acme);
+        $acme = DB::transaction(function () use ($params) {
+            $acme = $this->createOrder($params);
+            $acme = $this->payOrder($acme);
+
+            return $this->commitOrder($acme);
+        });
 
         $acme->makeVisible('eab_hmac');
         $this->success([

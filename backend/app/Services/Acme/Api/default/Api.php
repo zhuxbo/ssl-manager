@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Services\Acme\Api\certum;
+namespace App\Services\Acme\Api\default;
 
 use App\Services\Acme\Api\AcmeSourceApiInterface;
 

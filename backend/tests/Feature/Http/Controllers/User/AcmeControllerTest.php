@@ -4,6 +4,8 @@ use App\Exceptions\ApiResponseException;
 use App\Models\Acme;
 use App\Models\Product;
 use App\Models\ProductPrice;
+use App\Models\Setting;
+use App\Models\SettingGroup;
 use App\Models\User;
 use App\Services\Acme\Action;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -12,6 +14,25 @@ use Illuminate\Support\Facades\Queue;
 
 uses(Tests\Traits\ActsAsUser::class);
 uses(RefreshDatabase::class);
+
+/**
+ * 创建 Gateway 系统设置
+ */
+function setupUserGatewaySettings(string $url = 'https://fake-gateway.test/api/v2', string $token = 'fake-key'): void
+{
+    $group = SettingGroup::firstOrCreate(['name' => 'ca'], ['title' => '证书接口', 'weight' => 2]);
+
+    foreach (['url' => $url, 'token' => $token, 'acme_url' => null, 'acme_token' => null] as $key => $value) {
+        $setting = Setting::firstOrCreate(
+            ['group_id' => $group->id, 'key' => $key],
+            ['type' => 'string', 'value' => null, 'weight' => 0]
+        );
+        if ($value !== null) {
+            $setting->value = $value;
+            $setting->save();
+        }
+    }
+}
 
 /**
  * 创建 ACME 产品
@@ -210,14 +231,14 @@ test('pay 他人订单返回 404', function () {
 
 test('commit 成功提交', function () {
     $user = User::factory()->withBalance('1000.00')->create();
-    $product = createUserAcmeProduct(['source' => 'certumcnssl']);
+    $product = createUserAcmeProduct(['source' => 'default']);
     createUserProductPrice($product, $user);
 
     $acme = createUserAcmeViaAction($user, $product);
     $acme = payUserAcmeViaAction($acme);
     expect($acme->status)->toBe(Acme::STATUS_PENDING);
 
-    config(['acme.api.base_url' => 'https://fake-gateway.test', 'acme.api.api_key' => 'fake-key']);
+    setupUserGatewaySettings();
     Http::fake([
         'fake-gateway.test/*' => Http::response([
             'code' => 1,

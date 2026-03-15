@@ -69,16 +69,18 @@ skills/         # 开发规范（详细文档）
 ### ACME 订阅管理
 
 - **模型**：单一 `Acme` 模型（`App\Models\Acme`，表 `acmes`），`eab_hmac` 加密存储且默认 hidden
-- **计费流程**：`Action` 三步流程：`new(array $params)`（unpaid/待支付）→ `pay(int $id)`（pending/待提交）→ `commit(int $id)`（提交 Gateway → active）；`deployNew(array $params)` 一步完成三步
+- **计费流程**：`Action` 三步流程：`new(array $params)`（unpaid/待支付）→ `pay(int $id)`（pending/待提交）→ `commit(int $id)`（提交 Gateway → active）；`newAndCommit(array $params)` 一步完成三步（事务保护，失败回滚）
 - **取消流程**：`commitCancel(int $id)`（标记 cancelling + 创建 Task `cancel_acme` + TaskJob 延时 123s）→ `cancel(int $id)`（由 TaskJob 调用，调 Api->cancel() + 退费），与传统订单共用 Task + TaskJob 机制
 - **Transaction 类型**：`acme_order`/`acme_cancel`
 - **产品标识**：`products.product_type = 'acme'`
-- **Source API 层**：`Services/Acme/Api/` 按 `product.source` 路由，`AcmeSourceApiInterface` 统一 `new`/`get`/`cancel`/`getProducts` 接口，通过 SDK 代理调用 Gateway `/api/acme/*` 端点
-- **产品导入**：`Action::importProduct()` 同时查询 Order 和 ACME 两端产品（分别从传统 `Order\Api` 和 `Acme\Api` 获取）
+- **Source API 层**：`Services/Acme/Api/` 按 `product.source` 路由，仅 `default` 源（和 Order 一致），`AcmeSourceApiInterface` 统一 `new`/`get`/`cancel`/`getProducts` 接口，`default/Sdk` 通过系统设置 `ca.acme_url`/`ca.acme_token`（回落到 `ca.url`/`ca.token`）调用 Gateway `/api/acme/*` 端点
+- **产品导入**：`Order\Action::importProduct()` 同时查询 Order 和 ACME 两端产品，合并后按 `api_id` 去重
 - **控制器路由**：
+  - API：`/api/acme/` — new, get, cancel, get-products（对下游代理，与 Gateway 对齐）
   - Admin：`/api/admin/acme/` — index, show, new, pay, commit, sync, commit-cancel, remark
-  - User：`/api/acme/` — index, show, new, pay, commit, commit-cancel（限当前用户）
+  - User：`/api/user/acme/` — index, show, new, pay, commit, commit-cancel（限当前用户）
   - Deploy：`/api/deploy/acme/` — new（一步到位：创建+支付+提交）, get（含 EAB）
+- **产品 API 分离**：`/api/v2/get-products` 排除 ACME 产品，`/api/acme/get-products` 仅返回 ACME 产品
 - **传统流程完全隔离**：ACME 通过独立控制器、服务和前端模块处理，与传统订单无交集
 
 ## 系统架构约定

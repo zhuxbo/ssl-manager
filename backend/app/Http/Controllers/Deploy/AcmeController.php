@@ -27,7 +27,7 @@ class AcmeController extends Controller
             $this->error('Unauthorized');
         }
 
-        app(Action::class)->deployNew([
+        app(Action::class)->newAndCommit([
             'user_id' => $userId,
             'product_id' => $request->input('product_id'),
             'period' => $request->input('period'),

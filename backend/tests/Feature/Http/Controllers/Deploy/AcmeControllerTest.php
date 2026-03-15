@@ -4,11 +4,32 @@ use App\Models\Acme;
 use App\Models\DeployToken;
 use App\Models\Product;
 use App\Models\ProductPrice;
+use App\Models\Setting;
+use App\Models\SettingGroup;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 
 uses(RefreshDatabase::class);
+
+/**
+ * 创建 Gateway 系统设置
+ */
+function setupDeployGatewaySettings(string $url = 'https://fake-gateway.test/api/v2', string $token = 'fake-key'): void
+{
+    $group = SettingGroup::firstOrCreate(['name' => 'ca'], ['title' => '证书接口', 'weight' => 2]);
+
+    foreach (['url' => $url, 'token' => $token, 'acme_url' => null, 'acme_token' => null] as $key => $value) {
+        $setting = Setting::firstOrCreate(
+            ['group_id' => $group->id, 'key' => $key],
+            ['type' => 'string', 'value' => null, 'weight' => 0]
+        );
+        if ($value !== null) {
+            $setting->value = $value;
+            $setting->save();
+        }
+    }
+}
 
 test('new 一步到位成功', function () {
     $user = User::factory()->create(['balance' => '1000.00']);
@@ -16,7 +37,7 @@ test('new 一步到位成功', function () {
 
     $product = Product::factory()->create([
         'product_type' => Product::TYPE_ACME,
-        'source' => 'certum',
+        'source' => 'default',
         'periods' => [12],
     ]);
 
@@ -29,7 +50,7 @@ test('new 一步到位成功', function () {
         'alternative_wildcard_price' => '20.00',
     ]);
 
-    config(['acme.api.base_url' => 'https://fake-gateway.test', 'acme.api.api_key' => 'fake-key']);
+    setupDeployGatewaySettings();
     Http::fake([
         'fake-gateway.test/*' => Http::response([
             'code' => 1,
@@ -76,7 +97,7 @@ test('new 余额不足报错', function () {
 
     $product = Product::factory()->create([
         'product_type' => Product::TYPE_ACME,
-        'source' => 'certum',
+        'source' => 'default',
         'periods' => [12],
     ]);
 
