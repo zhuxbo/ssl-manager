@@ -620,7 +620,7 @@ except:
 
         # 如果存在旧的 release_url，合并到新的 version.json
         if [ -n "$old_release_url" ]; then
-            # 使用 Python 处理 JSON 合并
+            # 使用 Python 处理 JSON 合并（管理员手工运行，变量来自可信的本地文件）
             python3 << PYEOF
 import json
 with open("$INSTALL_DIR/version.json", "r") as f:

@@ -79,6 +79,7 @@ import { ArrowDown, Refresh } from "@element-plus/icons-vue";
 import { useMultiTagsStoreHook } from "@/store/modules/multiTags";
 import { useRoute } from "vue-router";
 import { useDetail } from "@/views/order/detail";
+import dayjs from "dayjs";
 
 const { toDetail } = useDetail();
 const route = useRoute();
@@ -99,7 +100,7 @@ const allowCancel = computed(() => {
   }
   return (
     ["processing", "approving", "active"].includes(order.latest_cert.status) &&
-    Math.floor(Date.now() / 1000) - new Date(order.created_at).getTime() <
+    dayjs().diff(dayjs(order.created_at), "seconds") <
       86400 * order.product.refund_period
   );
 });

@@ -114,7 +114,7 @@ class ApiController extends Controller
     public function getOrders(): void
     {
         $page = $this->request->input('page', 1) ?? 1;
-        $pageSize = $this->request->input('page_size', 100) ?? 100;
+        $pageSize = min(max((int) ($this->request->input('page_size', 100) ?? 100), 1), 100);
         $status = $this->request->input('status', 'all') ?? 'all';
 
         $whereStatus = [];

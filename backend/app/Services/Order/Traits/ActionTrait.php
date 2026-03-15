@@ -445,7 +445,7 @@ trait ActionTrait
      */
     protected function generateSectigoDcv(string $method, string $csr, string $unique_value): array
     {
-        $random = sprintf('%04x%04x', mt_rand(0, 0xFFFF), mt_rand(0, 0xFFFF));
+        $random = bin2hex(random_bytes(4));
         $tempDir = storage_path('temp-certs/'.$random);
         mkdir($tempDir, 0755, true);
 

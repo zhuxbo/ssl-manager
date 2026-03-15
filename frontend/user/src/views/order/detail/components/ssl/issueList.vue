@@ -18,10 +18,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, inject, watch } from "vue";
+import { ref, reactive, inject, watch } from "vue";
 import type { PaginationProps } from "@pureadmin/table";
 import { PureTable } from "@pureadmin/table";
-import * as CertApi from "@/api/cert";
+import * as OrderApi from "@/api/order";
 import { tableColumns } from "../issueList";
 
 const props = defineProps({
@@ -46,10 +46,9 @@ const pagination = reactive<PaginationProps>({
 const loadData = async () => {
   if (props.activeTab !== "issueList") return;
 
-  CertApi.index({
+  OrderApi.certs(order.id, {
     currentPage: pagination.currentPage,
-    pageSize: pagination.pageSize,
-    order_id: order.id
+    pageSize: pagination.pageSize
   }).then(res => {
     if (res.code === 1) {
       tableData.value = res.data.items;

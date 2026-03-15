@@ -768,9 +768,14 @@ const copyAllRecords = () => {
   }
 
   const text = records.join("\n\n");
-  navigator.clipboard.writeText(text).then(() => {
-    message("解析记录已复制到剪贴板", { type: "success" });
-  });
+  navigator.clipboard
+    .writeText(text)
+    .then(() => {
+      message("解析记录已复制到剪贴板", { type: "success" });
+    })
+    .catch(() => {
+      message("复制失败，请手动复制", { type: "error" });
+    });
 };
 
 // 委托验证 CNAME 检测函数
@@ -1158,7 +1163,7 @@ const debouncedVerifyItem = debounce(verifyItem, 500);
 async function startBatchVerify() {
   if (
     !cert.value?.validation?.length ||
-    (!["cname", "txt", "file", "http", "https"].includes(
+    (!["cname", "txt", "file_proxy", "file", "http", "https"].includes(
       cert.value.dcv?.method
     ) &&
       !cert.value.dcv?.is_delegate) ||

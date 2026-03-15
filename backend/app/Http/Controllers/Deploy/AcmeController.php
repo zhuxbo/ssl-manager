@@ -37,7 +37,10 @@ class AcmeController extends Controller
     }
 
     /**
-     * 查询订单详情（含 EAB，UserScope 自动过滤当前用户）
+     * 查询订单详情（含 EAB）
+     *
+     * deploy_tokens.user_id 为 non-nullable，DB 约束保证非空，
+     * DeployAuthenticate 始终注册 UserScope，Acme::find 自动过滤当前用户
      */
     public function get(int $id): void
     {

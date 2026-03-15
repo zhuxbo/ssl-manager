@@ -134,9 +134,14 @@ const formatDate = (date: string | null) => {
 };
 
 const handleCopy = (text: string) => {
-  navigator.clipboard.writeText(text).then(() => {
-    message("已复制到剪贴板", { type: "success" });
-  });
+  navigator.clipboard
+    .writeText(text)
+    .then(() => {
+      message("已复制到剪贴板", { type: "success" });
+    })
+    .catch(() => {
+      message("复制失败，请手动复制", { type: "error" });
+    });
 };
 
 const handleRemark = () => {

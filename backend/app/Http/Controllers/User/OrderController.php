@@ -4,6 +4,7 @@ namespace App\Http\Controllers\User;
 
 use App\Http\Requests\Order\GetIdsRequest;
 use App\Http\Requests\Order\IndexRequest;
+use App\Models\Cert;
 use App\Models\Order;
 use App\Services\Order\Action;
 use Throwable;
@@ -211,6 +212,36 @@ class OrderController extends BaseController
         $this->success([
             'items' => $result->toArray(),
             'balance' => $this->guard->user()->balance,
+        ]);
+    }
+
+    /**
+     * 获取订单的颁发记录
+     */
+    public function certs(int $id): void
+    {
+        $order = Order::find($id);
+        if (! $order) {
+            $this->error('订单不存在');
+        }
+
+        $currentPage = (int) (request('currentPage', 1));
+        $pageSize = min((int) (request('pageSize', 10)), 100);
+
+        $query = Cert::where('order_id', $id);
+
+        $total = $query->count();
+        $items = $query->select(['id', 'order_id', 'action', 'channel', 'common_name', 'amount', 'status', 'issued_at', 'expires_at'])
+            ->orderBy('id', 'desc')
+            ->offset(($currentPage - 1) * $pageSize)
+            ->limit($pageSize)
+            ->get();
+
+        $this->success([
+            'items' => $items,
+            'total' => $total,
+            'pageSize' => $pageSize,
+            'currentPage' => $currentPage,
         ]);
     }
 

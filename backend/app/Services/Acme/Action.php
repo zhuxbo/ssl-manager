@@ -78,47 +78,49 @@ class Action
      */
     public function commitCancel(int $acmeId): void
     {
-        $acme = Acme::findOrFail($acmeId);
+        DB::transaction(function () use ($acmeId) {
+            $acme = Acme::where('id', $acmeId)->lock()->firstOrFail();
 
-        if (! in_array($acme->status, [Acme::STATUS_ACTIVE, Acme::STATUS_PENDING])) {
-            $this->error('当前状态不允许取消');
-        }
+            if (! in_array($acme->status, [Acme::STATUS_ACTIVE, Acme::STATUS_PENDING])) {
+                $this->error('当前状态不允许取消');
+            }
 
-        // 未提交上游的 pending 订单，直接退费取消
-        if ($acme->status === Acme::STATUS_PENDING && ! $acme->api_id) {
-            $this->refund($acme);
+            // 未提交上游的 pending 订单，直接退费取消
+            if ($acme->status === Acme::STATUS_PENDING && ! $acme->api_id) {
+                $this->refund($acme);
+                $acme->update([
+                    'status' => Acme::STATUS_CANCELLED,
+                    'cancelled_at' => now(),
+                ]);
+
+                return;
+            }
+
             $acme->update([
-                'status' => Acme::STATUS_CANCELLED,
+                'status' => Acme::STATUS_CANCELLING,
                 'cancelled_at' => now(),
             ]);
 
-            $this->success();
-        }
+            // 检查是否已存在相同的执行中任务，避免重复创建
+            $existingTask = Task::where('order_id', $acme->id)
+                ->where('action', 'cancel_acme')
+                ->where('status', 'executing')
+                ->first();
 
-        $acme->update([
-            'status' => Acme::STATUS_CANCELLING,
-            'cancelled_at' => now(),
-        ]);
+            if (! $existingTask) {
+                $task = Task::create([
+                    'order_id' => $acme->id,
+                    'action' => 'cancel_acme',
+                    'started_at' => now()->addSeconds(120),
+                    'status' => 'executing',
+                    'source' => getControllerCategory(),
+                ]);
 
-        // 检查是否已存在相同的执行中任务，避免重复创建
-        $existingTask = Task::where('order_id', $acme->id)
-            ->where('action', 'cancel_acme')
-            ->where('status', 'executing')
-            ->first();
-
-        if (! $existingTask) {
-            $task = Task::create([
-                'order_id' => $acme->id,
-                'action' => 'cancel_acme',
-                'started_at' => now()->addSeconds(120),
-                'status' => 'executing',
-                'source' => getControllerCategory(),
-            ]);
-
-            TaskJob::dispatch(['id' => $task->id])
-                ->delay(now()->addSeconds(123))
-                ->onQueue(config('queue.names.tasks'));
-        }
+                TaskJob::dispatch(['id' => $task->id])
+                    ->delay(now()->addSeconds(123))
+                    ->onQueue(config('queue.names.tasks'));
+            }
+        });
 
         $this->success();
     }

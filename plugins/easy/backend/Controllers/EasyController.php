@@ -40,6 +40,9 @@ class EasyController extends Controller
 
     /**
      * 获取订单信息
+     *
+     * Easy 通过 tid+email 组合做业务层认证（查询 agiso 表，数据量有限），
+     * Action 已改造为无参构造，用户隔离不依赖 UserScope
      */
     protected function getOrder(array $params): Agiso
     {
@@ -177,7 +180,7 @@ class EasyController extends Controller
     {
         $params = $request->all();
         $order = $this->getOrder($params);
-        $action = new Action($order->user->id);
+        $action = new Action();
 
         if ($order->latestCert->status === 'processing') {
             try {
@@ -233,7 +236,7 @@ class EasyController extends Controller
         $params = $request->all();
         $order = $this->getOrder($params);
 
-        (new Action($order->user->id))->sync($order->order_id, true);
+        (new Action())->sync($order->order_id, true);
 
         $this->getStep($params);
 
@@ -339,7 +342,7 @@ class EasyController extends Controller
             // 提交证书申请（Action::new() 始终通过 ApiResponseException 返回结果，不会正常 return）
             $orderId = null;
             try {
-                (new Action($user->id))->new([
+                (new Action())->new([
                     'domains' => $params['domain'],
                     'product_id' => $product['id'],
                     'period' => $product['period'],
@@ -362,7 +365,7 @@ class EasyController extends Controller
             // 支付并提交订单
             try {
                 if ($orderId !== null) {
-                    (new Action($user->id))->pay($orderId, true, true);
+                    (new Action())->pay($orderId, true, true);
                 }
             } catch (ApiResponseException $e) {
                 $result = $e->getApiResponse();
@@ -397,7 +400,7 @@ class EasyController extends Controller
         $params = $request->all();
         $order = $this->getOrder($params);
 
-        $action = new Action($order->user->id);
+        $action = new Action();
 
         try {
             $action->updateDCV($order->order_id, $params['validation_method'] ?? 'cname');
@@ -421,7 +424,7 @@ class EasyController extends Controller
     {
         $params = $request->all();
         $order = $this->getOrder($params);
-        (new Action($order->user->id))->downloadValidateFile($order->order_id);
+        (new Action())->downloadValidateFile($order->order_id);
     }
 
     /**
@@ -431,7 +434,7 @@ class EasyController extends Controller
     {
         $params = $request->all();
         $order = $this->getOrder($params);
-        (new Action($order->user->id))->download($order->order_id, $params['type'] ?? 'all');
+        (new Action())->download($order->order_id, $params['type'] ?? 'all');
     }
 
     /**

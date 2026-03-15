@@ -724,6 +724,7 @@ class Action
             }
         }
 
+        // $result 仅在 processing 分支赋值，其他分支由 ?? 兜底
         $this->success([
             'dcv' => $result['data']['dcv'] ?? $cert->dcv,
             'validation' => $result['data']['validation'] ?? $cert->validation,
@@ -769,10 +770,14 @@ class Action
 
     /**
      * 撤回取消
+     *
+     * 设计说明：状态统一恢复为 approving，同时创建 sync 任务，
+     * 同步一次即可从上游恢复正确状态（processing/approving/active）
      */
     public function revokeCancel(int $orderId): void
     {
         $order = FindUtil::Order($orderId);
+        $order->latestCert->status !== 'cancelling' && $this->error('订单不在取消中状态');
 
         $this->deleteTask($orderId, 'cancel');
         $order->latestCert->update(['status' => 'approving']);
@@ -803,6 +808,7 @@ class Action
 
             $product = FindUtil::Product($order->product_id);
 
+            // 退款期严格以 created_at 计算，超过则不退款（卡 cancelling 为预期行为）
             $order->created_at->timestamp < time() - 86400 * $product->refund_period
             && $this->error('订单已超过'.$product->refund_period.'天');
 

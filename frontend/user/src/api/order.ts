@@ -46,6 +46,14 @@ export function index(params: IndexParams): Promise<BaseResponse> {
     .then(syncBalance);
 }
 
+/** 获取订单的颁发记录 */
+export function certs(
+  id: number,
+  params: { currentPage?: number; pageSize?: number }
+): Promise<BaseResponse> {
+  return http.get<BaseResponse<null>, any>(`/order/${id}/certs`, { params });
+}
+
 /** 获取订单详情 */
 export function show(id: number): Promise<BaseResponse> {
   return http

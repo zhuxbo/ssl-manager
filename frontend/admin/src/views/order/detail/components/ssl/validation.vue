@@ -767,9 +767,14 @@ const copyAllRecords = () => {
   }
 
   const text = records.join("\n\n");
-  navigator.clipboard.writeText(text).then(() => {
-    message("解析记录已复制到剪贴板", { type: "success" });
-  });
+  navigator.clipboard
+    .writeText(text)
+    .then(() => {
+      message("解析记录已复制到剪贴板", { type: "success" });
+    })
+    .catch(() => {
+      message("复制失败，请手动复制", { type: "error" });
+    });
 };
 
 // 委托验证 CNAME 检测函数

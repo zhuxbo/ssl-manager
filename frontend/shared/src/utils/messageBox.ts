@@ -69,13 +69,25 @@ interface MessageBoxParams {
 }
 
 /**
+ * 转义 HTML 实体，防止 XSS
+ */
+function escapeHTML(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+/**
  * 将对象格式化为HTML字符串，使用缩进表示数据结构
  * @param obj 要格式化的对象
  */
 function formatObjectToHTML(obj: any): string {
   if (obj === null) return "null";
   if (obj === undefined) return "undefined";
-  if (typeof obj !== "object") return String(obj);
+  if (typeof obj !== "object") return escapeHTML(String(obj));
 
   let html = "";
 
