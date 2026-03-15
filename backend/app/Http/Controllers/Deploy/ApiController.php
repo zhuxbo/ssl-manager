@@ -22,13 +22,18 @@ class ApiController extends Controller
         $request->validate([
             'order_id' => ['nullable', 'integer'],
             'domain' => ['nullable', 'string'],
+            'query' => ['nullable', 'string'],
+            'currentPage' => ['nullable', 'integer', 'min:1'],
+            'pageSize' => ['nullable', 'integer', 'min:1', 'max:100'],
         ]);
 
         $orderId = $request->input('order_id');
         $domain = $request->input('domain');
+        $queryStr = $request->input('query');
 
+        // 优先级：order_id > domain > query > 空参数
         if ($orderId) {
-            // 按 order_id 查询
+            // 按 order_id 精确查询，返回单条
             $order = Order::with('latestCert')
                 ->whereHas('latestCert')
                 ->where('id', $orderId)
@@ -38,27 +43,50 @@ class ApiController extends Controller
                 $this->error('未找到匹配的订单');
             }
 
-            $orders = collect([$order]);
-        } elseif ($domain) {
-            // 按域名查询
+            $this->success($this->getOrderData($order));
+        }
+
+        if ($domain) {
+            // 按域名精确查询，返回单条（取最新一条）
             $domain = strtolower(trim($domain));
             $orders = $this->findOrdersByDomain($domain);
 
             if ($orders->isEmpty()) {
                 $this->error('未找到匹配的订单');
             }
-        } else {
-            // 无参数：返回最新 100 条 active 订单
-            $orders = Order::with('latestCert')
-                ->whereHas('latestCert', fn ($q) => $q->where('status', 'active'))
-                ->orderByDesc('created_at')
-                ->limit(100)
-                ->get();
+
+            $this->success($this->getOrderData($orders->first()));
         }
 
-        $data = $orders->map(fn ($order) => $this->getOrderData($order))->values()->toArray();
+        $currentPage = (int) $request->input('currentPage', 1);
+        $pageSize = (int) ($request->input('pageSize', 100) ?? 100);
 
-        $this->success($data);
+        if ($queryStr) {
+            // 批量查询：支持 id 和 domain 混合，英文逗号分割
+            $orders = $this->batchQuery($queryStr);
+            $total = $orders->count();
+            $data = $orders->slice(($currentPage - 1) * $pageSize, $pageSize)->values()
+                ->map(fn ($order) => $this->getOrderData($order))->toArray();
+        } else {
+            // 空参数：返回最新 active 订单（数据库级分页）
+            $query = Order::with('latestCert')
+                ->whereHas('latestCert', fn ($q) => $q->where('status', 'active'))
+                ->orderByDesc('created_at');
+
+            $total = $query->count();
+            $data = $query->offset(($currentPage - 1) * $pageSize)
+                ->limit($pageSize)
+                ->get()
+                ->map(fn ($order) => $this->getOrderData($order))
+                ->toArray();
+        }
+
+        $this->success([
+            'total' => $total,
+            'currentPage' => $currentPage,
+            'pageSize' => $pageSize,
+            'data' => $data,
+        ]);
     }
 
     /**
@@ -231,6 +259,56 @@ class ApiController extends Controller
             'status' => $params['status'],
             'recorded' => $params['status'] === 'success',
         ]);
+    }
+
+    /**
+     * 批量查询：支持 id 和 domain 混合，英文逗号分割
+     */
+    private function batchQuery(string $queryStr): \Illuminate\Support\Collection
+    {
+        $items = array_filter(array_map('trim', explode(',', $queryStr)));
+
+        if (empty($items)) {
+            $this->error('查询参数不能为空');
+        }
+
+        if (count($items) > 100) {
+            $this->error('单次最多查询 100 条');
+        }
+
+        $ids = [];
+        $domains = [];
+
+        foreach ($items as $item) {
+            if (ctype_digit($item)) {
+                $ids[] = (int) $item;
+            } else {
+                $domains[] = strtolower($item);
+            }
+        }
+
+        $orders = collect();
+
+        if ($ids) {
+            $orders = Order::with('latestCert')
+                ->whereHas('latestCert')
+                ->whereIn('id', $ids)
+                ->get();
+        }
+
+        // 按域名逐个查询并合并（去重）
+        $existingIds = $orders->pluck('id')->all();
+        foreach ($domains as $domain) {
+            $found = $this->findOrdersByDomain($domain);
+            foreach ($found as $order) {
+                if (! in_array($order->id, $existingIds)) {
+                    $orders->push($order);
+                    $existingIds[] = $order->id;
+                }
+            }
+        }
+
+        return $orders->sortByDesc('created_at')->values();
     }
 
     /**
