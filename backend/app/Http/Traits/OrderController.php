@@ -285,7 +285,7 @@ trait OrderController
         }
         $token = $deployToken->token;
 
-        $releaseUrl = rtrim(get_system_setting('site', 'release_url', 'https://release.cnssl.com'), '/');
+        $releaseUrl = rtrim(get_system_setting('site', 'releaseUrl', 'https://release.cnssl.com'), '/');
         $deployUrl = rtrim(get_system_setting('site', 'url'), '/').'/api/deploy';
 
         $this->success([
