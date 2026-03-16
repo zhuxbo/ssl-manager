@@ -393,7 +393,7 @@ create_backup() {
         local frontend_tmp="$TEMP_DIR/backup_frontend"
         mkdir -p "$frontend_tmp"
 
-        for app in admin user; do
+        for app in admin user web; do
             if [ -d "$INSTALL_DIR/frontend/$app" ]; then
                 cp -r "$INSTALL_DIR/frontend/$app" "$frontend_tmp/"
                 has_frontend=true
@@ -473,12 +473,7 @@ perform_upgrade() {
         log_info "保留 vendor 目录（加速升级）..."
         mv "$INSTALL_DIR/backend/vendor" "$preserve_dir/"
     fi
-    # 保留 frontend/web（用户自定义前端，不随升级更新）
-    if [ -d "$INSTALL_DIR/frontend/web" ]; then
-        log_info "保留 frontend/web 目录..."
-        mkdir -p "$preserve_dir/frontend"
-        mv "$INSTALL_DIR/frontend/web" "$preserve_dir/frontend/"
-    fi
+    # frontend/web 不移动，在清理旧代码时跳过（避免脚本中断导致丢失）
     # 保留前端用户配置文件（logo、平台配置等）
     mkdir -p "$preserve_dir/frontend_config"
     # admin: logo.svg, platform-config.json
@@ -524,8 +519,9 @@ perform_upgrade() {
     rm -f "$INSTALL_DIR/backend/composer.json"
     rm -f "$INSTALL_DIR/backend/composer.lock"
 
-    # 删除前端目录（新结构 frontend/，兼容旧结构 admin/user/）
-    rm -rf "$INSTALL_DIR/frontend" 2>/dev/null || true
+    # 删除前端目录（保留 frontend/web，避免丢失用户自定义前端）
+    rm -rf "$INSTALL_DIR/frontend/admin" 2>/dev/null || true
+    rm -rf "$INSTALL_DIR/frontend/user" 2>/dev/null || true
     rm -rf "$INSTALL_DIR/admin" 2>/dev/null || true
     rm -rf "$INSTALL_DIR/user" 2>/dev/null || true
 
@@ -649,12 +645,7 @@ PYEOF
         mv "$preserve_dir/vendor" "$INSTALL_DIR/backend/"
     fi
 
-    # 恢复 frontend/web（用户自定义前端）
-    if [ -d "$preserve_dir/frontend/web" ]; then
-        mkdir -p "$INSTALL_DIR/frontend"
-        mv "$preserve_dir/frontend/web" "$INSTALL_DIR/frontend/"
-        log_info "已恢复 frontend/web 目录"
-    fi
+    # frontend/web 已在原地保留，无需恢复
 
     # 恢复前端用户配置文件
     if [ -d "$preserve_dir/frontend_config" ]; then

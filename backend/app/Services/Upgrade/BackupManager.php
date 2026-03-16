@@ -281,7 +281,7 @@ class BackupManager
         }
 
         // 备份前端应用（生产环境直接部署，没有 dist 子目录）
-        $apps = ['admin', 'user'];
+        $apps = ['admin', 'user', 'web'];
         $hasContent = false;
 
         foreach ($apps as $app) {
