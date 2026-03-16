@@ -37,10 +37,10 @@ test('查询订单-无参数返回最新活跃订单', function () {
         ->assertOk()
         ->assertJson(['code' => 1]);
 
-    expect($response->json('data'))->toHaveCount(1);
-    $response->assertJsonPath('data.0.order_id', $order->id);
-    $response->assertJsonPath('data.0.status', 'active');
-    $response->assertJsonPath('data.0.domain', $cert->common_name);
+    expect($response->json('data.data'))->toHaveCount(1);
+    $response->assertJsonPath('data.data.0.order_id', $order->id);
+    $response->assertJsonPath('data.data.0.status', 'active');
+    $response->assertJsonPath('data.data.0.domain', $cert->common_name);
 });
 
 test('查询订单-按 order_id', function () {
@@ -61,8 +61,7 @@ test('查询订单-按 order_id', function () {
         ->assertOk()
         ->assertJson(['code' => 1]);
 
-    expect($response->json('data'))->toHaveCount(1);
-    $response->assertJsonPath('data.0.order_id', $order->id);
+    $response->assertJsonPath('data.order_id', $order->id);
 });
 
 test('查询订单-按域名', function () {
@@ -85,9 +84,8 @@ test('查询订单-按域名', function () {
         ->assertOk()
         ->assertJson(['code' => 1]);
 
-    expect($response->json('data'))->toHaveCount(1);
-    $response->assertJsonPath('data.0.order_id', $order->id);
-    $response->assertJsonPath('data.0.domain', 'deploy.example.com');
+    $response->assertJsonPath('data.order_id', $order->id);
+    $response->assertJsonPath('data.domain', 'deploy.example.com');
 });
 
 test('查询订单-域名不存在', function () {
