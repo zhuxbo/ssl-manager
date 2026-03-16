@@ -41,6 +41,22 @@ abstract class BaseProductRequest extends BaseRequest
     }
 
     /**
+     * 判断是否为 ACME 产品
+     */
+    protected function isAcme(): bool
+    {
+        return $this->input('product_type') === 'acme';
+    }
+
+    /**
+     * 判断是否需要域名数量配置（SSL 和 ACME 产品）
+     */
+    protected function needsDomainConfig(): bool
+    {
+        return $this->isSSL() || $this->isAcme();
+    }
+
+    /**
      * 为非 SSL 产品设置默认值并清除不适用字段
      * S/MIME 和 Code Signing 产品不需要域名相关字段
      */
@@ -55,10 +71,28 @@ abstract class BaseProductRequest extends BaseRequest
         $data['standard_max'] = 0;
         $data['wildcard_min'] = 0;
         $data['wildcard_max'] = 0;
-        $data['total_min'] = 1;
-        $data['total_max'] = 1;
+        $data['total_min'] = 0;
+        $data['total_max'] = 0;
         $data['add_san'] = 0;
         $data['replace_san'] = 0;
+        $data['gift_root_domain'] = 0;
+        $data['server'] = 0;
+    }
+
+    /**
+     * 为 ACME 产品设置默认值并清除不适用字段
+     * ACME 产品需要域名数量配置，但不需要保险、验证方法等 SSL 专用字段
+     */
+    protected function setAcmeDefaults(array &$data): void
+    {
+        $data['warranty_currency'] = '$';
+        $data['warranty'] = 0;
+        $data['common_name_types'] = [];
+        $data['alternative_name_types'] = [];
+        $data['validation_methods'] = [];
+        $data['add_san'] = 0;
+        $data['replace_san'] = 0;
+        $data['reissue'] = 0;
         $data['gift_root_domain'] = 0;
         $data['server'] = 0;
     }

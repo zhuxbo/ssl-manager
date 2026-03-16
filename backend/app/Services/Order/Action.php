@@ -65,7 +65,14 @@ class Action
         try {
             $acmeProducts = (new AcmeApi)->getProducts($source, $brand, $api_id);
             if ($acmeProducts['code'] === 1 && ! empty($acmeProducts['data'])) {
-                $allProducts = array_merge($allProducts, $acmeProducts['data']);
+                // ACME 端点返回的产品隐含 product_type=acme，注入默认值
+                $acmeData = array_map(function (array $item) {
+                    $item['product_type'] = $item['product_type'] ?? 'acme';
+                    $item['validation_type'] = $item['validation_type'] ?? 'dv';
+
+                    return $item;
+                }, $acmeProducts['data']);
+                $allProducts = array_merge($allProducts, $acmeData);
             }
         } catch (ApiResponseException) {
             // 源不存在于 ACME API，忽略

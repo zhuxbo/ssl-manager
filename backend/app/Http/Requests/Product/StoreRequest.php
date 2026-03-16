@@ -10,6 +10,8 @@ class StoreRequest extends BaseProductRequest
     public function rules(): array
     {
         $isSSL = $this->isSSL();
+        $isAcme = $this->isAcme();
+        $needsDomainConfig = $isSSL || $isAcme;
         $isCodeSign = $this->isCodeSign();
 
         $rules = [
@@ -40,8 +42,8 @@ class StoreRequest extends BaseProductRequest
             'standard_max' => 'integer|min:0',
             'wildcard_min' => 'integer|min:0',
             'wildcard_max' => 'integer|min:0',
-            'total_min' => 'integer|min:1',
-            'total_max' => 'integer|min:1',
+            'total_min' => 'integer|min:0',
+            'total_max' => 'integer|min:0',
             'add_san' => 'in:0,1',
             'replace_san' => 'in:0,1',
             'reissue' => 'nullable|in:0,1',
@@ -63,24 +65,28 @@ class StoreRequest extends BaseProductRequest
         $rules['renew'] = 'required|in:0,1';
         $rules['reuse_csr'] = 'required|in:0,1';
 
-        // 非代码签名产品还需要重签字段（CodeSign 不支持重签）
-        if (! $isCodeSign) {
+        // 仅 SSL 和 S/MIME 产品需要重签字段（CodeSign、DocSign、ACME 不支持重签）
+        if (! $isCodeSign && ! $this->isDocSign() && ! $isAcme) {
             $rules['reissue'] = 'required|in:0,1';
         }
 
-        // SSL 产品特有的必填字段
-        if ($isSSL) {
-            $rules['common_name_types'] = 'required|array';  // SSL 产品必填
-            $rules['warranty_currency'] = 'required|in:$,€,¥';
-            $rules['warranty'] = 'required|numeric|min:0';
-            $rules['server'] = 'required|integer|min:0';
-            $rules['validation_methods'] = 'required|array';
+        // SSL 和 ACME 产品共用的域名数量必填字段
+        if ($needsDomainConfig) {
             $rules['standard_min'] = 'required|integer|min:0';
             $rules['standard_max'] = 'required|integer|min:0';
             $rules['wildcard_min'] = 'required|integer|min:0';
             $rules['wildcard_max'] = 'required|integer|min:0';
             $rules['total_min'] = 'required|integer|min:1';
             $rules['total_max'] = 'required|integer|min:1';
+        }
+
+        // SSL 产品特有的必填字段
+        if ($isSSL) {
+            $rules['common_name_types'] = 'required|array';
+            $rules['warranty_currency'] = 'required|in:$,€,¥';
+            $rules['warranty'] = 'required|numeric|min:0';
+            $rules['server'] = 'required|integer|min:0';
+            $rules['validation_methods'] = 'required|array';
             $rules['add_san'] = 'required|in:0,1';
             $rules['replace_san'] = 'required|in:0,1';
             $rules['gift_root_domain'] = 'required|in:0,1';
@@ -100,8 +106,11 @@ class StoreRequest extends BaseProductRequest
             return $data;
         }
 
-        // 非 SSL 产品，设置默认值并清除不适用字段
-        if (! $this->isSSL()) {
+        // ACME 产品：保留域名数量字段，清除 SSL 专用字段
+        if ($this->isAcme()) {
+            $this->setAcmeDefaults($data);
+        } elseif (! $this->isSSL()) {
+            // 其他非 SSL 产品，清除所有域名相关字段
             $this->setNonSSLDefaults($data);
         }
 
@@ -129,8 +138,8 @@ class StoreRequest extends BaseProductRequest
                 }
             }
 
-            // 只对 SSL 产品检查域名数量
-            if ($this->isSSL()) {
+            // SSL 和 ACME 产品检查域名数量
+            if ($this->needsDomainConfig()) {
                 $this->validateSSLProductDomains($validator, $data);
             }
 

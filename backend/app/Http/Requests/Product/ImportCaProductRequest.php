@@ -67,7 +67,9 @@ class ImportCaProductRequest extends UpdateRequest
         $data['total_max'] = $data['total_max'] ?? 0;
 
         $productType = $data['product_type'] ?? 'ssl';
-        if ($productType !== 'ssl' && ! empty($productType)) {
+        if ($productType === 'acme') {
+            $this->setAcmeDefaults($data);
+        } elseif ($productType !== 'ssl' && ! empty($productType)) {
             $this->setNonSSLDefaults($data);
         }
         if ($productType === 'codesign') {
