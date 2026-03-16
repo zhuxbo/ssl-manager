@@ -17,7 +17,7 @@ class CnameDelegationFactory extends Factory
 
     public function definition(): array
     {
-        $zone = fake()->domainName();
+        $zone = fake()->unique()->domainName();
         $prefix = '_acme-challenge';
         $userId = fake()->randomNumber(8);
 
