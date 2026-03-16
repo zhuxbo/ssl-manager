@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Services\Plugin\PluginManager;
 use Illuminate\Http\Request;
+use RuntimeException;
 
 class PluginController extends BaseController
 {
@@ -70,7 +71,11 @@ class PluginController extends BaseController
         $releaseUrl = $request->input('release_url');
         $version = $request->input('version');
 
-        $result = $this->pluginManager->install($name, $releaseUrl, $version);
+        try {
+            $result = $this->pluginManager->install($name, $releaseUrl, $version);
+        } catch (RuntimeException $e) {
+            $this->error($e->getMessage());
+        }
 
         $this->success($result);
     }
@@ -86,7 +91,12 @@ class PluginController extends BaseController
         }
 
         $version = $request->input('version');
-        $result = $this->pluginManager->update($name, $version);
+
+        try {
+            $result = $this->pluginManager->update($name, $version);
+        } catch (RuntimeException $e) {
+            $this->error($e->getMessage());
+        }
 
         $this->success($result);
     }

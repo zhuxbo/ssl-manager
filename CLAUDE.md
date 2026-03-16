@@ -22,7 +22,7 @@ skills/         # 开发规范（详细文档）
 - **不要自动提交** - 完成修改后等待用户确认"提交"再执行 git commit/push
 - **提交前格式化** - 后端 `./vendor/bin/pint`，前端 `pnpm prettier --write`
 - **base 目录只读** - 通过 git subtree 同步上游代码，不要修改
-- **PHP 8.3+** - 双引号变量不加大括号（如 `"$var"` 而非 `"{$var}"`）
+- **PHP 8.3+** - 双引号变量不加大括号（如 `"$var"` 而非 `"{$var}"`）；例外：变量后紧跟中文等非 ASCII 字符时必须加花括号（`"{$var}，中文"` 而非 `"$var，中文"`），因为 PHP 变量名匹配 `\x80-\xff` 字节
 - **测试发现 bug 必须修复代码** - 测试的目的是发现 bug 并修复，绝不修改测试去迎合错误的代码
 
 ## 开发规范
@@ -60,6 +60,8 @@ skills/         # 开发规范（详细文档）
 - **安全机制**：autoload 使用 `realpath()` 防路径遍历；公共端点仅返回 bundle/css 路径
 - **前端加载**：公共 `GET /api/plugins` 返回 bundle 路径，管理端返回完整信息；`plugin-loader.ts`（`@shared/utils/plugin-loader`）统一加载，校验 URL 必须以 `/` 开头
 - **共享依赖**：`exposeSharedDeps()` 暴露 Vue/Router/ElementPlus/Pinia + `getAccessToken()`
+- **Widget 插槽**：`__registerPlugin` 支持 `widgets` 字段，插件可向已有页面注入组件（如 Dashboard 横幅）；已定义插槽：`user-dashboard-top`（用户端 Dashboard 顶部）
+- **版本兼容**：`PluginManager.checkCompatibility()` 通过 `requires` 字段（如 `>=1.0.0`）检查主系统版本
 - **解耦原则**：主系统不硬引用插件代码/表，通过动态扫描（`_logs` 后缀表、`user_id` 字段）兼容插件数据
 - **插件打包**：`plugins/{name}/build.sh` + `release.json` 独立打包
 - **插件管理**：`PluginManager` 提供安装/更新/卸载/检查更新，管理端 `/plugin` 页面操作

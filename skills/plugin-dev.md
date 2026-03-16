@@ -117,18 +117,22 @@ export { routes };
 
 ### 开发测试
 
-插件前端打包为 IIFE，没有 Vite dev server 热更新。开发流程：
+插件前端打包为 IIFE，没有热更新。开发流程：
 
 - **后端**：改完 PHP 代码直接生效，无需额外操作
 - **前端**：每次修改后需重新构建 IIFE，然后刷新浏览器
 
 ```bash
 # 构建单端（在插件前端目录下）
-cd plugins/{name}/admin && pnpm build
+cd plugins/{name}/frontend/admin && pnpm install && pnpm build
 
 # 或构建整个插件（admin + user）
-bash plugins/release-plugin.sh {name} --build-only
+bash plugins/release-plugin.sh {name} --version x.y.z --build-only
 ```
+
+**开发环境静态资源映射**：`plugin.json` 中的 bundle 路径（如 `frontend/admin/notice-plugin.iife.js`）不含 `dist/`，但 Vite 构建产物输出在 `frontend/{side}/dist/`。主系统 admin/user 的 `vite.config.ts` 中 `servePlugins()` 中间件自动将 `/plugins/{name}/frontend/{side}/{file}` 映射到 `dist/{file}`，开发环境无需手动复制。
+
+**版本号不入仓库**：`plugin.json` 源文件不含 `version` 字段，由 `release-plugin.sh --version x.y.z` 在打包时动态注入到临时副本。开发环境下 `PluginManager` 读取时回落为 `0.0.0`。
 
 ### 共享依赖
 
@@ -144,6 +148,31 @@ bash plugins/release-plugin.sh {name} --build-only
 1. 公共接口 `GET /api/plugins` 返回已安装插件的 bundle/css 路径
 2. `plugin-loader.ts`（`@shared/utils/plugin-loader`）动态加载 IIFE 脚本
 3. 校验 URL 必须以 `/` 开头（防止加载外部资源）
+
+### Widget 插槽
+
+插件可以通过 `widgets` 向主系统已有页面注入组件（如 Dashboard 横幅）：
+
+```typescript
+window.__registerPlugin({
+  name: "my-plugin",
+  widgets: [
+    { slot: "user-dashboard-top", component: MyBanner, order: 0 }
+  ]
+});
+```
+
+- `slot`：插槽名称，主系统在页面中预埋渲染点
+- `component`：Vue 组件，在主系统 Vue 树内渲染（共享 Element Plus 主题和深色模式）
+- `order`：排序权重，越大越靠前（默认 0）
+
+已定义的插槽：
+
+| 插槽名 | 位置 | 说明 |
+|--------|------|------|
+| `user-dashboard-top` | 用户端 Dashboard 顶部 | 欢迎信息上方，适合公告横幅 |
+
+主系统通过 `getPluginWidgets(slot)` 获取并渲染插件组件。使用 widgets 的插件需要设置版本兼容（release 中 `requires` 字段），确保主系统已支持对应插槽。
 
 ### 词典扩展
 

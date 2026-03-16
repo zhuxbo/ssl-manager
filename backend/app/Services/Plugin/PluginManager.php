@@ -969,7 +969,7 @@ class PluginManager
             }
 
             if (! version_compare($systemVersion, $requiredVersion, $operator)) {
-                throw new RuntimeException("插件要求系统版本 {$requires}，当前版本 v{$systemVersion}");
+                throw new RuntimeException("该插件要求系统版本 {$requires}，当前版本 v{$systemVersion}，请先升级系统");
             }
         }
     }

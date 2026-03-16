@@ -115,6 +115,9 @@ if [ -z "$NAME" ]; then
     exit 1
 fi
 
+# 读取版本要求（可选）
+REQUIRES=$(grep -o '"requires"[[:space:]]*:[[:space:]]*"[^"]*"' plugin.json | head -1 | cut -d'"' -f4)
+
 # 版本号必须通过 --version 指定
 if [ -z "$INPUT_VERSION" ]; then
     log_error "请通过 --version 指定版本号"
@@ -214,7 +217,12 @@ build_plugin() {
     while IFS= read -r item; do
         item=$(echo "$item" | tr -d '",' | xargs)
         [ -z "$item" ] && continue
-        find "$PACK_DIR" -name "$item" -exec rm -rf {} + 2>/dev/null || true
+        # 支持路径（如 backend/tests/）和文件名（如 .gitignore）
+        if [ -e "$PACK_DIR/$item" ]; then
+            rm -rf "$PACK_DIR/$item"
+        else
+            find "$PACK_DIR" -name "$item" -exec rm -rf {} + 2>/dev/null || true
+        fi
     done < <(grep -A 100 '"exclude"' build.json | grep '"' | grep -v 'exclude\|\[' | head -20)
 
     # 打包（先删除旧 zip，避免 zip 更新模式残留已删除文件）
@@ -340,6 +348,7 @@ from datetime import datetime
 
 releases_file = '$remote_releases_file'
 version = '$VERSION'
+requires = '$REQUIRES'
 created_at = '$(date -Iseconds)'
 
 new_release = {
@@ -356,6 +365,9 @@ new_release = {
     }]
 }
 
+if requires:
+    new_release['requires'] = requires
+
 try:
     with open(releases_file, 'r') as f:
         data = json.load(f)
@@ -366,10 +378,29 @@ data['releases'] = [r for r in data.get('releases', []) if r.get('tag_name') != 
 data['releases'].insert(0, new_release)
 data['releases'].sort(key=lambda x: x.get('published_at', ''), reverse=True)
 
+# 只保留最新 5 个版本，清理多余的版本目录
+max_keep = 5
+removed = []
+if len(data['releases']) > max_keep:
+    plugin_dir = os.path.dirname(releases_file)
+    for old in data['releases'][max_keep:]:
+        tag = old.get('tag_name', '')
+        old_dir = os.path.join(plugin_dir, tag)
+        if os.path.isdir(old_dir):
+            import shutil
+            shutil.rmtree(old_dir)
+            removed.append(tag)
+    data['releases'] = data['releases'][:max_keep]
+
 with open(releases_file, 'w') as f:
     json.dump(data, f, indent=2, ensure_ascii=False)
 
-print(f'releases.json 已更新: v{version}')
+parts = [f'releases.json 已更新: v{version}']
+if requires:
+    parts.append(f'requires {requires}')
+if removed:
+    parts.append('已清理旧版本: ' + ' '.join(removed))
+print(' | '.join(parts))
 PYEOF"
 
         log_success "$srv_name: 发布完成"
