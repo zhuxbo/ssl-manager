@@ -14,6 +14,7 @@ import {
   loadPlugins,
   mergePluginDictionaries
 } from "@shared/utils/plugin-loader";
+import { http as sharedHttp } from "@shared/utils/http";
 
 import Table from "@pureadmin/table";
 // import PureDescriptions from "@pureadmin/descriptions";
@@ -69,7 +70,6 @@ getPlatformConfig(app).then(async config => {
   setupSharedModules();
   await exposeSharedDeps();
   // 暴露主应用 http 给插件使用（已认证、带 token 刷新）
-  const { http: sharedHttp } = await import("@shared/utils/http");
   window.__deps.http = sharedHttp;
   // ACME 菜单配置控制
   if (config.Acme === true) {

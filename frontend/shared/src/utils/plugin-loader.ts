@@ -1,4 +1,8 @@
 import type { Router } from "vue-router";
+import * as Vue from "vue";
+import * as VueRouter from "vue-router";
+import * as ElementPlus from "element-plus";
+import * as Pinia from "pinia";
 import Cookies from "js-cookie";
 import { storageNameSpace } from "../config";
 
@@ -34,14 +38,7 @@ export function initPluginSystem() {
 /**
  * 暴露共享依赖到 window
  */
-export async function exposeSharedDeps() {
-  const [Vue, VueRouter, ElementPlus, Pinia] = await Promise.all([
-    import("vue"),
-    import("vue-router"),
-    import("element-plus"),
-    import("pinia")
-  ]);
-
+export function exposeSharedDeps() {
   window.__deps = {
     Vue,
     VueRouter,
