@@ -67,6 +67,18 @@
           <td class="label" />
           <td class="content"><Install /></td>
         </tr>
+        <tr>
+          <td class="label">
+            <el-icon :size="16" class="icon" :color="issuedColor">
+              <Select />
+            </el-icon>
+          </td>
+          <td class="content">自动部署</td>
+        </tr>
+        <tr>
+          <td class="label" />
+          <td class="content"><Deploy /></td>
+        </tr>
       </tbody>
     </table>
   </el-card>
@@ -77,6 +89,7 @@ import { statusType, status } from "@/views/order/dictionary";
 import Operate from "./operate.vue";
 import Validation from "./validation.vue";
 import Install from "./install.vue";
+import Deploy from "./deploy.vue";
 import Documents from "../documents.vue";
 import { ElButton } from "element-plus";
 import { Select } from "@element-plus/icons-vue";

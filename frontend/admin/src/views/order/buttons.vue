@@ -51,9 +51,7 @@
     </el-button>
     <el-button
       v-if="
-        ['processing', 'active', 'approving'].includes(
-          row.latest_cert?.status
-        )
+        ['processing', 'active', 'approving'].includes(row.latest_cert?.status)
       "
       class="reset-margin !outline-none"
       type="primary"

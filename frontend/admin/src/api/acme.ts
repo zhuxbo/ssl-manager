@@ -76,10 +76,7 @@ export function cancelAcme(id: number): Promise<BaseResponse> {
 }
 
 /** ACME 备注 */
-export function remarkAcme(
-  id: number,
-  remark: string
-): Promise<BaseResponse> {
+export function remarkAcme(id: number, remark: string): Promise<BaseResponse> {
   return http.post<BaseResponse<null>, { remark: string }>(
     `/acme/remark/${id}`,
     { data: { remark } }

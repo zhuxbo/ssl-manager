@@ -126,6 +126,7 @@ Route::prefix('admin')->middleware('api.admin')->group(function () {
         Route::post('batch-revoke-cancel', [OrderController::class, 'batchRevokeCancel']);
         Route::patch('auto-settings/{id}', [OrderController::class, 'updateAutoSettings'])->where('id', '[0-9]+');
         Route::patch('amount/{id}', [OrderController::class, 'updateAmount'])->where('id', '[0-9]+');
+        Route::get('deploy-commands', [OrderController::class, 'deployCommands']);
     });
 
     // 证书路由

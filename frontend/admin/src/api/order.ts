@@ -245,6 +245,16 @@ export function batchRevokeCancel(
   );
 }
 
+/** 获取部署命令 */
+export function deployCommands(
+  orderIds: string | number
+): Promise<BaseResponse> {
+  return http.get<BaseResponse<null>, { order_ids: string | number }>(
+    "/order/deploy-commands",
+    { params: { order_ids: orderIds } }
+  );
+}
+
 /** 导入证书 */
 export function importCert(data: any): Promise<BaseResponse> {
   return http.post<BaseResponse<null>, any>("/order/input", { data });

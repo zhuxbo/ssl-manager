@@ -4,8 +4,8 @@ export default {
   redirect: "/acme",
   meta: {
     icon: "ri:robot-2-fill",
-    title: "ACME订阅",
-    rank: 3.5,
+    title: "ACME",
+    rank: 3.3,
     showLink: false
   },
   children: [
@@ -14,7 +14,7 @@ export default {
       name: "Acme",
       component: () => import("@/views/acme/index.vue"),
       meta: {
-        title: "ACME订阅",
+        title: "ACME",
         keepAlive: true
       }
     },
@@ -23,7 +23,7 @@ export default {
       name: "AcmeDetails",
       component: () => import("@/views/acme/details.vue"),
       meta: {
-        title: "ACME订阅详情",
+        title: "ACME详情",
         activePath: "/acme",
         showLink: false
       }

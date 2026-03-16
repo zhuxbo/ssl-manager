@@ -19,9 +19,15 @@ const renderPriceCell = (
         return `${val}/${periodLabels[period] || period + "月"}`;
       })
       .filter(Boolean);
-    return lines.length
-      ? <>{lines.map((line, i) => <div key={i}>{line}</div>)}</>
-      : "-";
+    return lines.length ? (
+      <>
+        {lines.map((line, i) => (
+          <div key={i}>{line}</div>
+        ))}
+      </>
+    ) : (
+      "-"
+    );
   }
   const val = formatPrice(row.price?.[field]);
   return val ? `${val}/${periodLabels[row.price?.period] || ""}` : "-";

@@ -64,6 +64,15 @@
       同步订单
     </el-button>
     <el-button
+      v-if="canDeploy()"
+      type="primary"
+      size="small"
+      class="ml-2"
+      @click="deploy()"
+    >
+      批量部署
+    </el-button>
+    <el-button
       v-if="canCommitCancel()"
       type="danger"
       size="small"
@@ -149,6 +158,10 @@ const canSync = () => {
   return getSelectedRows().some(row =>
     ["processing", "active", "approving"].includes(row.latest_cert?.status)
   );
+};
+
+const canDeploy = () => {
+  return getSelectedRows().some(row => row.latest_cert?.status === "active");
 };
 
 const canCommitCancel = () => {
@@ -248,9 +261,7 @@ const copy = () => {
 
         // 委托验证
         if (cert.dcv?.is_delegate) {
-          const prefix = getDelegationPrefix(
-            cert.dcv.ca || item.product?.ca
-          );
+          const prefix = getDelegationPrefix(cert.dcv.ca || item.product?.ca);
           const validation = cert.validation || [];
           const seen = new Map();
           const uniqueDelegations = validation.filter((v: any) => {
@@ -320,6 +331,37 @@ const copy = () => {
         type: "error"
       });
     });
+};
+
+const deploy = () => {
+  const filteredIds: number[] = [];
+
+  props.tableRef.clearSelection();
+
+  getSelectedRows().forEach(row => {
+    if (row.latest_cert.status === "active") {
+      filteredIds.push(row.id);
+      props.tableRef.toggleRowSelection(row);
+    }
+  });
+
+  if (!filteredIds.length) {
+    message("请至少选择一个已签发证书", { type: "error" });
+    return;
+  }
+
+  OrderApi.deployCommands(filteredIds.join(",")).then(res => {
+    if (res.code === 1) {
+      navigator.clipboard
+        .writeText(res.data.deploy)
+        .then(() => {
+          message("部署命令已复制", { type: "success" });
+        })
+        .catch(() => {
+          message("复制失败", { type: "error" });
+        });
+    }
+  });
 };
 
 const pay = () => {

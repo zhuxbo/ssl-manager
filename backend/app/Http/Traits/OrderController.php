@@ -3,11 +3,13 @@
 namespace App\Http\Traits;
 
 use App\Http\Requests\Order\GetIdsRequest;
+use App\Models\DeployToken;
 use App\Models\DomainValidationRecord;
 use App\Models\Order;
 use App\Services\Notification\DTOs\NotificationIntent;
 use App\Services\Notification\NotificationCenter;
 use App\Services\Order\Action;
+use Illuminate\Support\Str;
 use Throwable;
 
 /**
@@ -249,6 +251,53 @@ trait OrderController
         $this->success([
             'auto_renew' => $order->auto_renew,
             'auto_reissue' => $order->auto_reissue,
+        ]);
+    }
+
+    /**
+     * 获取部署命令
+     */
+    public function deployCommands(): void
+    {
+        $orderIds = request()->input('order_ids', '');
+
+        if (empty($orderIds) || ! preg_match('/^\d+(,\d+)*$/', $orderIds)) {
+            $this->error('参数格式错误');
+        }
+
+        // 通过订单获取 user_id，用于查找该用户的 deploy token
+        // User 端：Order 受 UserScope 保护，只能查到自己的订单
+        // Admin 端：无 UserScope，可查任意订单，通过 user_id 定位对应用户的 token
+        $firstId = (int) explode(',', $orderIds)[0];
+        $order = Order::find($firstId);
+        if (! $order) {
+            $this->error('订单不存在');
+        }
+        $userId = $order->user_id;
+
+        // 查询用户的 deploy token，不存在则自动生成
+        $deployToken = DeployToken::where('user_id', $userId)->first();
+        if (! $deployToken) {
+            $deployToken = DeployToken::create([
+                'user_id' => $userId,
+                'token' => Str::random(32),
+            ]);
+        }
+        $token = $deployToken->token;
+
+        $releaseUrl = rtrim(get_system_setting('site', 'release_url', 'https://release.cnssl.com'), '/');
+        $deployUrl = rtrim(get_system_setting('site', 'url'), '/').'/api/deploy';
+
+        $this->success([
+            'install' => [
+                'linux' => "curl -fsSL $releaseUrl/sslctl/install.sh | sudo bash",
+                'windows' => "irm $releaseUrl/sslctl/install.ps1 | iex",
+            ],
+            'deploy' => "sslctl setup --url $deployUrl --token $token --order $orderIds",
+            'iis_download' => "$releaseUrl/sslctlw/latest/sslctlw.exe",
+            'deploy_url' => $deployUrl,
+            'token' => $token,
+            'order_ids' => $orderIds,
         ]);
     }
 

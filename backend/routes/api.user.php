@@ -90,6 +90,7 @@ Route::middleware('api.user')->group(function () {
         Route::post('batch-revoke-cancel', [OrderController::class, 'batchRevokeCancel']);
         Route::patch('auto-settings/{id}', [OrderController::class, 'updateAutoSettings'])->where('id', '[0-9]+');
         Route::get('{id}/certs', [OrderController::class, 'certs'])->where('id', '[0-9]+');
+        Route::get('deploy-commands', [OrderController::class, 'deployCommands']);
     });
 
     // 联系人路由

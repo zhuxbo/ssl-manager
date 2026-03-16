@@ -8,6 +8,7 @@ use App\Models\ApiToken;
 use App\Models\Callback;
 use App\Models\CnameDelegation;
 use App\Models\Contact;
+use App\Models\DeployToken;
 use App\Models\ErrorLog;
 use App\Models\Fund;
 use App\Models\Invoice;
@@ -90,6 +91,7 @@ abstract class Authenticate
                 ApiToken::class,
                 Callback::class,
                 CnameDelegation::class,
+                DeployToken::class,
                 Order::class,
                 Fund::class,
                 Transaction::class,

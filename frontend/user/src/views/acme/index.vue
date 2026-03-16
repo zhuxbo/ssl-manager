@@ -1,5 +1,6 @@
 <script setup lang="tsx">
 import { ref, onMounted, onBeforeUnmount } from "vue";
+import { PureTableBar } from "@shared/components";
 import { PlusSearch } from "plus-pro-components";
 import { useAcme } from "./hook";
 import { useAcmeSearch } from "./search";

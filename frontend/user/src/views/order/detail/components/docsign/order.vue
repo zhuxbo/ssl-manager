@@ -11,7 +11,9 @@
         </tr>
         <tr>
           <td class="label">品牌</td>
-          <td class="content">{{ brandLabels[order.brand?.toLowerCase()] || order.brand }}</td>
+          <td class="content">
+            {{ brandLabels[order.brand?.toLowerCase()] || order.brand }}
+          </td>
         </tr>
         <tr>
           <td class="label">产品</td>
