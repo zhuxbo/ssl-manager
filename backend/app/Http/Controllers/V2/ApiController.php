@@ -227,11 +227,15 @@ class ApiController extends Controller
             $order = Order::with(['latestCert'])->where('orders.id', $order_id)->first();
         }
 
+        $cleaned = $this->cleanDcvAndValidation(
+            $order->latestCert->dcv ?? null,
+            $order->latestCert->validation ?? null,
+        );
+
         $this->success([
             'order_id' => $order_id ?? '',
             'cert_apply_status' => $order->latestCert->cert_apply_status ?? 0,
-            'dcv' => $order->latestCert->dcv ?? null,
-            'validation' => $order->latestCert->validation ?? null,
+            ...$cleaned,
         ]);
     }
 
@@ -279,11 +283,15 @@ class ApiController extends Controller
             $order = Order::with(['latestCert'])->where('orders.id', $order_id)->first();
         }
 
+        $cleaned = $this->cleanDcvAndValidation(
+            $order->latestCert->dcv ?? null,
+            $order->latestCert->validation ?? null,
+        );
+
         $this->success([
             'order_id' => $order_id ?? '',
             'cert_apply_status' => $order->latestCert->cert_apply_status ?? 0,
-            'dcv' => $order->latestCert->dcv ?? null,
-            'validation' => $order->latestCert->validation ?? null,
+            ...$cleaned,
         ]);
     }
 
@@ -337,11 +345,15 @@ class ApiController extends Controller
             $order = Order::with(['latestCert'])->where('orders.id', $order_id)->first();
         }
 
+        $cleaned = $this->cleanDcvAndValidation(
+            $order->latestCert->dcv ?? null,
+            $order->latestCert->validation ?? null,
+        );
+
         $this->success([
             'order_id' => $order_id ?? '',
             'cert_apply_status' => $order->latestCert->cert_apply_status ?? 0,
-            'dcv' => $order->latestCert->dcv ?? null,
-            'validation' => $order->latestCert->validation ?? null,
+            ...$cleaned,
         ]);
     }
 
@@ -466,6 +478,10 @@ class ApiController extends Controller
         if (empty($result['private_key'])) {
             unset($result['private_key']);
         }
+
+        // 清理 dcv/validation 中不可跨级传递的内部字段
+        $cleaned = $this->cleanDcvAndValidation($result['dcv'] ?? null, $result['validation'] ?? null);
+        $result = array_merge($result, $cleaned);
 
         $this->success($result);
     }
@@ -635,6 +651,40 @@ class ApiController extends Controller
         }
 
         return $result ?? [];
+    }
+
+    /**
+     * 从 dcv/validation 中提取可跨级传递的字段（白名单）
+     * delegation 内部标记不应暴露给下级系统
+     */
+    private function cleanDcvAndValidation(?array $dcv, ?array $validation): array
+    {
+        if ($dcv) {
+            $dcv = array_filter([
+                'method' => $dcv['method'] ?? null,
+                'dns' => $dcv['dns'] ?? null,
+                'file' => $dcv['file'] ?? null,
+            ], fn ($v) => $v !== null);
+        }
+
+        if ($validation) {
+            $validation = array_map(fn (array $item) => array_filter([
+                'domain' => $item['domain'] ?? null,
+                'method' => $item['method'] ?? null,
+                'verified' => $item['verified'] ?? null,
+                'host' => $item['host'] ?? null,
+                'value' => $item['value'] ?? null,
+                'name' => $item['name'] ?? null,
+                'content' => $item['content'] ?? null,
+                'link' => $item['link'] ?? null,
+                'path' => $item['path'] ?? null,
+                'email' => $item['email'] ?? null,
+                'error' => $item['error'] ?? null,
+                'expires_date' => $item['expires_date'] ?? null,
+            ], fn ($v) => $v !== null), $validation);
+        }
+
+        return ['dcv' => $dcv, 'validation' => $validation];
     }
 
     /**

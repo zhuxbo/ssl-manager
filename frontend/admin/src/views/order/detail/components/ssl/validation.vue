@@ -133,7 +133,7 @@
   </div>
   <div
     v-if="
-      ['file_proxy', 'file', 'http', 'https'].includes(cert.dcv?.method) &&
+      ['file', 'http', 'https'].includes(cert.dcv?.method) &&
       cert.dcv?.file?.content
     "
     class="descriptions"
@@ -164,7 +164,7 @@
           <template #suffix>
             <Copy :copied="cert.dcv?.file?.path" />
           </template>
-          <template v-if="cert.dcv?.method !== 'file_proxy'" #prepend>
+          <template #prepend>
             <el-button
               type="primary"
               @click="OrderApi.downloadValidateFile(order.id)"
@@ -172,12 +172,6 @@
             >
           </template>
         </el-input>
-        <el-tag
-          v-if="cert.dcv?.method === 'file_proxy'"
-          type="success"
-          style="margin-left: 8px"
-          >已代理</el-tag
-        >
       </el-form-item>
     </div>
   </div>
@@ -236,7 +230,7 @@
       <el-button
         v-if="
           cert.validation?.length > 1 &&
-          (['cname', 'txt', 'file_proxy', 'file', 'http', 'https'].includes(
+          (['cname', 'txt', 'file', 'http', 'https'].includes(
             cert.dcv?.method
           ) ||
             cert.dcv?.is_delegate) &&
@@ -1161,7 +1155,7 @@ const debouncedVerifyItem = debounce(verifyItem, 500);
 async function startBatchVerify() {
   if (
     !cert.value?.validation?.length ||
-    (!["cname", "txt", "file_proxy", "file", "http", "https"].includes(
+    (!["cname", "txt", "file", "http", "https"].includes(
       cert.value.dcv?.method
     ) &&
       !cert.value.dcv?.is_delegate) ||

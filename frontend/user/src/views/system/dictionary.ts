@@ -104,10 +104,9 @@ export const nameTypeLabels: { [key: string]: string } = {
 };
 
 // 验证方法选项
-// delegation 和 file_proxy 为所有 SSL 产品通用验证方式，非 ACME 专用
+// delegation 为所有 SSL 产品通用验证方式，非 ACME 专用
 export const validationMethodOptions = [
   { label: "委托验证", value: "delegation" },
-  { label: "文件代理", value: "file_proxy" },
   { label: "TXT", value: "txt" },
   { label: "CNAME", value: "cname" },
   { label: "FILE", value: "file" },
@@ -122,7 +121,6 @@ export const validationMethodOptions = [
 
 export const validationMethodLabels: { [key: string]: string } = {
   delegation: "委托验证(自动续签)",
-  file_proxy: "文件代理(自动验证)",
   txt: "TXT(解析验证)",
   cname: "CNAME(解析验证)",
   file: "FILE(文件验证)",
