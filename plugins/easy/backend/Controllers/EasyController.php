@@ -343,6 +343,7 @@ class EasyController extends Controller
             $orderId = null;
             try {
                 (new Action())->new([
+                    'user_id' => $user->id,
                     'domains' => $params['domain'],
                     'product_id' => $product['id'],
                     'period' => $product['period'],
