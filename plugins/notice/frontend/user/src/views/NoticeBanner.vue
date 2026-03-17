@@ -74,6 +74,7 @@ onMounted(async () => {
 .notice-banner-list :deep(.el-alert) {
   border-radius: 8px;
   border: none;
+  padding: 12px 16px;
 }
 
 .notice-banner-list :deep(.el-alert--info) {
@@ -81,15 +82,15 @@ onMounted(async () => {
 }
 
 .notice-banner-list :deep(.el-alert--success) {
-  background-color: #f0f9eb;
+  background-color: #f9fdf7;
 }
 
 .notice-banner-list :deep(.el-alert--warning) {
-  background-color: #fdf6ec;
+  background-color: #fefcf8;
 }
 
 .notice-banner-list :deep(.el-alert--error) {
-  background-color: #fef0f0;
+  background-color: #fef9f9;
 }
 
 html.dark .notice-banner-list :deep(.el-alert--info) {
@@ -97,14 +98,14 @@ html.dark .notice-banner-list :deep(.el-alert--info) {
 }
 
 html.dark .notice-banner-list :deep(.el-alert--success) {
-  background-color: #1c2518;
+  background-color: #141816;
 }
 
 html.dark .notice-banner-list :deep(.el-alert--warning) {
-  background-color: #2b2111;
+  background-color: #181716;
 }
 
 html.dark .notice-banner-list :deep(.el-alert--error) {
-  background-color: #2b1414;
+  background-color: #181516;
 }
 </style>
