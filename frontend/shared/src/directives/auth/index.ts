@@ -26,7 +26,9 @@ export const auth: Directive = {
     const { value } = binding;
     if (value) {
       if (!hasAuthFn) {
-        console.warn("[Directive: auth]: hasAuth function not initialized. Call setHasAuth() first.");
+        console.warn(
+          "[Directive: auth]: hasAuth function not initialized. Call setHasAuth() first."
+        );
         return;
       }
       !hasAuthFn(value) && el.parentNode?.removeChild(el);

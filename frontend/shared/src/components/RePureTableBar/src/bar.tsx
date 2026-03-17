@@ -84,8 +84,7 @@ export default defineComponent({
     const getDropdownItemStyle = computed(() => {
       return s => {
         return {
-          background:
-            s === size.value ? getEpThemeColor() : "",
+          background: s === size.value ? getEpThemeColor() : "",
           color: s === size.value ? "#fff" : "var(--el-text-color-primary)"
         };
       };
@@ -249,7 +248,7 @@ export default defineComponent({
     const reference = {
       reference: () => (
         <SettingIcon
-          class={["w-[16px]", iconClass.value]}
+          class={["w-4", iconClass.value]}
           v-tippy={rendTippyProps("列设置")}
         />
       )
@@ -282,7 +281,7 @@ export default defineComponent({
               {props.tableRef?.size ? (
                 <>
                   <ExpandIcon
-                    class={["w-[16px]", iconClass.value]}
+                    class={["w-4", iconClass.value]}
                     style={{
                       transform: isExpandAll.value ? "none" : "rotate(-90deg)"
                     }}
@@ -296,7 +295,7 @@ export default defineComponent({
               ) : null}
               <RefreshIcon
                 class={[
-                  "w-[16px]",
+                  "w-4",
                   iconClass.value,
                   loading.value ? "animate-spin" : ""
                 ]}
@@ -309,7 +308,7 @@ export default defineComponent({
                 trigger="click"
                 v-tippy={rendTippyProps("密度")}
               >
-                <CollapseIcon class={["w-[16px]", iconClass.value]} />
+                <CollapseIcon class={["w-4", iconClass.value]} />
               </el-dropdown>
               <el-divider direction="vertical" />
 
@@ -333,7 +332,7 @@ export default defineComponent({
                   </el-button>
                 </div>
 
-                <div class="pt-[6px] pl-[11px]">
+                <div class="pt-1.5 pl-[11px]">
                   <el-scrollbar max-height="36vh">
                     <el-checkbox-group
                       ref={`GroupRef${unref(props.tableKey)}`}
@@ -350,7 +349,7 @@ export default defineComponent({
                             <div class="flex items-center">
                               <DragIcon
                                 class={[
-                                  "drag-btn w-[16px] mr-2",
+                                  "drag-btn w-4 mr-2",
                                   isFixedColumn(item)
                                     ? "cursor-no-drop!"
                                     : "cursor-grab!"
@@ -385,7 +384,7 @@ export default defineComponent({
               <el-divider direction="vertical" />
 
               <iconifyIconOffline
-                class={["w-[16px]", iconClass.value]}
+                class={["w-4", iconClass.value]}
                 icon={isFullscreen.value ? ExitFullscreen : Fullscreen}
                 v-tippy={isFullscreen.value ? "退出全屏" : "全屏"}
                 onClick={() => onFullscreen()}
