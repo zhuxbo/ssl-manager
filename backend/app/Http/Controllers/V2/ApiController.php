@@ -204,6 +204,7 @@ class ApiController extends Controller
         }
         $params['product_id'] = $product->id;
 
+        $params['user_id'] = $this->user_id;
         $params['action'] = 'new';
         $params['channel'] = 'api';
 

@@ -174,7 +174,7 @@ class AutoRenewCommand extends Command
         ];
 
         // 执行续费或重签
-        $actionService = app(Action::class, ['userId' => $user->id]);
+        $actionService = app(Action::class);
 
         try {
             if ($action === 'renew') {
@@ -186,7 +186,7 @@ class AutoRenewCommand extends Command
             $this->info("订单 #{$order->id} {$action} 成功");
 
             // 自动支付并提交
-            $this->autoPayAndCommit($order->id, $user->id);
+            $this->autoPayAndCommit($order->id);
         } catch (ApiResponseException $e) {
             $result = $e->getApiResponse();
 
@@ -194,7 +194,7 @@ class AutoRenewCommand extends Command
             if (isset($result['data']['order_id'])) {
                 $newOrderId = $result['data']['order_id'];
                 $this->info("订单 #{$order->id} 续费创建新订单 #{$newOrderId}");
-                $this->autoPayAndCommit($newOrderId, $user->id);
+                $this->autoPayAndCommit($newOrderId);
             } else {
                 throw new \Exception($result['msg'] ?? '操作失败');
             }
@@ -204,9 +204,9 @@ class AutoRenewCommand extends Command
     /**
      * 自动支付并提交
      */
-    private function autoPayAndCommit(int $orderId, int $userId): void
+    private function autoPayAndCommit(int $orderId): void
     {
-        $actionService = app(Action::class, ['userId' => $userId]);
+        $actionService = app(Action::class);
 
         try {
             // 支付订单

@@ -112,6 +112,7 @@ class ApiController extends Controller
         // 转换V1参数格式为新系统格式
         $params = $this->convertV1Params($params);
 
+        $params['user_id'] = $this->user_id;
         $params['action'] = 'new';
         $params['channel'] = 'api';
 
