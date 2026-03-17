@@ -52,66 +52,61 @@
       </el-tab-pane>
       <el-tab-pane label="IIS" name="iis">
         <div class="deploy-step">
-          <div class="step-title">下载自动部署工具，在服务器运行</div>
-          <div class="command-line">
-            <code>{{ commands.iis_download }}</code>
-            <el-button
-              type="primary"
-              link
-              size="small"
-              :disabled="!isActive"
-              @click="copy(commands.iis_download)"
-              >复制</el-button
-            >
-            <el-link
-              v-if="isActive"
-              type="primary"
-              :href="commands.iis_download"
-              target="_blank"
-              >下载</el-link
-            >
+          <div class="step-title">第一步：安装 sslctlw</div>
+          <div class="command-block">
+            <div class="command-label">
+              <el-link
+                v-if="isActive"
+                type="primary"
+                :href="commands.iis_install?.download"
+                target="_blank"
+                :underline="false"
+                style="font-size: inherit; vertical-align: baseline"
+                >下载文件</el-link
+              ><template v-else>下载文件</template
+              >上传到服务器，或复制链接到服务器下载，在服务器内运行
+            </div>
+            <div class="command-line">
+              <code>{{ commands.iis_install?.download }}</code>
+              <el-button
+                type="primary"
+                link
+                size="small"
+                :disabled="!isActive"
+                @click="copy(commands.iis_install?.download)"
+                >复制</el-button
+              >
+            </div>
+          </div>
+          <div class="command-block">
+            <div class="command-label">Windows (PowerShell)</div>
+            <div class="command-line">
+              <code>{{ commands.iis_install?.windows }}</code>
+              <el-button
+                type="primary"
+                link
+                size="small"
+                :disabled="!isActive"
+                @click="copy(commands.iis_install?.windows)"
+                >复制</el-button
+              >
+            </div>
           </div>
         </div>
-        <div class="command-block">
-          <div class="command-label">部署 URL</div>
-          <div class="command-line">
-            <code>{{ commands.deploy_url }}</code>
-            <el-button
-              type="primary"
-              link
-              size="small"
-              :disabled="!isActive"
-              @click="copy(commands.deploy_url)"
-              >复制</el-button
-            >
-          </div>
-        </div>
-        <div class="command-block">
-          <div class="command-label">部署 Token</div>
-          <div class="command-line">
-            <code>{{ commands.token }}</code>
-            <el-button
-              type="primary"
-              link
-              size="small"
-              :disabled="!isActive"
-              @click="copy(commands.token)"
-              >复制</el-button
-            >
-          </div>
-        </div>
-        <div class="command-block">
-          <div class="command-label">订单 ID</div>
-          <div class="command-line">
-            <code>{{ commands.order_ids }}</code>
-            <el-button
-              type="primary"
-              link
-              size="small"
-              :disabled="!isActive"
-              @click="copy(commands.order_ids)"
-              >复制</el-button
-            >
+        <div class="deploy-step">
+          <div class="step-title">第二步：一键部署</div>
+          <div class="command-block">
+            <div class="command-line">
+              <code>{{ commands.iis_deploy }}</code>
+              <el-button
+                type="primary"
+                link
+                size="small"
+                :disabled="!isActive"
+                @click="copy(commands.iis_deploy)"
+                >复制</el-button
+              >
+            </div>
           </div>
         </div>
       </el-tab-pane>

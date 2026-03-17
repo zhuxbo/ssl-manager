@@ -294,10 +294,11 @@ trait OrderController
                 'windows' => "irm $releaseUrl/sslctl/install.ps1 | iex",
             ],
             'deploy' => "sslctl setup --url $deployUrl --token $token --order $orderIds",
-            'iis_download' => "$releaseUrl/sslctlw/latest/sslctlw.exe",
-            'deploy_url' => $deployUrl,
-            'token' => $token,
-            'order_ids' => $orderIds,
+            'iis_install' => [
+                'download' => "$releaseUrl/sslctlw/latest/sslctlw.exe",
+                'windows' => "irm $releaseUrl/sslctlw/install.ps1 | iex",
+            ],
+            'iis_deploy' => "sslctlw setup --url $deployUrl --token $token --order $orderIds",
         ]);
     }
 

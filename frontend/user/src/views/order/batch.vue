@@ -63,15 +63,15 @@
     >
       同步订单
     </el-button>
-    <el-button
-      v-if="canDeploy()"
-      type="primary"
-      size="small"
-      class="ml-2"
-      @click="deploy()"
-    >
-      批量部署
-    </el-button>
+    <el-dropdown v-if="canDeploy()" class="ml-2" @command="deploy">
+      <el-button type="primary" size="small">批量部署</el-button>
+      <template #dropdown>
+        <el-dropdown-menu>
+          <el-dropdown-item command="nginx">Nginx / Apache</el-dropdown-item>
+          <el-dropdown-item command="iis">IIS</el-dropdown-item>
+        </el-dropdown-menu>
+      </template>
+    </el-dropdown>
     <el-button
       v-if="canCommitCancel()"
       type="danger"
@@ -333,7 +333,7 @@ const copy = () => {
     });
 };
 
-const deploy = () => {
+const deploy = (type: string) => {
   const filteredIds: number[] = [];
 
   props.tableRef.clearSelection();
@@ -352,8 +352,9 @@ const deploy = () => {
 
   OrderApi.deployCommands(filteredIds.join(",")).then(res => {
     if (res.code === 1) {
+      const cmd = type === "iis" ? res.data.iis_deploy : res.data.deploy;
       navigator.clipboard
-        .writeText(res.data.deploy)
+        .writeText(cmd)
         .then(() => {
           message("部署命令已复制", { type: "success" });
         })
