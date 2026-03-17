@@ -8,5 +8,5 @@ use Illuminate\Database\Eloquent\Model;
 
 interface NotificationBuilderInterface
 {
-    public function build(NotificationIntent $intent, Model $notifiable): NotificationPayload;
+    public function build(NotificationIntent $intent, Model $notifiable): ?NotificationPayload;
 }

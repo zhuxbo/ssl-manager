@@ -19,7 +19,7 @@ class CertExpireMailNotificationBuilder implements NotificationBuilderInterface
         private readonly AutoRenewService $autoRenewService
     ) {}
 
-    public function build(NotificationIntent $intent, Model $notifiable): NotificationPayload
+    public function build(NotificationIntent $intent, Model $notifiable): ?NotificationPayload
     {
         if (! $notifiable instanceof User) {
             throw new RuntimeException('通知接收者必须为用户');
@@ -89,7 +89,7 @@ class CertExpireMailNotificationBuilder implements NotificationBuilderInterface
         }
 
         if (empty($certificates)) {
-            throw new RuntimeException('14天内没有需要通知的到期证书');
+            return null;
         }
 
         $subject = 'SSL证书到期提醒 ['.$siteName.']';
