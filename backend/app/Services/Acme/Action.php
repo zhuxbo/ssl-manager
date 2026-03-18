@@ -13,6 +13,7 @@ use App\Models\Transaction;
 use App\Services\Acme\Api\Api;
 use App\Services\Order\Utils\OrderUtil;
 use App\Traits\ApiResponse;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
@@ -282,10 +283,10 @@ class Action
         // 构造交易数据（金额取负数表示扣费）
         $transactionAmount = '-'.$acme->amount;
 
-        // 验证余额是否足够
+        // 管理员支付跳过余额检测，允许欠费支付
         $balanceAfter = bcadd((string) $user->balance, $transactionAmount, 2);
         if (bccomp($balanceAfter, (string) $user->credit_limit, 2) === -1) {
-            $this->error('余额不足');
+            Auth::guard('admin')->check() || $this->error('余额不足');
         }
 
         DB::transaction(function () use ($acme, $user, $transactionAmount) {

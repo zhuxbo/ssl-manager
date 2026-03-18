@@ -3,17 +3,17 @@
 use Illuminate\Support\Facades\File;
 
 test('签名为 cache:clear-all', function () {
-    $this->artisan('cache:clear-all --quick --without-composer --without-opcache')->assertSuccessful();
+    $this->artisan('cache:clear-all --quick --without-composer')->assertSuccessful();
 });
 
 test('快速模式输出简洁信息', function () {
-    $this->artisan('cache:clear-all --quick --without-composer --without-opcache')
+    $this->artisan('cache:clear-all --quick --without-composer')
         ->expectsOutputToContain('所有缓存清除完成')
         ->assertSuccessful();
 });
 
 test('正常模式输出详细信息', function () {
-    $this->artisan('cache:clear-all --without-composer --without-opcache')
+    $this->artisan('cache:clear-all --without-composer')
         ->expectsOutputToContain('开始清除')
         ->expectsOutputToContain('所有缓存清除完成')
         ->assertSuccessful();
@@ -40,7 +40,7 @@ test('返回成功退出码并清理缓存文件', function () {
     expect(File::exists($storageViewFile))->toBeTrue();
     expect(File::exists($storageSessionFile))->toBeTrue();
 
-    $this->artisan('cache:clear-all --quick --without-composer --without-opcache')
+    $this->artisan('cache:clear-all --quick --without-composer')
         ->assertExitCode(0);
 
     expect(File::exists($bootstrapCacheFile))->toBeFalse();

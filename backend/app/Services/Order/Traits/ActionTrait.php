@@ -24,6 +24,7 @@ use App\Utils\Random;
 use App\Utils\SnowFlake;
 use DateTime;
 use Exception;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
@@ -832,10 +833,10 @@ trait ActionTrait
             // 获取交易信息 订单金额为负数
             $transaction = OrderUtil::getOrderTransaction($order->toArray());
 
-            // 验证余额是否足够
+            // 管理员支付跳过余额检测，允许欠费支付
             $balance_after = bcadd((string) $order->user->balance, (string) $transaction['amount'], 2);
             if (bccomp($balance_after, (string) $order->user->credit_limit, 2) === -1) {
-                $this->error('余额不足');
+                Auth::guard('admin')->check() || $this->error('余额不足');
             }
 
             // 创建交易记录并扣费
