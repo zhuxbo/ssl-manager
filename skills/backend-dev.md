@@ -199,9 +199,11 @@ php artisan queue:work --queue Task  # 队列
 ## 迁移规范
 
 - **enum vs string**：系统核心字段用 `enum` 保证约束（如 `product_type`、`status`）；插件可扩展的字段用 `string`，方便插件写入自定义值
+- **优先 Laravel 系统方法**：迁移优先使用 `Schema::table` + Blueprint 方法，避免 `DB::statement` 裸 SQL
 - **up 幂等**：修改表结构的迁移必须先检查当前状态（`Schema::hasColumn`/`Schema::hasTable`），避免重复执行报错
 - **不写 down**：迁移只写 `up()`，不写 `down()`。生产环境不做回滚，回滚用新迁移前进修复
 - **structure.json 不手动改**：迁移变动后发布前通过 `php artisan db:structure --export` 重新导出
+- **数据库变更必须导出**：有迁移变更时，提交前必须执行 `php artisan db:structure --export --use-local` 更新 structure.json
 
 ### 迁移幂等示例
 

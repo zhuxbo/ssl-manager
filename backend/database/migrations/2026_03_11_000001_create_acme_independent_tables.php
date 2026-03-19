@@ -71,7 +71,7 @@ return new class extends Migration
                 $table->timestamp('issued_at')->nullable();
                 $table->timestamp('expires_at')->nullable();
                 $table->timestamp('auto_deploy_at')->nullable();
-                $table->enum('status', ['unpaid', 'pending', 'processing', 'approving', 'active', 'failed', 'cancelling', 'cancelled', 'revoking', 'revoked', 'reissued', 'expired'])->default('processing');
+                $table->enum('status', ['unpaid', 'pending', 'processing', 'approving', 'active', 'failed', 'cancelling', 'cancelled', 'revoked', 'reissued', 'expired'])->default('processing');
                 $table->timestamps();
 
                 $table->foreign('order_id')->references('id')->on('acme_orders')->onDelete('cascade');
