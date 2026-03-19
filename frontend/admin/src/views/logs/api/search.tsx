@@ -41,8 +41,8 @@ export const searchColumns: PlusColumn[] = [
         value: "v2"
       },
       {
-        label: "Auto",
-        value: "auto"
+        label: "Deploy",
+        value: "deploy"
       },
       {
         label: "ACME",

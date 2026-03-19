@@ -101,10 +101,8 @@ class LogOperation
             ];
 
             // 根据路由前缀记录不同类型的日志
-            if ($request->is(['api/V1/*', 'api/v2/*'])) {
+            if ($request->is(['api/V1/*', 'api/v2/*', 'api/acme/*', 'api/deploy', 'api/deploy/*'])) {
                 $this->logApiRequest($request, $logData);
-            } elseif ($request->is(['api/deploy', 'api/deploy/*'])) {
-                $this->logApiDeployRequest($request, $logData);
             } elseif ($request->is('api/admin/*')) {
                 $this->logAdminRequest($request, $logData);
             } elseif ($this->handlePluginLog($request, $logData)) {
@@ -156,19 +154,8 @@ class LogOperation
     protected function logApiRequest(Request $request, array $logData): void
     {
         LogBuffer::add(ApiLog::class, array_merge($logData, [
-            'user_id' => Auth::guard('api')->user()?->user_id,
+            'user_id' => Auth::guard('api')->user()?->user_id ?? $request->attributes->get('authenticated_user_id'),
             'version' => $this->getApiVersion($request),
-        ]));
-    }
-
-    /**
-     * 记录 API Deploy 请求日志
-     */
-    protected function logApiDeployRequest(Request $request, array $logData): void
-    {
-        LogBuffer::add(ApiLog::class, array_merge($logData, [
-            'user_id' => $request->attributes->get('authenticated_user_id'),
-            'version' => 'deploy',
         ]));
     }
 
@@ -227,15 +214,17 @@ class LogOperation
      */
     protected function getApiVersion(Request $request): string
     {
-        // 根据路由判断API版本
         if ($request->is('api/V1/*')) {
             return 'v1';
         } elseif ($request->is('api/v2/*')) {
             return 'v2';
+        } elseif ($request->is('api/acme/*')) {
+            return 'acme';
+        } elseif ($request->is(['api/deploy', 'api/deploy/*'])) {
+            return 'deploy';
         }
 
-        // 如果路由不匹配，则从请求头获取版本（兼容旧的实现）
-        return $request->header('Accept-Version', 'v2');
+        return 'v2';
     }
 
     /**
