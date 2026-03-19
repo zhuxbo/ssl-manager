@@ -14,6 +14,8 @@ use App\Models\Fund;
 use App\Models\Invoice;
 use App\Models\InvoiceLimit;
 use App\Models\Order;
+use App\Models\OrderDocument;
+use App\Models\OrderVerificationReport;
 use App\Models\Organization;
 use App\Models\Scopes\UserScope;
 use App\Models\Transaction;
@@ -99,6 +101,8 @@ abstract class Authenticate
                 InvoiceLimit::class,
                 Organization::class,
                 Contact::class,
+                OrderDocument::class,
+                OrderVerificationReport::class,
             ]);
         }
 

@@ -88,6 +88,22 @@ class Sdk
     }
 
     /**
+     * 上传文档（使用 JSON 发送，避免 base64 被 URL-encoded 二次膨胀）
+     */
+    public function uploadDocument(array $data): array
+    {
+        return $this->call('upload-document', $data, 'json');
+    }
+
+    /**
+     * 提交验证报告
+     */
+    public function submitVerificationReport(array $data): array
+    {
+        return $this->call('save-verification-report', $data, 'json');
+    }
+
+    /**
      * 提交接口请求
      */
     protected function call(string $uri, array $data = [], $method = 'post'): array
@@ -110,7 +126,14 @@ class Sdk
                 ],
                 'http_errors' => false,
             ];
-            $method === 'get' ? $options['query'] = $data : $options['form_params'] = $data;
+            if ($method === 'get') {
+                $options['query'] = $data;
+            } elseif ($method === 'json') {
+                $method = 'post';
+                $options['json'] = $data;
+            } else {
+                $options['form_params'] = $data;
+            }
             $response = $client->request($method, $url, $options);
         } catch (GuzzleException $e) {
             app(ApiExceptions::class)->logException($e);

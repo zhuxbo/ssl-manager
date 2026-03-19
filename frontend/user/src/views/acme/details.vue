@@ -52,7 +52,7 @@
         <el-descriptions-item label="EAB KID">
           <div class="flex items-center gap-2">
             <span>{{ acme.eab_kid }}</span>
-            <el-button link size="small" @click="handleCopy(acme.eab_kid)">
+            <el-button link size="small" @click="handleCopy(acme.eab_kid!)">
               <el-icon size="14"><DocumentCopy /></el-icon>
             </el-button>
           </div>
@@ -64,7 +64,7 @@
               v-if="acme.eab_hmac"
               link
               size="small"
-              @click="handleCopy(acme.eab_hmac)"
+              @click="handleCopy(acme.eab_hmac!)"
             >
               <el-icon size="14"><DocumentCopy /></el-icon>
             </el-button>

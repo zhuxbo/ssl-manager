@@ -7,6 +7,8 @@ use App\Http\Requests\Order\IndexRequest;
 use App\Models\Cert;
 use App\Models\Order;
 use App\Services\Order\Action;
+use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Throwable;
 
 class OrderController extends BaseController
@@ -298,5 +300,62 @@ class OrderController extends BaseController
         $params['action'] = 'reissue';
         $params['channel'] = 'web';
         $this->action->reissue($params);
+    }
+
+    /**
+     * 上传验证文档
+     */
+    public function uploadDocument(Request $request, int $id): void
+    {
+        $request->validate([
+            'file' => 'required|file|mimes:pdf,jpg,jpeg,png,doc,docx|max:5120',
+            'type' => 'required|string',
+            'description' => 'nullable|string|max:255',
+        ]);
+
+        /** @var UploadedFile $file */
+        $file = $request->file('file');
+        $this->action->uploadDocument($id, $file, $request->input('type'), 'user', $request->input('description'));
+    }
+
+    /**
+     * 预览文档
+     */
+    public function previewDocument(int $id): void
+    {
+        $this->action->previewDocument($id);
+    }
+
+    /**
+     * 获取文档列表
+     */
+    public function getDocuments(int $id): void
+    {
+        $this->action->getDocuments($id);
+    }
+
+    /**
+     * 删除文档
+     */
+    public function deleteDocument(int $id): void
+    {
+        $this->action->deleteDocument($id);
+    }
+
+    /**
+     * 获取验证报告
+     */
+    public function getVerificationReport(int $id): void
+    {
+        $this->action->getVerificationReport($id);
+    }
+
+    /**
+     * 保存验证报告
+     */
+    public function saveVerificationReport(int $id): void
+    {
+        $reportData = request()->input('report_data', []);
+        $this->action->saveVerificationReport($id, $reportData);
     }
 }

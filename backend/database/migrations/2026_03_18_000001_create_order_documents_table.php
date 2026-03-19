@@ -1,0 +1,34 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        if (Schema::hasTable('order_documents')) {
+            return;
+        }
+
+        Schema::create('order_documents', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('order_id')->index()->comment('订单ID');
+            $table->unsignedBigInteger('user_id')->index()->comment('用户ID');
+            $table->string('type', 50)->comment('文档类型: APPLICANT/ORGANIZATION/AUTHORIZATION/ADDITIONAL');
+            $table->string('file_name', 255)->comment('原始文件名');
+            $table->string('file_path', 500)->comment('相对路径');
+            $table->unsignedInteger('file_size')->comment('文件大小(bytes)');
+            $table->string('description', 255)->nullable()->comment('描述');
+            $table->string('uploaded_by', 10)->comment('上传来源: user/admin/api');
+            $table->unsignedTinyInteger('submitted')->default(0)->comment('是否已提交到上游');
+            $table->timestamps();
+        });
+    }
+
+    public function down(): void
+    {
+        // 系统采用整体升级方式，不支持回滚操作
+    }
+};

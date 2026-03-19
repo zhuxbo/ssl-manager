@@ -688,6 +688,47 @@ class ApiController extends Controller
     }
 
     /**
+     * 上传文档（接收下游 base64 文档）
+     */
+    public function uploadDocument(): void
+    {
+        $orderId = (int) $this->request->input('order_id');
+        $type = $this->request->input('type', '');
+        $fileName = $this->request->input('fileName', '');
+        $documentContent = $this->request->input('document_content', '');
+        $description = $this->request->input('description');
+
+        ! $orderId && $this->error('order_id is required');
+        ! $type && $this->error('type is required');
+        ! $fileName && $this->error('fileName is required');
+        ! $documentContent && $this->error('document_content is required');
+
+        // 验证订单归属当前用户
+        $order = Order::where('id', $orderId)->where('user_id', $this->user_id)->first();
+        ! $order && $this->error('Order not found');
+
+        $this->action->uploadDocumentFromBase64($orderId, $type, $fileName, $documentContent, $description);
+    }
+
+    /**
+     * 保存验证报告（接收下游报告数据）
+     */
+    public function saveVerificationReport(): void
+    {
+        $orderId = (int) $this->request->input('order_id');
+        $reportData = $this->request->input('report_data', []);
+
+        ! $orderId && $this->error('order_id is required');
+        empty($reportData) && $this->error('report_data is required');
+
+        // 验证订单归属当前用户
+        $order = Order::where('id', $orderId)->where('user_id', $this->user_id)->first();
+        ! $order && $this->error('Order not found');
+
+        $this->action->saveVerificationReport($orderId, $reportData);
+    }
+
+    /**
      * 健康检查接口
      */
     public function health(): void

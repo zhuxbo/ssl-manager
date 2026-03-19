@@ -34,12 +34,15 @@
         <tr
           v-if="
             order.product.validation_type !== 'dv' &&
-            order.brand?.toLowerCase() === 'certum' &&
-            hasDocuments
+            order.brand?.toLowerCase() === 'certum'
           "
         >
           <td class="label" />
-          <td class="content"><Documents /></td>
+          <td class="content">
+            <Documents v-if="hasDocuments" />
+            <DocumentUpload />
+            <VerificationReport />
+          </td>
         </tr>
         <tr>
           <td class="label">
@@ -72,6 +75,8 @@ import { statusType, status } from "@/views/order/dictionary";
 import Operate from "./operate.vue";
 import SmimeValidation from "./validation.vue";
 import Documents from "../documents.vue";
+import DocumentUpload from "../documentUpload.vue";
+import VerificationReport from "../verificationReport.vue";
 import { ElButton } from "element-plus";
 import { Select } from "@element-plus/icons-vue";
 import dayjs from "dayjs";

@@ -53,7 +53,7 @@
               v-if="acme.eab_kid"
               link
               size="small"
-              @click="handleCopy(acme.eab_kid)"
+              @click="handleCopy(acme.eab_kid!)"
             >
               <el-icon size="14"><DocumentCopy /></el-icon>
             </el-button>
@@ -66,7 +66,7 @@
               v-if="acme.eab_hmac"
               link
               size="small"
-              @click="handleCopy(acme.eab_hmac)"
+              @click="handleCopy(acme.eab_hmac!)"
             >
               <el-icon size="14"><DocumentCopy /></el-icon>
             </el-button>

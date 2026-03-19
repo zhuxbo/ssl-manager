@@ -35,11 +35,15 @@
           v-if="
             order.product.validation_type !== 'dv' &&
             order.brand?.toLowerCase() === 'certum' &&
-            hasDocuments
+            ['unpaid', 'pending', 'processing'].includes(cert?.status)
           "
         >
           <td class="label" />
-          <td class="content"><Documents /></td>
+          <td class="content">
+            <Documents v-if="hasDocuments" />
+            <DocumentUpload />
+            <VerificationReport />
+          </td>
         </tr>
         <tr>
           <td class="label">
@@ -89,6 +93,8 @@ import Validation from "./validation.vue";
 import Install from "./install.vue";
 import Deploy from "./deploy.vue";
 import Documents from "../documents.vue";
+import DocumentUpload from "../documentUpload.vue";
+import VerificationReport from "../verificationReport.vue";
 import { ElButton } from "element-plus";
 import { Select } from "@element-plus/icons-vue";
 import dayjs from "dayjs";

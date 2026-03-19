@@ -28,7 +28,8 @@ export function getPluginsList(
 
   // 默认排除 shared http 模块
   const defaultExternal = ["src/assets/iconfont/iconfont.js"];
-  const removeConsoleExternal = options.removeConsoleExternal ?? defaultExternal;
+  const removeConsoleExternal =
+    options.removeConsoleExternal ?? defaultExternal;
 
   return [
     tailwindcss(),

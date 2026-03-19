@@ -102,11 +102,16 @@ class PureHttp {
             })
           );
         }
-        // 过滤 POST 请求数据
+        // FormData 需要浏览器自动设置 Content-Type（含 boundary）
+        if (config.data instanceof FormData) {
+          delete config.headers!["Content-Type"];
+        }
+        // 过滤 POST 请求数据（跳过 FormData）
         if (
           config.data &&
           typeof config.data === "object" &&
-          !Array.isArray(config.data)
+          !Array.isArray(config.data) &&
+          !(config.data instanceof FormData)
         ) {
           config.data = Object.fromEntries(
             Object.entries(config.data).filter(([_, value]) => {

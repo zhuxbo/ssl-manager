@@ -1,5 +1,5 @@
 import { reactive, ref } from "vue";
-import { periodLabels, productTypeLabels } from "../system/dictionary";
+import { periodLabels } from "../system/dictionary";
 
 const formatPrice = (val: string | undefined) => {
   if (!val || val === "0.00") return "";
@@ -42,16 +42,6 @@ export const useProductTable = () => {
       label: "名称",
       prop: "name",
       minWidth: 150
-    },
-    {
-      label: "产品类型",
-      prop: "product_type",
-      width: 100,
-      formatter(row) {
-        return (
-          productTypeLabels[row.product_type] || row.product_type || "SSL证书"
-        );
-      }
     },
     {
       label: "说明",

@@ -110,6 +110,30 @@ class Api
     }
 
     /**
+     * 上传文档到上游
+     */
+    public function uploadDocument(int $orderId, array $data): array
+    {
+        $order = $this->findOrder($orderId);
+        $api = $this->getSourceApi($order->product->source ?? '');
+        $this->checkMethodExists($api, 'uploadDocument');
+
+        return $api->uploadDocument($data);
+    }
+
+    /**
+     * 提交验证报告到上游
+     */
+    public function submitVerificationReport(int $orderId, array $data): array
+    {
+        $order = $this->findOrder($orderId);
+        $api = $this->getSourceApi($order->product->source ?? '');
+        $this->checkMethodExists($api, 'submitVerificationReport');
+
+        return $api->submitVerificationReport($data);
+    }
+
+    /**
      * 设置产品来源
      */
     private function getSourceApi(string $source): OrderSourceApiInterface

@@ -6,6 +6,7 @@ use App\Models\Traits\HasSnowflakeId;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 
 /**
@@ -105,5 +106,21 @@ class Order extends BaseModel
     public function notifications(): MorphMany
     {
         return $this->morphMany(Notification::class, 'notifiable');
+    }
+
+    /**
+     * 获取验证文档
+     */
+    public function documents(): HasMany
+    {
+        return $this->hasMany(OrderDocument::class);
+    }
+
+    /**
+     * 获取验证报告
+     */
+    public function verificationReport(): HasOne
+    {
+        return $this->hasOne(OrderVerificationReport::class);
     }
 }

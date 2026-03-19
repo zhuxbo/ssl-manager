@@ -1,7 +1,7 @@
 {
     "version": "1.0",
     "mysql_version": "8.0.43",
-    "generated_at": "2026-03-14 21:36:11",
+    "generated_at": "2026-03-19 10:58:53",
     "database": {
         "name": "manager",
         "charset": "utf8mb4",
@@ -3385,6 +3385,240 @@
                     "type": "BTREE",
                     "columns": [
                         "template_id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "PRIMARY": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                }
+            },
+            "foreign_keys": []
+        },
+        "order_documents": {
+            "engine": "InnoDB",
+            "collation": "utf8mb4_0900_ai_ci",
+            "comment": "",
+            "auto_increment": 1,
+            "columns": {
+                "id": {
+                    "position": 1,
+                    "type": "bigint unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "auto_increment",
+                    "comment": ""
+                },
+                "order_id": {
+                    "position": 2,
+                    "type": "bigint unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "订单ID"
+                },
+                "user_id": {
+                    "position": 3,
+                    "type": "bigint unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "用户ID"
+                },
+                "type": {
+                    "position": 4,
+                    "type": "varchar(50)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "文档类型: APPLICANT\/ORGANIZATION\/AUTHORIZATION\/ADDITIONAL"
+                },
+                "file_name": {
+                    "position": 5,
+                    "type": "varchar(255)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "原始文件名"
+                },
+                "file_path": {
+                    "position": 6,
+                    "type": "varchar(500)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "相对路径"
+                },
+                "file_size": {
+                    "position": 7,
+                    "type": "int unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "文件大小(bytes)"
+                },
+                "description": {
+                    "position": 8,
+                    "type": "varchar(255)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "描述"
+                },
+                "uploaded_by": {
+                    "position": 9,
+                    "type": "varchar(10)",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "上传来源: user\/admin\/api"
+                },
+                "submitted": {
+                    "position": 10,
+                    "type": "tinyint unsigned",
+                    "nullable": false,
+                    "default": "0",
+                    "extra": "",
+                    "comment": "是否已提交到上游"
+                },
+                "created_at": {
+                    "position": 11,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                },
+                "updated_at": {
+                    "position": 12,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                }
+            },
+            "indexes": {
+                "order_documents_order_id_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "order_id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "order_documents_user_id_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "user_id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "PRIMARY": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                }
+            },
+            "foreign_keys": []
+        },
+        "order_verification_reports": {
+            "engine": "InnoDB",
+            "collation": "utf8mb4_0900_ai_ci",
+            "comment": "",
+            "auto_increment": 1,
+            "columns": {
+                "id": {
+                    "position": 1,
+                    "type": "bigint unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "auto_increment",
+                    "comment": ""
+                },
+                "order_id": {
+                    "position": 2,
+                    "type": "bigint unsigned",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "订单ID"
+                },
+                "user_id": {
+                    "position": 3,
+                    "type": "bigint unsigned",
+                    "nullable": false,
+                    "default": "0",
+                    "extra": "",
+                    "comment": "用户ID"
+                },
+                "report_data": {
+                    "position": 4,
+                    "type": "json",
+                    "nullable": false,
+                    "default": null,
+                    "extra": "",
+                    "comment": "验证报告表单数据"
+                },
+                "submitted": {
+                    "position": 5,
+                    "type": "tinyint unsigned",
+                    "nullable": false,
+                    "default": "0",
+                    "extra": "",
+                    "comment": "是否已提交到上游"
+                },
+                "created_at": {
+                    "position": 6,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                },
+                "updated_at": {
+                    "position": 7,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": ""
+                }
+            },
+            "indexes": {
+                "order_verification_reports_order_id_unique": {
+                    "unique": true,
+                    "type": "BTREE",
+                    "columns": [
+                        "order_id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "order_verification_reports_user_id_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "user_id"
                     ],
                     "sub_parts": [
                         null

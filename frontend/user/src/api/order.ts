@@ -277,6 +277,55 @@ export function deployCommands(
   );
 }
 
+/** 上传验证文档 */
+export function uploadDocument(
+  id: number,
+  data: FormData
+): Promise<BaseResponse> {
+  return http.request<BaseResponse>("post", `/order/upload-document/${id}`, {
+    data
+  });
+}
+
+/** 预览文档（返回 blob URL） */
+export function previewDocument(id: number): Promise<string> {
+  return http
+    .get<
+      any,
+      any
+    >(`/order/document-preview/${id}`, { params: { _t: Date.now() } }, { responseType: "blob" })
+    .then((res: any) => {
+      const blob = res instanceof Blob ? res : new Blob([res]);
+      return URL.createObjectURL(blob);
+    });
+}
+
+/** 获取文档列表 */
+export function getDocuments(id: number): Promise<BaseResponse> {
+  return http.get<BaseResponse<null>, any>(`/order/documents/${id}`);
+}
+
+/** 删除文档 */
+export function deleteDocument(id: number): Promise<BaseResponse> {
+  return http.delete<BaseResponse<null>, any>(`/order/document/${id}`);
+}
+
+/** 获取验证报告 */
+export function getVerificationReport(id: number): Promise<BaseResponse> {
+  return http.get<BaseResponse<null>, any>(`/order/verification-report/${id}`);
+}
+
+/** 保存验证报告 */
+export function saveVerificationReport(
+  id: number,
+  reportData: any
+): Promise<BaseResponse> {
+  return http.post<BaseResponse<null>, any>(
+    `/order/verification-report/${id}`,
+    { data: { report_data: reportData } }
+  );
+}
+
 /** 更新订单自动设置 */
 export function updateAutoSettings(
   id: number,

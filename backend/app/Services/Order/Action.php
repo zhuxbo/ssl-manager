@@ -19,6 +19,7 @@ use App\Services\Notification\NotificationCenter;
 use App\Services\Order\Api\Api;
 use App\Services\Order\Traits\ActionBatchTrait;
 use App\Services\Order\Traits\ActionCallbackTrait;
+use App\Services\Order\Traits\ActionDocumentTrait;
 use App\Services\Order\Traits\ActionFileTrait;
 use App\Services\Order\Traits\ActionTrait;
 use App\Services\Order\Utils\FindUtil;
@@ -33,6 +34,7 @@ class Action
 {
     use ActionBatchTrait;
     use ActionCallbackTrait;
+    use ActionDocumentTrait;
     use ActionFileTrait;
     use ActionTrait;
     use ApiResponse;

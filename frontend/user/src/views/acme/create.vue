@@ -158,7 +158,7 @@ const handleSubmit = async () => {
   loading.value = true;
   try {
     const res = await createOrder({
-      product_id: formData.product_id,
+      product_id: formData.product_id as number,
       period: Number(formData.period),
       purchased_standard_count: formData.purchased_standard_count,
       purchased_wildcard_count: formData.purchased_wildcard_count

@@ -12,13 +12,16 @@ export const root: string = process.cwd();
  * @param appRoot 应用根目录绝对路径
  * @param pkg 应用的 package.json 内容
  */
-export function createBuildUtils(appRoot: string, pkg: {
-  name?: string;
-  version?: string;
-  engines?: Record<string, string>;
-  dependencies?: Record<string, string>;
-  devDependencies?: Record<string, string>;
-}) {
+export function createBuildUtils(
+  appRoot: string,
+  pkg: {
+    name?: string;
+    version?: string;
+    engines?: Record<string, string>;
+    dependencies?: Record<string, string>;
+    devDependencies?: Record<string, string>;
+  }
+) {
   /**
    * @description 根据可选的路径片段生成一个新的绝对路径
    * @param dir 路径片段，默认当前目录
