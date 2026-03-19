@@ -281,9 +281,12 @@ export function uploadDocument(
   id: number,
   data: FormData
 ): Promise<BaseResponse> {
-  return http.request<BaseResponse>("post", `/order/upload-document/${id}`, {
-    data
-  });
+  return http.request<BaseResponse>(
+    "post",
+    `/order/upload-document/${id}`,
+    { data },
+    { timeout: 60000 }
+  );
 }
 
 /** 预览文档（返回 blob URL） */
@@ -311,7 +314,11 @@ export function deleteDocument(id: number): Promise<BaseResponse> {
 
 /** 提交文档到上游 */
 export function submitDocuments(id: number): Promise<BaseResponse> {
-  return http.post<BaseResponse<null>, any>(`/order/submit-documents/${id}`);
+  return http.post<BaseResponse<null>, any>(
+    `/order/submit-documents/${id}`,
+    {},
+    { timeout: 300000 }
+  );
 }
 
 /** 获取验证报告 */
@@ -333,7 +340,9 @@ export function saveVerificationReport(
 /** 提交验证报告到上游 */
 export function submitVerificationReport(id: number): Promise<BaseResponse> {
   return http.post<BaseResponse<null>, any>(
-    `/order/submit-verification-report/${id}`
+    `/order/submit-verification-report/${id}`,
+    {},
+    { timeout: 60000 }
   );
 }
 

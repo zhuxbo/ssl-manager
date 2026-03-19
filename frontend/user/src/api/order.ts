@@ -282,9 +282,12 @@ export function uploadDocument(
   id: number,
   data: FormData
 ): Promise<BaseResponse> {
-  return http.request<BaseResponse>("post", `/order/upload-document/${id}`, {
-    data
-  });
+  return http.request<BaseResponse>(
+    "post",
+    `/order/upload-document/${id}`,
+    { data },
+    { timeout: 60000 }
+  );
 }
 
 /** 预览文档（返回 blob URL） */
