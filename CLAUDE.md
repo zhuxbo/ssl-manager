@@ -125,4 +125,5 @@ skills/         # 开发规范（详细文档）
 - **Models**（15 文件 163 用例）：Order、User、Cert、Admin、Product、Notification、NotificationTemplate、Contact、Organization、Fund、Invoice、Transaction、CnameDelegation、ApiToken、Task
 - **Middleware**（8 文件）：AdminAuthenticate、UserAuthenticate、ApiAuthenticate、DeployAuthenticate、LogOperation、RateLimiter、LoginRateLimiter、FlushLogs
 - **ACME**：Unit/Services/Acme/ActionTest（27 用例）、Feature/Controllers/Admin/AcmeControllerTest（11 用例）、Feature/Controllers/User/AcmeControllerTest（9 用例）、Feature/Controllers/Deploy/AcmeControllerTest（5 用例）
+- **Deploy**：Feature/Controllers/Deploy/OrderControllerTest（39 用例）：query（21）、callback（7）、update（8）、认证（2）、数据结构（1）
 - 已有 Unit/Models 测试（DeployToken、OrderAutoFields、UserAutoSettings）不重复覆盖

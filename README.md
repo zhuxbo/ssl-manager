@@ -133,15 +133,15 @@ sslctl deploy --cert order-12345
 
 ### Deploy API
 
-通过 Deploy Token 认证：
+通过 Deploy Token 认证（`Authorization: Bearer <deploy_token>`）：
 
 ```http
-GET  /api/deploy?order_id=xxx  # 按订单查询证书
-GET  /api/deploy?domain=xxx    # 按域名查询证书
-POST /api/deploy               # 更新/续费证书
-POST /api/deploy/callback      # 部署结果回调
-
-Authorization: Bearer <deploy_token>
+GET  /api/deploy?order=123           # 按订单 ID 查询
+GET  /api/deploy?order=example.com   # 按域名查询
+GET  /api/deploy?order=1,2,a.com     # 批量混合查询
+GET  /api/deploy                     # 列出所有 active 订单
+POST /api/deploy                     # 更新/续费证书
+POST /api/deploy/callback            # 部署结果回调
 ```
 
 ### ACME 协议
