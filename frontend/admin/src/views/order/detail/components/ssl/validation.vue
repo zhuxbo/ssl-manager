@@ -321,8 +321,30 @@
                 ['unpaid', 'pending', 'processing'].includes(cert.status)
               "
             >
+              <el-tooltip
+                v-if="item.verified == 2 && item.error"
+                placement="top"
+              >
+                <template #content>
+                  <div
+                    v-for="(val, key) in typeof item.error === 'string'
+                      ? { error: item.error }
+                      : item.error"
+                    :key="key"
+                  >
+                    {{ key }}: {{ val }}
+                  </div>
+                </template>
+                <el-icon
+                  color="var(--el-color-warning)"
+                  :size="18"
+                  style="vertical-align: middle"
+                >
+                  <WarningFilled />
+                </el-icon>
+              </el-tooltip>
               <el-icon
-                v-if="item.verified == 2"
+                v-else-if="item.verified == 2"
                 color="var(--el-color-warning)"
                 :size="18"
                 style="vertical-align: middle"
