@@ -67,6 +67,7 @@
       <el-button type="primary" size="small">批量部署</el-button>
       <template #dropdown>
         <el-dropdown-menu>
+          <el-dropdown-item command="bt">宝塔面板</el-dropdown-item>
           <el-dropdown-item command="nginx">Nginx / Apache</el-dropdown-item>
           <el-dropdown-item command="iis">IIS</el-dropdown-item>
         </el-dropdown-menu>
@@ -352,7 +353,12 @@ const deploy = (type: string) => {
 
   OrderApi.deployCommands(filteredIds.join(",")).then(res => {
     if (res.code === 1) {
-      const cmd = type === "iis" ? res.data.iis_deploy : res.data.deploy;
+      const cmd =
+        type === "iis"
+          ? res.data.iis_deploy
+          : type === "bt"
+            ? res.data.bt_deploy
+            : res.data.deploy;
       navigator.clipboard
         .writeText(cmd)
         .then(() => {

@@ -1,6 +1,41 @@
 <template>
   <div class="deploy-section">
     <el-tabs v-model="activeTab" class="deploy-tabs">
+      <el-tab-pane label="宝塔面板" name="bt">
+        <div class="deploy-step">
+          <div class="step-title">第一步：安装 sslbt</div>
+          <div class="command-block">
+            <div class="command-label">Linux</div>
+            <div class="command-line">
+              <code>{{ commands.bt_install?.linux }}</code>
+              <el-button
+                type="primary"
+                link
+                size="small"
+                :disabled="!isActive"
+                @click="copy(commands.bt_install?.linux)"
+                >复制</el-button
+              >
+            </div>
+          </div>
+        </div>
+        <div class="deploy-step">
+          <div class="step-title">第二步：一键部署</div>
+          <div class="command-block">
+            <div class="command-line">
+              <code>{{ commands.bt_deploy }}</code>
+              <el-button
+                type="primary"
+                link
+                size="small"
+                :disabled="!isActive"
+                @click="copy(commands.bt_deploy)"
+                >复制</el-button
+              >
+            </div>
+          </div>
+        </div>
+      </el-tab-pane>
       <el-tab-pane label="Nginx / Apache" name="nginx">
         <div class="deploy-step">
           <div class="step-title">第一步：安装 sslctl</div>
@@ -123,7 +158,7 @@ const order = inject("order") as any;
 const cert = inject("cert") as any;
 
 const commands = ref<any>({});
-const activeTab = ref("nginx");
+const activeTab = ref("bt");
 
 const isActive = computed(() => cert.value?.status === "active");
 

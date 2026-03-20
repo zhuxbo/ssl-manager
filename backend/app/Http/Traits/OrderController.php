@@ -285,20 +285,26 @@ trait OrderController
         }
         $token = $deployToken->token;
 
-        $releaseUrl = rtrim(get_system_setting('site', 'releaseUrl', 'https://release.cnssl.com'), '/');
-        $deployUrl = rtrim(get_system_setting('site', 'url'), '/').'/api/deploy';
+        $releaseDomain = rtrim(get_system_setting('site', 'releaseDomain', 'release.cnssl.com'), '/');
+        $releaseUrl = "https://$releaseDomain";
+        $siteUrl = rtrim(get_system_setting('site', 'url'), '/');
+        $deployUrl = "$siteUrl/api/deploy";
 
         $this->success([
             'install' => [
-                'linux' => "curl -fsSL $releaseUrl/sslctl/install.sh | sudo bash",
-                'windows' => "irm $releaseUrl/sslctl/install.ps1 | iex",
+                'linux' => "curl -fsSL $releaseUrl/sslctl/install.sh | sudo bash -s -- $releaseDomain",
+                'windows' => "irm $releaseUrl/sslctl/install.ps1 -OutFile install.ps1; .\\install.ps1 -ReleaseHost $releaseDomain",
             ],
             'deploy' => "sslctl setup --url $deployUrl --token $token --order $orderIds",
             'iis_install' => [
                 'download' => "$releaseUrl/sslctlw/latest/sslctlw.exe",
-                'windows' => "irm $releaseUrl/sslctlw/install.ps1 | iex",
+                'windows' => "irm $releaseUrl/sslctlw/install.ps1 -OutFile install.ps1; .\\install.ps1 -ReleaseHost $releaseDomain",
             ],
             'iis_deploy' => "sslctlw setup --url $deployUrl --token $token --order $orderIds",
+            'bt_install' => [
+                'linux' => "curl -fsSL $releaseUrl/sslbt/install.sh | sudo bash -s -- $releaseDomain",
+            ],
+            'bt_deploy' => "$deployUrl?token=$token&order=$orderIds",
         ]);
     }
 
