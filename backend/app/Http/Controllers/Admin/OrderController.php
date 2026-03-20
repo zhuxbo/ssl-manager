@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Requests\Order\GetIdsRequest;
 use App\Http\Requests\Order\IndexRequest;
+use App\Models\Cert;
 use App\Models\Order;
 use App\Services\Order\Action;
 use Illuminate\Http\Request;
@@ -134,11 +135,25 @@ class OrderController extends BaseController
             }, 'product' => function ($query) {
                 $query->select(['id', 'name', 'product_type', 'refund_period']);
             }, 'latestCert' => function ($query) {
-                $query->select(['id', 'common_name', 'channel', 'action', 'dcv', 'validation', 'status', 'amount', 'issuer']);
+                $query->select(['id', 'common_name', 'channel', 'action', 'dcv', 'validation', 'status', 'amount', 'issuer', 'issued_at', 'expires_at']);
             },
         ])
-            ->select(['id', 'user_id', 'product_id', 'latest_cert_id', 'period', 'amount', 'created_at'])
-            ->orderBy('latest_cert_id', 'desc')
+            ->select(['id', 'user_id', 'product_id', 'latest_cert_id', 'period', 'amount', 'period_from', 'period_till', 'created_at'])
+            ->when(
+                ! empty($validated['sort_prop']),
+                function ($q) use ($validated) {
+                    $sortOrder = $validated['sort_order'] ?? 'desc';
+                    if ($validated['sort_prop'] === 'expires_at') {
+                        $q->orderBy(
+                            Cert::select('expires_at')->whereColumn('certs.id', 'orders.latest_cert_id')->limit(1),
+                            $sortOrder
+                        );
+                    } else {
+                        $q->orderBy($validated['sort_prop'], $sortOrder);
+                    }
+                },
+                fn ($q) => $q->orderBy('latest_cert_id', 'desc')
+            )
             ->offset(($currentPage - 1) * $pageSize)
             ->limit($pageSize)
             ->get();

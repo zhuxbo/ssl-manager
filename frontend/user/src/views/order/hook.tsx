@@ -10,6 +10,10 @@ export function useOrder(tableRef) {
   const dataList = ref([]);
   const loading = ref(true);
 
+  // 排序状态
+  const sortProp = ref<string>();
+  const sortOrder = ref<string>();
+
   const pagination = reactive<PaginationProps>({
     total: 0,
     pageSize: 10,
@@ -44,6 +48,11 @@ export function useOrder(tableRef) {
       params.expires_at = convertDateRangeToISO(params.expires_at);
     }
 
+    if (sortProp.value) {
+      params.sort_prop = sortProp.value;
+      params.sort_order = sortOrder.value;
+    }
+
     orderApi
       .index(params)
       .then(({ data }) => {
@@ -62,8 +71,29 @@ export function useOrder(tableRef) {
   }
 
   const onReset = () => {
+    sortProp.value = undefined;
+    sortOrder.value = undefined;
+    tableRef.value?.getTableRef().clearSort();
     onSearch();
   };
+
+  function handleSortChange({
+    prop,
+    order
+  }: {
+    prop: string;
+    order: string | null;
+  }) {
+    if (order) {
+      sortProp.value = prop;
+      sortOrder.value = order === "ascending" ? "asc" : "desc";
+    } else {
+      sortProp.value = undefined;
+      sortOrder.value = undefined;
+    }
+    pagination.currentPage = 1;
+    onSearch();
+  }
 
   const onCollapse = () => {
     setTimeout(() => {
@@ -78,6 +108,7 @@ export function useOrder(tableRef) {
     pagination,
     handleSizeChange,
     handleCurrentChange,
+    handleSortChange,
     onSearch,
     onReset,
     onCollapse

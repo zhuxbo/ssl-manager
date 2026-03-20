@@ -22,7 +22,6 @@ use App\Services\Order\Utils\OrderUtil;
 use App\Services\Order\Utils\ValidatorUtil;
 use App\Utils\Random;
 use App\Utils\SnowFlake;
-use DateTime;
 use Exception;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
@@ -883,20 +882,23 @@ trait ActionTrait
     }
 
     /**
-     * 获取证书有效期
+     * 计算订单周期结束时间
+     *
+     * >= 12 个月：每年固定 365 天，仅 12 个月且 plus 时额外 +30 天
+     * < 12 个月：每月固定 30 天
      */
-    protected function addMonths(int $timestamp, int $months): int
+    protected function calculatePeriodTill(int $timestamp, int $months, int $plus): int
     {
-        $date = new DateTime;
-        $date->setTimestamp($timestamp);
-        try {
-            $date->modify("+$months months");
-        } catch (Exception $e) {
-            app(ApiExceptions::class)->logException($e);
-            $this->error('证书有效期计算失败');
+        if ($months >= 12) {
+            $days = (int) ($months / 12) * 365;
+            if ($months === 12 && $plus) {
+                $days += 30;
+            }
+        } else {
+            $days = $months * 30;
         }
 
-        return $date->getTimestamp() - 1;
+        return $timestamp + $days * 86400 - 1;
     }
 
     /**

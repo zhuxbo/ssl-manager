@@ -17,8 +17,8 @@ return new class extends Migration
             $table->integer('period')->default(0)->comment('购买时长');
             $table->unsignedTinyInteger('plus')->default(0)->comment('赠送时间');
             $table->decimal('amount', 10)->default(0)->comment('金额');
-            $table->timestamp('period_from')->nullable()->comment('有效期从');
-            $table->timestamp('period_till')->nullable()->comment('有效期到');
+            $table->timestamp('period_from')->nullable()->index()->comment('有效期从');
+            $table->timestamp('period_till')->nullable()->index()->comment('有效期到');
             $table->integer('purchased_standard_count')->default(0)->comment('已购标准域名数');
             $table->integer('purchased_wildcard_count')->default(0)->comment('已购通配符数');
             $table->text('organization')->nullable()->comment('组织');

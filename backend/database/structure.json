@@ -1,7 +1,7 @@
 {
     "version": "1.0",
     "mysql_version": "8.0.43",
-    "generated_at": "2026-03-19 16:51:02",
+    "generated_at": "2026-03-20 13:58:24",
     "database": {
         "name": "manager",
         "charset": "utf8mb4",
@@ -3838,6 +3838,26 @@
                     "type": "BTREE",
                     "columns": [
                         "latest_cert_id"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "orders_period_from_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "period_from"
+                    ],
+                    "sub_parts": [
+                        null
+                    ]
+                },
+                "orders_period_till_index": {
+                    "unique": false,
+                    "type": "BTREE",
+                    "columns": [
+                        "period_till"
                     ],
                     "sub_parts": [
                         null

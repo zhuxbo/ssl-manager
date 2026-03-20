@@ -113,11 +113,10 @@ backend/
 ```bash
 php artisan db:structure --check        # 检测差异
 php artisan db:structure --fix          # 自动修复（仅 ADD）
-php artisan db:structure --export       # 导出标准结构（需 Docker）
-php artisan db:structure --export --use-local  # 使用本地 MySQL 导出
+php artisan db:structure --export       # 导出标准结构（需 Docker 容器）
 ```
 
-**注意**: 每次迁移变更后需重新导出 `structure.json`。
+**注意**: 每次迁移变更后需用 Docker 容器重新导出 `structure.json`，禁止用 `--use-local`。
 
 ---
 
@@ -203,7 +202,7 @@ php artisan queue:work --queue Task  # 队列
 - **up 幂等**：修改表结构的迁移必须先检查当前状态（`Schema::hasColumn`/`Schema::hasTable`），避免重复执行报错
 - **不写 down**：迁移只写 `up()`，不写 `down()`。生产环境不做回滚，回滚用新迁移前进修复
 - **structure.json 不手动改**：迁移变动后发布前通过 `php artisan db:structure --export` 重新导出
-- **数据库变更必须导出**：有迁移变更时，提交前必须执行 `php artisan db:structure --export --use-local` 更新 structure.json
+- **数据库变更必须用容器导出**：有迁移变更时，必须用 Docker 容器导出干净的 structure.json（`php artisan db:structure --export`），禁止用 `--use-local`（本地数据库可能有脏数据或插件表干扰）
 
 ### 迁移幂等示例
 

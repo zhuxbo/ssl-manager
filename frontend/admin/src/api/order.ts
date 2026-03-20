@@ -17,6 +17,8 @@ export interface IndexParams {
   created_at?: [string, string];
   expires_at?: [string, string];
   status?: string;
+  sort_prop?: string;
+  sort_order?: string;
 }
 
 export const ACTION_PARAMS_DEFAULT = {

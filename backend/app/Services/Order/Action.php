@@ -506,7 +506,8 @@ class Action
         if (! $order->period_from && ($data['issued_at'] ?? null) && ($data['expires_at'] ?? null)) {
             // 即使传递的是时间戳 赋值给模型属性后会转换为时间格式
             $order->period_from = $data['issued_at'];
-            $periodTill = $this->addMonths((int) $data['issued_at'], (int) $order->period);
+            $plus = ($order->product->product_type ?? '') === 'ssl' ? (int) $order->plus : 0;
+            $periodTill = $this->calculatePeriodTill((int) $data['issued_at'], (int) $order->period, $plus);
             $order->period_till = max($data['expires_at'], $periodTill);
         }
 
