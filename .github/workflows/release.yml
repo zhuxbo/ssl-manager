@@ -48,13 +48,13 @@ jobs:
           extensions: mbstring, xml, ctype, iconv, intl, pdo_mysql, redis, zip, gd, bcmath
           tools: composer:v2
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
           node-version: '22'
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v5
 
       - name: Get pnpm store directory
         shell: bash
