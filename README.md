@@ -66,6 +66,12 @@ curl ... | bash -s -- rollback          # 回滚到上一版本
 php artisan upgrade:check       # 检查更新
 php artisan upgrade:run         # 执行升级
 php artisan upgrade:rollback    # 回滚
+
+# 用户数据管理
+php artisan user:data export {user_id}              # 导出用户数据（SQL dump）
+php artisan user:data import {user_id} --dry-run    # 干跑检测冲突
+php artisan user:data import {user_id}              # 导入用户数据
+php artisan user:data purge {user_id}               # 清理用户数据（需先禁用+导出）
 ```
 
 | 参数 | 说明 |

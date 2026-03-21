@@ -1,0 +1,202 @@
+<?php
+
+namespace App\Services\UserData;
+
+use App\Models\User;
+use Illuminate\Support\Facades\DB;
+
+class UserDataTableRegistry
+{
+    /**
+     * 直接通过 user_id 关联的表（导出+清理共用）
+     *
+     * @return array<int, array{table: string, name: string}>
+     */
+    public static function directTables(): array
+    {
+        return [
+            ['table' => 'orders', 'name' => '订单'],
+            ['table' => 'acmes', 'name' => 'ACME订单'],
+            ['table' => 'contacts', 'name' => '联系人'],
+            ['table' => 'organizations', 'name' => '组织'],
+            ['table' => 'funds', 'name' => '充值记录'],
+            ['table' => 'transactions', 'name' => '交易记录'],
+            ['table' => 'invoices', 'name' => '发票'],
+            ['table' => 'invoice_limits', 'name' => '发票额度'],
+            ['table' => 'cname_delegations', 'name' => 'CNAME委托'],
+            ['table' => 'callbacks', 'name' => '回调配置'],
+            ['table' => 'order_documents', 'name' => '订单验证文档'],
+            ['table' => 'order_verification_reports', 'name' => '订单验证报告'],
+        ];
+    }
+
+    /**
+     * 通过 order_id 间接关联的表
+     *
+     * @return array<int, array{table: string, name: string}>
+     */
+    public static function indirectTables(): array
+    {
+        return [
+            ['table' => 'certs', 'name' => '证书'],
+            ['table' => 'tasks', 'name' => '任务'],
+            ['table' => 'domain_validation_records', 'name' => '域名验证记录'],
+        ];
+    }
+
+    /**
+     * 仅清理用的表（令牌、日志，不导出）
+     *
+     * @return array<int, array{table: string, name: string}>
+     */
+    public static function purgeOnlyTables(): array
+    {
+        return [
+            ['table' => 'api_tokens', 'name' => 'API令牌'],
+            ['table' => 'deploy_tokens', 'name' => '部署令牌'],
+            ['table' => 'user_logs', 'name' => '用户日志'],
+            ['table' => 'api_logs', 'name' => 'API日志'],
+            ['table' => 'user_refresh_tokens', 'name' => 'JWT刷新令牌'],
+        ];
+    }
+
+    /**
+     * users.password 在导出时排除的字段
+     */
+    public static function excludedUserColumns(): array
+    {
+        return ['password'];
+    }
+
+    /**
+     * 获取所有导出用的表（直接+间接+通知）
+     */
+    public static function exportTables(): array
+    {
+        return array_merge(
+            [['table' => 'users', 'name' => '用户', 'type' => 'user']],
+            array_map(fn ($t) => [...$t, 'type' => 'direct'], self::directTables()),
+            array_map(fn ($t) => [...$t, 'type' => 'indirect'], self::indirectTables()),
+            [['table' => 'notifications', 'name' => '通知', 'type' => 'notification']],
+        );
+    }
+
+    /**
+     * 获取清理用的删除顺序（考虑外键依赖）
+     */
+    public static function purgeOrder(): array
+    {
+        return [
+            // 1. 多态关联
+            ['table' => 'notifications', 'name' => '通知', 'type' => 'notification'],
+            // 2. 间接关联（必须在 orders 之前删除）
+            ['table' => 'domain_validation_records', 'name' => '域名验证记录', 'type' => 'indirect'],
+            ['table' => 'certs', 'name' => '证书', 'type' => 'indirect'],
+            ['table' => 'tasks', 'name' => '任务', 'type' => 'indirect'],
+            // 3. 有 order_id 的直接表（在 orders 之前）
+            ['table' => 'order_documents', 'name' => '订单验证文档', 'type' => 'direct'],
+            ['table' => 'order_verification_reports', 'name' => '订单验证报告', 'type' => 'direct'],
+            // 4. 订单和其他直接表
+            ['table' => 'orders', 'name' => '订单', 'type' => 'direct'],
+            ['table' => 'acmes', 'name' => 'ACME订单', 'type' => 'direct'],
+            ['table' => 'deploy_tokens', 'name' => '部署令牌', 'type' => 'direct'],
+            ['table' => 'contacts', 'name' => '联系人', 'type' => 'direct'],
+            ['table' => 'organizations', 'name' => '组织', 'type' => 'direct'],
+            ['table' => 'api_tokens', 'name' => 'API令牌', 'type' => 'direct'],
+            ['table' => 'funds', 'name' => '充值记录', 'type' => 'direct'],
+            ['table' => 'transactions', 'name' => '交易记录', 'type' => 'direct'],
+            ['table' => 'invoices', 'name' => '发票', 'type' => 'direct'],
+            ['table' => 'invoice_limits', 'name' => '发票额度', 'type' => 'direct'],
+            ['table' => 'cname_delegations', 'name' => 'CNAME委托', 'type' => 'direct'],
+            ['table' => 'callbacks', 'name' => '回调配置', 'type' => 'direct'],
+            ['table' => 'user_logs', 'name' => '用户日志', 'type' => 'direct'],
+            ['table' => 'api_logs', 'name' => 'API日志', 'type' => 'direct'],
+            ['table' => 'user_refresh_tokens', 'name' => 'JWT刷新令牌', 'type' => 'direct'],
+        ];
+    }
+
+    /**
+     * 动态扫描其他含 user_id 字段的表
+     */
+    public static function dynamicTables(int $userId): array
+    {
+        $knownTables = array_merge(
+            ['users'],
+            array_column(self::directTables(), 'table'),
+            array_column(self::indirectTables(), 'table'),
+            array_column(self::purgeOnlyTables(), 'table'),
+            ['notifications'],
+        );
+
+        $results = [];
+
+        try {
+            $database = DB::getDatabaseName();
+            $placeholders = implode(',', array_fill(0, count($knownTables), '?'));
+            $tables = DB::select(
+                "SELECT TABLE_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = ? AND COLUMN_NAME = ? AND TABLE_NAME NOT IN ($placeholders)",
+                array_merge([$database, 'user_id'], $knownTables)
+            );
+
+            foreach ($tables as $table) {
+                $tableName = $table->TABLE_NAME;
+                $count = DB::table($tableName)->where('user_id', $userId)->count();
+                if ($count > 0) {
+                    $results[] = ['table' => $tableName, 'name' => $tableName, 'type' => 'dynamic'];
+                }
+            }
+        } catch (\Throwable) {
+            // ignore
+        }
+
+        return $results;
+    }
+
+    /**
+     * 统计用户关联数据
+     */
+    public static function getStatistics(User $user): array
+    {
+        $stats = [];
+        $schema = DB::getSchemaBuilder();
+
+        // 用户自身
+        $stats[] = ['用户', 1];
+
+        // 直接表
+        foreach (self::directTables() as $item) {
+            if ($schema->hasTable($item['table'])) {
+                $stats[] = [$item['name'], DB::table($item['table'])->where('user_id', $user->id)->count()];
+            }
+        }
+
+        // 令牌/日志表
+        foreach (self::purgeOnlyTables() as $item) {
+            if ($schema->hasTable($item['table'])) {
+                $stats[] = [$item['name'], DB::table($item['table'])->where('user_id', $user->id)->count()];
+            }
+        }
+
+        // 间接表
+        foreach (self::indirectTables() as $item) {
+            if ($schema->hasTable($item['table'])) {
+                $count = DB::table($item['table'])
+                    ->whereIn('order_id', fn ($q) => $q->select('id')->from('orders')->where('user_id', $user->id))
+                    ->count();
+                $stats[] = [$item['name'], $count];
+            }
+        }
+
+        // 通知
+        if ($schema->hasTable('notifications')) {
+            $stats[] = ['通知', DB::table('notifications')->where('notifiable_type', User::class)->where('notifiable_id', $user->id)->count()];
+        }
+
+        // 动态表
+        foreach (self::dynamicTables($user->id) as $item) {
+            $stats[] = [$item['name'], DB::table($item['table'])->where('user_id', $user->id)->count()];
+        }
+
+        return $stats;
+    }
+}
