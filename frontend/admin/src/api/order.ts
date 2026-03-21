@@ -17,6 +17,8 @@ export interface IndexParams {
   created_at?: [string, string];
   expires_at?: [string, string];
   status?: string;
+  sort_prop?: string;
+  sort_order?: string;
 }
 
 export const ACTION_PARAMS_DEFAULT = {
@@ -183,19 +185,6 @@ export function sendActive(id: number, email?: string): Promise<BaseResponse> {
   );
 }
 
-/** 发送过期提醒 */
-export function sendExpire(
-  userId: number,
-  email?: string
-): Promise<BaseResponse> {
-  return http.get<BaseResponse<null>, { userId: number; email?: string }>(
-    `/order/send-expire/${userId}`,
-    {
-      params: { email }
-    }
-  );
-}
-
 /** 批量支付订单 */
 export function batchPay(
   ids: string | number | number[]
@@ -258,6 +247,16 @@ export function batchRevokeCancel(
   );
 }
 
+/** 获取部署命令 */
+export function deployCommands(
+  orderIds: string | number
+): Promise<BaseResponse> {
+  return http.get<BaseResponse<null>, { order_ids: string | number }>(
+    "/order/deploy-commands",
+    { params: { order_ids: orderIds } }
+  );
+}
+
 /** 导入证书 */
 export function importCert(data: any): Promise<BaseResponse> {
   return http.post<BaseResponse<null>, any>("/order/input", { data });
@@ -276,6 +275,76 @@ export function updateAmount(
   return http.patch<BaseResponse<null>, { amount: number | string }>(
     `/order/amount/${id}`,
     { data: { amount } }
+  );
+}
+
+/** 上传验证文档 */
+export function uploadDocument(
+  id: number,
+  data: FormData
+): Promise<BaseResponse> {
+  return http.request<BaseResponse>(
+    "post",
+    `/order/upload-document/${id}`,
+    { data },
+    { timeout: 60000 }
+  );
+}
+
+/** 预览文档（返回 blob URL） */
+export function previewDocument(id: number): Promise<string> {
+  return http
+    .get<
+      any,
+      any
+    >(`/order/document-preview/${id}`, { params: { _t: Date.now() } }, { responseType: "blob" })
+    .then((res: any) => {
+      const blob = res instanceof Blob ? res : new Blob([res]);
+      return URL.createObjectURL(blob);
+    });
+}
+
+/** 获取文档列表 */
+export function getDocuments(id: number): Promise<BaseResponse> {
+  return http.get<BaseResponse<null>, any>(`/order/documents/${id}`);
+}
+
+/** 删除文档 */
+export function deleteDocument(id: number): Promise<BaseResponse> {
+  return http.delete<BaseResponse<null>, any>(`/order/document/${id}`);
+}
+
+/** 提交文档到上游 */
+export function submitDocuments(id: number): Promise<BaseResponse> {
+  return http.post<BaseResponse<null>, any>(
+    `/order/submit-documents/${id}`,
+    {},
+    { timeout: 300000 }
+  );
+}
+
+/** 获取验证报告 */
+export function getVerificationReport(id: number): Promise<BaseResponse> {
+  return http.get<BaseResponse<null>, any>(`/order/verification-report/${id}`);
+}
+
+/** 保存验证报告 */
+export function saveVerificationReport(
+  id: number,
+  reportData: any
+): Promise<BaseResponse> {
+  return http.post<BaseResponse<null>, any>(
+    `/order/verification-report/${id}`,
+    { data: { report_data: reportData } }
+  );
+}
+
+/** 提交验证报告到上游 */
+export function submitVerificationReport(id: number): Promise<BaseResponse> {
+  return http.post<BaseResponse<null>, any>(
+    `/order/submit-verification-report/${id}`,
+    {},
+    { timeout: 60000 }
   );
 }
 

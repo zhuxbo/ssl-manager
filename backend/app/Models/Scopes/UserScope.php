@@ -21,9 +21,7 @@ class UserScope implements Scope
 
     public function apply(Builder $builder, Model $model): void
     {
-        if ($this->user_id) {
-            $builder->where('user_id', $this->user_id);
-        }
+        $builder->where('user_id', $this->user_id);
     }
 
     /**

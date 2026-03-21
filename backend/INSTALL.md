@@ -173,9 +173,7 @@ php artisan serve
 
 项目提供了完整的 Docker 部署方案，使用 Docker 可以快速部署并减少环境配置问题。
 
-开发环境 Docker 配置请参见：[开发 Docker 环境](../develop/docker/README.md)
-
-生产部署请使用项目根目录的一键安装脚本，详见 [主 README](../README.md#部署)
+生产部署请使用项目根目录的一键安装脚本，详见 [主 README](../README.md#安装)
 
 ## PHP 特殊设置
 

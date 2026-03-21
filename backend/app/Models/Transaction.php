@@ -15,6 +15,10 @@ class Transaction extends BaseModel
     // Laravel 不更新时间戳
     public const null UPDATED_AT = null;
 
+    const string TYPE_ACME_ORDER = 'acme_order';
+
+    const string TYPE_ACME_CANCEL = 'acme_cancel';
+
     protected $fillable = [
         'user_id',
         'type',
@@ -53,8 +57,8 @@ class Transaction extends BaseModel
 
             DB::beginTransaction();
             try {
-                // 交易类型不为order时，检查是否存在重复的交易记录
-                if ($model->type !== 'order') {
+                // order 和 acme_order 允许重复 transaction_id（重签增加域名会再次扣费）
+                if (! in_array($model->type, ['order', 'acme_order'])) {
                     $exists = self::where(['type' => $model->type, 'transaction_id' => $model->transaction_id])->exists();
                     if ($exists) {
                         throw new Exception('交易记录已存在');

@@ -14,7 +14,7 @@ return new class extends Migration
             $table->string('code', 100)->unique()->comment('产品标识');
             $table->string('api_id', 128)->comment('接口ID');
             $table->string('source', 500)->default('default')->comment('来源');
-            $table->enum('product_type', ['ssl', 'codesign', 'smime', 'docsign'])->default('ssl')->index()->comment('产品类型');
+            $table->enum('product_type', ['ssl', 'codesign', 'smime', 'docsign', 'acme'])->default('ssl')->index()->comment('产品类型');
             $table->string('brand', 50)->index()->comment('品牌');
             $table->string('ca', 200)->index()->comment('签发机构');
             $table->string('warranty_currency', 20)->default('$')->comment('保障金货币');
@@ -40,7 +40,6 @@ return new class extends Migration
             $table->unsignedTinyInteger('renew')->default(0)->comment('续费证书: 0=否, 1=是');
             $table->unsignedTinyInteger('reuse_csr')->default(0)->comment('重用CSR: 0=否, 1=是');
             $table->unsignedTinyInteger('gift_root_domain')->default(0)->comment('赠送根域名: 0=否, 1=是');
-            $table->tinyInteger('support_acme')->unsigned()->default(0)->comment('支持ACME: 0=否, 1=是');
             $table->unsignedTinyInteger('refund_period')->default(30)->comment('退款期限');
             $table->string('remark', 500)->nullable()->comment('备注');
             $table->integer('weight')->default(0)->index()->comment('权重');

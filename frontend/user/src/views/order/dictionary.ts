@@ -205,7 +205,6 @@ export const channel: { [key: string]: string } = {
   admin: "后台",
   web: "网站",
   api: "API",
-  acme: "ACME",
   deploy: "部署"
 };
 
@@ -219,7 +218,6 @@ export const channelType: {
   admin: "warning",
   web: "info",
   api: "primary",
-  acme: "success",
   deploy: "success"
 };
 
@@ -235,10 +233,6 @@ export const channelOptions: { label: string; value: string }[] = [
   {
     label: "API",
     value: "api"
-  },
-  {
-    label: "ACME",
-    value: "acme"
   },
   {
     label: "部署",

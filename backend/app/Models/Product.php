@@ -34,6 +34,8 @@ class Product extends BaseModel
 
     const string TYPE_DOCSIGN = 'docsign';
 
+    const string TYPE_ACME = 'acme';
+
     protected $fillable = [
         'code',
         'name',
@@ -65,7 +67,6 @@ class Product extends BaseModel
         'renew',
         'reuse_csr',
         'gift_root_domain',
-        'support_acme',
         'refund_period',
         'remark',
         'weight',
@@ -87,7 +88,6 @@ class Product extends BaseModel
         'renew' => 'integer',
         'reuse_csr' => 'integer',
         'gift_root_domain' => 'integer',
-        'support_acme' => 'integer',
         'refund_period' => 'integer',
         'cost' => 'array',
         'status' => 'integer',
@@ -100,8 +100,14 @@ class Product extends BaseModel
         return $this->getCost($cost);
     }
 
-    public function setCostAttribute(array $cost): void
+    public function setCostAttribute(?array $cost): void
     {
+        if ($cost === null) {
+            $this->attributes['cost'] = null;
+
+            return;
+        }
+
         $data = $this->getCost($cost);
         $this->attributes['cost'] = json_encode($data);
     }
@@ -172,5 +178,13 @@ class Product extends BaseModel
     public function isDocSign(): bool
     {
         return $this->product_type === self::TYPE_DOCSIGN;
+    }
+
+    /**
+     * 判断是否为 ACME 产品
+     */
+    public function isAcme(): bool
+    {
+        return $this->product_type === self::TYPE_ACME;
     }
 }

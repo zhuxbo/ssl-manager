@@ -1,7 +1,7 @@
 <template>
   <div>
     <table class="descriptions">
-      <el-text style="margin: 10px 20px">
+      <el-text style="margin: 10px 0">
         <el-button
           type="primary"
           link
@@ -159,6 +159,10 @@ watchEffect(() => {
 
 <style scoped lang="scss">
 @import url("../../styles/detail.scss");
+
+.descriptions {
+  border-left: none;
+}
 
 :deep(.el-textarea__inner) {
   resize: none;

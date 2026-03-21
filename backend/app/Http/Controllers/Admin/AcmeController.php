@@ -2,68 +2,127 @@
 
 namespace App\Http\Controllers\Admin;
 
-use App\Models\Order;
-use App\Models\User;
-use App\Services\Acme\BillingService;
+use App\Models\Acme;
+use App\Services\Acme\Action;
 use Illuminate\Http\Request;
 
 class AcmeController extends BaseController
 {
-    /**
-     * 创建 ACME 订阅订单
-     */
-    public function createOrder(Request $request): void
+    protected Action $action;
+
+    public function __construct()
     {
-        $request->validate([
-            'user_id' => 'required|integer',
-            'product_id' => 'required|integer',
-            'period' => 'required|integer',
-            'quantity' => 'sometimes|integer|min:1|max:100',
-        ]);
-
-        $user = User::findOrFail($request->input('user_id'));
-        $billingService = app(BillingService::class);
-        $quantity = (int) $request->input('quantity', 1);
-
-        $created = 0;
-        for ($i = 0; $i < $quantity; $i++) {
-            $result = $billingService->createSubscription($user, $request->input('product_id'), $request->input('period'));
-            if ($result['code'] !== 1) {
-                if ($created === 0) {
-                    $this->error($result['msg']);
-                }
-                break;
-            }
-            $created++;
-        }
-
-        $this->success(['created' => $created]);
+        parent::__construct();
+        $this->action = app(Action::class);
     }
 
     /**
-     * 获取订单 EAB 信息
+     * ACME 订单列表
      */
-    public function getEab(Request $request, int $orderId): void
+    public function index(Request $request): void
     {
-        $order = Order::where('id', $orderId)
-            ->whereNotNull('eab_kid')
-            ->firstOrFail();
+        $currentPage = (int) ($request->input('currentPage', 1));
+        $pageSize = (int) ($request->input('pageSize', 10));
 
-        $serverUrl = rtrim(get_system_setting('site', 'url', config('app.url')), '/').'/acme/directory';
-        $configDir = "/etc/letsencrypt/$order->eab_kid";
-        $configHome = "~/.acme.sh/$order->eab_kid";
+        $query = Acme::query();
+
+        if ($request->filled('user_id')) {
+            $query->where('user_id', $request->input('user_id'));
+        }
+        if ($request->filled('brand')) {
+            $query->where('brand', $request->input('brand'));
+        }
+        if ($request->filled('status')) {
+            $query->where('status', $request->input('status'));
+        }
+
+        $total = $query->count();
+        $items = $query->with(['user', 'product'])
+            ->orderByDesc('id')
+            ->offset(($currentPage - 1) * $pageSize)
+            ->limit($pageSize)
+            ->get();
 
         $this->success([
-            'order_id' => $order->id,
-            'eab_kid' => $order->eab_kid,
-            'eab_hmac' => $order->eab_hmac,
-            'eab_used' => $order->eab_used_at !== null,
-            'server_url' => $serverUrl,
-            'certbot_command' => "certbot certonly --config-dir $configDir --server $serverUrl --eab-kid $order->eab_kid"
-                ." --eab-hmac-key $order->eab_hmac"
-                .' -d example.com --preferred-challenges dns-01',
-            'acmesh_command' => "acme.sh --register-account --config-home $configHome --server $serverUrl --eab-kid $order->eab_kid"
-                ." --eab-hmac-key $order->eab_hmac",
+            'items' => $items,
+            'total' => $total,
+            'pageSize' => $pageSize,
+            'currentPage' => $currentPage,
         ]);
+    }
+
+    /**
+     * 订单详情（含 EAB，makeVisible eab_hmac）
+     */
+    public function show(int $id): void
+    {
+        $order = Acme::with(['user', 'product'])->find($id);
+
+        if (! $order) {
+            $this->error('订单不存在');
+        }
+
+        $order->makeVisible('eab_hmac');
+
+        $this->success($order->toArray());
+    }
+
+    /**
+     * 创建 ACME 订单
+     */
+    public function new(Request $request): void
+    {
+        $request->validate([
+            'user_id' => 'required|integer',
+            'product_id' => 'required|integer|exists:products,id',
+            'period' => 'required|integer',
+            'purchased_standard_count' => 'integer|min:0',
+            'purchased_wildcard_count' => 'integer|min:0',
+        ]);
+
+        $this->action->new($request->only([
+            'user_id', 'product_id', 'period',
+            'purchased_standard_count', 'purchased_wildcard_count', 'remark',
+        ]));
+    }
+
+    /**
+     * 支付订单
+     */
+    public function pay(int $id): void
+    {
+        $this->action->pay($id);
+    }
+
+    /**
+     * 提交订单到 Gateway
+     */
+    public function commit(int $id): void
+    {
+        $this->action->commit($id);
+    }
+
+    /**
+     * 同步订单状态
+     */
+    public function sync(int $id): void
+    {
+        $this->action->sync($id);
+    }
+
+    /**
+     * 取消订单
+     */
+    public function commitCancel(int $id): void
+    {
+        $this->action->commitCancel($id);
+    }
+
+    /**
+     * 备注
+     */
+    public function remark(int $id, Request $request): void
+    {
+        $this->action->remark($id, $request->string('remark')->trim()->limit(255), 'admin_remark');
     }
 }

@@ -46,7 +46,7 @@ class ApiController extends Controller
         if ($apiToken) {
             $this->user_id = $apiToken->user_id;
             $this->model = new Order;
-            $this->action = new Action($this->user_id);
+            $this->action = app(Action::class);
         }
     }
 
@@ -112,6 +112,7 @@ class ApiController extends Controller
         // 转换V1参数格式为新系统格式
         $params = $this->convertV1Params($params);
 
+        $params['user_id'] = $this->user_id;
         $params['action'] = 'new';
         $params['channel'] = 'api';
 

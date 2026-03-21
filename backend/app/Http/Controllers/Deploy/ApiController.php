@@ -14,51 +14,65 @@ class ApiController extends Controller
 {
     /**
      * 查询订单列表
-     * 支持按 order_id 或域名查询（精确匹配和通配符匹配）
-     * 都不传时返回最新 100 条 active 订单
+     * 统一使用 order 参数：纯数字为 ID，字符串为域名，含逗号为批量查询
+     * 不传时返回最新 100 条 active 订单
      */
     public function query(Request $request): void
     {
         $request->validate([
-            'order_id' => ['nullable', 'integer'],
-            'domain' => ['nullable', 'string'],
+            'order' => ['nullable', 'string'],
+            'currentPage' => ['nullable', 'integer', 'min:1'],
+            'pageSize' => ['nullable', 'integer', 'min:1', 'max:100'],
         ]);
 
-        $orderId = $request->input('order_id');
-        $domain = $request->input('domain');
+        $order = trim($request->input('order', ''));
 
-        if ($orderId) {
-            // 按 order_id 查询
-            $order = Order::with('latestCert')
-                ->whereHas('latestCert')
-                ->where('id', $orderId)
-                ->first();
-
-            if (! $order) {
-                $this->error('未找到匹配的订单');
+        if ($order !== '') {
+            // 含逗号：批量查询（支持 ID 和域名混合）
+            if (str_contains($order, ',')) {
+                $this->success($this->paginateResult($this->batchQuery($order), $request));
             }
 
-            $orders = collect([$order]);
-        } elseif ($domain) {
-            // 按域名查询
-            $domain = strtolower(trim($domain));
-            $orders = $this->findOrdersByDomain($domain);
+            // 纯数字：按 ID 精确查询
+            if (ctype_digit($order)) {
+                $found = Order::with('latestCert')
+                    ->whereHas('latestCert')
+                    ->where('id', $order)
+                    ->first();
+
+                if (! $found) {
+                    $this->error('未找到匹配的订单');
+                }
+
+                $this->success($this->paginateResult(collect([$found])));
+            }
+
+            // 字符串：按域名查询
+            $orders = $this->findOrdersByDomain(strtolower($order));
 
             if ($orders->isEmpty()) {
                 $this->error('未找到匹配的订单');
             }
-        } else {
-            // 无参数：返回最新 100 条 active 订单
-            $orders = Order::with('latestCert')
-                ->whereHas('latestCert', fn ($q) => $q->where('status', 'active'))
-                ->orderByDesc('created_at')
-                ->limit(100)
-                ->get();
+
+            $this->success($this->paginateResult($orders));
         }
 
-        $data = $orders->map(fn ($order) => $this->getOrderData($order))->values()->toArray();
+        // 空参数：返回最新 active 订单（数据库级分页）
+        $currentPage = (int) $request->input('currentPage', 1);
+        $pageSize = (int) ($request->input('pageSize', 100) ?? 100);
 
-        $this->success($data);
+        $query = Order::with('latestCert')
+            ->whereHas('latestCert', fn ($q) => $q->where('status', 'active'))
+            ->orderByDesc('created_at');
+
+        $total = $query->count();
+        $data = $query->offset(($currentPage - 1) * $pageSize)
+            ->limit($pageSize)
+            ->get()
+            ->map(fn ($o) => $this->getOrderData($o))
+            ->toArray();
+
+        $this->success(compact('total', 'currentPage', 'pageSize', 'data'));
     }
 
     /**
@@ -155,6 +169,7 @@ class ApiController extends Controller
                 }
 
                 $updateParams['action'] = 'renew';
+                $updateParams['period'] = $order->period;
                 $result = $this->getData($action, 'renew', [$updateParams]);
                 $orderId = $result['data']['order_id'] ?? $orderId;
             } else {
@@ -188,13 +203,8 @@ class ApiController extends Controller
     {
         $params = $request->validate([
             'order_id' => ['required', 'integer'],
-            'domain' => ['required', 'string'],
             'status' => ['required', 'in:success,failure'],
             'deployed_at' => ['nullable', 'string'],
-            'cert_expires_at' => ['nullable', 'string'],
-            'cert_serial' => ['nullable', 'string'],
-            'server_type' => ['nullable', 'string'],
-            'message' => ['nullable', 'string'],
         ]);
 
         // 通过 Order 查询（Order 已被 UserScope 限制）
@@ -227,35 +237,85 @@ class ApiController extends Controller
 
         $this->success([
             'order_id' => $params['order_id'],
-            'domain' => $params['domain'],
             'status' => $params['status'],
             'recorded' => $params['status'] === 'success',
         ]);
     }
 
     /**
-     * 按域名查找订单
-     * 支持精确匹配和通配符匹配（如 api.example.com 匹配 *.example.com）
+     * 统一分页返回格式
+     */
+    private function paginateResult(\Illuminate\Support\Collection $orders, ?Request $request = null): array
+    {
+        $currentPage = $request ? (int) $request->input('currentPage', 1) : 1;
+        $pageSize = $request ? (int) ($request->input('pageSize', 100) ?? 100) : 100;
+        $total = $orders->count();
+
+        $data = $orders->slice(($currentPage - 1) * $pageSize, $pageSize)->values()
+            ->map(fn ($o) => $this->getOrderData($o))->toArray();
+
+        return compact('total', 'currentPage', 'pageSize', 'data');
+    }
+
+    /**
+     * 批量查询：支持 id 和 domain 混合，英文逗号分割
+     */
+    private function batchQuery(string $queryStr): \Illuminate\Support\Collection
+    {
+        $items = array_filter(array_map('trim', explode(',', $queryStr)));
+
+        if (empty($items)) {
+            $this->error('查询参数不能为空');
+        }
+
+        if (count($items) > 100) {
+            $this->error('单次最多查询 100 条');
+        }
+
+        $ids = [];
+        $domains = [];
+
+        foreach ($items as $item) {
+            if (ctype_digit($item)) {
+                $ids[] = (int) $item;
+            } else {
+                $domains[] = strtolower($item);
+            }
+        }
+
+        $orders = collect();
+
+        if ($ids) {
+            $orders = Order::with('latestCert')
+                ->whereHas('latestCert')
+                ->whereIn('id', $ids)
+                ->get();
+        }
+
+        // 按域名逐个查询并合并（去重）
+        $existingIds = $orders->pluck('id')->all();
+        foreach ($domains as $domain) {
+            $found = $this->findOrdersByDomain($domain);
+            foreach ($found as $order) {
+                if (! in_array($order->id, $existingIds)) {
+                    $orders->push($order);
+                    $existingIds[] = $order->id;
+                }
+            }
+        }
+
+        return $orders->sortByDesc('created_at')->values();
+    }
+
+    /**
+     * 按域名精确查找订单
      * Order 已被 UserScope 限制
      */
     private function findOrdersByDomain(string $domain): \Illuminate\Database\Eloquent\Collection
     {
-        // 提取基础域名（去掉第一级子域名用于通配符匹配）
-        $parts = explode('.', $domain);
-        $wildcardDomain = count($parts) > 2 ? '*.'.implode('.', array_slice($parts, 1)) : null;
-
-        // 通过 Order 查询（Order 已被 UserScope 限制）
         return Order::with('latestCert')
-            ->whereHas('latestCert', function ($query) use ($domain, $wildcardDomain) {
-                $query->where(function ($q) use ($domain, $wildcardDomain) {
-                    // alternative_names 包含匹配（已含 common_name）
-                    $q->where('alternative_names', 'like', "%$domain%");
-
-                    // 通配符匹配
-                    if ($wildcardDomain) {
-                        $q->orWhere('alternative_names', 'like', "%$wildcardDomain%");
-                    }
-                })
+            ->whereHas('latestCert', function ($query) use ($domain) {
+                $query->where('alternative_names', 'like', "%$domain%")
                     ->where('status', 'active');
             })
             ->orderByDesc('created_at')
@@ -288,23 +348,27 @@ class ApiController extends Controller
 
         $data = [
             'order_id' => $order->id,
-            'domain' => $cert->common_name,
             'domains' => $cert->alternative_names,
             'status' => $cert->status,
-            'certificate' => $cert->cert,
-            'private_key' => $cert->private_key,
-            'ca_certificate' => $cert->intermediate_cert,
-            'expires_at' => $cert->expires_at?->toDateString(),
-            'created_at' => $cert->created_at?->toDateString(),
         ];
 
-        // 空值守卫：dcv 可能为 null
-        $dcvMethod = $cert->dcv['method'] ?? null;
-        if (in_array($dcvMethod, ['file', 'http', 'https']) && $cert->status === 'processing') {
-            $data['file'] = [
-                'path' => $cert->dcv['file']['path'] ?? '',
-                'content' => $cert->dcv['file']['content'] ?? '',
-            ];
+        if ($cert->status === 'active') {
+            $data['certificate'] = $cert->cert;
+            $data['private_key'] = $cert->private_key;
+            $data['ca_certificate'] = $cert->intermediate_cert;
+            $data['issued_at'] = $cert->issued_at?->toDateString();
+            $data['expires_at'] = $cert->expires_at?->toDateString();
+        }
+
+        // 文件验证信息：processing 状态且 DCV 方式为文件类
+        if ($cert->status === 'processing') {
+            $dcvMethod = $cert->dcv['method'] ?? null;
+            if (in_array($dcvMethod, ['file', 'http', 'https'])) {
+                $data['file'] = [
+                    'path' => $cert->dcv['file']['path'] ?? '',
+                    'content' => $cert->dcv['file']['content'] ?? '',
+                ];
+            }
         }
 
         return $data;

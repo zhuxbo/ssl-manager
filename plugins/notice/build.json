@@ -1,0 +1,11 @@
+{
+  "name": "notice",
+  "include": [
+    "plugin.json",
+    "backend/"
+  ],
+  "exclude": [
+    ".gitignore",
+    "backend/tests/"
+  ]
+}

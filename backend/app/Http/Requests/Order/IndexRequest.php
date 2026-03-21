@@ -23,11 +23,13 @@ class IndexRequest extends BaseRequest
             'username' => 'nullable|string|max:20',
             'product_name' => 'nullable|string|max:50',
             'domain' => 'nullable|string|max:255',
-            'channel' => 'nullable|string|in:admin,api,web,acme,deploy',
+            'channel' => 'nullable|string|in:admin,api,web,deploy',
             'action' => 'nullable|string|in:new,renew,reissue',
             'expires_at' => 'nullable|array|size:2',
             'expires_at.*' => 'string|date_format:Y-m-d\TH:i:s.v\Z',
             'status' => 'nullable|in:unpaid,pending,processing,active,approving,cancelling,failed,cancelled,renewed,replaced,reissued,expired,revoked',
+            'sort_prop' => 'nullable|string|in:period_till,expires_at',
+            'sort_order' => 'nullable|string|in:asc,desc',
         ];
     }
 }

@@ -1,4 +1,8 @@
 import type { Router } from "vue-router";
+import * as Vue from "vue";
+import * as VueRouter from "vue-router";
+import * as ElementPlus from "element-plus";
+import * as Pinia from "pinia";
 import Cookies from "js-cookie";
 import { storageNameSpace } from "../config";
 
@@ -7,10 +11,17 @@ interface PluginRouteConfig {
   route: any;
 }
 
+interface PluginWidgetConfig {
+  slot: string;
+  component: any;
+  order?: number;
+}
+
 interface PluginConfig {
   name: string;
   routes?: PluginRouteConfig[];
   dictionaries?: Record<string, Record<string, any>>;
+  widgets?: PluginWidgetConfig[];
 }
 
 declare global {
@@ -34,14 +45,7 @@ export function initPluginSystem() {
 /**
  * 暴露共享依赖到 window
  */
-export async function exposeSharedDeps() {
-  const [Vue, VueRouter, ElementPlus, Pinia] = await Promise.all([
-    import("vue"),
-    import("vue-router"),
-    import("element-plus"),
-    import("pinia")
-  ]);
-
+export function exposeSharedDeps() {
   window.__deps = {
     Vue,
     VueRouter,
@@ -160,6 +164,28 @@ export function mergePluginDictionaries(
       }
     }
   }
+}
+
+/**
+ * 获取注册到指定插槽的插件 widget 组件列表
+ */
+export function getPluginWidgets(
+  slot: string
+): { name: string; component: any; order: number }[] {
+  const widgets: { name: string; component: any; order: number }[] = [];
+  for (const plugin of window.__registered_plugins ?? []) {
+    if (!plugin.widgets) continue;
+    for (const w of plugin.widgets) {
+      if (w.slot === slot) {
+        widgets.push({
+          name: `${plugin.name}-${w.slot}`,
+          component: w.component,
+          order: w.order ?? 0
+        });
+      }
+    }
+  }
+  return widgets.sort((a, b) => b.order - a.order);
 }
 
 function validateLocalPath(path: string): void {

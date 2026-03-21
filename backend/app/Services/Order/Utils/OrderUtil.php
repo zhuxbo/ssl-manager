@@ -133,7 +133,7 @@ class OrderUtil
      *                        latestCert.action,latestCert.standard_count,latestCert.wildcard_count,
      *                        product.standard_min,product.wildcard_min,user.balance]
      */
-    public static function getOrderTransaction(array $order): array
+    public static function getOrderTransaction(array $order, string $transactionType = 'order'): array
     {
         $product = FindUtil::Product($order['product_id'])->toArray();
         $latestCert = $order['latest_cert'];
@@ -151,7 +151,7 @@ class OrderUtil
 
         return [
             'user_id' => $order['user_id'],
-            'type' => 'order',
+            'type' => $transactionType,
             'transaction_id' => $order['id'],
             'amount' => '-'.$order['latest_cert']['amount'],
             'standard_count' => $purchasedStandardCount,
@@ -163,14 +163,15 @@ class OrderUtil
     /**
      * 获取取消交易数据
      */
-    public static function getCancelTransaction(array $order): array
+    public static function getCancelTransaction(array $order, string $transactionType = 'cancel'): array
     {
         $orderId = $order['id'];
         $userId = $order['user_id'];
         $amount = $order['amount'];
 
         // 查找当前用户该订单所有交易记录
-        $transactions = Transaction::whereIn('type', ['order', 'cancel'])
+        $prefix = str_contains($transactionType, 'acme_') ? 'acme_' : '';
+        $transactions = Transaction::whereIn('type', [$prefix.'order', $prefix.'cancel'])
             ->where('transaction_id', $orderId)
             ->where('user_id', $userId)
             ->get();
@@ -192,7 +193,7 @@ class OrderUtil
 
         return [
             'user_id' => $userId,
-            'type' => 'cancel',
+            'type' => $transactionType,
             'transaction_id' => $orderId,
             'amount' => $amount,
             'standard_count' => -$order['purchased_standard_count'],
@@ -230,9 +231,8 @@ class OrderUtil
             if (is_array($value)) {
                 // 如果是数组，递归调用
                 $newArray[$key] = self::convertNumericValues($value);
-            } elseif (is_numeric($value)) {
-                // 检查是否为数字字符串并转换
-                $newArray[$key] = $value + 0; // 使用 + 运算符自动转换为整数或浮点数
+            } elseif (is_numeric($value) && (! is_string($value) || ! preg_match('/[eE]/', $value))) {
+                $newArray[$key] = $value + 0;
             } else {
                 // 非数字保持原样
                 $newArray[$key] = $value;

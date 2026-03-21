@@ -98,17 +98,19 @@ export const validationTypeOptions = [
 
 // 产品类型选项
 export const productTypeOptions = [
-  { label: "SSL证书", value: "ssl" },
-  { label: "S/MIME", value: "smime" },
+  { label: "SSL", value: "ssl" },
   { label: "代码签名", value: "codesign" },
-  { label: "文档签名", value: "docsign" }
+  { label: "S/MIME", value: "smime" },
+  { label: "文档签名", value: "docsign" },
+  { label: "ACME", value: "acme" }
 ];
 
 export const productTypeLabels: { [key: string]: string } = {
-  ssl: "SSL证书",
+  ssl: "SSL",
   smime: "S/MIME",
   codesign: "代码签名",
-  docsign: "文档签名"
+  docsign: "文档签名",
+  acme: "ACME"
 };
 
 // 通用名称类型选项
@@ -127,6 +129,7 @@ export const nameTypeLabels: { [key: string]: string } = {
 };
 
 // 验证方法选项
+// delegation 为所有 SSL 产品通用验证方式，非 ACME 专用
 export const validationMethodOptions = [
   { label: "委托验证", value: "delegation" },
   { label: "TXT", value: "txt" },

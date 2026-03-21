@@ -81,7 +81,6 @@ test('validate package success', function () {
 test('detect web user returns www for baota', function () {
     $reflection = new \ReflectionClass($this->extractor);
     $method = $reflection->getMethod('detectWebUser');
-    $method->setAccessible(true);
 
     $result = $method->invoke($this->extractor);
 
@@ -100,7 +99,6 @@ test('find manifest in root', function () {
 
     $reflection = new \ReflectionClass($this->extractor);
     $method = $reflection->getMethod('findManifest');
-    $method->setAccessible(true);
 
     $result = $method->invoke($this->extractor, $packageDir);
 
@@ -115,7 +113,6 @@ test('find manifest in subdirectory', function () {
 
     $reflection = new \ReflectionClass($this->extractor);
     $method = $reflection->getMethod('findManifest');
-    $method->setAccessible(true);
 
     $result = $method->invoke($this->extractor, $packageDir);
 
@@ -128,7 +125,6 @@ test('find backend dir direct', function () {
 
     $reflection = new \ReflectionClass($this->extractor);
     $method = $reflection->getMethod('findBackendDir');
-    $method->setAccessible(true);
 
     $result = $method->invoke($this->extractor, $packageDir);
 
@@ -141,7 +137,6 @@ test('find backend dir with app', function () {
 
     $reflection = new \ReflectionClass($this->extractor);
     $method = $reflection->getMethod('findBackendDir');
-    $method->setAccessible(true);
 
     $result = $method->invoke($this->extractor, $packageDir);
 

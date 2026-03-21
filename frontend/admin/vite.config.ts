@@ -1,4 +1,9 @@
-import { type UserConfigExport, type ConfigEnv, loadEnv, type Plugin } from "vite";
+import {
+  type UserConfigExport,
+  type ConfigEnv,
+  loadEnv,
+  type Plugin
+} from "vite";
 import { resolve, relative, isAbsolute } from "path";
 import { createReadStream, existsSync, statSync } from "fs";
 import {
@@ -36,13 +41,17 @@ function servePlugins(): Plugin {
         // 防止路径遍历（不要使用 startsWith 前缀判断）
         const relPath = relative(pluginsRoot, filePath);
         if (relPath.startsWith("..") || isAbsolute(relPath)) return next();
-        if (!existsSync(filePath) || !statSync(filePath).isFile()) return next();
+        if (!existsSync(filePath) || !statSync(filePath).isFile())
+          return next();
         const ext = filePath.split(".").pop();
         const mime: Record<string, string> = {
           js: "application/javascript",
           css: "text/css"
         };
-        res.setHeader("Content-Type", mime[ext ?? ""] ?? "application/octet-stream");
+        res.setHeader(
+          "Content-Type",
+          mime[ext ?? ""] ?? "application/octet-stream"
+        );
         createReadStream(filePath).pipe(res);
       });
     }

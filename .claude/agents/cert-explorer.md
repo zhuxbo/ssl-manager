@@ -38,7 +38,6 @@ backend/        # Laravel 11 后端
 
 build/          # 构建系统
 deploy/         # 部署脚本
-develop/        # 开发环境
 ```
 
 ## 核心模块

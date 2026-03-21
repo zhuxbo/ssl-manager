@@ -58,7 +58,10 @@ class RechargeController extends BaseController
 
             $payMethod = $agisoOrder->pay_method;
 
-            // 计算赠送金额
+            // 充值策略：
+            // 1. 实付部分（amount）全额充值，不受 price 限制
+            // 2. 赠送部分（price - amount）仅 platinum 用户享有
+            // 3. 当 amount >= price 时，赠送金额 <= 0，不产生赠送充值
             $giftAmount = bcsub((string) $agisoOrder->price, (string) $agisoOrder->amount, 2);
 
             /** @var User $user */

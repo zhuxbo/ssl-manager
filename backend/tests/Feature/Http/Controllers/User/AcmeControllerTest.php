@@ -1,129 +1,315 @@
 <?php
 
-use App\Models\Order;
+use App\Exceptions\ApiResponseException;
+use App\Models\Acme;
 use App\Models\Product;
+use App\Models\ProductPrice;
+use App\Models\Setting;
+use App\Models\SettingGroup;
 use App\Models\User;
-use App\Services\Acme\BillingService;
+use App\Services\Acme\Action;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 
 uses(Tests\Traits\ActsAsUser::class);
+uses(RefreshDatabase::class);
 
-test('创建 ACME 订阅订单', function () {
-    $user = User::factory()->withBalance('1000.00')->create();
-    $product = Product::factory()->create(['support_acme' => 1]);
+/**
+ * 创建 Gateway 系统设置
+ */
+function setupUserGatewaySettings(string $url = 'https://fake-gateway.test/api/v2', string $token = 'fake-key'): void
+{
+    $group = SettingGroup::firstOrCreate(['name' => 'ca'], ['title' => '证书接口', 'weight' => 2]);
 
-    $mockBilling = Mockery::mock(BillingService::class);
-    $mockBilling->shouldReceive('createSubscription')
-        ->once()
-        ->andReturn([
-            'code' => 1,
-            'data' => [
-                'order' => Order::factory()->acme()->create([
-                    'user_id' => $user->id,
-                    'product_id' => $product->id,
-                ]),
-                'eab_kid' => 'test_kid',
-                'eab_hmac' => 'test_hmac',
-                'server_url' => 'https://example.com/acme/directory',
-            ],
-        ]);
-    app()->instance(BillingService::class, $mockBilling);
+    foreach (['url' => $url, 'token' => $token, 'acme_url' => null, 'acme_token' => null] as $key => $value) {
+        $setting = Setting::firstOrCreate(
+            ['group_id' => $group->id, 'key' => $key],
+            ['type' => 'string', 'value' => null, 'weight' => 0]
+        );
+        if ($value !== null) {
+            $setting->value = $value;
+            $setting->save();
+        }
+    }
+}
 
-    $this->actingAsUser($user)
-        ->postJson('/api/acme/order', [
-            'product_id' => $product->id,
-            'period' => 12,
-        ])
-        ->assertOk()
-        ->assertJson(['code' => 1])
-        ->assertJsonStructure(['data' => ['created']]);
-});
+/**
+ * 创建 ACME 产品
+ */
+function createUserAcmeProduct(array $overrides = []): Product
+{
+    return Product::factory()->create(array_merge([
+        'product_type' => Product::TYPE_ACME,
+    ], $overrides));
+}
 
-test('创建 ACME 订阅订单-批量', function () {
-    $user = User::factory()->withBalance('5000.00')->create();
-    $product = Product::factory()->create(['support_acme' => 1]);
+/**
+ * 创建产品价格
+ */
+function createUserProductPrice(Product $product, User $user, string $price = '100.00'): void
+{
+    ProductPrice::create([
+        'product_id' => $product->id,
+        'level_code' => $user->level_code ?? 'standard',
+        'period' => 12,
+        'price' => $price,
+        'alternative_standard_price' => '10.00',
+        'alternative_wildcard_price' => '20.00',
+    ]);
+}
 
-    $mockBilling = Mockery::mock(BillingService::class);
-    $mockBilling->shouldReceive('createSubscription')
-        ->times(3)
-        ->andReturn([
-            'code' => 1,
-            'data' => [
-                'order' => Order::factory()->acme()->create([
-                    'user_id' => $user->id,
-                    'product_id' => $product->id,
-                ]),
-                'eab_kid' => 'test_kid',
-                'eab_hmac' => 'test_hmac',
-                'server_url' => 'https://example.com/acme/directory',
-            ],
-        ]);
-    app()->instance(BillingService::class, $mockBilling);
+/**
+ * 通过 Action 创建 unpaid 的 ACME 订单
+ */
+function createUserAcmeViaAction(User $user, Product $product, array $overrides = []): Acme
+{
+    $action = app(Action::class);
 
-    $this->actingAsUser($user)
-        ->postJson('/api/acme/order', [
-            'product_id' => $product->id,
-            'period' => 12,
-            'quantity' => 3,
-        ])
-        ->assertOk()
-        ->assertJson(['code' => 1, 'data' => ['created' => 3]]);
-});
-
-test('创建 ACME 订阅订单-余额不足', function () {
-    $user = User::factory()->create(['balance' => '0.00']);
-    $product = Product::factory()->create(['support_acme' => 1]);
-
-    $mockBilling = Mockery::mock(BillingService::class);
-    $mockBilling->shouldReceive('createSubscription')
-        ->once()
-        ->andReturn([
-            'code' => 0,
-            'msg' => '余额不足',
-        ]);
-    app()->instance(BillingService::class, $mockBilling);
-
-    $this->actingAsUser($user)
-        ->postJson('/api/acme/order', [
-            'product_id' => $product->id,
-            'period' => 12,
-        ])
-        ->assertOk()
-        ->assertJson(['code' => 0]);
-});
-
-test('获取 EAB 凭据', function () {
-    $user = User::factory()->create();
-    $product = Product::factory()->create(['support_acme' => 1]);
-    $order = Order::factory()->acme()->create([
+    $params = array_merge([
         'user_id' => $user->id,
         'product_id' => $product->id,
-    ]);
+        'period' => 12,
+        'purchased_standard_count' => 0,
+        'purchased_wildcard_count' => 0,
+    ], $overrides);
 
-    $this->actingAsUser($user)
-        ->getJson("/api/acme/eab/$order->id")
-        ->assertOk()
-        ->assertJson(['code' => 1])
-        ->assertJsonStructure(['data' => ['eab_kid', 'eab_hmac', 'server_url', 'certbot_command', 'acmesh_command']]);
-});
+    try {
+        $action->new($params);
+        test()->fail('期望抛出 ApiResponseException 但未抛出');
+    } catch (ApiResponseException $e) {
+        $response = $e->getApiResponse();
+        expect($response['code'])->toBe(1);
 
-test('获取 EAB 凭据-订单不属于当前用户', function () {
+        return Acme::find($response['data']['order_id']);
+    }
+}
+
+/**
+ * 将 unpaid 订单支付为 pending 状态
+ */
+function payUserAcmeViaAction(Acme $acme): Acme
+{
+    $action = app(Action::class);
+
+    try {
+        $action->pay($acme->id);
+    } catch (ApiResponseException) {
+    }
+
+    return $acme->refresh();
+}
+
+// ==================== index ====================
+
+test('index 仅返回当前用户订单', function () {
     $user = User::factory()->create();
     $otherUser = User::factory()->create();
-    $product = Product::factory()->create(['support_acme' => 1]);
-    $order = Order::factory()->acme()->create([
+    $product = createUserAcmeProduct();
+
+    $acme = Acme::factory()->create(['user_id' => $user->id, 'product_id' => $product->id]);
+    Acme::factory()->create(['user_id' => $otherUser->id, 'product_id' => $product->id]);
+
+    $response = $this->actingAsUser($user)
+        ->getJson('/api/acme/')
+        ->assertOk()
+        ->assertJson(['code' => 1])
+        ->assertJsonStructure(['data' => ['items', 'total', 'pageSize', 'currentPage']]);
+
+    expect($response->json('data.total'))
+        ->toBe(1)
+        ->and($response->json('data.items'))
+        ->toHaveCount(1)
+        ->and($response->json('data.items.0.id'))
+        ->toBe($acme->id);
+});
+
+// ==================== show ====================
+
+test('show 仅查看自己订单', function () {
+    $user = User::factory()->create();
+    $product = createUserAcmeProduct();
+
+    $acme = Acme::factory()->active()->create([
+        'user_id' => $user->id,
+        'product_id' => $product->id,
+        'eab_kid' => 'test-kid',
+        'eab_hmac' => 'test-hmac-secret',
+    ]);
+
+    $response = $this->actingAsUser($user)
+        ->getJson("/api/acme/$acme->id")
+        ->assertOk()
+        ->assertJson(['code' => 1]);
+
+    expect($response->json('data.id'))
+        ->toBe($acme->id)
+        ->and($response->json('data.eab_kid'))
+        ->toBe('test-kid')
+        ->and($response->json('data.eab_hmac'))
+        ->not->toBeNull();
+});
+
+test('show 查看他人订单返回 null', function () {
+    $user = User::factory()->create();
+    $otherUser = User::factory()->create();
+    $product = createUserAcmeProduct();
+
+    $acme = Acme::factory()->active()->create([
         'user_id' => $otherUser->id,
         'product_id' => $product->id,
     ]);
 
     $this->actingAsUser($user)
-        ->getJson("/api/acme/eab/$order->id")
-        ->assertStatus(404);
+        ->getJson("/api/acme/$acme->id")
+        ->assertOk()
+        ->assertJson(['code' => 0]);
 });
 
-test('ACME 订单-未认证', function () {
-    $this->postJson('/api/acme/order', [
-        'product_id' => 1,
-        'period' => 12,
-    ])
-        ->assertUnauthorized();
+// ==================== new ====================
+
+test('new 成功创建订单', function () {
+    $user = User::factory()->withBalance('1000.00')->create();
+    $product = createUserAcmeProduct();
+    createUserProductPrice($product, $user);
+
+    $response = $this->actingAsUser($user)
+        ->postJson('/api/acme/new', [
+            'product_id' => $product->id,
+            'period' => 12,
+        ])
+        ->assertOk()
+        ->assertJson(['code' => 1]);
+
+    expect($response->json('data.order_id'))->toBeGreaterThan(0);
+
+    $acme = Acme::find($response->json('data.order_id'));
+
+    expect($acme)
+        ->not->toBeNull()
+        ->and($acme->status)
+        ->toBe(Acme::STATUS_UNPAID)
+        ->and($acme->user_id)
+        ->toBe($user->id)
+        ->and($acme->product_id)
+        ->toBe($product->id);
+});
+
+// ==================== pay ====================
+
+test('pay 成功支付', function () {
+    $user = User::factory()->withBalance('1000.00')->create();
+    $product = createUserAcmeProduct();
+    createUserProductPrice($product, $user);
+
+    $acme = createUserAcmeViaAction($user, $product);
+    expect($acme->status)->toBe(Acme::STATUS_UNPAID);
+
+    $response = $this->actingAsUser($user)
+        ->postJson("/api/acme/pay/$acme->id")
+        ->assertOk()
+        ->assertJson(['code' => 1]);
+
+    $acme->refresh();
+    expect($acme->status)->toBe(Acme::STATUS_PENDING);
+});
+
+test('pay 他人订单返回 404', function () {
+    $user = User::factory()->withBalance('1000.00')->create();
+    $otherUser = User::factory()->withBalance('1000.00')->create();
+    $product = createUserAcmeProduct();
+    createUserProductPrice($product, $otherUser);
+
+    $acme = createUserAcmeViaAction($otherUser, $product);
+
+    $this->actingAsUser($user)
+        ->postJson("/api/acme/pay/$acme->id")
+        ->assertNotFound();
+});
+
+// ==================== commit ====================
+
+test('commit 成功提交', function () {
+    $user = User::factory()->withBalance('1000.00')->create();
+    $product = createUserAcmeProduct(['source' => 'default']);
+    createUserProductPrice($product, $user);
+
+    $acme = createUserAcmeViaAction($user, $product);
+    $acme = payUserAcmeViaAction($acme);
+    expect($acme->status)->toBe(Acme::STATUS_PENDING);
+
+    setupUserGatewaySettings();
+    Http::fake([
+        'fake-gateway.test/*' => Http::response([
+            'code' => 1,
+            'data' => [
+                'api_id' => 'gw-123',
+                'vendor_id' => 'v-456',
+                'eab_kid' => 'kid-abc',
+                'eab_hmac' => 'hmac-xyz',
+            ],
+        ]),
+    ]);
+
+    $response = $this->actingAsUser($user)
+        ->postJson("/api/acme/commit/$acme->id")
+        ->assertOk()
+        ->assertJson(['code' => 1]);
+
+    expect($response->json('data.eab_kid'))
+        ->toBe('kid-abc')
+        ->and($response->json('data.eab_hmac'))
+        ->toBe('hmac-xyz');
+
+    $acme->refresh();
+    expect($acme->status)
+        ->toBe(Acme::STATUS_ACTIVE)
+        ->and($acme->api_id)
+        ->toBe('gw-123');
+});
+
+// ==================== commitCancel ====================
+
+test('commitCancel 成功取消', function () {
+    Queue::fake();
+
+    $user = User::factory()->create();
+    $product = createUserAcmeProduct();
+
+    $acme = Acme::factory()->active()->create([
+        'user_id' => $user->id,
+        'product_id' => $product->id,
+        'api_id' => 'upstream-123',
+        'amount' => '100.00',
+    ]);
+
+    $response = $this->actingAsUser($user)
+        ->postJson("/api/acme/commit-cancel/$acme->id")
+        ->assertOk()
+        ->assertJson(['code' => 1]);
+
+    $acme->refresh();
+    expect($acme->status)
+        ->toBe(Acme::STATUS_CANCELLING)
+        ->and($acme->cancelled_at)
+        ->not->toBeNull();
+});
+
+test('commitCancel 他人订单返回 404', function () {
+    Queue::fake();
+
+    $user = User::factory()->create();
+    $otherUser = User::factory()->create();
+    $product = createUserAcmeProduct();
+
+    $acme = Acme::factory()->active()->create([
+        'user_id' => $otherUser->id,
+        'product_id' => $product->id,
+        'api_id' => 'upstream-456',
+        'amount' => '100.00',
+    ]);
+
+    $this->actingAsUser($user)
+        ->postJson("/api/acme/commit-cancel/$acme->id")
+        ->assertNotFound();
 });

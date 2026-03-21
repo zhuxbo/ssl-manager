@@ -34,6 +34,7 @@ const {
   pagination,
   handleSizeChange,
   handleCurrentChange,
+  handleSortChange,
   onSearch,
   onReset,
   onCollapse
@@ -120,7 +121,7 @@ onBeforeUnmount(() => {
 <template>
   <div class="main">
     <div
-      class="search bg-bg_color w-[99/100] pl-4 pr-4 pt-[24px] pb-[12px] overflow-auto"
+      class="search bg-bg_color w-[99/100] pl-4 pr-4 pt-6 pb-3 overflow-auto"
     >
       <PlusSearch
         v-model="search"
@@ -153,14 +154,14 @@ onBeforeUnmount(() => {
         <div
           v-if="selectedIds.length > 0"
           v-motion-fade
-          class="bg-[var(--el-fill-color-light)] w-full h-[46px] mb-2 pl-3 pr-2 flex items-center"
+          class="bg-(--el-fill-color-light) w-full h-[46px] mb-2 pl-3 pr-2 flex items-center"
         >
           <div class="flex-auto">
             <el-tooltip placement="top" content="取消选择">
               <el-button
                 type="primary"
                 size="small"
-                class="!w-[15px] !p-0 !h-[15px] !rounded-[3px]"
+                class="w-[15px]! p-0! h-[15px]! rounded-[3px]!"
                 :icon="useRenderIcon(CloseBold)"
                 @click="handleCancelSelection"
               />
@@ -196,6 +197,7 @@ onBeforeUnmount(() => {
           }"
           @row-click="handleRowClick"
           @selection-change="handleSelectionChange"
+          @sort-change="handleSortChange"
           @page-size-change="handleSizeChange"
           @page-current-change="handleCurrentChange"
         >

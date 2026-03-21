@@ -3,22 +3,22 @@
 namespace App\Http\Controllers\Deploy;
 
 use App\Http\Controllers\Controller;
-use App\Models\Order;
-use App\Models\Product;
-use App\Models\User;
-use App\Services\Acme\BillingService;
+use App\Models\Acme;
+use App\Services\Acme\Action;
 use Illuminate\Http\Request;
 
 class AcmeController extends Controller
 {
     /**
-     * 创建 ACME 订阅订单
+     * 创建 ACME 订单（一步到位：创建 + 支付 + 提交）
      */
-    public function createOrder(Request $request): void
+    public function new(Request $request): void
     {
         $request->validate([
-            'product_code' => 'required|string|max:50',
+            'product_id' => 'required|integer|exists:products,id',
             'period' => 'required|integer',
+            'purchased_standard_count' => 'integer|min:0',
+            'purchased_wildcard_count' => 'integer|min:0',
         ]);
 
         $userId = $request->attributes->get('authenticated_user_id');
@@ -27,66 +27,31 @@ class AcmeController extends Controller
             $this->error('Unauthorized');
         }
 
-        $product = Product::where('code', $request->input('product_code'))
-            ->where('support_acme', 1)
-            ->first();
-
-        if (! $product) {
-            $this->error('Product not found or does not support ACME');
-        }
-
-        $user = User::findOrFail($userId);
-        $billingService = app(BillingService::class);
-
-        $result = $billingService->createSubscription($user, $product->id, $request->input('period'));
-
-        if ($result['code'] !== 1) {
-            $this->error($result['msg']);
-        }
-
-        $order = $result['data']['order'];
-
-        $this->success([
-            'order_id' => $order->id,
-            'eab_kid' => $result['data']['eab_kid'],
-            'eab_hmac' => $result['data']['eab_hmac'],
-            'server_url' => $result['data']['server_url'],
+        app(Action::class)->newAndCommit([
+            'user_id' => $userId,
+            'product_id' => $request->input('product_id'),
+            'period' => $request->input('period'),
+            'purchased_standard_count' => (int) $request->input('purchased_standard_count', 0),
+            'purchased_wildcard_count' => (int) $request->input('purchased_wildcard_count', 0),
         ]);
     }
 
     /**
-     * 按订单 ID 获取 EAB 凭据
+     * 查询订单详情（含 EAB）
+     *
+     * deploy_tokens.user_id 为 non-nullable，DB 约束保证非空，
+     * DeployAuthenticate 始终注册 UserScope，Acme::find 自动过滤当前用户
      */
-    public function getEab(Request $request, int $orderId): void
+    public function get(int $id): void
     {
-        $userId = $request->attributes->get('authenticated_user_id');
+        $acme = Acme::find($id);
 
-        if (! $userId) {
-            $this->error('Unauthorized');
+        if (! $acme) {
+            $this->error('Order not found');
         }
 
-        $order = Order::where('id', $orderId)
-            ->where('user_id', $userId)
-            ->whereNotNull('eab_kid')
-            ->first();
+        $acme->makeVisible('eab_hmac');
 
-        if (! $order) {
-            $this->error('No available EAB credentials for this order.');
-        }
-
-        $serverUrl = rtrim(get_system_setting('site', 'url', config('app.url')), '/').'/acme/directory';
-        $configDir = "/etc/letsencrypt/$order->eab_kid";
-        $configHome = "~/.acme.sh/$order->eab_kid";
-
-        $this->success([
-            'eab_kid' => $order->eab_kid,
-            'eab_hmac' => $order->eab_hmac,
-            'server_url' => $serverUrl,
-            'certbot_command' => "certbot certonly --config-dir $configDir --server $serverUrl --eab-kid $order->eab_kid"
-                ." --eab-hmac-key $order->eab_hmac"
-                .' -d example.com --preferred-challenges dns-01',
-            'acmesh_command' => "acme.sh --register-account --config-home $configHome --server $serverUrl --eab-kid $order->eab_kid"
-                ." --eab-hmac-key $order->eab_hmac",
-        ]);
+        $this->success($acme->toArray());
     }
 }

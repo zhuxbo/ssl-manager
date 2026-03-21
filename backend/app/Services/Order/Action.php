@@ -12,12 +12,14 @@ use App\Models\Cert;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\Transaction;
+use App\Services\Acme\Api\Api as AcmeApi;
 use App\Services\Delegation\AutoDcvTxtService;
 use App\Services\Notification\DTOs\NotificationIntent;
 use App\Services\Notification\NotificationCenter;
 use App\Services\Order\Api\Api;
 use App\Services\Order\Traits\ActionBatchTrait;
 use App\Services\Order\Traits\ActionCallbackTrait;
+use App\Services\Order\Traits\ActionDocumentTrait;
 use App\Services\Order\Traits\ActionFileTrait;
 use App\Services\Order\Traits\ActionTrait;
 use App\Services\Order\Utils\FindUtil;
@@ -32,23 +34,16 @@ class Action
 {
     use ActionBatchTrait;
     use ActionCallbackTrait;
+    use ActionDocumentTrait;
     use ActionFileTrait;
     use ActionTrait;
     use ApiResponse;
 
     protected mixed $api;
 
-    protected int $userId;
-
-    public function __construct(int $userId = 0)
+    public function __construct()
     {
-        $this->userId = $userId;
         $this->api = new Api;
-    }
-
-    public function getUserId(): int
-    {
-        return $this->userId;
     }
 
     /**
@@ -56,15 +51,46 @@ class Action
      */
     public function importProduct(string $source = '', string $brand = '', string $api_id = '', string $type = 'new'): void
     {
-        $products = $this->api->getProducts($source, $brand, $api_id);
+        $allProducts = [];
 
-        if ($products['code'] !== 1) {
-            $this->error($products['msg'] ?? '获取产品失败');
+        // 查询传统 Order 产品
+        try {
+            $orderProducts = $this->api->getProducts($source, $brand, $api_id);
+            if ($orderProducts['code'] === 1 && ! empty($orderProducts['data'])) {
+                $allProducts = array_merge($allProducts, $orderProducts['data']);
+            }
+        } catch (ApiResponseException) {
+            // 源不存在于 Order API，忽略
         }
 
-        if (empty($products['data'])) {
+        // 查询 ACME 产品
+        try {
+            $acmeProducts = (new AcmeApi)->getProducts($source, $brand, $api_id);
+            if ($acmeProducts['code'] === 1 && ! empty($acmeProducts['data'])) {
+                // ACME 端点返回的产品隐含 product_type=acme，注入默认值
+                $acmeData = array_map(function (array $item) {
+                    $item['product_type'] = $item['product_type'] ?? 'acme';
+                    $item['validation_type'] = $item['validation_type'] ?? 'dv';
+
+                    return $item;
+                }, $acmeProducts['data']);
+                $allProducts = array_merge($allProducts, $acmeData);
+            }
+        } catch (ApiResponseException) {
+            // 源不存在于 ACME API，忽略
+        }
+
+        if (empty($allProducts)) {
             $this->error('没有获取到产品');
         }
+
+        // 按 code（api_id）去重，后出现的覆盖前面的
+        $unique = [];
+        foreach ($allProducts as $item) {
+            $unique[$item['code']] = $item;
+        }
+
+        $products = ['code' => 1, 'data' => array_values($unique)];
 
         foreach ($products['data'] as $item) {
             $item['source'] = $source;
@@ -84,6 +110,9 @@ class Action
                     $updateRequest = new UpdateRequest;
                     $updateRequest->setProductId($product->id);
                     $updateRequest->skipSslDomainValidation();
+
+                    // 过滤 null 值，避免上游未设置的字段覆盖本地数据
+                    $item = array_filter($item, fn ($value) => $value !== null);
 
                     // 将 $item 数据合并到请求中，以便 rules() 能正确判断产品类型
                     $updateRequest->merge($item);
@@ -147,7 +176,7 @@ class Action
      */
     public function new(array $params): void
     {
-        $later = $this->checkDuplicate('new', [$params, $this->userId], 10);
+        $later = $this->checkDuplicate('new', [$params], 10);
         $later && $this->error('参数重复，请在 '.$later.' 秒后再提交申请');
 
         $params = $this->initParams($params);
@@ -184,7 +213,7 @@ class Action
      */
     public function batchNew(array $params): void
     {
-        $later = $this->checkDuplicate('batchNew', [$params, $this->userId], 10);
+        $later = $this->checkDuplicate('batchNew', [$params], 10);
         $later && $this->error('参数重复，请在 '.$later.' 秒后再提交批量申请');
 
         $domains = explode(',', $params['domains'] ?? '');
@@ -226,7 +255,7 @@ class Action
      */
     public function renew(array $params): void
     {
-        $later = $this->checkDuplicate('renew', [$params, $this->userId], 10);
+        $later = $this->checkDuplicate('renew', [$params], 10);
         $later && $this->error('参数重复，请在 '.$later.' 秒后再提交续费');
 
         $this->new($params);
@@ -239,7 +268,7 @@ class Action
      */
     public function reissue(array $params): void
     {
-        $later = $this->checkDuplicate('reissue', [$params, $this->userId], 10);
+        $later = $this->checkDuplicate('reissue', [$params], 10);
         $later && $this->error('参数重复，请在 '.$later.' 秒后再提交重签');
 
         $params = $this->initParams($params);
@@ -320,6 +349,9 @@ class Action
      */
     public function commit(int $orderId): void
     {
+        $order = null;
+        $result = null;
+
         DB::beginTransaction();
         try {
             // 事务查询不锁定产品
@@ -335,7 +367,6 @@ class Action
 
             $order->latestCert->status != 'pending' && $this->error('订单状态不是待提交');
 
-            // 提交订单
             $product = FindUtil::Product($order->product_id);
 
             $action = $order->latestCert->action;
@@ -401,7 +432,7 @@ class Action
     public function sync(int $orderId, bool $force = false): void
     {
         // 10秒内仅请求一次 API 避免重复请求
-        if ($this->checkDuplicate('sync', [$orderId, $this->userId], 10)) {
+        if ($this->checkDuplicate('sync', [$orderId], 10)) {
             if ($force) {
                 return;
             } else {
@@ -475,7 +506,8 @@ class Action
         if (! $order->period_from && ($data['issued_at'] ?? null) && ($data['expires_at'] ?? null)) {
             // 即使传递的是时间戳 赋值给模型属性后会转换为时间格式
             $order->period_from = $data['issued_at'];
-            $periodTill = $this->addMonths((int) $data['issued_at'], (int) $order->period);
+            $plus = ($order->product->product_type ?? '') === 'ssl' ? (int) $order->plus : 0;
+            $periodTill = $this->calculatePeriodTill((int) $data['issued_at'], (int) $order->period, $plus);
             $order->period_till = max($data['expires_at'], $periodTill);
         }
 
@@ -603,7 +635,7 @@ class Action
      */
     public function revalidate(int $orderId): void
     {
-        $later = $this->checkDuplicate('revalidate', [$orderId, $this->userId]);
+        $later = $this->checkDuplicate('revalidate', [$orderId]);
         $later && $this->error('请在 '.$later.' 秒后再提交验证');
 
         $order = FindUtil::Order($orderId);
@@ -669,7 +701,7 @@ class Action
      */
     public function updateDCV(int $orderId, string $method): void
     {
-        $later = $this->checkDuplicate('updateDCV', [$orderId, $this->userId]);
+        $later = $this->checkDuplicate('updateDCV', [$orderId]);
         $later && $this->error('请在 '.$later.' 秒后再提交修改');
 
         $order = FindUtil::Order($orderId);
@@ -689,7 +721,7 @@ class Action
             $result = $this->api->updateDCV($orderId, $apiMethod);
             // 使用新生成的 dcv（包含正确的 is_delegate 标记），然后合并 API 返回的 dns/file 信息
             $cert->dcv = $this->mergeDcv($result['data']['dcv'] ?? null, $newDcv);
-            // 优先使用 API 返回的 validation（多域名/ACME 场景每个域名有独立 token），合并本地委托字段
+            // 优先使用 API 返回的 validation（多域名场景每个域名有独立 token），合并本地委托字段
             $localValidation = $this->generateValidation($cert->dcv, $cert->alternative_names, $order->user_id) ?? [];
             $cert->validation = isset($result['data']['validation'])
                 ? $this->mergeValidation($result['data']['validation'], $localValidation)
@@ -708,6 +740,7 @@ class Action
             }
         }
 
+        // $result 仅在 processing 分支赋值，其他分支由 ?? 兜底
         $this->success([
             'dcv' => $result['data']['dcv'] ?? $cert->dcv,
             'validation' => $result['data']['validation'] ?? $cert->validation,
@@ -753,10 +786,14 @@ class Action
 
     /**
      * 撤回取消
+     *
+     * 设计说明：状态统一恢复为 approving，同时创建 sync 任务，
+     * 同步一次即可从上游恢复正确状态（processing/approving/active）
      */
     public function revokeCancel(int $orderId): void
     {
         $order = FindUtil::Order($orderId);
+        $order->latestCert->status !== 'cancelling' && $this->error('订单不在取消中状态');
 
         $this->deleteTask($orderId, 'cancel');
         $order->latestCert->update(['status' => 'approving']);
@@ -772,10 +809,6 @@ class Action
      */
     public function cancel(int $orderId): void
     {
-        // 先在事务内完成校验
-        $order = null;
-        $isAcme = false;
-
         DB::beginTransaction();
         try {
             // 事务查询不锁定产品
@@ -791,48 +824,37 @@ class Action
 
             $product = FindUtil::Product($order->product_id);
 
+            // 退款期严格以 created_at 计算，超过则不退款（卡 cancelling 为预期行为）
             $order->created_at->timestamp < time() - 86400 * $product->refund_period
             && $this->error('订单已超过'.$product->refund_period.'天');
 
             $order->latestCert->status === 'cancelled' && $this->error('订单已取消');
             $order->latestCert->status != 'cancelling' && $this->error('订单状态不是取消中');
 
-            $isAcme = $order->latestCert->channel === 'acme';
-
-            if ($isAcme) {
-                // ACME 分支：校验通过后先提交事务，executeCancel 内部管理自己的事务和 cancelled_at
-                DB::commit();
-            } else {
-                try {
-                    $this->api->cancel($orderId);
-                } catch (ApiResponseException $e) {
-                    $errors = $e->getApiResponse()['errors'] ?? null;
-                    $msg = $e->getApiResponse()['msg'] ?: 'CA取消失败';
-                    $this->error($msg, $errors);
-                }
-
-                // 获取交易信息
-                $transaction = OrderUtil::getCancelTransaction($order->toArray());
-
-                // 创建交易记录并退款
-                Transaction::create($transaction);
-
-                // 更新订单状态
-                $order->latestCert->update(['status' => 'cancelled']);
-
-                // 保存取消时间
-                $order->update(['cancelled_at' => now()]);
-
-                DB::commit();
+            try {
+                $this->api->cancel($orderId);
+            } catch (ApiResponseException $e) {
+                $errors = $e->getApiResponse()['errors'] ?? null;
+                $msg = $e->getApiResponse()['msg'] ?: 'CA取消失败';
+                $this->error($msg, $errors);
             }
+
+            // 获取交易信息
+            $transaction = OrderUtil::getCancelTransaction($order->toArray());
+
+            // 创建交易记录并退款
+            Transaction::create($transaction);
+
+            // 更新订单状态
+            $order->latestCert->update(['status' => 'cancelled']);
+
+            // 保存取消时间
+            $order->update(['cancelled_at' => now()]);
+
+            DB::commit();
         } catch (Throwable $e) {
             DB::rollback();
             throw $e;
-        }
-
-        // ACME 分支：CA 调用和本地清理在外层事务外执行
-        if ($isAcme) {
-            app(\App\Services\Acme\BillingService::class)->executeCancel($order);
         }
 
         $this->success();
@@ -841,11 +863,9 @@ class Action
     /**
      * 备注
      */
-    public function remark(int $orderId, string $remark): void
+    public function remark(int $orderId, string $remark, string $field = 'remark'): void
     {
         $order = FindUtil::Order($orderId);
-
-        $field = $this->userId ? 'remark' : 'admin_remark';
         $order->update([$field => $remark]);
 
         $this->success();

@@ -16,7 +16,7 @@ class CertExpireSmsNotificationBuilder implements NotificationBuilderInterface
         private readonly AutoRenewService $autoRenewService
     ) {}
 
-    public function build(NotificationIntent $intent, Model $notifiable): NotificationPayload
+    public function build(NotificationIntent $intent, Model $notifiable): ?NotificationPayload
     {
         if (! $notifiable instanceof User) {
             throw new RuntimeException('通知接收者必须为用户');
@@ -47,8 +47,7 @@ class CertExpireSmsNotificationBuilder implements NotificationBuilderInterface
             if ($willAutoRenew || $willAutoReissue) {
                 $ca = strtolower($order->product->ca ?? '');
                 $domains = $order->latestCert->alternative_names;
-                $channel = $order->latestCert->channel ?? '';
-                $delegationValid = $this->autoRenewService->checkDelegationValidity($notifiable->id, $domains, $ca, $channel);
+                $delegationValid = $this->autoRenewService->checkDelegationValidity($notifiable->id, $domains, $ca);
 
                 if ($delegationValid) {
                     // 委托有效，完全跳过该证书（不发通知）
@@ -64,7 +63,7 @@ class CertExpireSmsNotificationBuilder implements NotificationBuilderInterface
         }
 
         if (empty($certificates)) {
-            throw new RuntimeException('14天内没有需要通知的到期证书');
+            return null;
         }
 
         $domains = array_column($certificates, 'domain');

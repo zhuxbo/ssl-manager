@@ -1,0 +1,9 @@
+{
+  "name": "notice",
+  "requires": ">=0.3.11",
+  "description": "公告系统插件",
+  "provider": "NoticeServiceProvider",
+  "admin_bundle": "frontend/admin/notice-plugin.iife.js",
+  "user_bundle": "frontend/user/notice-plugin.iife.js",
+  "user_css": "frontend/user/notice-plugin-user.css"
+}

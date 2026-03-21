@@ -1,7 +1,10 @@
 <?php
 
 use App\Models\Fund;
+use App\Models\OrderDocument;
+use App\Models\OrderVerificationReport;
 use App\Models\User;
+use Tests\Traits\CreatesTestData;
 
 test('签名为 schedule:purge', function () {
     $this->artisan('schedule:purge')->assertSuccessful();
@@ -44,4 +47,125 @@ test('命令输出包含清理统计', function () {
     $this->artisan('schedule:purge')
         ->expectsOutputToContain('Purged')
         ->assertSuccessful();
+});
+
+// --- 文档清理测试 ---
+
+uses(CreatesTestData::class)->in(__DIR__);
+
+test('清理已签发订单的上传文档和文件', function () {
+    $user = $this->createTestUser();
+    $product = $this->createTestProduct();
+    $order = $this->createTestOrder($user, $product);
+    $this->createTestCert($order, ['status' => 'active']);
+
+    // 创建测试文件
+    $dir = storage_path("app/verification/$order->id");
+    is_dir($dir) || mkdir($dir, 0755, true);
+    $filePath = "verification/$order->id/test.pdf";
+    file_put_contents(storage_path("app/$filePath"), 'test content');
+
+    $doc = OrderDocument::create([
+        'order_id' => $order->id,
+        'user_id' => $user->id,
+        'type' => 'APPLICANT',
+        'file_name' => 'test.pdf',
+        'file_path' => $filePath,
+        'file_size' => 12,
+        'uploaded_by' => 'user',
+    ]);
+
+    $this->artisan('schedule:purge')->assertSuccessful();
+
+    expect(OrderDocument::find($doc->id))->toBeNull();
+    expect(file_exists(storage_path("app/$filePath")))->toBeFalse();
+    expect(is_dir($dir))->toBeFalse();
+});
+
+test('不清理 unpaid/pending/processing/approving 状态订单的文档', function () {
+    $user = $this->createTestUser();
+    $product = $this->createTestProduct();
+
+    foreach (['pending', 'processing', 'approving', 'cancelling'] as $status) {
+        $order = $this->createTestOrder($user, $product);
+        $this->createTestCert($order, ['status' => $status]);
+
+        $dir = storage_path("app/verification/$order->id");
+        is_dir($dir) || mkdir($dir, 0755, true);
+        $filePath = "verification/$order->id/test.pdf";
+        file_put_contents(storage_path("app/$filePath"), 'test content');
+
+        $doc = OrderDocument::create([
+            'order_id' => $order->id,
+            'user_id' => $user->id,
+            'type' => 'APPLICANT',
+            'file_name' => 'test.pdf',
+            'file_path' => $filePath,
+            'file_size' => 12,
+            'uploaded_by' => 'user',
+        ]);
+
+        $this->artisan('schedule:purge')->assertSuccessful();
+
+        expect(OrderDocument::find($doc->id))->not->toBeNull();
+        expect(file_exists(storage_path("app/$filePath")))->toBeTrue();
+
+        // 清理测试文件
+        unlink(storage_path("app/$filePath"));
+        rmdir($dir);
+    }
+});
+
+test('保留验证报告表单', function () {
+    $user = $this->createTestUser();
+    $product = $this->createTestProduct();
+    $order = $this->createTestOrder($user, $product);
+    $this->createTestCert($order, ['status' => 'active']);
+
+    $report = OrderVerificationReport::create([
+        'order_id' => $order->id,
+        'user_id' => $user->id,
+        'report_data' => ['org' => 'Test Corp'],
+    ]);
+
+    $this->artisan('schedule:purge')->assertSuccessful();
+
+    expect(OrderVerificationReport::find($report->id))->not->toBeNull();
+});
+
+test('清理无记录的孤立 verification 目录', function () {
+    // 创建一个没有对应 order_documents 记录的目录
+    $fakeOrderId = '99999999999';
+    $dir = storage_path("app/verification/$fakeOrderId");
+    is_dir($dir) || mkdir($dir, 0755, true);
+    file_put_contents("$dir/orphan.pdf", 'orphan content');
+
+    $this->artisan('schedule:purge')->assertSuccessful();
+
+    expect(is_dir($dir))->toBeFalse();
+});
+
+test('清理非进行中状态订单的文档', function () {
+    $user = $this->createTestUser();
+    $product = $this->createTestProduct();
+
+    foreach (['active', 'reissued', 'expired', 'cancelled', 'revoked'] as $status) {
+        $order = $this->createTestOrder($user, $product);
+        $this->createTestCert($order, ['status' => $status]);
+
+        $doc = OrderDocument::create([
+            'order_id' => $order->id,
+            'user_id' => $user->id,
+            'type' => 'ORGANIZATION',
+            'file_name' => 'doc.pdf',
+            'file_path' => "verification/$order->id/doc.pdf",
+            'file_size' => 10,
+            'uploaded_by' => 'admin',
+        ]);
+
+        $this->artisan('schedule:purge')->assertSuccessful();
+
+        expect(OrderDocument::find($doc->id))->toBeNull()
+            ->and("$status should be purged")->toBe("$status should be purged");
+    }
 });

@@ -36,7 +36,7 @@ certbot → Manager (ACME 服务) → Gateway/上级 Manager (REST API) → Cert
 | NonceService | `Services/Acme/NonceService.php` | Nonce 管理 |
 | AccountService | `Services/Acme/AccountService.php` | 账户管理 |
 | OrderService | `Services/Acme/OrderService.php` | 订单管理 |
-| BillingService | `Services/Acme/BillingService.php` | 计费逻辑 |
+| Action | `Services/Acme/Action.php` | 计费逻辑 |
 | UpstreamClient | `Services/Acme/UpstreamClient.php` | 上级 API |
 
 ## 安全机制

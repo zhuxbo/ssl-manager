@@ -118,7 +118,6 @@ Route::prefix('admin')->middleware('api.admin')->group(function () {
         Route::get('download', [OrderController::class, 'download']);
         Route::get('download-validate-file/{id}', [OrderController::class, 'downloadValidateFile'])->where('id', '[0-9]+');
         Route::get('send-active/{id}', [OrderController::class, 'sendActive'])->where('id', '[0-9]+');
-        Route::get('send-expire/{userId}', [OrderController::class, 'sendExpire'])->where('userId', '[0-9]+');
         Route::post('batch-pay', [OrderController::class, 'batchPay']);
         Route::post('batch-commit', [OrderController::class, 'batchCommit']);
         Route::post('batch-revalidate', [OrderController::class, 'batchRevalidate']);
@@ -127,6 +126,15 @@ Route::prefix('admin')->middleware('api.admin')->group(function () {
         Route::post('batch-revoke-cancel', [OrderController::class, 'batchRevokeCancel']);
         Route::patch('auto-settings/{id}', [OrderController::class, 'updateAutoSettings'])->where('id', '[0-9]+');
         Route::patch('amount/{id}', [OrderController::class, 'updateAmount'])->where('id', '[0-9]+');
+        Route::get('deploy-commands', [OrderController::class, 'deployCommands']);
+        Route::post('upload-document/{id}', [OrderController::class, 'uploadDocument'])->where('id', '[0-9]+');
+        Route::get('document-preview/{id}', [OrderController::class, 'previewDocument'])->where('id', '[0-9]+');
+        Route::get('documents/{id}', [OrderController::class, 'getDocuments'])->where('id', '[0-9]+');
+        Route::delete('document/{id}', [OrderController::class, 'deleteDocument'])->where('id', '[0-9]+');
+        Route::post('submit-documents/{id}', [OrderController::class, 'submitDocuments'])->where('id', '[0-9]+');
+        Route::get('verification-report/{id}', [OrderController::class, 'getVerificationReport'])->where('id', '[0-9]+');
+        Route::post('verification-report/{id}', [OrderController::class, 'saveVerificationReport'])->where('id', '[0-9]+');
+        Route::post('submit-verification-report/{id}', [OrderController::class, 'submitVerificationReport'])->where('id', '[0-9]+');
     });
 
     // 证书路由
@@ -184,8 +192,14 @@ Route::prefix('admin')->middleware('api.admin')->group(function () {
 
     // ACME 路由
     Route::prefix('acme')->group(function () {
-        Route::post('order', [AcmeController::class, 'createOrder']);
-        Route::get('eab/{orderId}', [AcmeController::class, 'getEab'])->where('orderId', '[0-9]+');
+        Route::get('/', [AcmeController::class, 'index']);
+        Route::get('{id}', [AcmeController::class, 'show'])->where('id', '[0-9]+');
+        Route::post('new', [AcmeController::class, 'new']);
+        Route::post('pay/{id}', [AcmeController::class, 'pay'])->where('id', '[0-9]+');
+        Route::post('commit/{id}', [AcmeController::class, 'commit'])->where('id', '[0-9]+');
+        Route::post('sync/{id}', [AcmeController::class, 'sync'])->where('id', '[0-9]+');
+        Route::post('commit-cancel/{id}', [AcmeController::class, 'commitCancel'])->where('id', '[0-9]+');
+        Route::post('remark/{id}', [AcmeController::class, 'remark'])->where('id', '[0-9]+');
     });
 
     // CNAME 委托管理路由

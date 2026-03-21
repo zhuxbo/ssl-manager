@@ -22,6 +22,14 @@ export const transactionTypeOptions = [
   {
     label: "取消",
     value: "cancel"
+  },
+  {
+    label: "ACME订阅",
+    value: "acme_order"
+  },
+  {
+    label: "ACME取消",
+    value: "acme_cancel"
   }
 ];
 
@@ -31,5 +39,7 @@ export const transactionTypeMap = {
   deduct: "primary",
   reverse: "danger",
   order: "primary",
-  cancel: "danger"
+  cancel: "danger",
+  acme_order: "primary",
+  acme_cancel: "danger"
 };

@@ -66,6 +66,12 @@ curl ... | bash -s -- rollback          # 回滚到上一版本
 php artisan upgrade:check       # 检查更新
 php artisan upgrade:run         # 执行升级
 php artisan upgrade:rollback    # 回滚
+
+# 用户数据管理
+php artisan user:data export {user_id}              # 导出用户数据（SQL dump）
+php artisan user:data import {user_id} --dry-run    # 干跑检测冲突
+php artisan user:data import {user_id}              # 导入用户数据
+php artisan user:data purge {user_id}               # 清理用户数据（需先禁用+导出）
 ```
 
 | 参数 | 说明 |
@@ -96,7 +102,6 @@ frontend/           # Vue 3 前端
 backend/            # Laravel 11 后端
 build/              # 构建系统（见 build/README.md）
 deploy/             # 部署脚本
-develop/            # 开发环境（见 develop/README.md）
 ```
 
 | 组件 | 技术栈 |
@@ -134,15 +139,15 @@ sslctl deploy --cert order-12345
 
 ### Deploy API
 
-通过 Deploy Token 认证：
+通过 Deploy Token 认证（`Authorization: Bearer <deploy_token>`）：
 
 ```http
-GET  /api/deploy?order_id=xxx  # 按订单查询证书
-GET  /api/deploy?domain=xxx    # 按域名查询证书
-POST /api/deploy               # 更新/续费证书
-POST /api/deploy/callback      # 部署结果回调
-
-Authorization: Bearer <deploy_token>
+GET  /api/deploy?order=123           # 按订单 ID 查询
+GET  /api/deploy?order=example.com   # 按域名查询
+GET  /api/deploy?order=1,2,a.com     # 批量混合查询
+GET  /api/deploy                     # 列出所有 active 订单
+POST /api/deploy                     # 更新/续费证书
+POST /api/deploy/callback            # 部署结果回调
 ```
 
 ### ACME 协议
@@ -161,12 +166,13 @@ certbot certonly --server https://your-platform.com/acme/directory \
 
 配合 CNAME 委托，ACME 证书申请时自动完成 DNS-01 验证。
 
+Web 端支持两步创建：先建立订阅（pending），再从详情页提交到上游。同步按钮通过 ACME REST API 获取状态，不依赖 SOAP 接口。
+
 ## 文档
 
 | 文档 | 说明 |
 |------|------|
 | [build/README.md](build/README.md) | 构建系统、版本发布 |
-| [develop/README.md](develop/README.md) | 开发环境搭建 |
 | [deploy/docker/README.md](deploy/docker/README.md) | Docker 部署详细说明 |
 
 ## License

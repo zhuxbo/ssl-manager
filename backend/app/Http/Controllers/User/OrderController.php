@@ -4,9 +4,11 @@ namespace App\Http\Controllers\User;
 
 use App\Http\Requests\Order\GetIdsRequest;
 use App\Http\Requests\Order\IndexRequest;
+use App\Models\Cert;
 use App\Models\Order;
-use App\Services\Acme\OrderService as AcmeOrderService;
 use App\Services\Order\Action;
+use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Throwable;
 
 class OrderController extends BaseController
@@ -18,7 +20,7 @@ class OrderController extends BaseController
         parent::__construct();
 
         $this->guard->id() || $this->error('用户不存在');
-        $this->action = new Action($this->guard->id());
+        $this->action = app(Action::class);
     }
 
     use \App\Http\Traits\OrderController;
@@ -37,16 +39,24 @@ class OrderController extends BaseController
         $query = Order::query();
 
         $statusSet = $validated['statusSet'] ?? 'activating';
-        // 活动中的状态
+        // 活动中的状态（含证书到期但订单未到期）
         if ($statusSet === 'activating') {
-            $query->whereHas('latestCert', function ($latestCertQuery) {
-                $latestCertQuery->whereIn('status', ['unpaid', 'pending', 'processing', 'active', 'approving', 'cancelling']);
+            $query->where(function ($q) {
+                $q->whereHas('latestCert', function ($latestCertQuery) {
+                    $latestCertQuery->whereIn('status', ['unpaid', 'pending', 'processing', 'active', 'approving', 'cancelling']);
+                })->orWhere(function ($q) {
+                    $q->whereHas('latestCert', fn ($c) => $c->where('status', 'expired'))
+                        ->where('period_till', '>', now());
+                });
             });
         }
-        // 已存档的状态
+        // 已存档的状态（排除证书到期但订单未到期）
         if ($statusSet === 'archived') {
             $query->whereHas('latestCert', function ($latestCertQuery) {
-                $latestCertQuery->whereIn('status', ['cancelled', 'renewed', 'replaced', 'reissued', 'expired', 'revoked', 'failed']);
+                $latestCertQuery->whereIn('status', ['cancelled', 'renewed', 'reissued', 'expired', 'revoked', 'failed']);
+            })->whereNot(function ($q) {
+                $q->whereHas('latestCert', fn ($c) => $c->where('status', 'expired'))
+                    ->where('period_till', '>', now());
             });
         }
 
@@ -120,11 +130,27 @@ class OrderController extends BaseController
             'product' => function ($query) {
                 $query->select(['id', 'name', 'product_type', 'refund_period']);
             }, 'latestCert' => function ($query) {
-                $query->select(['id', 'common_name', 'channel', 'action', 'dcv', 'validation', 'status', 'amount', 'issuer']);
+                $query->select(['id', 'common_name', 'channel', 'action', 'dcv', 'validation', 'status', 'amount', 'issuer', 'issued_at', 'expires_at']);
             },
         ])
-            ->select(['id', 'product_id', 'latest_cert_id', 'period', 'amount', 'created_at'])
-            ->orderBy('latest_cert_id', 'desc')
+            ->select(['id', 'product_id', 'latest_cert_id', 'period', 'amount', 'period_from', 'period_till', 'created_at'])
+            ->when(
+                ! empty($validated['sort_prop']),
+                function ($q) use ($validated) {
+                    $sortOrder = $validated['sort_order'] ?? 'desc';
+                    if ($validated['sort_prop'] === 'expires_at') {
+                        $sub = Cert::select('expires_at')->whereColumn('certs.id', 'orders.latest_cert_id')->limit(1);
+                        $q->orderByRaw("({$sub->toRawSql()}) IS NULL")
+                            ->orderBy($sub, $sortOrder);
+                    } elseif ($validated['sort_prop'] === 'period_till') {
+                        $q->orderByRaw('period_till IS NULL')
+                            ->orderBy('period_till', $sortOrder);
+                    } else {
+                        $q->orderBy($validated['sort_prop'], $sortOrder);
+                    }
+                },
+                fn ($q) => $q->orderBy('latest_cert_id', 'desc')
+            )
             ->offset(($currentPage - 1) * $pageSize)
             ->limit($pageSize)
             ->get();
@@ -151,7 +177,7 @@ class OrderController extends BaseController
     {
         $order = Order::with([
             'product' => function ($query) {
-                $query->select(['id', 'name', 'product_type', 'ca', 'refund_period', 'validation_methods', 'validation_type', 'common_name_types', 'alternative_name_types', 'support_acme']);
+                $query->select(['id', 'name', 'product_type', 'ca', 'refund_period', 'validation_methods', 'validation_type', 'common_name_types', 'alternative_name_types']);
             }, 'latestCert',
         ])->find($id);
 
@@ -172,30 +198,6 @@ class OrderController extends BaseController
         $data = $order->toArray();
         $data['balance'] = $this->guard->user()->balance;
 
-        // ACME 订单附加信息
-        if ($order->latestCert && $order->latestCert->channel === 'acme') {
-            // 懒补充 dcv/validation 数据（兼容旧数据）
-            if (empty($order->latestCert->dcv)) {
-                app(AcmeOrderService::class)->populateDcvAndValidation($order->latestCert);
-                $order->latestCert->refresh();
-            }
-
-            $order->load('latestCert.acmeAuthorizations');
-            $order->latestCert->makeVisible(['eab_kid', 'eab_hmac']);
-            $data['latest_cert'] = $order->latestCert->toArray();
-            $data['is_acme'] = true;
-            $data['eab_kid'] = $order->eab_kid;
-            $data['eab_hmac'] = $order->eab_hmac;
-            $data['eab_used'] = $order->eab_used_at !== null;
-            $serverUrl = rtrim(get_system_setting('site', 'url', config('app.url')), '/').'/acme/directory';
-            $data['server_url'] = $serverUrl;
-            $data['certbot_command'] = "certbot certonly --server $serverUrl --eab-kid $order->eab_kid"
-                ." --eab-hmac-key $order->eab_hmac"
-                .' -d example.com --preferred-challenges dns-01';
-            $data['acmesh_command'] = "acme.sh --register-account --server $serverUrl --eab-kid $order->eab_kid"
-                ." --eab-hmac-key $order->eab_hmac";
-        }
-
         $this->success($data);
     }
 
@@ -209,7 +211,7 @@ class OrderController extends BaseController
         $orders = Order::whereIn('id', $ids)
             ->with([
                 'product' => function ($query) {
-                    $query->select(['id', 'name', 'product_type', 'ca', 'refund_period', 'validation_methods', 'validation_type', 'common_name_types', 'alternative_name_types', 'support_acme']);
+                    $query->select(['id', 'name', 'product_type', 'ca', 'refund_period', 'validation_methods', 'validation_type', 'common_name_types', 'alternative_name_types']);
                 }, 'latestCert',
             ])
             ->get();
@@ -230,28 +232,42 @@ class OrderController extends BaseController
         }
 
         $result = $orders->map(function ($order) {
-            $data = $order->toArray();
-
-            if ($order->latestCert && $order->latestCert->channel === 'acme') {
-                $data['is_acme'] = true;
-                $data['eab_kid'] = $order->eab_kid;
-                $data['eab_hmac'] = $order->eab_hmac;
-                $data['eab_used'] = $order->eab_used_at !== null;
-                $serverUrl = rtrim(get_system_setting('site', 'url', config('app.url')), '/').'/acme/directory';
-                $data['server_url'] = $serverUrl;
-                $data['certbot_command'] = "certbot certonly --server $serverUrl --eab-kid $order->eab_kid"
-                    ." --eab-hmac-key $order->eab_hmac"
-                    .' -d example.com --preferred-challenges dns-01';
-                $data['acmesh_command'] = "acme.sh --register-account --server $serverUrl --eab-kid $order->eab_kid"
-                    ." --eab-hmac-key $order->eab_hmac";
-            }
-
-            return $data;
+            return $order->toArray();
         });
 
         $this->success([
             'items' => $result->toArray(),
             'balance' => $this->guard->user()->balance,
+        ]);
+    }
+
+    /**
+     * 获取订单的颁发记录
+     */
+    public function certs(int $id): void
+    {
+        $order = Order::find($id);
+        if (! $order) {
+            $this->error('订单不存在');
+        }
+
+        $currentPage = (int) (request('currentPage', 1));
+        $pageSize = min((int) (request('pageSize', 10)), 100);
+
+        $query = Cert::where('order_id', $id);
+
+        $total = $query->count();
+        $items = $query->select(['id', 'order_id', 'action', 'channel', 'common_name', 'amount', 'status', 'issued_at', 'expires_at'])
+            ->orderBy('id', 'desc')
+            ->offset(($currentPage - 1) * $pageSize)
+            ->limit($pageSize)
+            ->get();
+
+        $this->success([
+            'items' => $items,
+            'total' => $total,
+            'pageSize' => $pageSize,
+            'currentPage' => $currentPage,
         ]);
     }
 
@@ -263,6 +279,7 @@ class OrderController extends BaseController
     public function new(): void
     {
         $params = request()->post();
+        $params['user_id'] = $this->guard->id();
         $params['action'] = 'new';
         $params['channel'] = 'web';
         $this->action->new($params);
@@ -276,6 +293,7 @@ class OrderController extends BaseController
     public function batchNew(): void
     {
         $params = request()->post();
+        $params['user_id'] = $this->guard->id();
         $params['action'] = 'new';
         $params['channel'] = 'web';
         $params['is_batch'] = true;
@@ -306,5 +324,62 @@ class OrderController extends BaseController
         $params['action'] = 'reissue';
         $params['channel'] = 'web';
         $this->action->reissue($params);
+    }
+
+    /**
+     * 上传验证文档
+     */
+    public function uploadDocument(Request $request, int $id): void
+    {
+        $request->validate([
+            'file' => 'required|file|mimes:pdf,jpg,jpeg,png,doc,docx|max:5120',
+            'type' => 'required|string',
+            'description' => 'nullable|string|max:255',
+        ]);
+
+        /** @var UploadedFile $file */
+        $file = $request->file('file');
+        $this->action->uploadDocument($id, $file, $request->input('type'), 'user', $request->input('description'));
+    }
+
+    /**
+     * 预览文档
+     */
+    public function previewDocument(int $id): void
+    {
+        $this->action->previewDocument($id);
+    }
+
+    /**
+     * 获取文档列表
+     */
+    public function getDocuments(int $id): void
+    {
+        $this->action->getDocuments($id);
+    }
+
+    /**
+     * 删除文档
+     */
+    public function deleteDocument(int $id): void
+    {
+        $this->action->deleteDocument($id);
+    }
+
+    /**
+     * 获取验证报告
+     */
+    public function getVerificationReport(int $id): void
+    {
+        $this->action->getVerificationReport($id);
+    }
+
+    /**
+     * 保存验证报告
+     */
+    public function saveVerificationReport(int $id): void
+    {
+        $reportData = request()->input('report_data', []);
+        $this->action->saveVerificationReport($id, $reportData);
     }
 }

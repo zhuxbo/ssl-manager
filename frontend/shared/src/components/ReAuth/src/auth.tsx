@@ -26,7 +26,9 @@ export default defineComponent({
     return () => {
       if (!slots) return null;
       if (!hasAuthFn) {
-        console.warn("[ReAuth] hasAuth function not initialized. Call setHasAuthForAuth() first.");
+        console.warn(
+          "[ReAuth] hasAuth function not initialized. Call setHasAuthForAuth() first."
+        );
         return null;
       }
       return hasAuthFn(props.value) ? (

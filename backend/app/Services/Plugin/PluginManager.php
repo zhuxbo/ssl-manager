@@ -173,11 +173,18 @@ class PluginManager
             // 清理缓存
             $this->clearCaches();
 
-            return [
+            $result = [
                 'name' => $name,
                 'version' => $release['version'],
                 'message' => "插件 $name v{$release['version']} 安装成功",
             ];
+
+            if ($this->hasNginxConfig("$pluginDir/nginx")) {
+                $result['nginx_reload'] = true;
+                $result['message'] .= '，请重载 Nginx 以使配置生效';
+            }
+
+            return $result;
         } finally {
             // 清理临时文件
             $this->cleanupTemp($zipPath, $extractDir ?? null);
@@ -225,11 +232,18 @@ class PluginManager
 
             $version = $manifest['version'] ?? '0.0.0';
 
-            return [
+            $result = [
                 'name' => $name,
                 'version' => $version,
                 'message' => "插件 $name v$version 安装成功",
             ];
+
+            if ($this->hasNginxConfig("$pluginDir/nginx")) {
+                $result['nginx_reload'] = true;
+                $result['message'] .= '，请重载 Nginx 以使配置生效';
+            }
+
+            return $result;
         } finally {
             $this->cleanupTemp(null, $extractDir);
         }
@@ -310,12 +324,19 @@ class PluginManager
                 File::deleteDirectory($backupDir);
             }
 
-            return [
+            $result = [
                 'name' => $name,
                 'from_version' => $currentVersion,
                 'version' => $release['version'],
                 'message' => "插件 $name 从 v$currentVersion 更新到 v{$release['version']} 成功",
             ];
+
+            if ($this->hasNginxConfig("$pluginDir/nginx")) {
+                $result['nginx_reload'] = true;
+                $result['message'] .= '，请重载 Nginx 以使配置生效';
+            }
+
+            return $result;
         } catch (\Exception $e) {
             // 从备份恢复
             if ($backupDir && is_dir($backupDir)) {
@@ -344,6 +365,9 @@ class PluginManager
             throw new RuntimeException("插件 $name 不存在");
         }
 
+        // 在删除前检查是否有 nginx 配置
+        $hasNginx = $this->hasNginxConfig("$pluginDir/nginx");
+
         // 回滚迁移（删除数据库表）
         if ($removeData) {
             $this->rollbackPluginMigrations($name);
@@ -357,11 +381,20 @@ class PluginManager
         // 清理缓存
         $this->clearCaches();
 
-        return [
+        $message = "插件 $name 已卸载".($removeData ? '（数据已清除）' : '（数据已保留）');
+
+        $result = [
             'name' => $name,
             'remove_data' => $removeData,
-            'message' => "插件 $name 已卸载".($removeData ? '（数据已清除）' : '（数据已保留）'),
+            'message' => $message,
         ];
+
+        if ($hasNginx) {
+            $result['nginx_reload'] = true;
+            $result['message'] .= '，请重载 Nginx';
+        }
+
+        return $result;
     }
 
     /**
@@ -740,6 +773,24 @@ class PluginManager
     }
 
     /**
+     * 检查插件是否包含 nginx 配置文件
+     */
+    protected function hasNginxConfig(string $nginxDir): bool
+    {
+        if (! is_dir($nginxDir)) {
+            return false;
+        }
+
+        foreach (File::allFiles($nginxDir) as $file) {
+            if ($file->getExtension() === 'conf') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * 替换 nginx 配置中的占位符
      */
     protected function replaceNginxPlaceholders(string $nginxDir): void
@@ -918,7 +969,7 @@ class PluginManager
             }
 
             if (! version_compare($systemVersion, $requiredVersion, $operator)) {
-                throw new RuntimeException("插件要求系统版本 {$requires}，当前版本 v{$systemVersion}");
+                throw new RuntimeException("该插件要求系统版本 {$requires}，当前版本 v{$systemVersion}，请先升级系统");
             }
         }
     }

@@ -102,11 +102,16 @@ class PureHttp {
             })
           );
         }
-        // 过滤 POST 请求数据
+        // FormData 需要浏览器自动设置 Content-Type（含 boundary）
+        if (config.data instanceof FormData) {
+          delete config.headers!["Content-Type"];
+        }
+        // 过滤 POST 请求数据（跳过 FormData）
         if (
           config.data &&
           typeof config.data === "object" &&
-          !Array.isArray(config.data)
+          !Array.isArray(config.data) &&
+          !(config.data instanceof FormData)
         ) {
           config.data = Object.fromEntries(
             Object.entries(config.data).filter(([_, value]) => {
@@ -135,7 +140,9 @@ class PureHttp {
                     return timestamp;
                   }
                   // 否则当作 ISO 时间字符串处理
-                  return new Date(data.expires_in as unknown as string).getTime();
+                  return new Date(
+                    data.expires_in as unknown as string
+                  ).getTime();
                 })();
                 const expired = expiresTime - now <= 0;
                 if (expired) {
@@ -151,15 +158,18 @@ class PureHttp {
                           PureHttp.requests.forEach(cb => cb(token));
                           PureHttp.requests = [];
                         })
-                        .catch(error => {
-                          // 刷新失败 退出登录
-                          if (error.response?.status === 401) {
-                            storeHooks!.logout();
-                          }
+                        .catch(() => {
+                          // 刷新失败，清空请求队列并退出登录
+                          if (storeHooks) storeHooks.logout();
+                          PureHttp.requests = [];
                         })
                         .finally(() => {
                           PureHttp.isRefreshing = false;
                         });
+                    } else {
+                      // storeHooks 未初始化，重置状态避免死锁
+                      PureHttp.isRefreshing = false;
+                      PureHttp.requests = [];
                     }
                   }
                   resolve(PureHttp.retryOriginalRequest(config));

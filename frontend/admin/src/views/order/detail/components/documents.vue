@@ -1,5 +1,8 @@
 <template>
   <div v-if="documents.length > 0" class="documents">
+    <div style="font-size: 13px; font-weight: 500; margin-bottom: 8px">
+      审核状态
+    </div>
     <el-table :data="documents" size="small" :style="{ width: '100%' }">
       <el-table-column prop="type" label="类型" width="140">
         <template #default="{ row }">

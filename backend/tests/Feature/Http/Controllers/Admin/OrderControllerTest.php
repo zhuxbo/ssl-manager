@@ -92,6 +92,48 @@ test('管理员可以按用户ID筛选订单', function () {
     expect($response->json('data.items.0.user_id'))->toBe($this->user->id);
 });
 
+test('列表返回 period_from period_till 和证书时间字段', function () {
+    [$order, $cert] = createOrderWithCert('active', [
+        'period_from' => now(),
+        'period_till' => now()->addYear(),
+    ], [
+        'issued_at' => now(),
+        'expires_at' => now()->addYear(),
+    ]);
+
+    $response = $this->actingAsAdmin($this->admin)->getJson('/api/admin/order?statusSet=all');
+
+    $response->assertOk()->assertJson(['code' => 1]);
+    $item = collect($response->json('data.items'))->firstWhere('id', $order->id);
+    expect($item)->not->toBeNull()
+        ->and($item)->toHaveKeys(['period_from', 'period_till'])
+        ->and($item['latest_cert'])->toHaveKeys(['issued_at', 'expires_at']);
+});
+
+test('列表支持按 period_till 排序', function () {
+    [$olderOrder] = createOrderWithCert('active', ['period_till' => now()->addMonths(6)]);
+    [$newerOrder] = createOrderWithCert('active', ['period_till' => now()->addYear()]);
+
+    $response = $this->actingAsAdmin($this->admin)
+        ->getJson('/api/admin/order?statusSet=all&sort_prop=period_till&sort_order=asc');
+
+    $response->assertOk()->assertJson(['code' => 1]);
+    $ids = collect($response->json('data.items'))->pluck('id')->all();
+    expect(array_search($olderOrder->id, $ids))->toBeLessThan(array_search($newerOrder->id, $ids));
+});
+
+test('列表支持按 expires_at 排序', function () {
+    [$olderOrder] = createOrderWithCert('active', [], ['expires_at' => now()->addMonths(6)]);
+    [$newerOrder] = createOrderWithCert('active', [], ['expires_at' => now()->addYear()]);
+
+    $response = $this->actingAsAdmin($this->admin)
+        ->getJson('/api/admin/order?statusSet=all&sort_prop=expires_at&sort_order=asc');
+
+    $response->assertOk()->assertJson(['code' => 1]);
+    $ids = collect($response->json('data.items'))->pluck('id')->all();
+    expect(array_search($olderOrder->id, $ids))->toBeLessThan(array_search($newerOrder->id, $ids));
+});
+
 test('管理员可以查看订单详情', function () {
     [$order, $cert] = createOrderWithCert('pending');
 
@@ -194,7 +236,7 @@ test('管理员可以添加订单备注', function () {
     $mockAction = Mockery::mock(Action::class);
     $mockAction->shouldReceive('remark')
         ->once()
-        ->with($order->id, '测试备注');
+        ->with($order->id, '测试备注', 'admin_remark');
     $this->app->instance(Action::class, $mockAction);
 
     $response = $this->actingAsAdmin($this->admin)->postJson("/api/admin/order/remark/$order->id", [

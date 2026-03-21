@@ -1,6 +1,7 @@
 {
   "compilerOptions": {
     "skipLibCheck": true,
+    "module": "preserve",
     "moduleResolution": "bundler"
   },
   "files": [],

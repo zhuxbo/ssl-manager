@@ -2,18 +2,25 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\Acme;
 use App\Models\Admin;
 use App\Models\ApiToken;
 use App\Models\Callback;
+use App\Models\CnameDelegation;
 use App\Models\Contact;
+use App\Models\DeployToken;
+use App\Models\ErrorLog;
 use App\Models\Fund;
 use App\Models\Invoice;
 use App\Models\InvoiceLimit;
 use App\Models\Order;
+use App\Models\OrderDocument;
+use App\Models\OrderVerificationReport;
 use App\Models\Organization;
 use App\Models\Scopes\UserScope;
 use App\Models\Transaction;
 use App\Models\User;
+use App\Services\LogBuffer;
 use App\Traits\ApiResponse;
 use Closure;
 use Exception;
@@ -66,15 +73,27 @@ abstract class Authenticate
 
             // 检查永久黑名单 (token_version) + 宽限期
             $this->checkTokenVersionGraceful($guard, $payload);
-        } catch (Exception) {
+        } catch (AuthenticationException $e) {
+            throw $e;
+        } catch (Exception $e) {
+            LogBuffer::add(ErrorLog::class, [
+                'method' => $request->method(),
+                'url' => $request->fullUrl(),
+                'exception' => class_basename($e),
+                'message' => $e->getMessage(),
+                'ip' => $request->ip(),
+            ]);
             throw new AuthenticationException('Authentication failed');
         }
 
         // 限制查询当前用户的数据
         if ($this->guardName() === 'user' && $guard->id()) {
             UserScope::addScopeToModels($guard->id(), [
+                Acme::class,
                 ApiToken::class,
                 Callback::class,
+                CnameDelegation::class,
+                DeployToken::class,
                 Order::class,
                 Fund::class,
                 Transaction::class,
@@ -82,6 +101,8 @@ abstract class Authenticate
                 InvoiceLimit::class,
                 Organization::class,
                 Contact::class,
+                OrderDocument::class,
+                OrderVerificationReport::class,
             ]);
         }
 
@@ -101,7 +122,7 @@ abstract class Authenticate
         // 从数据库模型获取当前用户版本号 和 登出时间
         $user = $guard->user();
         $userVersion = $user->token_version ?? 0;
-        $logoutAt = $user->logout_at->timestamp ?? 0;
+        $logoutAt = $user->logout_at?->timestamp ?? 0;
 
         // 如果用户模型版本号 > Token 中的版本号，说明是旧令牌，需要进入“宽限期检查”
         if ($userVersion > $tokenVersion) {

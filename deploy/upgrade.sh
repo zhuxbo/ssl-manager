@@ -393,7 +393,7 @@ create_backup() {
         local frontend_tmp="$TEMP_DIR/backup_frontend"
         mkdir -p "$frontend_tmp"
 
-        for app in admin user; do
+        for app in admin user web; do
             if [ -d "$INSTALL_DIR/frontend/$app" ]; then
                 cp -r "$INSTALL_DIR/frontend/$app" "$frontend_tmp/"
                 has_frontend=true
@@ -473,12 +473,7 @@ perform_upgrade() {
         log_info "保留 vendor 目录（加速升级）..."
         mv "$INSTALL_DIR/backend/vendor" "$preserve_dir/"
     fi
-    # 保留 frontend/web（用户自定义前端，不随升级更新）
-    if [ -d "$INSTALL_DIR/frontend/web" ]; then
-        log_info "保留 frontend/web 目录..."
-        mkdir -p "$preserve_dir/frontend"
-        mv "$INSTALL_DIR/frontend/web" "$preserve_dir/frontend/"
-    fi
+    # frontend/web 不移动，在清理旧代码时跳过（避免脚本中断导致丢失）
     # 保留前端用户配置文件（logo、平台配置等）
     mkdir -p "$preserve_dir/frontend_config"
     # admin: logo.svg, platform-config.json
@@ -524,8 +519,9 @@ perform_upgrade() {
     rm -f "$INSTALL_DIR/backend/composer.json"
     rm -f "$INSTALL_DIR/backend/composer.lock"
 
-    # 删除前端目录（新结构 frontend/，兼容旧结构 admin/user/）
-    rm -rf "$INSTALL_DIR/frontend" 2>/dev/null || true
+    # 删除前端目录（保留 frontend/web，避免丢失用户自定义前端）
+    rm -rf "$INSTALL_DIR/frontend/admin" 2>/dev/null || true
+    rm -rf "$INSTALL_DIR/frontend/user" 2>/dev/null || true
     rm -rf "$INSTALL_DIR/admin" 2>/dev/null || true
     rm -rf "$INSTALL_DIR/user" 2>/dev/null || true
 
@@ -620,7 +616,7 @@ except:
 
         # 如果存在旧的 release_url，合并到新的 version.json
         if [ -n "$old_release_url" ]; then
-            # 使用 Python 处理 JSON 合并
+            # 使用 Python 处理 JSON 合并（管理员手工运行，变量来自可信的本地文件）
             python3 << PYEOF
 import json
 with open("$INSTALL_DIR/version.json", "r") as f:
@@ -649,12 +645,7 @@ PYEOF
         mv "$preserve_dir/vendor" "$INSTALL_DIR/backend/"
     fi
 
-    # 恢复 frontend/web（用户自定义前端）
-    if [ -d "$preserve_dir/frontend/web" ]; then
-        mkdir -p "$INSTALL_DIR/frontend"
-        mv "$preserve_dir/frontend/web" "$INSTALL_DIR/frontend/"
-        log_info "已恢复 frontend/web 目录"
-    fi
+    # frontend/web 已在原地保留，无需恢复
 
     # 恢复前端用户配置文件
     if [ -d "$preserve_dir/frontend_config" ]; then
@@ -927,12 +918,22 @@ PYEOF
     # .env 文件敏感信息保护（root 和 web 用户可读）
     [ -f "$INSTALL_DIR/.env" ] && chmod 640 "$INSTALL_DIR/.env"
 
-    # Docker 环境重启服务以加载新配置
+    # 重启服务以加载新配置
     if [ "$DEPLOY_MODE" = "docker" ]; then
         log_step "重启服务..."
         cd "$INSTALL_DIR"
         $compose_cmd restart nginx php queue scheduler 2>/dev/null || true
         log_info "服务已重启"
+    else
+        # 宝塔环境：reload Nginx 以加载更新后的 manager.conf
+        log_step "重载 Nginx 配置..."
+        if command -v nginx &> /dev/null; then
+            nginx -t 2>/dev/null && nginx -s reload 2>/dev/null && log_info "Nginx 已重载" || log_warning "Nginx 重载失败，请手动执行: nginx -s reload"
+        elif [ -f /etc/init.d/nginx ]; then
+            /etc/init.d/nginx reload 2>/dev/null && log_info "Nginx 已重载" || log_warning "Nginx 重载失败"
+        else
+            log_warning "未找到 Nginx，请手动重载 Nginx 配置"
+        fi
     fi
 
     log_success "升级完成！版本: $target_version"

@@ -4,9 +4,10 @@ declare(strict_types=1);
 
 namespace App\Services\Order\Api\default;
 
+use App\Services\Order\Api\OrderSourceApiInterface;
 use App\Utils\SnowFlake;
 
-class Api
+class Api implements OrderSourceApiInterface
 {
     private Sdk $sdk;
 
@@ -34,7 +35,7 @@ class Api
     /**
      * 购买证书（支持 SSL、SMIME、CodeSign）
      */
-    public function new($data): array
+    public function new(array $data): array
     {
         $productType = $data['product_type'] ?? 'ssl';
 
@@ -57,7 +58,7 @@ class Api
     /**
      * 续费证书（支持 SSL、SMIME、CodeSign）
      */
-    public function renew($data): array
+    public function renew(array $data): array
     {
         $productType = $data['product_type'] ?? 'ssl';
 
@@ -225,7 +226,7 @@ class Api
     /**
      * 获取订单信息
      */
-    public function get(string|int $apiId): array
+    public function get(string|int $apiId, array $cert = []): array
     {
         return $this->sdk->get($apiId);
     }
@@ -233,7 +234,7 @@ class Api
     /**
      * 取消订单
      */
-    public function cancel(string|int $apiId): array
+    public function cancel(string|int $apiId, array $cert = []): array
     {
         return $this->sdk->cancel($apiId);
     }
@@ -241,7 +242,7 @@ class Api
     /**
      * 重新验证
      */
-    public function revalidate(string|int $apiId): array
+    public function revalidate(string|int $apiId, array $cert = []): array
     {
         return $this->sdk->revalidate($apiId);
     }
@@ -249,9 +250,25 @@ class Api
     /**
      * 修改验证方法
      */
-    public function updateDCV(string|int $apiId, string $method): array
+    public function updateDCV(string|int $apiId, string $method, array $cert = []): array
     {
         return $this->sdk->updateDCV($apiId, $method);
+    }
+
+    /**
+     * 上传文档到上游
+     */
+    public function uploadDocument(array $data): array
+    {
+        return $this->sdk->uploadDocument($data);
+    }
+
+    /**
+     * 提交验证报告到上游
+     */
+    public function submitVerificationReport(array $data): array
+    {
+        return $this->sdk->submitVerificationReport($data);
     }
 
     /**

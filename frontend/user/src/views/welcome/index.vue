@@ -11,6 +11,7 @@ import {
 import PieChart from "@shared/components/Charts/PieChart.vue";
 import LineChart from "@shared/components/Charts/LineChart.vue";
 import BarChart from "@shared/components/Charts/BarChart.vue";
+import { getPluginWidgets } from "@shared/utils/plugin-loader";
 import type {
   AssetsData,
   OrdersData,
@@ -23,6 +24,9 @@ defineOptions({
 });
 
 const router = useRouter();
+
+// 插件 widget
+const dashboardTopWidgets = getPluginWidgets("user-dashboard-top");
 
 // 用户信息
 const userInfo = ref();
@@ -297,6 +301,13 @@ onUnmounted(() => {
 
     <!-- Dashboard内容 -->
     <div v-else class="space-y-6">
+      <!-- 插件 widget 插槽 -->
+      <component
+        :is="w.component"
+        v-for="w in dashboardTopWidgets"
+        :key="w.name"
+      />
+
       <!-- 欢迎信息 -->
       <div class="bg-white dark:bg-[#141414] rounded-lg p-0">
         <div class="flex items-center justify-between">

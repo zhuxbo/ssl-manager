@@ -123,32 +123,7 @@
         />
       </el-form-item>
       <el-form-item label="记录值：" label-width="82px">
-        <table v-if="isAcme && cert.validation?.length > 1" style="width: 100%">
-          <tbody>
-            <tr v-for="(item, index) in cert.validation" :key="index">
-              <td
-                v-if="['txt'].includes(item.method?.toLowerCase())"
-                style="padding: 0"
-              >
-                <el-input
-                  :model-value="item.value || cert.dcv?.dns?.value"
-                  spellcheck="false"
-                  :style="{ width: '100%' }"
-                >
-                  <template #suffix>
-                    <Copy :copied="item.value || cert.dcv?.dns?.value" />
-                  </template>
-                  <template #append
-                    >.{{
-                      getRootDomain(item.domain.replace("*.", ""))
-                    }}</template
-                  >
-                </el-input>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-        <el-input v-else :model-value="cert.dcv?.dns?.value" spellcheck="false">
+        <el-input :model-value="cert.dcv?.dns?.value" spellcheck="false">
           <template #suffix>
             <Copy :copied="cert.dcv?.dns?.value" />
           </template>
@@ -156,6 +131,7 @@
       </el-form-item>
     </div>
   </div>
+  <!-- 文件验证：ACME 多域名循环展示 -->
   <div
     v-if="
       ['file', 'http', 'https'].includes(cert.dcv?.method) &&
@@ -207,9 +183,7 @@
     <div style="margin: 10px 0">
       <ValidationMethods
         v-model="validationMethod"
-        :methods="
-          isAcme ? acmeValidationMethods : order.product.validation_methods
-        "
+        :methods="order.product.validation_methods"
       />
       <el-button
         :disabled="
@@ -226,9 +200,7 @@
       >
       <el-button
         v-if="
-          (isAcme
-            ? ['pending', 'processing'].includes(cert.status)
-            : ['processing'].includes(cert.status)) &&
+          ['processing'].includes(cert.status) &&
           ![
             'admin',
             'administrator',
@@ -350,8 +322,30 @@
                 ['unpaid', 'pending', 'processing'].includes(cert.status)
               "
             >
+              <el-tooltip
+                v-if="item.verified == 2 && item.error"
+                placement="top"
+              >
+                <template #content>
+                  <div
+                    v-for="(val, key) in typeof item.error === 'string'
+                      ? { error: item.error }
+                      : item.error"
+                    :key="key"
+                  >
+                    {{ key }}: {{ val }}
+                  </div>
+                </template>
+                <el-icon
+                  color="var(--el-color-warning)"
+                  :size="18"
+                  style="vertical-align: middle"
+                >
+                  <WarningFilled />
+                </el-icon>
+              </el-tooltip>
               <el-icon
-                v-if="item.verified == 2"
+                v-else-if="item.verified == 2"
                 color="var(--el-color-warning)"
                 :size="18"
                 style="vertical-align: middle"
@@ -427,11 +421,16 @@
             {{ currentCheckItem.delegation_target }}
           </el-descriptions-item>
           <el-descriptions-item
-            v-if="currentCheckItem.delegation_cname_detected"
+            v-if="currentCheckItem.delegation_cname_checked !== undefined"
             label="实际指向"
             label-align="right"
           >
-            {{ currentCheckItem.delegation_cname_detected }}
+            <template v-if="currentCheckItem.delegation_cname_detected">
+              {{ currentCheckItem.delegation_cname_detected }}
+            </template>
+            <span v-else style="color: var(--el-text-color-placeholder)">
+              未检测到
+            </span>
           </el-descriptions-item>
           <el-descriptions-item
             v-if="currentCheckItem.delegation_cname_error"
@@ -515,11 +514,16 @@
             {{ currentCheckItem.value || cert.dcv?.dns?.value }}
           </el-descriptions-item>
           <el-descriptions-item
-            v-if="currentCheckItem.detected_value"
+            v-if="currentCheckItem.checked !== undefined"
             label="检测到的值"
             label-align="right"
           >
-            {{ currentCheckItem.detected_value }}
+            <template v-if="currentCheckItem.detected_value">
+              {{ currentCheckItem.detected_value }}
+            </template>
+            <span v-else style="color: var(--el-text-color-placeholder)">
+              未检测到
+            </span>
           </el-descriptions-item>
           <el-descriptions-item
             v-if="currentCheckItem.query_sub"
@@ -608,8 +612,6 @@ import { getConfig } from "@/config";
 const get = inject("get") as Function;
 const order = inject("order") as any;
 const cert = inject("cert") as any;
-const isAcme = inject("isAcme", ref(false)) as any;
-
 const hostIncludeSubDomain = computed(() => {
   let includeSubDomain = false;
   cert.value?.validation &&
@@ -620,6 +622,7 @@ const hostIncludeSubDomain = computed(() => {
   return includeSubDomain;
 });
 
+// 空列表时返回 true（无需验证的订单不禁用操作按钮）
 const allVerified = computed(() => {
   let verified = true;
   cert.value.validation &&
@@ -630,8 +633,7 @@ const allVerified = computed(() => {
 });
 
 // 获取委托验证前缀
-const getDelegationPrefix = (ca?: string, channel?: string) => {
-  if (channel === "acme") return "_acme-challenge";
+const getDelegationPrefix = (ca?: string) => {
   const caLower = (ca || "").toLowerCase();
   switch (caLower) {
     case "sectigo":
@@ -653,10 +655,7 @@ const getDelegationPrefix = (ca?: string, channel?: string) => {
 
 // 委托验证前缀
 const delegationPrefix = computed(() =>
-  getDelegationPrefix(
-    cert.value.dcv?.ca || order.product?.ca,
-    cert.value.channel
-  )
+  getDelegationPrefix(cert.value.dcv?.ca || order.product?.ca)
 );
 
 // 获取委托验证的域名部分
@@ -687,12 +686,6 @@ const getDisplayMethod = (dcv: any) => {
   if (dcv?.is_delegate) return "delegation";
   return dcv?.method;
 };
-
-// ACME 可用的验证方式（dns-01: delegation/txt，http-01: file）
-const acmeValidationMethods = computed(() => {
-  if (cert.value.dcv?.file?.content) return ["file"];
-  return ["delegation", "txt"];
-});
 
 const validationMethod = ref(getDisplayMethod(cert.value.dcv));
 
@@ -791,9 +784,14 @@ const copyAllRecords = () => {
   }
 
   const text = records.join("\n\n");
-  navigator.clipboard.writeText(text).then(() => {
-    message("解析记录已复制到剪贴板", { type: "success" });
-  });
+  navigator.clipboard
+    .writeText(text)
+    .then(() => {
+      message("解析记录已复制到剪贴板", { type: "success" });
+    })
+    .catch(() => {
+      message("复制失败，请手动复制", { type: "error" });
+    });
 };
 
 // 委托验证 CNAME 检测函数
@@ -816,12 +814,16 @@ async function verifyCname(
         { timeout: 10000 }
       );
 
-      if (response.data?.data?.results) {
-        const result = response.data.data.results[domain] || {};
+      // code=1 时数据在 data.results，code=0 时在 errors 数组
+      let result = response.data?.data?.results?.[domain];
+      if (!result && response.data?.errors?.length) {
+        result = response.data.errors.find((e: any) => e.domain === domain);
+      }
+      if (result) {
         return {
           detected_value: result.value || "",
           checked: result.matched === "true",
-          error: result.matched === "false" ? "CNAME 记录不匹配" : ""
+          error: result.matched === "false" ? "验证未通过" : ""
         };
       }
       if (response.data?.msg)

@@ -272,6 +272,10 @@ class UpgradeStatusManager
             $steps++; // structure_check
         }
 
+        if (Config::get('upgrade.behavior.auto_seed', true)) {
+            $steps++; // seed
+        }
+
         // composer_install 是动态的，暂不计入
         // 实际执行时会通过 setExpectedSteps 设置
 

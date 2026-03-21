@@ -73,6 +73,12 @@ class NotificationJob implements ShouldQueue
             return;
         }
 
+        if (! $payload) {
+            $this->logSkip('无需发送通知');
+
+            return;
+        }
+
         // 通道验证：确保模板支持该通道
         if (! in_array($this->channel, $template->channels ?? [])) {
             $this->logSkip("模板不支持该通道: $this->channel");

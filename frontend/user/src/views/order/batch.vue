@@ -63,6 +63,16 @@
     >
       同步订单
     </el-button>
+    <el-dropdown v-if="canDeploy()" class="ml-2" @command="deploy">
+      <el-button type="primary" size="small">批量部署</el-button>
+      <template #dropdown>
+        <el-dropdown-menu>
+          <el-dropdown-item command="bt">宝塔面板</el-dropdown-item>
+          <el-dropdown-item command="nginx">Nginx / Apache</el-dropdown-item>
+          <el-dropdown-item command="iis">IIS</el-dropdown-item>
+        </el-dropdown-menu>
+      </template>
+    </el-dropdown>
     <el-button
       v-if="canCommitCancel()"
       type="danger"
@@ -134,28 +144,25 @@ const canPay = () => {
 };
 
 const canCommit = () => {
-  return getSelectedRows().some(
-    row =>
-      row.latest_cert?.status === "pending" &&
-      row.latest_cert?.channel !== "acme"
-  );
+  return getSelectedRows().some(row => row.latest_cert?.status === "pending");
 };
 
 const canRevalidate = () => {
   return getSelectedRows().some(
     row =>
       row.latest_cert?.status === "processing" &&
-      row.latest_cert?.domain_verify_status !== 2 &&
-      row.latest_cert?.channel !== "acme"
+      row.latest_cert?.domain_verify_status !== 2
   );
 };
 
 const canSync = () => {
-  return getSelectedRows().some(
-    row =>
-      ["processing", "active", "approving"].includes(row.latest_cert?.status) &&
-      row.latest_cert?.channel !== "acme"
+  return getSelectedRows().some(row =>
+    ["processing", "active", "approving"].includes(row.latest_cert?.status)
   );
+};
+
+const canDeploy = () => {
+  return getSelectedRows().some(row => row.latest_cert?.status === "active");
 };
 
 const canCommitCancel = () => {
@@ -204,8 +211,7 @@ const view = () => {
   toDetail({ ids: ids.join(",") }, "params");
 };
 
-const getDelegationPrefix = (ca?: string, channel?: string) => {
-  if (channel === "acme") return "_acme-challenge";
+const getDelegationPrefix = (ca?: string) => {
   const caLower = (ca || "").toLowerCase();
   switch (caLower) {
     case "sectigo":
@@ -256,7 +262,7 @@ const copy = () => {
 
         // 委托验证
         if (cert.dcv?.is_delegate) {
-          const prefix = getDelegationPrefix(cert.dcv.ca || item.product?.ca, cert.channel);
+          const prefix = getDelegationPrefix(cert.dcv.ca || item.product?.ca);
           const validation = cert.validation || [];
           const seen = new Map();
           const uniqueDelegations = validation.filter((v: any) => {
@@ -328,6 +334,43 @@ const copy = () => {
     });
 };
 
+const deploy = (type: string) => {
+  const filteredIds: number[] = [];
+
+  props.tableRef.clearSelection();
+
+  getSelectedRows().forEach(row => {
+    if (row.latest_cert.status === "active") {
+      filteredIds.push(row.id);
+      props.tableRef.toggleRowSelection(row);
+    }
+  });
+
+  if (!filteredIds.length) {
+    message("请至少选择一个已签发证书", { type: "error" });
+    return;
+  }
+
+  OrderApi.deployCommands(filteredIds.join(",")).then(res => {
+    if (res.code === 1) {
+      const cmd =
+        type === "iis"
+          ? res.data.iis_deploy
+          : type === "bt"
+            ? res.data.bt_deploy
+            : res.data.deploy;
+      navigator.clipboard
+        .writeText(cmd)
+        .then(() => {
+          message("部署命令已复制", { type: "success" });
+        })
+        .catch(() => {
+          message("复制失败", { type: "error" });
+        });
+    }
+  });
+};
+
 const pay = () => {
   const filteredIds: number[] = [];
 
@@ -361,17 +404,14 @@ const commit = () => {
   props.tableRef.clearSelection();
 
   getSelectedRows().forEach(row => {
-    if (
-      row.latest_cert.status == "pending" &&
-      row.latest_cert?.channel !== "acme"
-    ) {
+    if (row.latest_cert.status == "pending") {
       filteredIds.push(row.id);
       props.tableRef.toggleRowSelection(row);
     }
   });
 
   if (!filteredIds.length) {
-    message("请至少选择一个待提交的非 ACME 订单", {
+    message("请至少选择一个待提交的订单", {
       type: "error"
     });
     return;
@@ -393,8 +433,7 @@ const revalidate = () => {
   getSelectedRows().forEach(row => {
     if (
       row.latest_cert.status == "processing" &&
-      row.latest_cert.domain_verify_status !== 2 &&
-      row.latest_cert?.channel !== "acme"
+      row.latest_cert.domain_verify_status !== 2
     ) {
       filteredIds.push(row.id);
       props.tableRef.toggleRowSelection(row);
@@ -403,7 +442,7 @@ const revalidate = () => {
 
   if (!filteredIds.length) {
     message(
-      "请至少选择一个符合要求的非 ACME 证书 1.状态是处理中 2.所有域名尚未完成验证",
+      "请至少选择一个符合要求的证书 1.状态是处理中 2.所有域名尚未完成验证",
       {
         type: "error"
       }
@@ -426,8 +465,7 @@ const sync = () => {
 
   getSelectedRows().forEach(row => {
     if (
-      ["processing", "active", "approving"].includes(row.latest_cert.status) &&
-      row.latest_cert?.channel !== "acme"
+      ["processing", "active", "approving"].includes(row.latest_cert.status)
     ) {
       filteredIds.push(row.id);
       props.tableRef.toggleRowSelection(row);
@@ -435,7 +473,7 @@ const sync = () => {
   });
 
   if (!filteredIds.length) {
-    message("请至少选择一个待验证，已签发，待审核的非 ACME 证书", {
+    message("请至少选择一个待验证，已签发，待审核的证书", {
       type: "error"
     });
     return;

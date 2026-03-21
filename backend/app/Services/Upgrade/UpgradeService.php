@@ -90,7 +90,7 @@ class UpgradeService
             }
 
             if (! $this->versionManager->isUpgradeAllowed($targetVersion)) {
-                throw new RuntimeException("不允许从 $currentVersion 升级到 $targetVersion（目标版本低于当前版本）");
+                throw new RuntimeException("不允许从 $currentVersion 升级到 {$targetVersion}（目标版本低于当前版本）");
             }
 
             $steps[count($steps) - 1]['status'] = 'completed';
@@ -127,7 +127,7 @@ class UpgradeService
                 throw new RuntimeException("PHP 版本不满足要求，需要 PHP >= $minVersion");
             }
 
-            // 步骤 2: 创建备份
+            // 步骤 3: 创建备份
             $forceBackup = Config::get('upgrade.behavior.force_backup', true);
             $backupId = null;
 
@@ -138,7 +138,7 @@ class UpgradeService
                 $steps[count($steps) - 1]['backup_id'] = $backupId;
             }
 
-            // 步骤 3: 进入维护模式
+            // 步骤 4: 进入维护模式
             $maintenanceMode = Config::get('upgrade.behavior.maintenance_mode', true);
             if ($maintenanceMode) {
                 $steps[] = ['step' => 'maintenance_on', 'status' => 'running'];
@@ -146,7 +146,7 @@ class UpgradeService
                 $steps[count($steps) - 1]['status'] = 'completed';
             }
 
-            // 步骤 4: 下载升级包
+            // 步骤 5: 下载升级包
             $steps[] = ['step' => 'download', 'status' => 'running'];
             $packagePath = $this->packageExtractor->getDownloadPath()."/upgrade-$targetVersion.zip";
 
@@ -155,7 +155,7 @@ class UpgradeService
             }
             $steps[count($steps) - 1]['status'] = 'completed';
 
-            // 步骤 5: 解压并验证
+            // 步骤 6: 解压并验证
             $steps[] = ['step' => 'extract', 'status' => 'running'];
             $extractedPath = $this->packageExtractor->extract($packagePath);
             $this->packageExtractor->validatePackage($extractedPath);
@@ -165,12 +165,12 @@ class UpgradeService
             $oldComposerHashes = $this->getComposerHashes(base_path());
             Log::info('[Upgrade] Current composer hashes', $oldComposerHashes);
 
-            // 步骤 6: 应用升级
+            // 步骤 7: 应用升级
             $steps[] = ['step' => 'apply', 'status' => 'running'];
             $this->packageExtractor->applyUpgrade($extractedPath);
             $steps[count($steps) - 1]['status'] = 'completed';
 
-            // 步骤 6.5: 检测并安装 Composer 依赖（比较 hash 决定是否需要安装）
+            // 步骤 8: 安装 Composer 依赖（比较 hash 决定是否需要安装）
             $newComposerHashes = $this->getComposerHashes(base_path());
             Log::info('[Upgrade] New composer hashes', $newComposerHashes);
 
@@ -190,13 +190,13 @@ class UpgradeService
                 Log::info('[Upgrade] No composer changes detected, skipping composer install');
             }
 
-            // 清理 opcache 以便加载新代码
+            // 步骤 9: 清理 opcache 以便加载新代码
             if (function_exists('opcache_reset')) {
                 opcache_reset();
                 Log::info('[Upgrade] opcache_reset called after applying upgrade');
             }
 
-            // 步骤 7: 运行迁移
+            // 步骤 10: 运行迁移
             $autoMigrate = Config::get('upgrade.behavior.auto_migrate', true);
             if ($autoMigrate) {
                 $steps[] = ['step' => 'migrate', 'status' => 'running'];
@@ -204,7 +204,7 @@ class UpgradeService
                 $steps[count($steps) - 1]['status'] = 'completed';
             }
 
-            // 步骤 7.5: 数据库结构校验
+            // 步骤 11: 数据库结构校验
             $structureCheckResult = $this->checkAndFixDatabaseStructure();
             if ($structureCheckResult && ! ($structureCheckResult['skipped'] ?? false)) {
                 $steps[] = [
@@ -214,7 +214,7 @@ class UpgradeService
                 ];
             }
 
-            // 步骤 8: 运行种子
+            // 步骤 12: 运行种子
             $autoSeed = Config::get('upgrade.behavior.auto_seed', true);
             if ($autoSeed) {
                 $steps[] = ['step' => 'seed', 'status' => 'running'];
@@ -227,7 +227,7 @@ class UpgradeService
                 $steps[count($steps) - 1]['status'] = 'completed';
             }
 
-            // 步骤 9: 清理缓存
+            // 步骤 13: 清理缓存
             $clearCache = Config::get('upgrade.behavior.clear_cache', true);
             if ($clearCache) {
                 $steps[] = ['step' => 'clear_cache', 'status' => 'running'];
@@ -255,18 +255,18 @@ class UpgradeService
                 $steps[count($steps) - 1]['status'] = 'completed';
             }
 
-            // 步骤 10: 更新版本号（所有操作完成后再更新）
+            // 步骤 14: 更新版本号（所有操作完成后再更新）
             $steps[] = ['step' => 'update_version', 'status' => 'running'];
             $this->updateEnvVersion($targetVersion);
             $steps[count($steps) - 1]['status'] = 'completed';
 
-            // 步骤 11: 清理临时文件
+            // 步骤 15: 清理临时文件
             $steps[] = ['step' => 'cleanup', 'status' => 'running'];
             $this->packageExtractor->cleanup($extractedPath);
             $this->packageExtractor->cleanupOldPackages();
             $steps[count($steps) - 1]['status'] = 'completed';
 
-            // 步骤 12: 退出维护模式
+            // 步骤 16: 退出维护模式
             if ($maintenanceMode) {
                 $steps[] = ['step' => 'maintenance_off', 'status' => 'running'];
                 Artisan::call('up');
@@ -349,7 +349,7 @@ class UpgradeService
             }
 
             if (! $this->versionManager->isUpgradeAllowed($targetVersion)) {
-                throw new RuntimeException("不允许从 $currentVersion 升级到 $targetVersion（目标版本低于当前版本）");
+                throw new RuntimeException("不允许从 $currentVersion 升级到 {$targetVersion}（目标版本低于当前版本）");
             }
 
             // 检查 PHP 版本
@@ -370,7 +370,7 @@ class UpgradeService
                 $statusManager->completeStep('backup');
             }
 
-            // 步骤 3.5: 进入维护模式
+            // 步骤 4: 进入维护模式
             $maintenanceMode = Config::get('upgrade.behavior.maintenance_mode', true);
 
             if ($maintenanceMode) {
@@ -380,7 +380,7 @@ class UpgradeService
                 $statusManager->completeStep('maintenance_on');
             }
 
-            // 步骤 4: 下载升级包
+            // 步骤 5: 下载升级包
             $statusManager->startStep('download');
             $packagePath = $this->packageExtractor->getDownloadPath()."/upgrade-$targetVersion.zip";
 
@@ -389,7 +389,7 @@ class UpgradeService
             }
             $statusManager->completeStep('download');
 
-            // 步骤 5: 解压并验证
+            // 步骤 6: 解压并验证
             $statusManager->startStep('extract');
             $extractedPath = $this->packageExtractor->extract($packagePath);
             $this->packageExtractor->validatePackage($extractedPath);
@@ -399,12 +399,12 @@ class UpgradeService
             $oldComposerHashes = $this->getComposerHashes(base_path());
             Log::info('[Upgrade] Current composer hashes', $oldComposerHashes);
 
-            // 步骤 6: 应用升级
+            // 步骤 7: 应用升级
             $statusManager->startStep('apply');
             $this->packageExtractor->applyUpgrade($extractedPath);
             $statusManager->completeStep('apply');
 
-            // 步骤 6.5: Composer 依赖（比较 hash 决定是否需要安装）
+            // 步骤 8: 安装 Composer 依赖（比较 hash 决定是否需要安装）
             $newComposerHashes = $this->getComposerHashes(base_path());
             Log::info('[Upgrade] New composer hashes', $newComposerHashes);
 
@@ -421,22 +421,34 @@ class UpgradeService
                 Log::info('[Upgrade] No composer changes detected, skipping composer install');
             }
 
-            // 清理 opcache
+            // 步骤 9: 清理 opcache
             if (function_exists('opcache_reset')) {
                 opcache_reset();
             }
 
-            // 步骤 7: 运行迁移
+            // 步骤 10: 运行迁移
             if (Config::get('upgrade.behavior.auto_migrate', true)) {
                 $statusManager->startStep('migrate');
                 Artisan::call('migrate', ['--force' => true]);
                 $statusManager->completeStep('migrate');
             }
 
-            // 步骤 7.5: 数据库结构校验
+            // 步骤 11: 数据库结构校验
             $structureCheckResult = $this->checkAndFixDatabaseStructure($statusManager);
 
-            // 步骤 8: 清理缓存
+            // 步骤 12: 运行种子
+            if (Config::get('upgrade.behavior.auto_seed', true)) {
+                $statusManager->startStep('seed');
+                $seedClass = Config::get('upgrade.behavior.seed_class');
+                $seedOptions = ['--force' => true];
+                if ($seedClass) {
+                    $seedOptions['--class'] = $seedClass;
+                }
+                Artisan::call('db:seed', $seedOptions);
+                $statusManager->completeStep('seed');
+            }
+
+            // 步骤 13: 清理缓存
             if (Config::get('upgrade.behavior.clear_cache', true)) {
                 $statusManager->startStep('clear_cache');
                 Artisan::call('optimize:clear', ['--except' => 'view']);
@@ -452,18 +464,18 @@ class UpgradeService
                 $statusManager->completeStep('clear_cache');
             }
 
-            // 步骤 9: 更新版本号
+            // 步骤 14: 更新版本号
             $statusManager->startStep('update_version');
             $this->updateEnvVersion($targetVersion);
             $statusManager->completeStep('update_version');
 
-            // 步骤 10: 清理临时文件
+            // 步骤 15: 清理临时文件
             $statusManager->startStep('cleanup');
             $this->packageExtractor->cleanup($extractedPath);
             $this->packageExtractor->cleanupOldPackages();
             $statusManager->completeStep('cleanup');
 
-            // 步骤 11: 退出维护模式
+            // 步骤 16: 退出维护模式
             if ($inMaintenanceMode) {
                 $statusManager->startStep('maintenance_off');
                 Artisan::call('up');
@@ -845,7 +857,7 @@ class UpgradeService
 
         curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
+        unset($ch);
 
         return $httpCode >= 200 && $httpCode < 400;
     }

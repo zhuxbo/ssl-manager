@@ -162,20 +162,9 @@ class Setting extends BaseModel
             return self::getByGroupName($groupName);
         }
 
-        $cacheKey = self::CACHE_PREFIX.'value:'.$groupName.':'.$key;
+        $values = self::getByGroupName($groupName);
 
-        return Cache::remember($cacheKey, self::CACHE_TTL, function () use ($groupName, $key) {
-            $group = SettingGroup::where('name', $groupName)->first();
-            if (! $group) {
-                return null;
-            }
-
-            $setting = self::where('group_id', $group->id)
-                ->where('key', $key)
-                ->first();
-
-            return $setting?->value;
-        });
+        return $values[$key] ?? null;
     }
 
     /**
@@ -280,19 +269,11 @@ class Setting extends BaseModel
      */
     public static function clearGroupCache(int $groupId): void
     {
-        // 清除按组ID查询的缓存
         Cache::forget(self::CACHE_PREFIX.'group:'.$groupId);
 
-        // 清除按组名查询的缓存（需要查询组名）
         $group = SettingGroup::find($groupId);
         if ($group) {
             Cache::forget(self::CACHE_PREFIX.'group_name:'.$group->name);
-
-            // 清除该组下所有配置项的单个值缓存
-            $settings = self::where('group_id', $groupId)->get(['key']);
-            foreach ($settings as $setting) {
-                Cache::forget(self::CACHE_PREFIX.'value:'.$group->name.':'.$setting->key);
-            }
         }
     }
 
@@ -301,14 +282,9 @@ class Setting extends BaseModel
      */
     public static function clearAllCache(): void
     {
-        // 获取所有缓存键并删除
         $groups = SettingGroup::all();
         foreach ($groups as $group) {
             self::clearGroupCache($group->id);
         }
-
-        // 或者使用通配符删除（如果缓存驱动支持）
-        // Redis 支持，但 file/database 驱动不支持
-        // Cache::flush(); // 这会清除所有缓存，不推荐
     }
 }

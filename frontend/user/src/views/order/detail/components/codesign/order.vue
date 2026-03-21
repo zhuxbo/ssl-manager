@@ -11,7 +11,9 @@
         </tr>
         <tr>
           <td class="label">品牌</td>
-          <td class="content">{{ brandLabels[order.brand?.toLowerCase()] || order.brand }}</td>
+          <td class="content">
+            {{ brandLabels[order.brand?.toLowerCase()] || order.brand }}
+          </td>
         </tr>
         <tr>
           <td class="label">产品</td>
@@ -24,6 +26,16 @@
         <tr>
           <td class="label">购买时长</td>
           <td class="content">{{ periodLabels[order.period] }}</td>
+        </tr>
+        <tr>
+          <td class="label">创建时间</td>
+          <td class="content">
+            {{
+              order.created_at
+                ? dayjs(order.created_at).format("YYYY-MM-DD HH:mm:ss")
+                : "-"
+            }}
+          </td>
         </tr>
         <tr>
           <td class="label">有效期从</td>

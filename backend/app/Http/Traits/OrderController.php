@@ -3,13 +3,13 @@
 namespace App\Http\Traits;
 
 use App\Http\Requests\Order\GetIdsRequest;
+use App\Models\DeployToken;
 use App\Models\DomainValidationRecord;
 use App\Models\Order;
-use App\Models\User;
-use App\Services\Acme\OrderService as AcmeOrderService;
 use App\Services\Notification\DTOs\NotificationIntent;
 use App\Services\Notification\NotificationCenter;
 use App\Services\Order\Action;
+use Illuminate\Support\Str;
 use Throwable;
 
 /**
@@ -44,14 +44,6 @@ trait OrderController
      */
     public function revalidate(int $id): void
     {
-        $order = Order::with('latestCert')->find($id);
-        if ($order?->latestCert?->channel === 'acme') {
-            app(AcmeOrderService::class)->acmeRevalidate($order->latestCert);
-            $this->success();
-
-            return;
-        }
-
         // 重置域名验证记录，重新开始验证计时
         DomainValidationRecord::where('order_id', $id)->delete();
 
@@ -66,15 +58,6 @@ trait OrderController
      */
     public function updateDCV(int $id): void
     {
-        $order = Order::with('latestCert')->find($id);
-        if ($order?->latestCert?->channel === 'acme') {
-            $method = request()->string('method', '')->trim() ?: null;
-            app(AcmeOrderService::class)->acmeUpdateDCV($order->latestCert, $method);
-            $this->success();
-
-            return;
-        }
-
         // 重置域名验证记录，重新开始验证计时
         DomainValidationRecord::where('order_id', $id)->delete();
 
@@ -170,34 +153,6 @@ trait OrderController
     }
 
     /**
-     * 发送过期邮件
-     */
-    public function sendExpire(string $userId): void
-    {
-        $email = request()->string('email', '')->trim();
-        $user = User::find((int) $userId);
-        if (! $user) {
-            $this->error('用户不存在');
-        }
-
-        $targetEmail = $email ?: $user->email;
-        if (! $targetEmail) {
-            $this->error('邮箱为空');
-        }
-
-        app(NotificationCenter::class)->dispatch(new NotificationIntent(
-            'cert_expire',
-            'user',
-            $user->id,
-            [
-                'email' => $targetEmail,
-            ],
-            ['mail']
-        ));
-        $this->success();
-    }
-
-    /**
      * 批量支付
      *
      * @throws Throwable
@@ -278,14 +233,7 @@ trait OrderController
             'auto_reissue' => 'nullable',
         ]);
 
-        $order = Order::where('id', $id);
-
-        // 用户端只能更新自己的订单
-        if ($this->action->getUserId()) {
-            $order->where('user_id', $this->action->getUserId());
-        }
-
-        $order = $order->first();
+        $order = Order::find($id);
         if (! $order) {
             $this->error('订单不存在');
         }
@@ -303,6 +251,60 @@ trait OrderController
         $this->success([
             'auto_renew' => $order->auto_renew,
             'auto_reissue' => $order->auto_reissue,
+        ]);
+    }
+
+    /**
+     * 获取部署命令
+     */
+    public function deployCommands(): void
+    {
+        $orderIds = request()->input('order_ids', '');
+
+        if (empty($orderIds) || ! preg_match('/^\d+(,\d+)*$/', $orderIds)) {
+            $this->error('参数格式错误');
+        }
+
+        // 通过订单获取 user_id，用于查找该用户的 deploy token
+        // User 端：Order 受 UserScope 保护，只能查到自己的订单
+        // Admin 端：无 UserScope，可查任意订单，通过 user_id 定位对应用户的 token
+        $firstId = (int) explode(',', $orderIds)[0];
+        $order = Order::find($firstId);
+        if (! $order) {
+            $this->error('订单不存在');
+        }
+        $userId = $order->user_id;
+
+        // 查询用户的 deploy token，不存在则自动生成
+        $deployToken = DeployToken::where('user_id', $userId)->first();
+        if (! $deployToken) {
+            $deployToken = DeployToken::create([
+                'user_id' => $userId,
+                'token' => Str::random(32),
+            ]);
+        }
+        $token = $deployToken->token;
+
+        $releaseDomain = rtrim(get_system_setting('site', 'releaseDomain', 'release.cnssl.com'), '/');
+        $releaseUrl = "https://$releaseDomain";
+        $siteUrl = rtrim(get_system_setting('site', 'url'), '/');
+        $deployUrl = "$siteUrl/api/deploy";
+
+        $this->success([
+            'install' => [
+                'linux' => "curl -fsSL $releaseUrl/sslctl/install.sh | sudo bash -s -- $releaseDomain",
+                'windows' => "irm $releaseUrl/sslctl/install.ps1 -OutFile install.ps1; .\\install.ps1 -ReleaseHost $releaseDomain",
+            ],
+            'deploy' => "sslctl setup --url $deployUrl --token $token --order $orderIds",
+            'iis_install' => [
+                'download' => "$releaseUrl/sslctlw/latest/sslctlw.exe",
+                'windows' => "irm $releaseUrl/sslctlw/install.ps1 -OutFile install.ps1; .\\install.ps1 -ReleaseHost $releaseDomain",
+            ],
+            'iis_deploy' => "sslctlw setup --url $deployUrl --token $token --order $orderIds",
+            'bt_install' => [
+                'linux' => "curl -fsSL $releaseUrl/sslbt/install.sh | sudo bash -s -- $releaseDomain",
+            ],
+            'bt_deploy' => "$deployUrl?token=$token&order=$orderIds",
         ]);
     }
 

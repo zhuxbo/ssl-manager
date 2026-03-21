@@ -12,12 +12,8 @@ class AdminSeeder extends Seeder
      */
     public function run(): void
     {
-        Admin::firstOrCreate(
-            ['username' => 'admin'],
-            [
-                'username' => 'admin',
-                'password' => '123456',
-            ]
-        );
+        if (Admin::count() === 0) {
+            Admin::create(['username' => 'admin', 'password' => '123456']);
+        }
     }
 }

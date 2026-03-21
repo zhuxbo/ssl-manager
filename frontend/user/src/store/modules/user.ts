@@ -83,6 +83,7 @@ export const useUserStore = defineStore("pure-user", {
               resolve(res);
             } else {
               this.logOut();
+              reject(new Error("Token refresh failed"));
             }
           })
           .catch(error => {

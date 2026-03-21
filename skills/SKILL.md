@@ -4,25 +4,16 @@
 
 ## Skill 列表
 
-| Skill | 目录 | 触发场景 |
+| Skill | 文件 | 触发场景 |
 |-------|------|---------|
-| 后端开发 | `backend-dev/` | Laravel API、ACME 协议、升级系统 |
-| 前端开发 | `frontend-dev/` | Vue 3、Monorepo、共享组件 |
-| 部署运维 | `deploy-ops/` | Docker、宝塔、环境配置 |
-| 构建发布 | `build-release/` | 版本发布、打包、CI/CD |
-| 插件开发 | `plugin-dev/` | 插件系统、IIFE 打包、安装/更新/卸载 |
+| 后端开发 | `backend-dev.md` | Laravel API、升级系统、认证、委托验证 |
+| ACME 模块 | `acme-module.md` | ACME 协议服务端、上游对接、订阅计费、状态流转 |
+| 前端开发 | `frontend-dev.md` | Vue 3、Monorepo、共享组件 |
+| 部署运维 | `deploy-ops.md` | Docker、宝塔、环境配置 |
+| 构建发布 | `build-release.md` | 版本发布、打包、CI/CD |
+| 插件开发 | `plugin-dev.md` | 插件系统、IIFE 打包、安装/更新/卸载 |
 | ACME E2E 测试 | `acme-e2e-test/` | Docker certbot 端到端测试（Manager + Gateway） |
-
-## 使用方式
-
-根据当前任务类型，读取对应 skill 获取详细规范：
-
-```
-skills/backend-dev/SKILL.md    # 后端开发任务
-skills/frontend-dev/SKILL.md   # 前端开发任务
-skills/deploy-ops/SKILL.md     # 部署运维任务
-skills/build-release/SKILL.md  # 构建发布任务
-```
+| Source API 接入 | `source-api.md` | 新增上游来源（Order\Api + Acme\Api） |
 
 ## 知识积累
 

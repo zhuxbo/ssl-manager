@@ -104,10 +104,9 @@ test('检查委托有效性 - 自动续费且委托有效时跳过证书', funct
     $intent = new NotificationIntent('cert_expire', 'user', 1, ['email' => 'user@example.com']);
 
     // 由于 build 方法内部有 Order::with()... 数据库查询，
-    // 如果所有证书都因委托有效被跳过，会抛出 "14天内没有需要通知的到期证书"
-    // 这证明了委托有效性检查的逻辑是正确的
-    expect(fn () => $builder->build($intent, $user))
-        ->toThrow(RuntimeException::class, '14天内没有需要通知的到期证书');
+    // 如果所有证书都因委托有效被跳过，返回 null 表示无需发送
+    $result = $builder->build($intent, $user);
+    expect($result)->toBeNull();
 });
 
 test('NotificationPayload 正确构造', function () {

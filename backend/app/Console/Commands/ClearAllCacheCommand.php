@@ -20,8 +20,7 @@ class ClearAllCacheCommand extends Command
                             {--quick : 快速模式，不显示详细信息}
                             {--logs : 同时清除旧日志文件}
                             {--restart-queue : 清理完成后重启队列服务}
-                            {--without-composer : 跳过 Composer autoload 缓存清理}
-                            {--without-opcache : 跳过 OPCache 清理}';
+                            {--without-composer : 跳过 Composer autoload 缓存清理}';
 
     /**
      * The console command description.
@@ -39,8 +38,6 @@ class ClearAllCacheCommand extends Command
         $clearLogs = $this->option('logs');
         $restartQueue = $this->option('restart-queue');
         $skipComposer = $this->option('without-composer');
-        $skipOpcache = $this->option('without-opcache');
-
         if (! $quick) {
             $this->info('开始清除SSL证书管理系统所有缓存...');
             $this->newLine();
@@ -68,15 +65,7 @@ class ClearAllCacheCommand extends Command
             $this->warn('5. 已跳过 Composer autoload 缓存清理');
         }
 
-        // 6. 清除OPCache
-        if (! $skipOpcache) {
-            $this->clearOPCache($quick);
-        } elseif (! $quick) {
-            $this->newLine();
-            $this->warn('6. 已跳过 OPCache 清理');
-        }
-
-        // 7. 重启队列服务（可选）
+        // 6. 重启队列服务（可选）
         if ($restartQueue) {
             $this->restartQueueService($quick);
         }
@@ -313,39 +302,6 @@ class ClearAllCacheCommand extends Command
         } catch (Exception) {
             if (! $quick) {
                 $this->error('✗ Composer命令不可用，跳过autoload缓存清除');
-            }
-        }
-    }
-
-    /**
-     * 清除OPCache
-     */
-    private function clearOPCache(bool $quick): void
-    {
-        if (! $quick) {
-            $this->newLine();
-            $this->info('6. 清除OPCache');
-            $this->info('============================================');
-        }
-
-        if (function_exists('opcache_get_status') && opcache_get_status()) {
-            try {
-                if (function_exists('opcache_reset')) {
-                    opcache_reset();
-                    if (! $quick) {
-                        $this->line('✓ OPCache清除成功');
-                    }
-                } else {
-                    if (! $quick) {
-                        $this->warn('⚠ OPCache重置函数不可用');
-                    }
-                }
-            } catch (Exception $e) {
-                $this->error('✗ OPCache清除失败: '.$e->getMessage());
-            }
-        } else {
-            if (! $quick) {
-                $this->line('OPCache未启用，跳过清除');
             }
         }
     }

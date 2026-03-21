@@ -44,7 +44,7 @@ class ApiController extends Controller
 
         $this->user_id = $apiToken->user_id;
         $this->model = new Order;
-        $this->action = new Action($this->user_id);
+        $this->action = app(Action::class);
     }
 
     /**
@@ -59,6 +59,7 @@ class ApiController extends Controller
         $brand && $where[] = ['brand', '=', $brand];
         $code && $where[] = ['code', 'like', '%'.$code.'%'];
         $where[] = ['status', '=', 1];
+        $where[] = ['product_type', '!=', Product::TYPE_ACME];
 
         $res = Product::where($where)->orderBy('weight', 'ASC')->get();
         $res->makeHidden(['id', 'api_id', 'cost', 'status', 'created_at', 'updated_at']);
@@ -114,7 +115,7 @@ class ApiController extends Controller
     public function getOrders(): void
     {
         $page = $this->request->input('page', 1) ?? 1;
-        $pageSize = $this->request->input('page_size', 100) ?? 100;
+        $pageSize = min(max((int) ($this->request->input('page_size', 100) ?? 100), 1), 100);
         $status = $this->request->input('status', 'all') ?? 'all';
 
         $whereStatus = [];
@@ -203,6 +204,7 @@ class ApiController extends Controller
         }
         $params['product_id'] = $product->id;
 
+        $params['user_id'] = $this->user_id;
         $params['action'] = 'new';
         $params['channel'] = 'api';
 
@@ -225,11 +227,15 @@ class ApiController extends Controller
             $order = Order::with(['latestCert'])->where('orders.id', $order_id)->first();
         }
 
+        $cleaned = $this->cleanDcvAndValidation(
+            $order->latestCert->dcv ?? null,
+            $order->latestCert->validation ?? null,
+        );
+
         $this->success([
             'order_id' => $order_id ?? '',
             'cert_apply_status' => $order->latestCert->cert_apply_status ?? 0,
-            'dcv' => $order->latestCert->dcv ?? null,
-            'validation' => $order->latestCert->validation ?? null,
+            ...$cleaned,
         ]);
     }
 
@@ -277,11 +283,15 @@ class ApiController extends Controller
             $order = Order::with(['latestCert'])->where('orders.id', $order_id)->first();
         }
 
+        $cleaned = $this->cleanDcvAndValidation(
+            $order->latestCert->dcv ?? null,
+            $order->latestCert->validation ?? null,
+        );
+
         $this->success([
             'order_id' => $order_id ?? '',
             'cert_apply_status' => $order->latestCert->cert_apply_status ?? 0,
-            'dcv' => $order->latestCert->dcv ?? null,
-            'validation' => $order->latestCert->validation ?? null,
+            ...$cleaned,
         ]);
     }
 
@@ -335,11 +345,15 @@ class ApiController extends Controller
             $order = Order::with(['latestCert'])->where('orders.id', $order_id)->first();
         }
 
+        $cleaned = $this->cleanDcvAndValidation(
+            $order->latestCert->dcv ?? null,
+            $order->latestCert->validation ?? null,
+        );
+
         $this->success([
             'order_id' => $order_id ?? '',
             'cert_apply_status' => $order->latestCert->cert_apply_status ?? 0,
-            'dcv' => $order->latestCert->dcv ?? null,
-            'validation' => $order->latestCert->validation ?? null,
+            ...$cleaned,
         ]);
     }
 
@@ -464,6 +478,10 @@ class ApiController extends Controller
         if (empty($result['private_key'])) {
             unset($result['private_key']);
         }
+
+        // 清理 dcv/validation 中不可跨级传递的内部字段
+        $cleaned = $this->cleanDcvAndValidation($result['dcv'] ?? null, $result['validation'] ?? null);
+        $result = array_merge($result, $cleaned);
 
         $this->success($result);
     }
@@ -633,6 +651,81 @@ class ApiController extends Controller
         }
 
         return $result ?? [];
+    }
+
+    /**
+     * 从 dcv/validation 中提取可跨级传递的字段（白名单）
+     * delegation 内部标记不应暴露给下级系统
+     */
+    private function cleanDcvAndValidation(?array $dcv, ?array $validation): array
+    {
+        if ($dcv) {
+            $dcv = array_filter([
+                'method' => $dcv['method'] ?? null,
+                'dns' => $dcv['dns'] ?? null,
+                'file' => $dcv['file'] ?? null,
+            ], fn ($v) => $v !== null);
+        }
+
+        if ($validation) {
+            $validation = array_map(fn (array $item) => array_filter([
+                'domain' => $item['domain'] ?? null,
+                'method' => $item['method'] ?? null,
+                'verified' => $item['verified'] ?? null,
+                'host' => $item['host'] ?? null,
+                'value' => $item['value'] ?? null,
+                'name' => $item['name'] ?? null,
+                'content' => $item['content'] ?? null,
+                'link' => $item['link'] ?? null,
+                'path' => $item['path'] ?? null,
+                'email' => $item['email'] ?? null,
+                'error' => $item['error'] ?? null,
+                'expires_date' => $item['expires_date'] ?? null,
+            ], fn ($v) => $v !== null), $validation);
+        }
+
+        return ['dcv' => $dcv, 'validation' => $validation];
+    }
+
+    /**
+     * 上传文档（接收下游 base64 文档）
+     */
+    public function uploadDocument(): void
+    {
+        $orderId = (int) $this->request->input('order_id');
+        $type = $this->request->input('type', '');
+        $fileName = $this->request->input('fileName', '');
+        $documentContent = $this->request->input('document_content', '');
+        $description = $this->request->input('description');
+
+        ! $orderId && $this->error('order_id is required');
+        ! $type && $this->error('type is required');
+        ! $fileName && $this->error('fileName is required');
+        ! $documentContent && $this->error('document_content is required');
+
+        // 验证订单归属当前用户
+        $order = Order::where('id', $orderId)->where('user_id', $this->user_id)->first();
+        ! $order && $this->error('Order not found');
+
+        $this->action->uploadDocumentFromBase64($orderId, $type, $fileName, $documentContent, $description);
+    }
+
+    /**
+     * 保存验证报告（接收下游报告数据）
+     */
+    public function saveVerificationReport(): void
+    {
+        $orderId = (int) $this->request->input('order_id');
+        $reportData = $this->request->input('report_data', []);
+
+        ! $orderId && $this->error('order_id is required');
+        empty($reportData) && $this->error('report_data is required');
+
+        // 验证订单归属当前用户
+        $order = Order::where('id', $orderId)->where('user_id', $this->user_id)->first();
+        ! $order && $this->error('Order not found');
+
+        $this->action->saveVerificationReport($orderId, $reportData);
     }
 
     /**

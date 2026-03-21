@@ -117,7 +117,6 @@ test('all txt records processed', function (array $validation, bool $expected) {
 test('split prefix and zone', function (string $host, ?string $expectedPrefix, ?string $expectedZone) {
     $reflection = new ReflectionClass($this->service);
     $method = $reflection->getMethod('splitPrefixAndZone');
-    $method->setAccessible(true);
 
     [$prefix, $zone] = $method->invoke($this->service, $host);
 
@@ -209,7 +208,6 @@ test('collect txt records skips already processed', function () {
 
     $reflection = new ReflectionClass($this->service);
     $method = $reflection->getMethod('collectTxtRecords');
-    $method->setAccessible(true);
 
     $order->refresh();
     [$txtRecords, $updatedValidation, $hasChanges] = $method->invoke($this->service, $order);
@@ -234,7 +232,6 @@ test('collect txt records skips incomplete validation', function () {
 
     $reflection = new ReflectionClass($this->service);
     $method = $reflection->getMethod('collectTxtRecords');
-    $method->setAccessible(true);
 
     $order->refresh();
     [$txtRecords, $updatedValidation, $hasChanges] = $method->invoke($this->service, $order);
@@ -268,7 +265,6 @@ test('collect txt records uses dcv host when validation host missing', function 
 
     $reflection = new ReflectionClass($this->service);
     $method = $reflection->getMethod('collectTxtRecords');
-    $method->setAccessible(true);
 
     $order->refresh();
     [$txtRecords, $updatedValidation, $hasChanges] = $method->invoke($this->service, $order);
@@ -305,7 +301,6 @@ test('collect txt records expands prefix only host', function () {
 
     $reflection = new ReflectionClass($this->service);
     $method = $reflection->getMethod('collectTxtRecords');
-    $method->setAccessible(true);
 
     $order->refresh();
     [$txtRecords, $updatedValidation, $hasChanges] = $method->invoke($this->service, $order);
@@ -333,7 +328,6 @@ test('collect txt records skips when missing host and dcv host', function () {
 
     $reflection = new ReflectionClass($this->service);
     $method = $reflection->getMethod('collectTxtRecords');
-    $method->setAccessible(true);
 
     $order->refresh();
     [$txtRecords, $updatedValidation, $hasChanges] = $method->invoke($this->service, $order);
@@ -373,7 +367,6 @@ test('collect txt records groups by delegation', function () {
 
     $reflection = new ReflectionClass($this->service);
     $method = $reflection->getMethod('collectTxtRecords');
-    $method->setAccessible(true);
 
     $order->refresh();
     [$txtRecords, $updatedValidation, $hasChanges] = $method->invoke($this->service, $order);
@@ -408,7 +401,6 @@ test('collect txt records marks delegation id', function () {
 
     $reflection = new ReflectionClass($this->service);
     $method = $reflection->getMethod('collectTxtRecords');
-    $method->setAccessible(true);
 
     $order->refresh();
     [$txtRecords, $updatedValidation, $hasChanges] = $method->invoke($this->service, $order);
@@ -437,7 +429,6 @@ test('collect txt records skips when no delegation found', function () {
 
     $reflection = new ReflectionClass($this->service);
     $method = $reflection->getMethod('collectTxtRecords');
-    $method->setAccessible(true);
 
     $order->refresh();
     [$txtRecords, $updatedValidation, $hasChanges] = $method->invoke($this->service, $order);

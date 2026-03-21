@@ -59,7 +59,6 @@ test('all txt records processed', function (array $validation, bool $expected) {
 test('split prefix and zone', function (string $host, ?string $expectedPrefix, ?string $expectedZone) {
     $reflection = new ReflectionClass($this->service);
     $method = $reflection->getMethod('splitPrefixAndZone');
-    $method->setAccessible(true);
 
     [$prefix, $zone] = $method->invoke($this->service, $host);
 

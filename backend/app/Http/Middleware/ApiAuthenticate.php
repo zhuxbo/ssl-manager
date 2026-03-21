@@ -2,13 +2,18 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\Acme;
 use App\Models\ApiToken;
 use App\Models\Callback;
+use App\Models\CnameDelegation;
 use App\Models\Contact;
+use App\Models\DeployToken;
 use App\Models\Fund;
 use App\Models\Invoice;
 use App\Models\InvoiceLimit;
 use App\Models\Order;
+use App\Models\OrderDocument;
+use App\Models\OrderVerificationReport;
 use App\Models\Organization;
 use App\Models\Scopes\UserScope;
 use App\Models\Transaction;
@@ -60,8 +65,11 @@ class ApiAuthenticate
 
         if ($apiToken->user_id) {
             UserScope::addScopeToModels($apiToken->user_id, [
+                Acme::class,
                 ApiToken::class,
                 Callback::class,
+                CnameDelegation::class,
+                DeployToken::class,
                 Order::class,
                 Fund::class,
                 Transaction::class,
@@ -69,6 +77,8 @@ class ApiAuthenticate
                 InvoiceLimit::class,
                 Organization::class,
                 Contact::class,
+                OrderDocument::class,
+                OrderVerificationReport::class,
             ]);
         }
 

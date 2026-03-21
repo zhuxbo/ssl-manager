@@ -110,24 +110,6 @@ test('will auto renew execute returns false when product not renewable', functio
     expect($result)->toBeFalse();
 });
 
-test('will auto renew execute returns false for acme channel', function () {
-    $user = $this->createTestUser(['auto_settings' => ['auto_renew' => true, 'auto_reissue' => false]]);
-    $product = $this->createTestProduct(['status' => 1, 'renew' => 1]);
-    $order = $this->createTestOrder($user, $product, [
-        'auto_renew' => true,
-        'period_till' => now()->addDays(30),
-    ]);
-    $this->createTestCert($order, [
-        'channel' => 'acme', // ACME 渠道
-        'expires_at' => now()->addDays(28),
-    ]);
-
-    $order->refresh();
-    $result = $this->service->willAutoRenewExecute($order, $user);
-
-    expect($result)->toBeFalse();
-});
-
 test('will auto renew execute returns false when period diff too large', function () {
     $user = $this->createTestUser(['auto_settings' => ['auto_renew' => true, 'auto_reissue' => false]]);
     $product = $this->createTestProduct(['status' => 1, 'renew' => 1]);
@@ -247,24 +229,6 @@ test('will auto reissue execute returns false when product disabled', function (
     ]);
     $this->createTestCert($order, [
         'channel' => 'api',
-        'expires_at' => now()->addDays(10),
-    ]);
-
-    $order->refresh();
-    $result = $this->service->willAutoReissueExecute($order, $user);
-
-    expect($result)->toBeFalse();
-});
-
-test('will auto reissue execute returns false for acme channel', function () {
-    $user = $this->createTestUser(['auto_settings' => ['auto_renew' => false, 'auto_reissue' => true]]);
-    $product = $this->createTestProduct(['status' => 1]);
-    $order = $this->createTestOrder($user, $product, [
-        'auto_reissue' => true,
-        'period_till' => now()->addDays(30),
-    ]);
-    $this->createTestCert($order, [
-        'channel' => 'acme', // ACME 渠道
         'expires_at' => now()->addDays(10),
     ]);
 

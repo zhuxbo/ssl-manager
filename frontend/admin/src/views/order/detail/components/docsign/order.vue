@@ -44,6 +44,16 @@
           <td class="content">{{ periodLabels[order.period] }}</td>
         </tr>
         <tr>
+          <td class="label">创建时间</td>
+          <td class="content">
+            {{
+              order.created_at
+                ? dayjs(order.created_at).format("YYYY-MM-DD HH:mm:ss")
+                : ""
+            }}
+          </td>
+        </tr>
+        <tr>
           <td class="label">有效期从</td>
           <td class="content">
             {{

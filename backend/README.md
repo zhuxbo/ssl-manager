@@ -233,13 +233,15 @@ php artisan test
 - 操作审计日志
 - 资金账户管理
 
-### ACME 多级代理
+### ACME 订阅管理
 
-- 支持 certbot → Manager A → Manager B → ... → CA 多级链路
-- 每级独立 ID 体系，通过映射字段关联上游（accountId、orderId、challengeId）
-- AcmeApiService 统一处理「查本级 → 映射 ID → 调上游」流程
-- 延迟扣费：创建订阅时不扣费，推迟到 new-order 提交域名后按实际域名精确计费
-- 订单取消：支持 pending（快速清理）、processing/active（通知上游+退费）三种场景
+- 单一 `Acme` 模型（表 `acmes`），独立于传统订单/证书
+- 计费三步流程：createOrder（unpaid）→ payOrder（pending）→ commitOrder（active，含 EAB）
+- 取消流程：commitCancel（标记 cancelling + 延时任务）→ executeCancel（调上游 + 退费）
+- Source API 层：4 方法接口（new/get/cancel/getProducts），按 product.source 路由，通过 SDK 代理调用 Gateway 端点
+- 产品映射由 Gateway 侧维护，Manager 通过 `GET /api/acme/get-products` 获取产品列表
+- 产品导入：Action::importProduct() 同时查询 Order + ACME 两端产品
+- Admin/User/Deploy 三端独立 ACME 控制器，Deploy 端支持一步到位下单
 
 ### 系统集成
 

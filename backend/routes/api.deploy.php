@@ -7,11 +7,11 @@ use Illuminate\Support\Facades\Route;
 // Deploy API 路由
 // 需要 Deploy Token 认证
 Route::prefix('deploy')->middleware('api.deploy')->group(function () {
-    Route::get('/', [ApiController::class, 'query']);        // 按域名查询订单
+    Route::get('/', [ApiController::class, 'query']);        // 查询订单
     Route::post('/', [ApiController::class, 'update']);      // 更新/续费证书
     Route::post('callback', [ApiController::class, 'callback']); // 部署回调
 
     // ACME
-    Route::post('acme/order', [AcmeController::class, 'createOrder']);
-    Route::get('acme/eab/{orderId}', [AcmeController::class, 'getEab']);
+    Route::post('acme/new', [AcmeController::class, 'new']);
+    Route::get('acme/{id}', [AcmeController::class, 'get'])->where('id', '[0-9]+');
 });

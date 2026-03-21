@@ -159,49 +159,31 @@ FROM certs WHERE channel = 'acme' ORDER BY id DESC LIMIT 5;
 
 ## 前置条件
 
-### 1. Docker 网络
+### 1. 基础服务
 
-两个服务共享 `cnssl-dev-network`：
-
-```bash
-docker network create cnssl-dev-network
-```
+确保本地已安装并运行 MySQL 和 Redis。
 
 ### 2. Gateway 环境
 
 ```bash
-cd gateway/backend/develop/docker
-
-# 配置端口（.env）
-BACKEND_PORT=6300
-MYSQL_PORT=3307
-REDIS_PORT=6380
-
-# 首次初始化
-./start.sh init
-
-# 启动
-./start.sh up
+cd gateway/backend
+cp .env.example .env
+composer install
+php artisan migrate
+php artisan serve --port=6300
 ```
 
 ### 3. Manager 环境
 
 ```bash
-cd manager/develop
-
-# 配置端口（.env）
-BACKEND_PORT=5300
-MYSQL_PORT=3306
-REDIS_PORT=6379
-
-# 首次初始化
-./start.sh init
-
-# 启动
-./start.sh up
+cd manager/backend
+cp .env.example .env
+composer install
+php artisan migrate
+php artisan serve --port=5300
 ```
 
-> **网络说明**：Manager 容器通过 Docker 网络访问 Gateway 容器，使用容器名 `gateway-backend` + 内部端口 `8000`。也可用 `http://host.docker.internal:6300/api/acme` 通过宿主机端口访问。
+> **网络说明**：Manager 通过 `ca.acmeUrl` 配置访问 Gateway ACME API（如 `http://localhost:6300/api/acme`）。
 
 ## 手动测试流程
 
@@ -316,9 +298,7 @@ docker volume rm certbot-e2e-etc certbot-e2e-var
 # 或通过脚本清理
 bash manager/skills/acme-e2e-test/run-e2e.sh --clean
 
-# 停止服务
-cd manager/develop && ./start.sh down
-cd gateway/backend/develop/docker && ./start.sh down
+# 停止本地 artisan serve 进程即可
 ```
 
 ## 常见问题
@@ -348,10 +328,7 @@ Token: `system_settings('ca', 'acmeToken')` → 回落 `system_settings('ca', 't
 
 ### 端口映射
 
-| 服务 | 宿主机端口 | 容器内端口 | 容器名 |
-|------|-----------|-----------|--------|
-| Manager backend | 5300 | 8000 | manager-backend |
-| Gateway backend | 6300 | 8000 | gateway-backend |
-| Manager MySQL | 3306 | 3306 | manager-mysql |
-| Gateway MySQL | 3307 | 3306 | gateway-mysql |
-| Gateway Redis | 6380 | 6379 | gateway-redis |
+| 服务 | 端口 |
+|------|------|
+| Manager backend | 5300 |
+| Gateway backend | 6300 |

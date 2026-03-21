@@ -7,6 +7,7 @@ namespace App\Jobs;
 use App\Exceptions\ApiResponseException;
 use App\Models\Admin;
 use App\Models\Task as TaskModel;
+use App\Services\Acme\Action as AcmeAction;
 use App\Services\Notification\DTOs\NotificationIntent;
 use App\Services\Notification\NotificationCenter;
 use App\Services\Order\Action;
@@ -44,7 +45,11 @@ class TaskJob implements ShouldQueue
             $action = $task->action;
 
             try {
-                (new Action($task->user_id ?? 0))->$action($task->order_id);
+                if ($action === 'cancel_acme') {
+                    (new AcmeAction)->cancel($task->order_id);
+                }
+
+                (new Action)->$action($task->order_id);
             } catch (ApiResponseException $e) {
                 $response = $e->getApiResponse();
                 $data['result'] = $response;

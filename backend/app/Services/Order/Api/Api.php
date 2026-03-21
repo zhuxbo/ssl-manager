@@ -17,7 +17,6 @@ class Api
     public function getProducts(string $source = '', string $brand = '', string $code = ''): array
     {
         $api = $this->getSourceApi($source);
-        $this->checkMethodExists($api, 'getProducts');
 
         return $this->handleResult($api->getProducts($brand, $code));
     }
@@ -40,7 +39,6 @@ class Api
     {
         $source = $data['source'] ?? '';
         $api = $this->getSourceApi($source);
-        $this->checkMethodExists($api, 'new');
 
         return $this->handleResult($api->new($data));
     }
@@ -52,7 +50,6 @@ class Api
     {
         $source = $data['source'] ?? '';
         $api = $this->getSourceApi($source);
-        $this->checkMethodExists($api, 'renew');
 
         return $this->handleResult($api->renew($data));
     }
@@ -64,7 +61,6 @@ class Api
     {
         $source = $data['source'] ?? '';
         $api = $this->getSourceApi($source);
-        $this->checkMethodExists($api, 'reissue');
 
         return $this->handleResult($api->reissue($data));
     }
@@ -74,9 +70,8 @@ class Api
      */
     public function get(int $orderId): array
     {
-        $order = $this->findOrder($orderId);
-        $api = $this->getSourceApi($order->product->source ?? 'default');
-        $this->checkMethodExists($api, 'get');
+        $order = $this->findOrder($orderId, requireApiId: true);
+        $api = $this->getSourceApi($order->product->source ?? '');
 
         return $this->handleResult($api->get($order->latestCert->api_id, $order->latestCert->toArray()));
     }
@@ -86,9 +81,8 @@ class Api
      */
     public function cancel(int $orderId): array
     {
-        $order = $this->findOrder($orderId);
+        $order = $this->findOrder($orderId, requireApiId: true);
         $api = $this->getSourceApi($order->product->source ?? '');
-        $this->checkMethodExists($api, 'cancel');
 
         return $this->handleResult($api->cancel($order->latestCert->api_id, $order->latestCert->toArray()));
     }
@@ -98,9 +92,8 @@ class Api
      */
     public function revalidate(int $orderId): array
     {
-        $order = $this->findOrder($orderId);
+        $order = $this->findOrder($orderId, requireApiId: true);
         $api = $this->getSourceApi($order->product->source ?? '');
-        $this->checkMethodExists($api, 'revalidate');
 
         return $this->handleResult($api->revalidate($order->latestCert->api_id, $order->latestCert->toArray()));
     }
@@ -110,17 +103,40 @@ class Api
      */
     public function updateDCV(int $orderId, string $method): array
     {
-        $order = $this->findOrder($orderId);
+        $order = $this->findOrder($orderId, requireApiId: true);
         $api = $this->getSourceApi($order->product->source ?? '');
-        $this->checkMethodExists($api, 'updateDCV');
 
         return $this->handleResult($api->updateDCV($order->latestCert->api_id, $method, $order->latestCert->toArray()));
     }
 
     /**
+     * 上传文档到上游
+     */
+    public function uploadDocument(int $orderId, array $data): array
+    {
+        $order = $this->findOrder($orderId);
+        $api = $this->getSourceApi($order->product->source ?? '');
+        $this->checkMethodExists($api, 'uploadDocument');
+
+        return $api->uploadDocument($data);
+    }
+
+    /**
+     * 提交验证报告到上游
+     */
+    public function submitVerificationReport(int $orderId, array $data): array
+    {
+        $order = $this->findOrder($orderId);
+        $api = $this->getSourceApi($order->product->source ?? '');
+        $this->checkMethodExists($api, 'submitVerificationReport');
+
+        return $api->submitVerificationReport($data);
+    }
+
+    /**
      * 设置产品来源
      */
-    private function getSourceApi(string $source): mixed
+    private function getSourceApi(string $source): OrderSourceApiInterface
     {
         ! $source && $this->error('产品配置错误');
 
@@ -145,7 +161,7 @@ class Api
     /**
      * 根据API ID查找订单
      */
-    private function findOrder(int $orderId): Order
+    private function findOrder(int $orderId, bool $requireApiId = false): Order
     {
         $order = Order::with(['product', 'latestCert'])
             ->whereHas('user')
@@ -155,6 +171,10 @@ class Api
 
         if (! $order) {
             $this->error('未找到对应的订单');
+        }
+
+        if ($requireApiId && ! $order->latestCert->api_id) {
+            $this->error('订单尚未提交，无法执行此操作');
         }
 
         return $order;

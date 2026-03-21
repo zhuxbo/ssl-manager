@@ -22,8 +22,8 @@ use App\Services\Order\Utils\OrderUtil;
 use App\Services\Order\Utils\ValidatorUtil;
 use App\Utils\Random;
 use App\Utils\SnowFlake;
-use DateTime;
 use Exception;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
@@ -71,7 +71,7 @@ trait ActionTrait
         $params['params'] = $params;
 
         if ($params['action'] == 'new') {
-            $params['user_id'] = $this->userId ?: (int) ($params['user_id'] ?? 0);
+            $params['user_id'] = (int) ($params['user_id'] ?? 0);
             FindUtil::User($params['user_id'], true);
 
             $product = FindUtil::Product((int) ($params['product_id'] ?? 0), true);
@@ -91,14 +91,12 @@ trait ActionTrait
         } else {
             isset($params['order_id']) || $this->error('订单ID不能为空');
 
-            $whereUser = $this->userId ? ['user_id' => $this->userId] : [];
             $orderId = $params['order_id'];
 
             $order = Order::with(['product', 'latestCert'])
                 ->whereHas('user')
                 ->whereHas('product')
                 ->whereHas('latestCert')
-                ->where($whereUser)
                 ->where('id', $orderId)
                 ->first();
 
@@ -447,7 +445,7 @@ trait ActionTrait
      */
     protected function generateSectigoDcv(string $method, string $csr, string $unique_value): array
     {
-        $random = sprintf('%04x%04x', mt_rand(0, 0xFFFF), mt_rand(0, 0xFFFF));
+        $random = bin2hex(random_bytes(4));
         $tempDir = storage_path('temp-certs/'.$random);
         mkdir($tempDir, 0755, true);
 
@@ -523,7 +521,7 @@ trait ActionTrait
                 // 查找或创建委托记录
                 if ($delegationService) {
                     // 根据 CA 确定委托前缀（不同 CA 使用不同的验证前缀）
-                    $prefix = $this->getDelegationPrefixForCa($dcv['ca'] ?? '', $dcv['channel'] ?? '');
+                    $prefix = $this->getDelegationPrefixForCa($dcv['ca'] ?? '');
 
                     // 判断是否精确匹配前缀（ACME/DigiCert 需要每个子域单独委托）
                     $isExactMatch = in_array($prefix, ['_acme-challenge', '_dnsauth']);
@@ -684,14 +682,10 @@ trait ActionTrait
      * - Sectigo: _pki-validation
      * - Certum: _certum
      * - DigiCert/GeoTrust/Thawte/RapidSSL/TrustAsia: _dnsauth
-     * - ACME 渠道统一: _acme-challenge
+     * - 其他（含 ACME CA）: _acme-challenge
      */
-    protected function getDelegationPrefixForCa(string $ca, string $channel = ''): string
+    protected function getDelegationPrefixForCa(string $ca): string
     {
-        if ($channel === 'acme') {
-            return '_acme-challenge';
-        }
-
         return match (strtolower($ca)) {
             'sectigo', 'comodo' => '_pki-validation',
             'certum' => '_certum',
@@ -822,13 +816,10 @@ trait ActionTrait
         $result = [];
         DB::beginTransaction();
         try {
-            $whereUser = $this->userId ? ['orders.user_id' => $this->userId] : [];
-
             // 查询订单并加锁 不查询产品 避免锁定产品
             $order = Order::with(['user', 'latestCert'])
                 ->whereHas('user')
                 ->whereHas('latestCert')
-                ->where($whereUser)
                 ->lock()
                 ->find($order_id);
 
@@ -841,10 +832,10 @@ trait ActionTrait
             // 获取交易信息 订单金额为负数
             $transaction = OrderUtil::getOrderTransaction($order->toArray());
 
-            // 会员提交时验证余额是否足够
+            // 管理员支付跳过余额检测，允许欠费支付
             $balance_after = bcadd((string) $order->user->balance, (string) $transaction['amount'], 2);
             if (bccomp($balance_after, (string) $order->user->credit_limit, 2) === -1) {
-                $this->userId && $this->error('余额不足');
+                Auth::guard('admin')->check() || $this->error('余额不足');
             }
 
             // 创建交易记录并扣费
@@ -891,20 +882,23 @@ trait ActionTrait
     }
 
     /**
-     * 获取证书有效期
+     * 计算订单周期结束时间
+     *
+     * >= 12 个月：每年固定 365 天，仅 12 个月且 plus 时额外 +30 天
+     * < 12 个月：每月固定 30 天
      */
-    protected function addMonths(int $timestamp, int $months): int
+    protected function calculatePeriodTill(int $timestamp, int $months, int $plus): int
     {
-        $date = new DateTime;
-        $date->setTimestamp($timestamp);
-        try {
-            $date->modify("+$months months");
-        } catch (Exception $e) {
-            app(ApiExceptions::class)->logException($e);
-            $this->error('证书有效期计算失败');
+        if ($months >= 12) {
+            $days = (int) ($months / 12) * 365;
+            if ($months === 12 && $plus) {
+                $days += 30;
+            }
+        } else {
+            $days = $months * 30;
         }
 
-        return $date->getTimestamp() - 1;
+        return $timestamp + $days * 86400 - 1;
     }
 
     /**
@@ -1047,11 +1041,6 @@ trait ActionTrait
                 // 标记证书为 cancelled，保留 order 和 cert
                 $cert->update(['status' => 'cancelled']);
             } else {
-                // ACME 订单取消：由 BillingService 清理特有数据
-                if ($cert->channel === 'acme' && empty($cert->api_id)) {
-                    app(\App\Services\Acme\BillingService::class)->cancelOrder($order);
-                }
-
                 // 获取交易信息
                 $transaction = OrderUtil::getCancelTransaction($order->toArray());
 

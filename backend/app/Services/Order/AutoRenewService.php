@@ -24,7 +24,6 @@ class AutoRenewService
      * 条件：
      * - auto_renew = true（订单级或用户级）
      * - 产品 status=1 且 renew=1
-     * - 证书 channel != 'acme'
      * - period_till - expires_at < 7天（订单周期与证书到期接近）
      */
     public function willAutoRenewExecute(Order $order, User $user): bool
@@ -41,14 +40,9 @@ class AutoRenewService
             return false;
         }
 
-        // 检查证书 channel 不是 acme
-        $cert = $order->latestCert;
-        if ($cert->channel === 'acme') {
-            return false;
-        }
-
         // 检查订单周期与证书到期时间相差小于7天
         // period_till - expires_at < 7 时执行续费
+        $cert = $order->latestCert;
         $periodTill = $order->period_till;
         $expiresAt = $cert->expires_at;
         if ($periodTill && $expiresAt) {
@@ -68,7 +62,6 @@ class AutoRenewService
      * 条件：
      * - auto_reissue = true（订单级或用户级）
      * - 产品 status=1
-     * - 证书 channel != 'acme'
      * - period_till - expires_at > 7天（订单周期还有余量）
      */
     public function willAutoReissueExecute(Order $order, User $user): bool
@@ -85,14 +78,9 @@ class AutoRenewService
             return false;
         }
 
-        // 检查证书 channel 不是 acme
-        $cert = $order->latestCert;
-        if ($cert->channel === 'acme') {
-            return false;
-        }
-
         // 检查订单周期与证书到期时间相差大于7天
         // period_till - expires_at > 7 时执行重签
+        $cert = $order->latestCert;
         $periodTill = $order->period_till;
         $expiresAt = $cert->expires_at;
         if ($periodTill && $expiresAt) {
@@ -112,12 +100,11 @@ class AutoRenewService
      * @param  int  $userId  用户ID
      * @param  string  $domains  域名列表（逗号分隔）
      * @param  string  $ca  CA名称
-     * @param  string  $channel  渠道（acme 时统一使用 _acme-challenge）
      * @return bool 是否所有域名都有有效委托
      */
-    public function checkDelegationValidity(int $userId, string $domains, string $ca, string $channel = ''): bool
+    public function checkDelegationValidity(int $userId, string $domains, string $ca): bool
     {
-        $prefix = CnameDelegationService::getDelegationPrefixForCa($ca, $channel);
+        $prefix = CnameDelegationService::getDelegationPrefixForCa($ca);
         $domainList = explode(',', trim($domains, ','));
 
         foreach ($domainList as $domain) {

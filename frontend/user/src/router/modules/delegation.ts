@@ -5,7 +5,7 @@ export default {
   meta: {
     icon: "ri:flip-vertical-fill",
     title: "域名委托",
-    rank: 3.1
+    rank: 3.6
   },
   children: [
     {

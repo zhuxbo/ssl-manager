@@ -15,6 +15,7 @@ class AutoRenewCommand extends Command
 {
     protected $signature = 'schedule:auto-renew';
 
+    // 注意：不处理 ACME 订单。ACME 续签由客户端（certbot）主动发起，服务端不主动续费/重签
     protected $description = '自动续费/重签即将到期的证书';
 
     /**
@@ -59,8 +60,9 @@ class AutoRenewCommand extends Command
                 $query->where('status', 'active')
                     ->where('expires_at', '>', now()->subDays(15))
                     ->where('expires_at', '<', now()->addDays(14))
+                    // API 订单由下游系统自行处理续费/重签
                     ->where(function ($q) {
-                        $q->whereNull('channel')->orWhereNotIn('channel', ['acme', 'api']);
+                        $q->whereNull('channel')->orWhere('channel', '!=', 'api');
                     });
             })
             // 订单级 auto_renew=true，或订单未设置时回落到用户设置
@@ -96,8 +98,9 @@ class AutoRenewCommand extends Command
                 $query->where('status', 'active')
                     ->where('expires_at', '>', now()->subDays(15))
                     ->where('expires_at', '<', now()->addDays(14))
+                    // API 订单由下游系统自行处理续费/重签
                     ->where(function ($q) {
-                        $q->whereNull('channel')->orWhereNotIn('channel', ['acme', 'api']);
+                        $q->whereNull('channel')->orWhere('channel', '!=', 'api');
                     });
             })
             // 订单级 auto_reissue=true，或订单未设置时回落到用户设置
@@ -141,8 +144,7 @@ class AutoRenewCommand extends Command
 
         // 检查委托有效性，无有效委托则跳过
         $ca = strtolower($product->ca ?? '');
-        $channel = $cert->channel ?? '';
-        if (! $this->checkDelegationValidity($user->id, $cert->alternative_names, $ca, $channel)) {
+        if (! $this->checkDelegationValidity($user->id, $cert->alternative_names, $ca)) {
             $this->warn("订单 #{$order->id} 跳过：无有效委托记录");
 
             return;
@@ -172,7 +174,7 @@ class AutoRenewCommand extends Command
         ];
 
         // 执行续费或重签
-        $actionService = app(Action::class, ['userId' => $user->id]);
+        $actionService = app(Action::class);
 
         try {
             if ($action === 'renew') {
@@ -184,7 +186,7 @@ class AutoRenewCommand extends Command
             $this->info("订单 #{$order->id} {$action} 成功");
 
             // 自动支付并提交
-            $this->autoPayAndCommit($order->id, $user->id);
+            $this->autoPayAndCommit($order->id);
         } catch (ApiResponseException $e) {
             $result = $e->getApiResponse();
 
@@ -192,7 +194,7 @@ class AutoRenewCommand extends Command
             if (isset($result['data']['order_id'])) {
                 $newOrderId = $result['data']['order_id'];
                 $this->info("订单 #{$order->id} 续费创建新订单 #{$newOrderId}");
-                $this->autoPayAndCommit($newOrderId, $user->id);
+                $this->autoPayAndCommit($newOrderId);
             } else {
                 throw new \Exception($result['msg'] ?? '操作失败');
             }
@@ -202,9 +204,9 @@ class AutoRenewCommand extends Command
     /**
      * 自动支付并提交
      */
-    private function autoPayAndCommit(int $orderId, int $userId): void
+    private function autoPayAndCommit(int $orderId): void
     {
-        $actionService = app(Action::class, ['userId' => $userId]);
+        $actionService = app(Action::class);
 
         try {
             // 支付订单
@@ -251,8 +253,8 @@ class AutoRenewCommand extends Command
     /**
      * 检查所有域名是否都有有效委托记录（即时验证）
      */
-    private function checkDelegationValidity(int $userId, string $domains, string $ca, string $channel = ''): bool
+    private function checkDelegationValidity(int $userId, string $domains, string $ca): bool
     {
-        return app(AutoRenewService::class)->checkDelegationValidity($userId, $domains, $ca, $channel);
+        return app(AutoRenewService::class)->checkDelegationValidity($userId, $domains, $ca);
     }
 }

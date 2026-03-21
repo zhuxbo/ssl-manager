@@ -41,5 +41,5 @@
     "https://dns-tools-us.cnssl.com"
   ],
   "Beian": "豫ICP备123456789号",
-  "AcmeIssueMode": false
+  "Acme": true
 }

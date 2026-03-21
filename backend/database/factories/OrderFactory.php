@@ -84,17 +84,6 @@ class OrderFactory extends Factory
     }
 
     /**
-     * ACME 订单
-     */
-    public function acme(): static
-    {
-        return $this->state([
-            'eab_kid' => fake()->uuid(),
-            'eab_hmac' => fake()->sha256(),
-        ]);
-    }
-
-    /**
      * 设置自动续费
      */
     public function autoRenew(bool $enabled = true): static

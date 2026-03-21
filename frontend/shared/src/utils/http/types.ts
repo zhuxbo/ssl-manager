@@ -20,8 +20,10 @@ export interface PureHttpRequestConfig extends AxiosRequestConfig {
   beforeResponseCallback?: (response: PureHttpResponse) => void;
 }
 
-export interface PureHttpResponse<T = any, D = any>
-  extends AxiosResponse<T, D> {
+export interface PureHttpResponse<T = any, D = any> extends AxiosResponse<
+  T,
+  D
+> {
   config: InternalAxiosRequestConfig<D> & PureHttpRequestConfig;
 }
 

@@ -35,4 +35,3 @@ test('EasyController sourceLevel 未配置或为空时默认 platinum', function
     expect($controller->exposeResolveLevelFromSource('unknown', []))->toBe('platinum');
     expect($controller->exposeResolveLevelFromSource('taobao', ['taobao' => '']))->toBe('platinum');
 });
-

@@ -23,9 +23,6 @@ class RouteServiceProvider extends ServiceProvider
             });
 
             Route::middleware('global')->group($routePath.'/callback.php');
-
-            // ACME RFC 8555 路由
-            Route::middleware('global')->group($routePath.'/acme.php');
         });
     }
 }

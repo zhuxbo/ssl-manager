@@ -53,6 +53,12 @@ export const useProductStore = (onSearch: () => void, sourcesList: any) => {
   // 判断是否为 SMIME 产品
   const isSMIME = computed(() => storeValues.value.product_type === "smime");
 
+  // 判断是否为 ACME 产品
+  const isACME = computed(() => storeValues.value.product_type === "acme");
+
+  // 需要域名数量配置的产品类型（SSL 和 ACME）
+  const needsDomainConfig = computed(() => isSSL.value || isACME.value);
+
   // SMIME 产品 code 必须包含的类型标记
   const SMIME_CODE_TYPES = ["mailbox", "individual", "sponsor", "organization"];
 
@@ -279,7 +285,7 @@ export const useProductStore = (onSearch: () => void, sourcesList: any) => {
         precision: 0,
         controlsPosition: "right"
       },
-      hideInForm: !isSSL.value
+      hideInForm: !needsDomainConfig.value
     },
     {
       label: "标准域名最大个数",
@@ -291,7 +297,7 @@ export const useProductStore = (onSearch: () => void, sourcesList: any) => {
         precision: 0,
         controlsPosition: "right"
       },
-      hideInForm: !isSSL.value
+      hideInForm: !needsDomainConfig.value
     },
     {
       label: "通配符起始个数",
@@ -303,7 +309,7 @@ export const useProductStore = (onSearch: () => void, sourcesList: any) => {
         precision: 0,
         controlsPosition: "right"
       },
-      hideInForm: !isSSL.value
+      hideInForm: !needsDomainConfig.value
     },
     {
       label: "通配符最大个数",
@@ -315,7 +321,7 @@ export const useProductStore = (onSearch: () => void, sourcesList: any) => {
         precision: 0,
         controlsPosition: "right"
       },
-      hideInForm: !isSSL.value
+      hideInForm: !needsDomainConfig.value
     },
     {
       label: "总域名起始个数",
@@ -327,7 +333,7 @@ export const useProductStore = (onSearch: () => void, sourcesList: any) => {
         precision: 0,
         controlsPosition: "right"
       },
-      hideInForm: !isSSL.value
+      hideInForm: !needsDomainConfig.value
     },
     {
       label: "总域名最大个数",
@@ -339,7 +345,7 @@ export const useProductStore = (onSearch: () => void, sourcesList: any) => {
         precision: 0,
         controlsPosition: "right"
       },
-      hideInForm: !isSSL.value
+      hideInForm: !needsDomainConfig.value
     },
     {
       label: "添加SAN",
@@ -360,7 +366,7 @@ export const useProductStore = (onSearch: () => void, sourcesList: any) => {
       prop: "reissue",
       valueType: "switch",
       fieldProps: switchOptions,
-      hideInForm: isCodeSign.value || isDocSign.value // CodeSign 和 DocSign 不支持重签
+      hideInForm: isCodeSign.value || isDocSign.value || isACME.value // CodeSign、DocSign、ACME 不支持重签
     },
     {
       label: "续期",
@@ -380,13 +386,6 @@ export const useProductStore = (onSearch: () => void, sourcesList: any) => {
       valueType: "switch",
       fieldProps: switchOptions,
       hideInForm: !isSSL.value
-    },
-    {
-      label: "ACME支持",
-      prop: "support_acme",
-      valueType: "switch",
-      fieldProps: switchOptions,
-      tooltip: "开启后该产品支持 ACME 协议签发"
     },
     {
       label: "退款期限",
@@ -485,21 +484,8 @@ export const useProductStore = (onSearch: () => void, sourcesList: any) => {
       { required: true, message: "请选择签名摘要算法" }
     ];
 
-    // SSL 产品特有的验证规则
-    if (isSSL.value) {
-      baseRules.common_name_types = [
-        { required: true, message: "请选择通用名称类型" }
-      ];
-      baseRules.warranty_currency = [
-        { required: true, message: "请选择保险币种" }
-      ];
-      baseRules.warranty = [
-        { required: true, message: "请输入保险金额" },
-        { type: "number", min: 0, message: "保险金额不能小于0" }
-      ];
-      baseRules.validation_methods = [
-        { required: true, message: "请选择验证方法" }
-      ];
+    // SSL 和 ACME 产品共用的域名数量验证规则
+    if (needsDomainConfig.value) {
       baseRules.standard_min = [
         { required: true, message: "请输入标准域名起始个数" }
       ];
@@ -517,6 +503,23 @@ export const useProductStore = (onSearch: () => void, sourcesList: any) => {
       ];
       baseRules.total_max = [
         { required: true, message: "请输入总域名最大个数" }
+      ];
+    }
+
+    // SSL 产品特有的验证规则
+    if (isSSL.value) {
+      baseRules.common_name_types = [
+        { required: true, message: "请选择通用名称类型" }
+      ];
+      baseRules.warranty_currency = [
+        { required: true, message: "请选择保险币种" }
+      ];
+      baseRules.warranty = [
+        { required: true, message: "请输入保险金额" },
+        { type: "number", min: 0, message: "保险金额不能小于0" }
+      ];
+      baseRules.validation_methods = [
+        { required: true, message: "请选择验证方法" }
       ];
     }
 
@@ -557,27 +560,30 @@ export const useProductStore = (onSearch: () => void, sourcesList: any) => {
 
     // 非 SSL 产品，清除不适用字段
     if (filtered.product_type && filtered.product_type !== "ssl") {
-      // 清除 SSL 专用字段
+      // 清除 SSL 专用字段（非域名数量相关）
       filtered.common_name_types = [];
       filtered.alternative_name_types = [];
       filtered.validation_methods = [];
-      filtered.standard_min = 0;
-      filtered.standard_max = 0;
-      filtered.wildcard_min = 0;
-      filtered.wildcard_max = 0;
-      filtered.total_min = 1;
-      filtered.total_max = 1;
       filtered.add_san = 0;
       filtered.replace_san = 0;
       filtered.gift_root_domain = 0;
       filtered.server = 0;
-      // 保险字段
       filtered.warranty_currency = "$";
       filtered.warranty = 0;
+
+      // ACME 产品保留域名数量字段，其他非 SSL 产品清零
+      if (filtered.product_type !== "acme") {
+        filtered.standard_min = 0;
+        filtered.standard_max = 0;
+        filtered.wildcard_min = 0;
+        filtered.wildcard_max = 0;
+        filtered.total_min = 0;
+        filtered.total_max = 0;
+      }
     }
 
-    // 代码签名产品，只设置重签默认值（CodeSign 不支持重签）
-    if (filtered.product_type === "codesign") {
+    // CodeSign、DocSign、ACME 不支持重签
+    if (["codesign", "docsign", "acme"].includes(filtered.product_type ?? "")) {
       filtered.reissue = 0;
     }
 

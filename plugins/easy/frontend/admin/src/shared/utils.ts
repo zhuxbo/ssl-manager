@@ -79,7 +79,7 @@ export const getPickerShortcuts = (): Array<{
 /** 将日期范围转换为 ISO 格式 */
 export function convertDateRangeToISO(
   dates: [Date | string | null, Date | string | null]
-): [string, string] {
+): [string | null, string | null] {
   if (!dates[0] || !dates[1]) return [null, null];
 
   return [
@@ -118,42 +118,3 @@ export function useDrawerSize() {
 
   return { drawerSize };
 }
-
-/** 用户名渲染器 */
-import { h } from "vue";
-
-export const showUserInfoCard = ref(false);
-export const selectedUserId = ref<number | null>(null);
-
-export const createUsernameRenderer = (userField = "username") => {
-  return (data: any) => {
-    const { row } = data;
-
-    const handleClick = (e: Event) => {
-      e.stopPropagation();
-      let userObject = row;
-      if (userField.includes(".")) {
-        const pathParts = userField.split(".");
-        if (pathParts[0] === "user" && row.user) {
-          userObject = row.user;
-        }
-      }
-      const userId =
-        userObject.id || userObject.user_id || userObject.user?.id;
-      if (userId) {
-        selectedUserId.value = userId;
-        showUserInfoCard.value = true;
-      }
-    };
-
-    const displayValue = userField.includes(".")
-      ? userField.split(".").reduce((obj: any, key: string) => obj?.[key], row)
-      : row[userField];
-
-    return h(
-      "span",
-      { class: "cursor-pointer", onClick: handleClick },
-      displayValue
-    );
-  };
-};

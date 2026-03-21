@@ -45,7 +45,7 @@ class UpdateRequest extends BaseProductRequest
             'source' => 'string|max:20',
             'brand' => 'string|max:50',
             'ca' => 'string|max:200',
-            'product_type' => 'string|in:ssl,codesign,smime,docsign',
+            'product_type' => 'string|in:ssl,codesign,smime,docsign,acme',
             'warranty_currency' => 'string|max:10',
             'warranty' => 'numeric|min:0',
             'server' => 'integer|min:0',
@@ -66,15 +66,14 @@ class UpdateRequest extends BaseProductRequest
             'standard_max' => 'integer|min:0',
             'wildcard_min' => 'integer|min:0',
             'wildcard_max' => 'integer|min:0',
-            'total_min' => 'integer|min:1',
-            'total_max' => 'integer|min:1',
+            'total_min' => 'integer|min:0',
+            'total_max' => 'integer|min:0',
             'add_san' => 'boolean',
             'replace_san' => 'boolean',
             'reissue' => 'boolean',
             'renew' => 'boolean',
             'reuse_csr' => 'boolean',
             'gift_root_domain' => 'boolean',
-            'support_acme' => 'boolean',
             'refund_period' => 'integer|min:0',
             'remark' => 'nullable|string|max:255',
             'weight' => 'integer|min:0',
@@ -93,8 +92,11 @@ class UpdateRequest extends BaseProductRequest
             return $data;
         }
 
-        // 非 SSL 产品，设置默认值并清除不适用字段
-        if (! $this->isSSL()) {
+        // ACME 产品：保留域名数量字段，清除 SSL 专用字段
+        if ($this->isAcme()) {
+            $this->setAcmeDefaults($data);
+        } elseif (! $this->isSSL()) {
+            // 其他非 SSL 产品，清除所有域名相关字段
             $this->setNonSSLDefaults($data);
         }
 
@@ -129,7 +131,7 @@ class UpdateRequest extends BaseProductRequest
             $hasDomainFields = isset($data['standard_max']) || isset($data['wildcard_max'])
                 || isset($data['standard_min']) || isset($data['wildcard_min'])
                 || isset($data['total_min']) || isset($data['total_max']);
-            if (! $this->skipSslDomainValidation && $hasDomainFields && $this->isSSL()) {
+            if (! $this->skipSslDomainValidation && $hasDomainFields && $this->needsDomainConfig()) {
                 $this->validateSSLProductDomains($validator, $data);
             }
         });

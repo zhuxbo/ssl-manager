@@ -1,5 +1,4 @@
-import { ref } from "vue";
-import { useRouter } from "vue-router";
+import { ref, getCurrentInstance } from "vue";
 import dayjs from "dayjs";
 import {
   payMethodOptions,
@@ -7,12 +6,12 @@ import {
   rechargedOptions,
   rechargedMap
 } from "./dictionary";
-import { createUsernameRenderer } from "../../shared/utils";
-
 export const useAgisoTable = () => {
   const tableRef = ref();
   const selectedIds = ref<number[]>([]);
-  const router = useRouter();
+  // IIFE 插件不能用 useRouter()（Symbol 注入不匹配），通过实例获取
+  const instance = getCurrentInstance();
+  const router = instance?.appContext.config.globalProperties.$router as any;
 
   const handleSelectionChange = (val: any) => {
     selectedIds.value = val.map((row: any) => row.id);
@@ -59,7 +58,19 @@ export const useAgisoTable = () => {
       label: "用户名",
       prop: "user.username",
       minWidth: 120,
-      cellRenderer: createUsernameRenderer("user.username")
+      cellRenderer: ({ row }: any) => {
+        const username = row?.user?.username;
+        const handleClick = () => {
+          if (username) {
+            router.push({ path: "/user", query: { username } });
+          }
+        };
+        return (
+          <span class="cursor-pointer" onClick={handleClick}>
+            {username}
+          </span>
+        );
+      }
     },
     {
       label: "订单ID",

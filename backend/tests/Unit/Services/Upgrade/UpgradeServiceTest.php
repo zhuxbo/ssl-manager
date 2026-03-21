@@ -208,7 +208,6 @@ test('find composer command', function () {
 
     $reflection = new \ReflectionClass($service);
     $method = $reflection->getMethod('findComposerCommand');
-    $method->setAccessible(true);
 
     $result = $method->invoke($service);
 
@@ -221,7 +220,6 @@ test('check network access method', function () {
 
     $reflection = new \ReflectionClass($service);
     $method = $reflection->getMethod('checkNetworkAccess');
-    $method->setAccessible(true);
 
     // 测试本地地址
     $result = $method->invoke($service, 'http://localhost', 1);

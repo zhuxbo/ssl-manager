@@ -43,7 +43,6 @@ abstract class AbstractModel
         $memberList = $ref->getProperties();
         foreach ($memberList as $x => $member) {
             $name = ucfirst($member->getName());
-            $member->setAccessible(true);
             $value = $member->getValue($obj);
             if ($value === null) {
                 continue;

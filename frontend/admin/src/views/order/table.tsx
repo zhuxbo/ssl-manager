@@ -13,9 +13,16 @@ import {
 import { periodLabels } from "@/views/system/dictionary";
 import { createUsernameRenderer } from "@/views/system/username";
 
+const expiryColor = (date: string | null) => {
+  if (!date) return "";
+  const diff = dayjs(date).diff(dayjs(), "day");
+  if (diff < 0) return "color: var(--el-color-danger)";
+  if (diff < 15) return "color: var(--el-color-warning)";
+  return "";
+};
+
 // 获取委托验证前缀
-const getDelegationPrefix = (ca?: string, channel?: string) => {
-  if (channel === "acme") return "_acme-challenge";
+const getDelegationPrefix = (ca?: string) => {
   const caLower = (ca || "").toLowerCase();
   switch (caLower) {
     case "sectigo":
@@ -58,10 +65,7 @@ export function useOrderTable() {
 
     // 委托验证
     if (dcv?.is_delegate) {
-      const prefix = getDelegationPrefix(
-        dcv.ca || row.product?.ca,
-        cert.channel
-      );
+      const prefix = getDelegationPrefix(dcv.ca || row.product?.ca);
       const validation = cert.validation || [];
       // 按 delegation_id 去重
       const seen = new Map();
@@ -115,15 +119,11 @@ export function useOrderTable() {
       cellRenderer: createUsernameRenderer("user.username")
     },
     {
-      label: "产品",
-      prop: "product.name",
-      minWidth: 150
-    },
-    {
       label: "通用名称",
       prop: "latest_cert.common_name",
-      minWidth: 150,
+      minWidth: 200,
       cellRenderer: ({ row }) => {
+        const productName = row.product?.name || "-";
         const commonName = row.latest_cert?.common_name;
         const dcv = row.latest_cert?.dcv;
         const shouldShowCopyButton =
@@ -134,84 +134,111 @@ export function useOrderTable() {
           (dcv?.is_delegate ||
             (["cname", "txt"].includes(dcv.method) && dcv?.dns?.value));
         return (
-          <div className="flex items-center gap-1">
-            <span>{commonName || "-"}</span>
-            {shouldShowCopyButton && (
-              <el-button
-                link
-                size="small"
-                onClick={(e: { stopPropagation: () => void }) => {
-                  e.stopPropagation();
-                  copyDnsRecords(row);
-                }}
-                className="!p-0 !m-0 !mt-1 !bg-transparent !border-none !shadow-none align-middle text-gray-500 hover:text-blue-500"
-              >
-                <el-icon size="14">
-                  <DocumentCopy />
-                </el-icon>
-              </el-button>
-            )}
+          <div class="flex flex-col">
+            <div class="flex items-center gap-1">
+              <span>{commonName || "-"}</span>
+              {shouldShowCopyButton && (
+                <el-button
+                  link
+                  size="small"
+                  onClick={(e: { stopPropagation: () => void }) => {
+                    e.stopPropagation();
+                    copyDnsRecords(row);
+                  }}
+                  class="p-0! m-0! bg-transparent! border-none! shadow-none! text-gray-500 hover:text-blue-500"
+                >
+                  <el-icon size="14">
+                    <DocumentCopy />
+                  </el-icon>
+                </el-button>
+              )}
+            </div>
+            <span class="text-xs text-gray-400">{productName}</span>
           </div>
         );
       }
     },
     {
-      label: "有效期",
+      label: "周期",
       prop: "period",
-      minWidth: 120,
-      formatter: ({ period }) => {
-        return periodLabels[period];
-      }
-    },
-    {
-      label: "金额",
-      prop: "amount",
-      minWidth: 80
+      minWidth: 100,
+      cellRenderer: ({ row }) => (
+        <div class="flex flex-col">
+          <span>{periodLabels[row.period] || "-"}</span>
+          <span class="text-xs text-gray-400">¥{row.amount}</span>
+        </div>
+      )
     },
     {
       label: "渠道",
       prop: "latest_cert.channel",
       minWidth: 80,
-      cellRenderer: ({ row }) => {
-        return (
-          <el-tag type={channelType[row.latest_cert.channel]}>
-            {channel[row.latest_cert.channel]}
-          </el-tag>
-        );
-      }
+      cellRenderer: ({ row }) => (
+        <el-tag type={channelType[row.latest_cert.channel]}>
+          {channel[row.latest_cert.channel]}
+        </el-tag>
+      )
     },
     {
       label: "操作",
       prop: "latest_cert.action",
       minWidth: 80,
-      cellRenderer: ({ row }) => {
-        return (
-          <el-tag type={actionType[row.latest_cert.action]}>
-            {action[row.latest_cert.action]}
-          </el-tag>
-        );
-      }
+      cellRenderer: ({ row }) => (
+        <el-tag type={actionType[row.latest_cert.action]}>
+          {action[row.latest_cert.action]}
+        </el-tag>
+      )
     },
     {
       label: "状态",
       prop: "latest_cert.status",
       minWidth: 80,
+      cellRenderer: ({ row }) => (
+        <el-tag type={statusType[row.latest_cert.status] || "info"}>
+          {status[row.latest_cert.status]}
+        </el-tag>
+      )
+    },
+    {
+      label: "订单周期",
+      prop: "period_till",
+      minWidth: 170,
+      sortable: "custom",
       cellRenderer: ({ row }) => {
+        const from = row.period_from
+          ? dayjs(row.period_from).format("YYYY-MM-DD HH:mm:ss")
+          : row.created_at
+            ? dayjs(row.created_at).format("YYYY-MM-DD HH:mm:ss")
+            : "-";
+        const till = row.period_till
+          ? dayjs(row.period_till).format("YYYY-MM-DD HH:mm:ss")
+          : "-";
         return (
-          <el-tag type={statusType[row.latest_cert.status] || "info"}>
-            {status[row.latest_cert.status]}
-          </el-tag>
+          <div class="flex flex-col">
+            <span style={expiryColor(row.period_till)}>{till}</span>
+            <span class="text-xs text-gray-400">{from}</span>
+          </div>
         );
       }
     },
     {
-      label: "创建时间",
-      prop: "created_at",
-      width: 170,
-      formatter: ({ created_at }) => {
-        return created_at
-          ? dayjs(created_at).format("YYYY-MM-DD HH:mm:ss")
+      label: "证书周期",
+      prop: "expires_at",
+      minWidth: 170,
+      sortable: "custom",
+      cellRenderer: ({ row }) => {
+        const issued = row.latest_cert?.issued_at
+          ? dayjs(row.latest_cert.issued_at).format("YYYY-MM-DD HH:mm:ss")
           : "-";
+        const expires = row.latest_cert?.expires_at
+          ? dayjs(row.latest_cert.expires_at).format("YYYY-MM-DD HH:mm:ss")
+          : "-";
+        return (
+          <div class="flex flex-col">
+            <span style={expiryColor(row.latest_cert?.expires_at)}>{expires}</span>
+            <span class="text-xs text-gray-400">{issued}</span>
+          </div>
+        );
       }
     },
     {

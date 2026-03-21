@@ -63,6 +63,7 @@ window.API = (function () {
   async function verifyDCV(validation) {
     const endpoints = Config.getDCVEndpoints();
     let lastError = null;
+    let hasResponse = false;
 
     // 准备请求数据
     const requestData = {
@@ -97,6 +98,7 @@ window.API = (function () {
         });
 
         if (response.ok) {
+          hasResponse = true;
           const data = await response.json();
 
           // code=1: API 处理成功，有验证结果
@@ -122,6 +124,9 @@ window.API = (function () {
     }
 
     // 所有端点都失败
+    if (hasResponse) {
+      throw new Error("未获取到验证结果");
+    }
     throw lastError || new Error("验证服务不可用");
   }
 
@@ -140,12 +145,16 @@ window.API = (function () {
         });
         if (response.ok) {
           const data = await response.json();
-          if (data.data?.results) {
-            const result = data.data.results[domain] || {};
+          // code=1 时数据在 data.results，code=0 时在 errors 数组
+          let result = data.data?.results?.[domain];
+          if (!result && data.errors?.length) {
+            result = data.errors.find(e => e.domain === domain);
+          }
+          if (result) {
             return {
               detected_value: result.value || "",
               checked: result.matched === "true",
-              error: result.matched === "false" ? "CNAME 记录不匹配" : ""
+              error: result.matched === "false" ? "验证未通过" : ""
             };
           }
           if (data.msg)

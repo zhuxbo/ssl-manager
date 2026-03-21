@@ -1,118 +1,302 @@
 <?php
 
+use App\Exceptions\ApiResponseException;
+use App\Models\Acme;
 use App\Models\Admin;
-use App\Models\Order;
 use App\Models\Product;
+use App\Models\ProductPrice;
+use App\Models\Setting;
+use App\Models\SettingGroup;
 use App\Models\User;
-use App\Services\Acme\BillingService;
+use App\Services\Acme\Action;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 
 uses(Tests\Traits\ActsAsAdmin::class);
-uses(Tests\Traits\MocksExternalApis::class);
 uses(RefreshDatabase::class);
 
 beforeEach(function () {
     $this->admin = Admin::factory()->create();
-    $this->user = User::factory()->create();
-    $this->product = Product::factory()->create(['support_acme' => 1]);
 });
 
-test('管理员可以创建ACME订阅订单', function () {
-    $mock = Mockery::mock(BillingService::class);
-    $mock->shouldReceive('createSubscription')
-        ->once()
-        ->andReturn(['code' => 1, 'order_id' => 1]);
-    $this->app->instance(BillingService::class, $mock);
+/**
+ * 创建 Gateway 系统设置
+ */
+function setupAdminGatewaySettings(string $url = 'https://fake-gateway.test/api/v2', string $token = 'fake-key'): void
+{
+    $group = SettingGroup::firstOrCreate(['name' => 'ca'], ['title' => '证书接口', 'weight' => 2]);
 
-    $response = $this->actingAsAdmin($this->admin)->postJson('/api/admin/acme/order', [
-        'user_id' => $this->user->id,
-        'product_id' => $this->product->id,
+    foreach (['url' => $url, 'token' => $token, 'acme_url' => null, 'acme_token' => null] as $key => $value) {
+        $setting = Setting::firstOrCreate(
+            ['group_id' => $group->id, 'key' => $key],
+            ['type' => 'string', 'value' => null, 'weight' => 0]
+        );
+        if ($value !== null) {
+            $setting->value = $value;
+            $setting->save();
+        }
+    }
+}
+
+/**
+ * 创建 ACME 产品及价格
+ */
+function createAcmeProduct(array $productOverrides = []): Product
+{
+    return Product::factory()->create(array_merge([
+        'product_type' => Product::TYPE_ACME,
+    ], $productOverrides));
+}
+
+/**
+ * 创建产品价格
+ */
+function createProductPrice(Product $product, User $user, string $price = '100.00'): void
+{
+    ProductPrice::create([
+        'product_id' => $product->id,
+        'level_code' => $user->level_code ?? 'standard',
         'period' => 12,
+        'price' => $price,
+        'alternative_standard_price' => '10.00',
+        'alternative_wildcard_price' => '20.00',
     ]);
+}
+
+/**
+ * 通过 Action 创建 unpaid 的 ACME 订单
+ */
+function createAcmeViaAction(User $user, Product $product, array $overrides = []): Acme
+{
+    $action = app(Action::class);
+
+    $params = array_merge([
+        'user_id' => $user->id,
+        'product_id' => $product->id,
+        'period' => 12,
+        'purchased_standard_count' => 0,
+        'purchased_wildcard_count' => 0,
+    ], $overrides);
+
+    try {
+        $action->new($params);
+        test()->fail('期望抛出 ApiResponseException 但未抛出');
+    } catch (ApiResponseException $e) {
+        $response = $e->getApiResponse();
+        expect($response['code'])->toBe(1);
+
+        return Acme::find($response['data']['order_id']);
+    }
+}
+
+// ==================== index ====================
+
+test('index 返回列表', function () {
+    $acme1 = Acme::factory()->create();
+    $acme2 = Acme::factory()->create();
+
+    $response = $this->actingAsAdmin($this->admin)->getJson('/api/admin/acme/');
 
     $response->assertOk()->assertJson(['code' => 1]);
-    $response->assertJsonPath('data.created', 1);
+    $response->assertJsonStructure(['data' => ['items', 'total', 'pageSize', 'currentPage']]);
+    expect($response->json('data.total'))->toBe(2);
+    expect($response->json('data.items'))->toHaveCount(2);
 });
 
-test('管理员可以批量创建ACME订阅订单', function () {
-    $mock = Mockery::mock(BillingService::class);
-    $mock->shouldReceive('createSubscription')
-        ->times(3)
-        ->andReturn(['code' => 1, 'order_id' => 1]);
-    $this->app->instance(BillingService::class, $mock);
+test('index 按 user_id 过滤', function () {
+    $user1 = User::factory()->create();
+    $user2 = User::factory()->create();
 
-    $response = $this->actingAsAdmin($this->admin)->postJson('/api/admin/acme/order', [
-        'user_id' => $this->user->id,
-        'product_id' => $this->product->id,
-        'period' => 12,
-        'quantity' => 3,
-    ]);
+    Acme::factory()->create(['user_id' => $user1->id]);
+    Acme::factory()->create(['user_id' => $user2->id]);
+
+    $response = $this->actingAsAdmin($this->admin)->getJson("/api/admin/acme/?user_id=$user1->id");
 
     $response->assertOk()->assertJson(['code' => 1]);
-    $response->assertJsonPath('data.created', 3);
+    expect($response->json('data.total'))->toBe(1);
+    expect($response->json('data.items.0.user_id'))->toBe($user1->id);
 });
 
-test('创建ACME订单失败返回错误', function () {
-    $mock = Mockery::mock(BillingService::class);
-    $mock->shouldReceive('createSubscription')
-        ->once()
-        ->andReturn(['code' => 0, 'msg' => '余额不足']);
-    $this->app->instance(BillingService::class, $mock);
+test('index 按 status 过滤', function () {
+    Acme::factory()->active()->create();
+    Acme::factory()->cancelled()->create();
 
-    $response = $this->actingAsAdmin($this->admin)->postJson('/api/admin/acme/order', [
-        'user_id' => $this->user->id,
-        'product_id' => $this->product->id,
-        'period' => 12,
+    $response = $this->actingAsAdmin($this->admin)->getJson('/api/admin/acme/?status=active');
+
+    $response->assertOk()->assertJson(['code' => 1]);
+    expect($response->json('data.total'))->toBe(1);
+    expect($response->json('data.items.0.status'))->toBe('active');
+});
+
+// ==================== show ====================
+
+test('show 返回详情含 eab_hmac', function () {
+    $acme = Acme::factory()->active()->create([
+        'eab_kid' => 'test-kid',
+        'eab_hmac' => 'test-hmac-secret',
     ]);
+
+    $response = $this->actingAsAdmin($this->admin)->getJson("/api/admin/acme/$acme->id");
+
+    $response->assertOk()->assertJson(['code' => 1]);
+    $response->assertJsonPath('data.id', $acme->id);
+    $response->assertJsonPath('data.eab_kid', 'test-kid');
+    // eab_hmac 通过 makeVisible 暴露，应存在于响应中
+    expect($response->json('data.eab_hmac'))->not->toBeNull();
+});
+
+test('show 不存在返回错误', function () {
+    $response = $this->actingAsAdmin($this->admin)->getJson('/api/admin/acme/99999');
 
     $response->assertOk()->assertJson(['code' => 0]);
 });
 
-test('管理员可以获取订单EAB信息', function () {
-    $order = Order::factory()->acme()->create([
-        'user_id' => $this->user->id,
-        'product_id' => $this->product->id,
-    ]);
+// ==================== new ====================
 
-    $response = $this->actingAsAdmin($this->admin)->getJson("/api/admin/acme/eab/$order->id");
+test('new 成功创建订单', function () {
+    $user = User::factory()->create(['balance' => '500.00']);
+    $product = createAcmeProduct();
+    createProductPrice($product, $user);
+
+    $response = $this->actingAsAdmin($this->admin)->postJson('/api/admin/acme/new', [
+        'user_id' => $user->id,
+        'product_id' => $product->id,
+        'period' => 12,
+        'purchased_standard_count' => 1,
+        'purchased_wildcard_count' => 0,
+    ]);
 
     $response->assertOk()->assertJson(['code' => 1]);
-    $response->assertJsonStructure(['data' => [
-        'order_id', 'eab_kid', 'eab_hmac', 'eab_used',
-        'server_url', 'certbot_command', 'acmesh_command',
-    ]]);
+    expect($response->json('data.order_id'))->toBeGreaterThan(0);
+
+    $acme = Acme::find($response->json('data.order_id'));
+    expect($acme)->not->toBeNull();
+    expect($acme->status)->toBe(Acme::STATUS_UNPAID);
+    expect($acme->user_id)->toBe($user->id);
+    expect($acme->product_id)->toBe($product->id);
 });
 
-test('获取不存在的订单EAB信息返回404', function () {
-    $response = $this->actingAsAdmin($this->admin)->getJson('/api/admin/acme/eab/99999');
+// ==================== pay ====================
 
-    $response->assertNotFound();
+test('pay 成功支付', function () {
+    $user = User::factory()->create(['balance' => '500.00']);
+    $product = createAcmeProduct();
+    createProductPrice($product, $user);
+
+    $acme = createAcmeViaAction($user, $product);
+    expect($acme->status)->toBe(Acme::STATUS_UNPAID);
+
+    $response = $this->actingAsAdmin($this->admin)->postJson("/api/admin/acme/pay/$acme->id");
+
+    $response->assertOk()->assertJson(['code' => 1]);
+
+    $acme->refresh();
+    expect($acme->status)->toBe(Acme::STATUS_PENDING);
 });
 
-test('获取无EAB的订单EAB信息返回404', function () {
-    $order = Order::factory()->create([
-        'user_id' => $this->user->id,
-        'product_id' => $this->product->id,
-        'eab_kid' => null,
+// ==================== commit ====================
+
+test('commit 成功提交', function () {
+    $user = User::factory()->create(['balance' => '500.00']);
+    $product = createAcmeProduct(['source' => 'default']);
+    createProductPrice($product, $user);
+
+    $acme = createAcmeViaAction($user, $product);
+
+    // 先支付
+    $action = app(Action::class);
+    try {
+        $action->pay($acme->id);
+    } catch (ApiResponseException) {
+    }
+
+    $acme->refresh();
+    expect($acme->status)->toBe(Acme::STATUS_PENDING);
+
+    // Mock Gateway HTTP
+    setupAdminGatewaySettings();
+    Http::fake([
+        'fake-gateway.test/*' => Http::response([
+            'code' => 1,
+            'data' => [
+                'api_id' => 'gw-123',
+                'vendor_id' => 'v-456',
+                'eab_kid' => 'kid-abc',
+                'eab_hmac' => 'hmac-xyz',
+            ],
+        ]),
     ]);
 
-    $response = $this->actingAsAdmin($this->admin)->getJson("/api/admin/acme/eab/$order->id");
+    $response = $this->actingAsAdmin($this->admin)->postJson("/api/admin/acme/commit/$acme->id");
 
-    $response->assertNotFound();
+    $response->assertOk()->assertJson(['code' => 1]);
+    expect($response->json('data.eab_kid'))->toBe('kid-abc');
+    expect($response->json('data.eab_hmac'))->toBe('hmac-xyz');
+
+    $acme->refresh();
+    expect($acme->status)->toBe(Acme::STATUS_ACTIVE);
+    expect($acme->api_id)->toBe('gw-123');
 });
 
-test('创建ACME订单缺少必要参数返回验证错误', function () {
-    $response = $this->actingAsAdmin($this->admin)->postJson('/api/admin/acme/order', []);
+// ==================== sync ====================
 
-    $response->assertOk()->assertJson(['code' => 0]);
-});
-
-test('未认证用户无法访问ACME管理', function () {
-    $response = $this->postJson('/api/admin/acme/order', [
-        'user_id' => 1,
-        'product_id' => 1,
-        'period' => 12,
+test('sync 成功同步', function () {
+    $product = createAcmeProduct(['source' => 'default']);
+    $acme = Acme::factory()->active()->create([
+        'product_id' => $product->id,
+        'api_id' => 'gw-sync-test',
     ]);
 
-    $response->assertUnauthorized();
+    setupAdminGatewaySettings();
+    Http::fake([
+        'fake-gateway.test/*' => Http::response([
+            'code' => 1,
+            'data' => ['status' => 'expired', 'vendor_id' => 'v-new'],
+        ]),
+    ]);
+
+    $response = $this->actingAsAdmin($this->admin)->postJson("/api/admin/acme/sync/$acme->id");
+
+    $response->assertOk()->assertJson(['code' => 1]);
+
+    $acme->refresh();
+    expect($acme->status)->toBe(Acme::STATUS_EXPIRED);
+    expect($acme->vendor_id)->toBe('v-new');
+});
+
+// ==================== commitCancel ====================
+
+test('commitCancel 成功取消', function () {
+    Queue::fake();
+
+    $product = createAcmeProduct();
+    $acme = Acme::factory()->active()->create([
+        'product_id' => $product->id,
+        'api_id' => 'upstream-123',
+        'amount' => '100.00',
+    ]);
+
+    $response = $this->actingAsAdmin($this->admin)->postJson("/api/admin/acme/commit-cancel/$acme->id");
+
+    $response->assertOk()->assertJson(['code' => 1]);
+
+    $acme->refresh();
+    expect($acme->status)->toBe(Acme::STATUS_CANCELLING);
+    expect($acme->cancelled_at)->not->toBeNull();
+});
+
+// ==================== remark ====================
+
+test('remark 更新 admin_remark', function () {
+    $acme = Acme::factory()->create();
+
+    $response = $this->actingAsAdmin($this->admin)->postJson("/api/admin/acme/remark/$acme->id", [
+        'remark' => '管理员测试备注',
+    ]);
+
+    $response->assertOk()->assertJson(['code' => 1]);
+
+    $acme->refresh();
+    expect($acme->admin_remark)->toBe('管理员测试备注');
 });

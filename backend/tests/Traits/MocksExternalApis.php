@@ -2,7 +2,7 @@
 
 namespace Tests\Traits;
 
-use App\Services\Acme\ApiClient;
+use App\Services\Acme\Api\Api as AcmeApiFactory;
 use App\Services\Delegation\DelegationDnsService;
 use App\Services\Order\Api\default\Sdk;
 use Illuminate\Support\Facades\Mail;
@@ -58,18 +58,18 @@ trait MocksExternalApis
     }
 
     /**
-     * Mock ACME ApiClient（上游 ACME REST API）
+     * Mock ACME 路由器（上游 ACME REST API）
      */
     protected function mockAcmeClient(array $methods = []): MockInterface
     {
-        $mock = Mockery::mock(ApiClient::class);
+        $mock = Mockery::mock(AcmeApiFactory::class);
 
         foreach ($methods as $method => $returnValue) {
             $mock->shouldReceive($method)
                 ->andReturn($returnValue);
         }
 
-        $this->app->instance(ApiClient::class, $mock);
+        $this->app->instance(AcmeApiFactory::class, $mock);
 
         return $mock;
     }
