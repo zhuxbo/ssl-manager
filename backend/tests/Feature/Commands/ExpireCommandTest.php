@@ -76,6 +76,81 @@ test('即将到期的证书发送通知（14天内）', function () {
     $this->artisan('schedule:expire')->assertSuccessful();
 });
 
+test('订单到期但证书未到期时不标记 expired', function () {
+    $user = User::factory()->create();
+    $product = Product::factory()->create();
+    $order = Order::factory()->create([
+        'user_id' => $user->id,
+        'product_id' => $product->id,
+        'period_till' => now()->subDay(),
+    ]);
+
+    $cert = Cert::factory()->create([
+        'order_id' => $order->id,
+        'status' => 'active',
+        'expires_at' => now()->addDays(30),
+    ]);
+
+    $notificationCenter = Mockery::mock(NotificationCenter::class);
+    $notificationCenter->shouldReceive('dispatch')->zeroOrMoreTimes();
+    $this->app->instance(NotificationCenter::class, $notificationCenter);
+
+    $this->artisan('schedule:expire')->assertSuccessful();
+
+    $cert->refresh();
+    expect($cert->status)->toBe('active');
+});
+
+test('订单到期且证书也到期时标记 expired', function () {
+    $user = User::factory()->create();
+    $product = Product::factory()->create();
+    $order = Order::factory()->create([
+        'user_id' => $user->id,
+        'product_id' => $product->id,
+        'period_till' => now()->subDay(),
+    ]);
+
+    $cert = Cert::factory()->create([
+        'order_id' => $order->id,
+        'status' => 'processing',
+        'expires_at' => now()->subDay(),
+    ]);
+
+    $notificationCenter = Mockery::mock(NotificationCenter::class);
+    $notificationCenter->shouldReceive('dispatch')->zeroOrMoreTimes();
+    $this->app->instance(NotificationCenter::class, $notificationCenter);
+
+    $this->artisan('schedule:expire')->assertSuccessful();
+
+    $cert->refresh();
+    expect($cert->status)->toBe('expired');
+});
+
+test('订单到期且证书无到期时间时标记 expired', function () {
+    $user = User::factory()->create();
+    $product = Product::factory()->create();
+    $order = Order::factory()->create([
+        'user_id' => $user->id,
+        'product_id' => $product->id,
+        'period_till' => now()->subDay(),
+    ]);
+
+    $cert = Cert::factory()->create([
+        'order_id' => $order->id,
+        'status' => 'processing',
+        'expires_at' => null,
+    ]);
+
+    $notificationCenter = Mockery::mock(NotificationCenter::class);
+    $notificationCenter->shouldReceive('dispatch')->zeroOrMoreTimes();
+    $this->app->instance(NotificationCenter::class, $notificationCenter);
+
+    $this->artisan('schedule:expire')->assertSuccessful();
+
+    $cert->refresh();
+    expect($cert->status)->toBe('expired');
+});
+
 test('无过期证书时正常退出', function () {
     $notificationCenter = Mockery::mock(NotificationCenter::class);
     $notificationCenter->shouldNotReceive('dispatch');
