@@ -10,6 +10,7 @@ use App\Models\CaLog;
 use App\Models\ErrorLog;
 use App\Models\Fund;
 use App\Models\Order;
+use App\Models\OrderDocument;
 use App\Models\Task;
 use App\Models\UserLog;
 use App\Services\Order\Action;
@@ -102,6 +103,9 @@ class PurgeCommand extends Command
             $this->warn('Dynamic log cleanup failed: '.$e->getMessage());
         }
 
+        // 清理已签发订单的用户上传文档（保留验证报告表单）
+        $this->purgeIssuedOrderDocuments();
+
         // 预同步：距退款期限2-4天的处理中订单，24小时内无同步则创建sync任务
         $preSyncOrders = Order::with(['latestCert'])
             ->join('products', 'orders.product_id', '=', 'products.id')
@@ -170,6 +174,68 @@ class PurgeCommand extends Command
         } else {
             $this->info('No orders to cancel near refund deadline');
         }
+    }
+
+    /**
+     * 清理已签发订单的用户上传文档（文件 + 记录），保留验证报告表单。
+     */
+    private function purgeIssuedOrderDocuments(): void
+    {
+        $documents = OrderDocument::whereHas('order', fn ($query) => $query
+            ->whereHas('latestCert', fn ($q) => $q->whereNotIn('status', ['unpaid', 'pending', 'processing', 'approving', 'cancelling']))
+        )->get();
+
+        $deletedFiles = 0;
+        $cleanedOrderIds = [];
+
+        foreach ($documents as $document) {
+            $fullPath = storage_path("app/$document->file_path");
+            if (file_exists($fullPath)) {
+                unlink($fullPath);
+                $deletedFiles++;
+            }
+            $cleanedOrderIds[$document->order_id] = true;
+        }
+
+        $deletedRecords = $documents->isNotEmpty()
+            ? OrderDocument::whereIn('id', $documents->pluck('id'))->delete()
+            : 0;
+
+        // 清理空的 verification 子目录
+        foreach (array_keys($cleanedOrderIds) as $orderId) {
+            $dir = storage_path("app/verification/$orderId");
+            if (is_dir($dir) && count(scandir($dir)) === 2) {
+                rmdir($dir);
+            }
+        }
+
+        // 清理孤立的 verification 子目录（无对应 order_documents 记录）
+        $orphanDirs = 0;
+        $baseDir = storage_path('app/verification');
+        if (is_dir($baseDir)) {
+            foreach (scandir($baseDir) as $entry) {
+                if ($entry === '.' || $entry === '..') {
+                    continue;
+                }
+                $dir = "$baseDir/$entry";
+                if (! is_dir($dir)) {
+                    continue;
+                }
+                if (OrderDocument::where('order_id', $entry)->exists()) {
+                    continue;
+                }
+                // 递归删除目录及文件
+                foreach (scandir($dir) as $file) {
+                    if ($file !== '.' && $file !== '..') {
+                        unlink("$dir/$file");
+                    }
+                }
+                rmdir($dir);
+                $orphanDirs++;
+            }
+        }
+
+        $this->info("Purged $deletedRecords document records, $deletedFiles files, $orphanDirs orphan dirs");
     }
 
     /**

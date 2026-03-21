@@ -65,6 +65,10 @@
       </el-table-column>
     </el-table>
 
+    <el-alert type="info" :closable="false" show-icon style="margin-top: 8px">
+      本系统不保留文档，证书签发后 24 小时内清理。
+    </el-alert>
+
     <div style="display: flex; gap: 8px; margin-top: 8px">
       <el-button
         v-if="unsubmittedCount > 0"

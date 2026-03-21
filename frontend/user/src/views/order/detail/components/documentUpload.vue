@@ -50,6 +50,10 @@
       </el-table-column>
     </el-table>
 
+    <el-alert type="info" :closable="false" show-icon style="margin-top: 8px">
+      本系统不保留文档，证书签发后 24 小时内清理。
+    </el-alert>
+
     <div style="margin-top: 8px">
       <el-button size="small" type="primary" @click="showUploadDialog = true">
         上传文档
