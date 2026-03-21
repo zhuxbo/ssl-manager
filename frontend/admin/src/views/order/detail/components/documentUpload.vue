@@ -3,7 +3,7 @@
     <!-- 本地文档列表 -->
     <div
       v-if="documents.length > 0"
-      style="font-size: 13px; font-weight: 500; margin: 10px 0 8px"
+      style="margin: 10px 0 8px; font-size: 13px; font-weight: 500"
     >
       本地文档
     </div>
@@ -256,8 +256,8 @@ onMounted(loadDocuments);
 
 .section-header {
   display: flex;
-  align-items: center;
   gap: 10px;
+  align-items: center;
   margin-bottom: 10px;
 }
 

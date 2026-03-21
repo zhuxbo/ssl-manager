@@ -767,10 +767,10 @@ onUnmounted(() => {
 }
 
 .structure-warning-content pre {
-  background: rgba(0, 0, 0, 0.03);
   padding: 8px 12px;
-  border-radius: 4px;
   margin: 0;
+  background: rgb(0 0 0 / 3%);
+  border-radius: 4px;
 }
 
 .structure-warning-content code {

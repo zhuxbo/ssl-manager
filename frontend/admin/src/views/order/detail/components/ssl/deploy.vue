@@ -205,8 +205,8 @@ const copy = (content: string) => {
 }
 
 .step-title {
-  font-weight: 500;
   margin-bottom: 6px;
+  font-weight: 500;
   color: var(--el-text-color-primary);
 }
 
@@ -215,25 +215,25 @@ const copy = (content: string) => {
 }
 
 .command-label {
+  margin-bottom: 2px;
   font-size: 12px;
   color: var(--el-text-color-secondary);
-  margin-bottom: 2px;
 }
 
 .command-line {
   display: flex;
-  align-items: center;
   gap: 8px;
+  align-items: center;
+  padding: 6px 10px;
   background: var(--el-fill-color-light);
   border-radius: 4px;
-  padding: 6px 10px;
 
   code {
     flex: 1;
     font-family: Consolas, Monaco, monospace;
     font-size: 12px;
-    word-break: break-all;
     color: var(--el-text-color-regular);
+    word-break: break-all;
   }
 }
 </style>

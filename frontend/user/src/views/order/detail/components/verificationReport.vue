@@ -323,18 +323,18 @@ onMounted(loadReport);
 }
 
 .form-section-title {
+  padding-bottom: 5px;
+  margin-bottom: 10px;
   font-size: 13px;
   font-weight: 500;
   color: var(--el-text-color-regular);
-  margin-bottom: 10px;
-  padding-bottom: 5px;
   border-bottom: 1px solid var(--el-border-color-lighter);
 }
 
 .date-with-check {
   display: flex;
-  align-items: center;
   gap: 10px;
+  align-items: center;
   width: 100%;
 }
 </style>
