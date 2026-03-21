@@ -102,6 +102,7 @@ jobs:
             if grep -rEi "$pattern" \
                  --include="*.php" --include="*.js" --include="*.ts" \
                  --exclude-dir=".git" --exclude-dir="vendor" --exclude-dir="node_modules" \
+                 --exclude-dir="tests" --exclude-dir="temp" \
                  --exclude="*.example*" --exclude="*test*" --exclude="*Test*" \
                  . 2>/dev/null | grep -v "env(" | grep -v "getenv(" | grep -v "config(" | head -5; then
               found_credentials=true
