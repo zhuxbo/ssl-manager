@@ -303,9 +303,9 @@ onUnmounted(() => {
     <div v-else class="space-y-6">
       <!-- 插件 widget 插槽 -->
       <component
+        :is="w.component"
         v-for="w in dashboardTopWidgets"
         :key="w.name"
-        :is="w.component"
       />
 
       <!-- 欢迎信息 -->
