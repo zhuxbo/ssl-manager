@@ -1,7 +1,7 @@
 {
     "version": "1.0",
     "mysql_version": "8.0.43",
-    "generated_at": "2026-03-20 13:58:24",
+    "generated_at": "2026-03-21 11:42:01",
     "database": {
         "name": "manager",
         "charset": "utf8mb4",
@@ -3566,7 +3566,7 @@
                     "position": 3,
                     "type": "bigint unsigned",
                     "nullable": false,
-                    "default": "0",
+                    "default": null,
                     "extra": "",
                     "comment": "用户ID"
                 },

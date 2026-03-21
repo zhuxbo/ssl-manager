@@ -265,7 +265,7 @@ const prefillFromOrder = (prefill: any) => {
   if (prefill?.contact) {
     const contact = prefill.contact;
     form.value.subscriber.chinese_transcription =
-      `${contact.first_name || ""} ${contact.last_name || ""}`.trim();
+      `${contact.last_name || ""} ${contact.first_name || ""}`.trim();
     if (contact.identification_number) {
       form.value.subscriber.document_number = contact.identification_number;
     }

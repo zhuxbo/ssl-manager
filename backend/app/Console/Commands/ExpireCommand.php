@@ -36,9 +36,14 @@ class ExpireCommand extends Command
      */
     public function handle(): void
     {
-        // 更改所有到期证书的状态
+        // 更改所有到期证书的状态（证书到期）
         Cert::where('status', 'active')
             ->where('expires_at', '<', now())
+            ->update(['status' => 'expired']);
+
+        // 订单到期时，标记 processing/approving/active 的证书为到期
+        Cert::whereIn('status', ['processing', 'approving', 'active'])
+            ->whereHas('order', fn ($q) => $q->where('period_till', '<', now()))
             ->update(['status' => 'expired']);
 
         // 到期通知时间窗口查询条件（第 14/7/3/1 天当天）

@@ -13,6 +13,14 @@ import {
 import { periodLabels } from "@/views/system/dictionary";
 import { createUsernameRenderer } from "@/views/system/username";
 
+const expiryColor = (date: string | null) => {
+  if (!date) return "";
+  const diff = dayjs(date).diff(dayjs(), "day");
+  if (diff < 0) return "color: var(--el-color-danger)";
+  if (diff < 15) return "color: var(--el-color-warning)";
+  return "";
+};
+
 // 获取委托验证前缀
 const getDelegationPrefix = (ca?: string) => {
   const caLower = (ca || "").toLowerCase();
@@ -111,8 +119,8 @@ export function useOrderTable() {
       cellRenderer: createUsernameRenderer("user.username")
     },
     {
-      label: "产品",
-      prop: "product.name",
+      label: "通用名称",
+      prop: "latest_cert.common_name",
       minWidth: 200,
       cellRenderer: ({ row }) => {
         const productName = row.product?.name || "-";
@@ -127,8 +135,7 @@ export function useOrderTable() {
             (["cname", "txt"].includes(dcv.method) && dcv?.dns?.value));
         return (
           <div class="flex flex-col">
-            <span>{productName}</span>
-            <div class="flex items-center gap-1 text-xs text-gray-400">
+            <div class="flex items-center gap-1">
               <span>{commonName || "-"}</span>
               {shouldShowCopyButton && (
                 <el-button
@@ -146,6 +153,7 @@ export function useOrderTable() {
                 </el-button>
               )}
             </div>
+            <span class="text-xs text-gray-400">{productName}</span>
           </div>
         );
       }
@@ -207,7 +215,7 @@ export function useOrderTable() {
           : "-";
         return (
           <div class="flex flex-col">
-            <span>{till}</span>
+            <span style={expiryColor(row.period_till)}>{till}</span>
             <span class="text-xs text-gray-400">{from}</span>
           </div>
         );
@@ -227,7 +235,7 @@ export function useOrderTable() {
           : "-";
         return (
           <div class="flex flex-col">
-            <span>{expires}</span>
+            <span style={expiryColor(row.latest_cert?.expires_at)}>{expires}</span>
             <span class="text-xs text-gray-400">{issued}</span>
           </div>
         );

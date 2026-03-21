@@ -15,7 +15,7 @@ return new class extends Migration
         Schema::create('order_verification_reports', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('order_id')->unique()->comment('订单ID');
-            $table->unsignedBigInteger('user_id')->default(0)->index()->comment('用户ID');
+            $table->unsignedBigInteger('user_id')->index()->comment('用户ID');
             $table->json('report_data')->comment('验证报告表单数据');
             $table->unsignedTinyInteger('submitted')->default(0)->comment('是否已提交到上游');
             $table->timestamps();

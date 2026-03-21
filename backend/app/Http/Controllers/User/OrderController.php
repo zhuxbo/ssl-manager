@@ -39,16 +39,24 @@ class OrderController extends BaseController
         $query = Order::query();
 
         $statusSet = $validated['statusSet'] ?? 'activating';
-        // 活动中的状态
+        // 活动中的状态（含证书到期但订单未到期）
         if ($statusSet === 'activating') {
-            $query->whereHas('latestCert', function ($latestCertQuery) {
-                $latestCertQuery->whereIn('status', ['unpaid', 'pending', 'processing', 'active', 'approving', 'cancelling']);
+            $query->where(function ($q) {
+                $q->whereHas('latestCert', function ($latestCertQuery) {
+                    $latestCertQuery->whereIn('status', ['unpaid', 'pending', 'processing', 'active', 'approving', 'cancelling']);
+                })->orWhere(function ($q) {
+                    $q->whereHas('latestCert', fn ($c) => $c->where('status', 'expired'))
+                        ->where('period_till', '>', now());
+                });
             });
         }
-        // 已存档的状态
+        // 已存档的状态（排除证书到期但订单未到期）
         if ($statusSet === 'archived') {
             $query->whereHas('latestCert', function ($latestCertQuery) {
                 $latestCertQuery->whereIn('status', ['cancelled', 'renewed', 'reissued', 'expired', 'revoked', 'failed']);
+            })->whereNot(function ($q) {
+                $q->whereHas('latestCert', fn ($c) => $c->where('status', 'expired'))
+                    ->where('period_till', '>', now());
             });
         }
 
@@ -131,10 +139,12 @@ class OrderController extends BaseController
                 function ($q) use ($validated) {
                     $sortOrder = $validated['sort_order'] ?? 'desc';
                     if ($validated['sort_prop'] === 'expires_at') {
-                        $q->orderBy(
-                            Cert::select('expires_at')->whereColumn('certs.id', 'orders.latest_cert_id')->limit(1),
-                            $sortOrder
-                        );
+                        $sub = Cert::select('expires_at')->whereColumn('certs.id', 'orders.latest_cert_id')->limit(1);
+                        $q->orderByRaw("({$sub->toRawSql()}) IS NULL")
+                            ->orderBy($sub, $sortOrder);
+                    } elseif ($validated['sort_prop'] === 'period_till') {
+                        $q->orderByRaw('period_till IS NULL')
+                            ->orderBy('period_till', $sortOrder);
                     } else {
                         $q->orderBy($validated['sort_prop'], $sortOrder);
                     }
