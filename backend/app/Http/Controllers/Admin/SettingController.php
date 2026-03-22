@@ -7,6 +7,7 @@ use App\Http\Requests\Setting\StoreRequest;
 use App\Http\Requests\Setting\UpdateRequest;
 use App\Models\Setting;
 use App\Models\SettingGroup;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Config;
 
 class SettingController extends BaseController
@@ -210,6 +211,19 @@ class SettingController extends BaseController
     public function clearCache(): void
     {
         Setting::clearAllCache();
+        $this->success();
+    }
+
+    /**
+     * 清除系统全部缓存
+     */
+    public function clearAllCache(): void
+    {
+        try {
+            Artisan::call('cache:clear-all', ['--quick' => true, '--without-composer' => true]);
+        } catch (\Throwable) {
+            $this->error('缓存清除失败');
+        }
         $this->success();
     }
 }

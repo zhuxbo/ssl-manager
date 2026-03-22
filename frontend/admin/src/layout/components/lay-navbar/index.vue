@@ -1,16 +1,44 @@
 <script setup lang="ts">
+import { ref } from "vue";
 import { useNav } from "@/layout/hooks/useNav";
+import { message } from "@shared/utils";
+import { ElMessageBox } from "element-plus";
+import { clearAllCache } from "@/api/setting";
 import LayNavMix from "../lay-sidebar/NavMix.vue";
 import LaySidebarBreadCrumb from "../lay-sidebar/components/SidebarBreadCrumb.vue";
 import LaySidebarTopCollapse from "../lay-sidebar/components/SidebarTopCollapse.vue";
 
 import HomeFill from "~icons/ri/home-9-fill";
+import DeleteBin2Fill from "~icons/ri/delete-bin-2-fill";
 import UserFill from "~icons/ri/user-fill";
 import LogoutCircleRLine from "~icons/ri/logout-circle-r-line";
 import Setting from "~icons/ri/settings-3-line";
 
 const { layout, device, logout, onPanel, pureApp, username, toggleSideBar } =
   useNav();
+
+const clearingCache = ref(false);
+
+function handleClearCache() {
+  if (clearingCache.value) return;
+  ElMessageBox.confirm("确认清除所有系统缓存？", "确认", {
+    type: "warning",
+    confirmButtonText: "确认清除",
+    cancelButtonText: "取消"
+  }).then(() => {
+    clearingCache.value = true;
+    clearAllCache()
+      .then(() => {
+        message("系统缓存已清除", { type: "success" });
+      })
+      .catch(() => {
+        message("缓存清除失败", { type: "error" });
+      })
+      .finally(() => {
+        clearingCache.value = false;
+      });
+  });
+}
 </script>
 
 <template>
@@ -42,6 +70,16 @@ const { layout, device, logout, onPanel, pureApp, username, toggleSideBar } =
       >
         <IconifyIconOffline :icon="HomeFill" />
       </a>
+      <span
+        class="cache-icon navbar-bg-hover"
+        title="清空系统缓存"
+        @click="handleClearCache"
+      >
+        <IconifyIconOffline
+          :icon="DeleteBin2Fill"
+          :style="{ opacity: clearingCache ? 0.5 : 1 }"
+        />
+      </span>
       <!-- 退出登录 -->
       <el-dropdown trigger="click">
         <span class="el-dropdown-link navbar-bg-hover select-none">
@@ -123,8 +161,20 @@ const { layout, device, logout, onPanel, pureApp, username, toggleSideBar } =
       border-radius: 4px;
     }
 
-    .home-icon:hover {
+    .home-icon:hover,
+    .cache-icon:hover {
       background-color: var(--el-fill-color-light);
+    }
+
+    .cache-icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 48px;
+      padding: 10px;
+      color: var(--el-text-color-regular);
+      cursor: pointer;
+      border-radius: 4px;
     }
   }
 

@@ -175,6 +175,7 @@ Route::prefix('admin')->middleware('api.admin')->group(function () {
         Route::get('config', [SettingController::class, 'getConfig']);
         Route::put('batch-update', [SettingController::class, 'batchUpdate']);
         Route::post('clear-cache', [SettingController::class, 'clearCache']);
+        Route::post('clear-all-cache', [SettingController::class, 'clearAllCache']);
     });
 
     // 日志路由
