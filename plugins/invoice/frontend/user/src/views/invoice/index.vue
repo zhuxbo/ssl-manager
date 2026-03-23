@@ -115,9 +115,8 @@ const statusMap: Record<number, { label: string; type: string }> = {
   2: { label: "已作废", type: "danger" }
 };
 const tableColumns: any[] = [
-  { label: "ID", prop: "id", width: 130 },
-  { label: "金额", prop: "amount", width: 100 },
   { label: "组织", prop: "organization", minWidth: 150 },
+  { label: "金额", prop: "amount", width: 100 },
   { label: "邮箱", prop: "email", minWidth: 150 },
   { label: "备注", prop: "remark", minWidth: 150 },
   {
