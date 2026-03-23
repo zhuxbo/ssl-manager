@@ -13,7 +13,7 @@ test('active 返回激活的公告', function () {
 
     $user = User::factory()->create();
     $response = $this->actingAsUser($user)
-        ->getJson('/api/user/notice/active');
+        ->getJson('/api/notice/active');
 
     $response->assertOk()->assertJson(['code' => 1]);
     expect(count($response->json('data')))->toBe(2);
@@ -26,7 +26,7 @@ test('active 按 sort desc, id desc 排序', function () {
 
     $user = User::factory()->create();
     $response = $this->actingAsUser($user)
-        ->getJson('/api/user/notice/active');
+        ->getJson('/api/notice/active');
 
     $data = $response->json('data');
     expect($data[0]['title'])->toBe('C');
@@ -39,7 +39,7 @@ test('active 只返回 id title content type 字段', function () {
 
     $user = User::factory()->create();
     $response = $this->actingAsUser($user)
-        ->getJson('/api/user/notice/active');
+        ->getJson('/api/notice/active');
 
     $item = $response->json('data.0');
     expect(array_keys($item))->toBe(['id', 'title', 'content', 'type']);
@@ -48,12 +48,12 @@ test('active 只返回 id title content type 字段', function () {
 test('active 无公告时返回空数组', function () {
     $user = User::factory()->create();
     $response = $this->actingAsUser($user)
-        ->getJson('/api/user/notice/active');
+        ->getJson('/api/notice/active');
 
     $response->assertOk();
     expect($response->json('data'))->toBe([]);
 });
 
 test('未认证访问返回 401', function () {
-    $this->getJson('/api/user/notice/active')->assertUnauthorized();
+    $this->getJson('/api/notice/active')->assertUnauthorized();
 });
