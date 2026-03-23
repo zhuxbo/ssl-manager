@@ -162,7 +162,11 @@ const canSync = () => {
 };
 
 const canDeploy = () => {
-  return getSelectedRows().some(row => row.latest_cert?.status === "active");
+  return getSelectedRows().some(
+    row =>
+      row.latest_cert?.status === "active" &&
+      row.product?.product_type === "ssl"
+  );
 };
 
 const canCommitCancel = () => {
@@ -340,14 +344,17 @@ const deploy = (type: string) => {
   props.tableRef.clearSelection();
 
   getSelectedRows().forEach(row => {
-    if (row.latest_cert.status === "active") {
+    if (
+      row.latest_cert.status === "active" &&
+      row.product?.product_type === "ssl"
+    ) {
       filteredIds.push(row.id);
       props.tableRef.toggleRowSelection(row);
     }
   });
 
   if (!filteredIds.length) {
-    message("请至少选择一个已签发证书", { type: "error" });
+    message("请至少选择一个已签发的 SSL 证书", { type: "error" });
     return;
   }
 
