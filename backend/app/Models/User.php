@@ -27,7 +27,6 @@ class User extends BaseModel implements AuthenticatableContract, JWTSubject
         'level_code',
         'custom_level_code',
         'credit_limit',
-        'invoice_limit',
         'last_login_at',
         'last_login_ip',
         'join_ip',
@@ -49,7 +48,6 @@ class User extends BaseModel implements AuthenticatableContract, JWTSubject
     protected $casts = [
         'balance' => 'decimal:2',
         'credit_limit' => 'decimal:2',
-        'invoice_limit' => 'decimal:2',
         'last_login_at' => 'datetime',
         'join_at' => 'datetime',
         'logout_at' => 'datetime',
@@ -178,22 +176,6 @@ class User extends BaseModel implements AuthenticatableContract, JWTSubject
     public function transactions(): HasMany
     {
         return $this->hasMany(Transaction::class);
-    }
-
-    /**
-     * 获取发票
-     */
-    public function invoices(): HasMany
-    {
-        return $this->hasMany(Invoice::class);
-    }
-
-    /**
-     * 获取发票限额
-     */
-    public function invoiceLimits(): HasMany
-    {
-        return $this->hasMany(InvoiceLimit::class);
     }
 
     /**

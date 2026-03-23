@@ -35,7 +35,7 @@ const {
 <template>
   <div class="main">
     <div
-      class="search bg-bg_color w-[99/100] pl-4 pr-4 pt-[24px] pb-[24px] overflow-auto"
+      class="search bg-bg_color w-[99/100] pl-4 pr-4 pt-[24px] pb-[12px] overflow-auto"
     >
       <PlusSearch
         v-model="form"
@@ -117,7 +117,7 @@ const {
   margin: 24px 24px 0 !important;
 }
 
-.search-form :deep(.el-form-item) {
+.search :deep(.el-form-item) {
   margin-bottom: 12px;
 }
 </style>

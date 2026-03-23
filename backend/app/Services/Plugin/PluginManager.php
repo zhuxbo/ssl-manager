@@ -424,7 +424,17 @@ class PluginManager
             return null;
         }
 
-        return rtrim($systemReleaseUrl, '/')."/plugins/$name";
+        // plugins 目录与主系统目录同级，去掉 URL 最后一段路径
+        $url = rtrim($systemReleaseUrl, '/');
+        $parsed = parse_url($url);
+        $path = $parsed['path'] ?? '';
+        $parentPath = substr($path, 0, (int) strrpos($path, '/')) ?: '';
+        $base = ($parsed['scheme'] ?? 'https').'://'.($parsed['host'] ?? '');
+        if (! empty($parsed['port'])) {
+            $base .= ':'.$parsed['port'];
+        }
+
+        return "$base$parentPath/plugins/$name";
     }
 
     /**

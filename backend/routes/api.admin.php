@@ -12,8 +12,6 @@ use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\DelegationController;
 use App\Http\Controllers\Admin\DeployTokenController;
 use App\Http\Controllers\Admin\FundController;
-use App\Http\Controllers\Admin\InvoiceController;
-use App\Http\Controllers\Admin\InvoiceLimitController;
 use App\Http\Controllers\Admin\LogsController;
 use App\Http\Controllers\Admin\NotificationController;
 use App\Http\Controllers\Admin\NotificationTemplateController;
@@ -156,7 +154,6 @@ Route::prefix('admin')->middleware('api.admin')->group(function () {
     });
 
     // 财务管理路由
-    RouteHelper::registerResourceRoutes('invoice', InvoiceController::class);
     RouteHelper::registerResourceRoutes('fund', FundController::class);
     Route::prefix('fund')->group(function () {
         Route::post('reverse/{id}', [FundController::class, 'reverse'])->where('id', '[0-9]+');
@@ -164,7 +161,6 @@ Route::prefix('admin')->middleware('api.admin')->group(function () {
         Route::post('check/{id}', [FundController::class, 'check'])->where('id', '[0-9]+');
     });
     Route::get('transaction', [TransactionController::class, 'index']);
-    Route::get('invoice-limit', [InvoiceLimitController::class, 'index']);
 
     // 设置组和设置项路由
     RouteHelper::registerResourceRoutes('setting-group', SettingGroupController::class);

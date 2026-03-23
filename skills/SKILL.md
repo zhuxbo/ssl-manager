@@ -12,7 +12,7 @@
 | 部署运维 | `deploy-ops.md` | Docker、宝塔、环境配置 |
 | 构建发布 | `build-release.md` | 版本发布、打包、CI/CD |
 | 插件开发 | `plugin-dev.md` | 插件系统、IIFE 打包、安装/更新/卸载 |
-| ACME E2E 测试 | `acme-e2e-test/` | Docker certbot 端到端测试（Manager + Gateway） |
+| ACME E2E 测试 | `acme-e2e-test/` | Docker certbot 端到端测试（Manager + 上游系统） |
 | Source API 接入 | `source-api.md` | 新增上游来源（Order\Api + Acme\Api） |
 
 ## 知识积累

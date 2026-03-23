@@ -1,0 +1,10 @@
+{
+  "name": "invoice",
+  "include": [
+    "plugin.json",
+    "backend/"
+  ],
+  "exclude": [
+    ".gitignore"
+  ]
+}

@@ -9,8 +9,6 @@ use App\Models\CnameDelegation;
 use App\Models\Contact;
 use App\Models\DeployToken;
 use App\Models\Fund;
-use App\Models\Invoice;
-use App\Models\InvoiceLimit;
 use App\Models\Order;
 use App\Models\OrderDocument;
 use App\Models\OrderVerificationReport;
@@ -73,8 +71,6 @@ class ApiAuthenticate
                 Order::class,
                 Fund::class,
                 Transaction::class,
-                Invoice::class,
-                InvoiceLimit::class,
                 Organization::class,
                 Contact::class,
                 OrderDocument::class,

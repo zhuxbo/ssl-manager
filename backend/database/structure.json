@@ -1,7 +1,7 @@
 {
     "version": "1.0",
     "mysql_version": "8.0.43",
-    "generated_at": "2026-03-21 11:42:01",
+    "generated_at": "2026-03-23 12:52:45",
     "database": {
         "name": "manager",
         "charset": "utf8mb4",
@@ -2661,274 +2661,6 @@
                     ]
                 },
                 "funds_user_id_index": {
-                    "unique": false,
-                    "type": "BTREE",
-                    "columns": [
-                        "user_id"
-                    ],
-                    "sub_parts": [
-                        null
-                    ]
-                },
-                "PRIMARY": {
-                    "unique": true,
-                    "type": "BTREE",
-                    "columns": [
-                        "id"
-                    ],
-                    "sub_parts": [
-                        null
-                    ]
-                }
-            },
-            "foreign_keys": []
-        },
-        "invoice_limits": {
-            "engine": "InnoDB",
-            "collation": "utf8mb4_0900_ai_ci",
-            "comment": "",
-            "auto_increment": 1,
-            "columns": {
-                "id": {
-                    "position": 1,
-                    "type": "bigint unsigned",
-                    "nullable": false,
-                    "default": null,
-                    "extra": "auto_increment",
-                    "comment": ""
-                },
-                "user_id": {
-                    "position": 2,
-                    "type": "bigint unsigned",
-                    "nullable": false,
-                    "default": null,
-                    "extra": "",
-                    "comment": "用户ID"
-                },
-                "type": {
-                    "position": 3,
-                    "type": "enum('issue','void','addfunds','refunds')",
-                    "nullable": false,
-                    "default": null,
-                    "extra": "",
-                    "comment": "类型:issue=开票,void=作废,addfunds=充值,refunds=退款"
-                },
-                "limit_id": {
-                    "position": 4,
-                    "type": "bigint unsigned",
-                    "nullable": false,
-                    "default": null,
-                    "extra": "",
-                    "comment": "关联ID（invoice_id 或 fund_id）"
-                },
-                "amount": {
-                    "position": 5,
-                    "type": "decimal(10,2)",
-                    "nullable": false,
-                    "default": "0.00",
-                    "extra": "",
-                    "comment": "金额"
-                },
-                "limit_before": {
-                    "position": 6,
-                    "type": "decimal(10,2)",
-                    "nullable": false,
-                    "default": "0.00",
-                    "extra": "",
-                    "comment": "操作前额度"
-                },
-                "limit_after": {
-                    "position": 7,
-                    "type": "decimal(10,2)",
-                    "nullable": false,
-                    "default": "0.00",
-                    "extra": "",
-                    "comment": "操作后额度"
-                },
-                "created_at": {
-                    "position": 8,
-                    "type": "timestamp",
-                    "nullable": true,
-                    "default": null,
-                    "extra": "",
-                    "comment": "创建时间"
-                }
-            },
-            "indexes": {
-                "invoice_limits_limit_id_index": {
-                    "unique": false,
-                    "type": "BTREE",
-                    "columns": [
-                        "limit_id"
-                    ],
-                    "sub_parts": [
-                        null
-                    ]
-                },
-                "invoice_limits_type_index": {
-                    "unique": false,
-                    "type": "BTREE",
-                    "columns": [
-                        "type"
-                    ],
-                    "sub_parts": [
-                        null
-                    ]
-                },
-                "invoice_limits_type_limit_id_unique": {
-                    "unique": true,
-                    "type": "BTREE",
-                    "columns": [
-                        "type",
-                        "limit_id"
-                    ],
-                    "sub_parts": [
-                        null,
-                        null
-                    ]
-                },
-                "invoice_limits_user_id_index": {
-                    "unique": false,
-                    "type": "BTREE",
-                    "columns": [
-                        "user_id"
-                    ],
-                    "sub_parts": [
-                        null
-                    ]
-                },
-                "PRIMARY": {
-                    "unique": true,
-                    "type": "BTREE",
-                    "columns": [
-                        "id"
-                    ],
-                    "sub_parts": [
-                        null
-                    ]
-                }
-            },
-            "foreign_keys": []
-        },
-        "invoices": {
-            "engine": "InnoDB",
-            "collation": "utf8mb4_0900_ai_ci",
-            "comment": "",
-            "auto_increment": null,
-            "columns": {
-                "id": {
-                    "position": 1,
-                    "type": "bigint unsigned",
-                    "nullable": false,
-                    "default": null,
-                    "extra": "",
-                    "comment": "ID"
-                },
-                "user_id": {
-                    "position": 2,
-                    "type": "bigint unsigned",
-                    "nullable": false,
-                    "default": null,
-                    "extra": "",
-                    "comment": "用户ID"
-                },
-                "amount": {
-                    "position": 3,
-                    "type": "decimal(10,2)",
-                    "nullable": false,
-                    "default": "0.00",
-                    "extra": "",
-                    "comment": "金额"
-                },
-                "organization": {
-                    "position": 4,
-                    "type": "varchar(200)",
-                    "nullable": true,
-                    "default": null,
-                    "extra": "",
-                    "comment": "组织"
-                },
-                "taxation": {
-                    "position": 5,
-                    "type": "varchar(100)",
-                    "nullable": true,
-                    "default": null,
-                    "extra": "",
-                    "comment": "税号"
-                },
-                "remark": {
-                    "position": 6,
-                    "type": "varchar(500)",
-                    "nullable": true,
-                    "default": null,
-                    "extra": "",
-                    "comment": "备注"
-                },
-                "email": {
-                    "position": 7,
-                    "type": "varchar(100)",
-                    "nullable": true,
-                    "default": null,
-                    "extra": "",
-                    "comment": "邮箱"
-                },
-                "status": {
-                    "position": 8,
-                    "type": "tinyint",
-                    "nullable": false,
-                    "default": "0",
-                    "extra": "",
-                    "comment": "状态: 0=处理中, 1=已开票, 2=已作废"
-                },
-                "created_at": {
-                    "position": 9,
-                    "type": "timestamp",
-                    "nullable": true,
-                    "default": null,
-                    "extra": "",
-                    "comment": ""
-                },
-                "updated_at": {
-                    "position": 10,
-                    "type": "timestamp",
-                    "nullable": true,
-                    "default": null,
-                    "extra": "",
-                    "comment": ""
-                }
-            },
-            "indexes": {
-                "invoices_organization_index": {
-                    "unique": false,
-                    "type": "BTREE",
-                    "columns": [
-                        "organization"
-                    ],
-                    "sub_parts": [
-                        null
-                    ]
-                },
-                "invoices_status_index": {
-                    "unique": false,
-                    "type": "BTREE",
-                    "columns": [
-                        "status"
-                    ],
-                    "sub_parts": [
-                        null
-                    ]
-                },
-                "invoices_taxation_index": {
-                    "unique": false,
-                    "type": "BTREE",
-                    "columns": [
-                        "taxation"
-                    ],
-                    "sub_parts": [
-                        null
-                    ]
-                },
-                "invoices_user_id_index": {
                     "unique": false,
                     "type": "BTREE",
                     "columns": [
@@ -5684,16 +5416,8 @@
                     "extra": "",
                     "comment": "信用额度"
                 },
-                "invoice_limit": {
-                    "position": 9,
-                    "type": "decimal(10,2)",
-                    "nullable": false,
-                    "default": "0.00",
-                    "extra": "",
-                    "comment": "发票额度"
-                },
                 "last_login_at": {
-                    "position": 10,
+                    "position": 9,
                     "type": "timestamp",
                     "nullable": true,
                     "default": null,
@@ -5701,7 +5425,7 @@
                     "comment": "上次登录时间"
                 },
                 "last_login_ip": {
-                    "position": 11,
+                    "position": 10,
                     "type": "varchar(50)",
                     "nullable": true,
                     "default": null,
@@ -5709,7 +5433,7 @@
                     "comment": "上次登录IP"
                 },
                 "join_ip": {
-                    "position": 12,
+                    "position": 11,
                     "type": "varchar(50)",
                     "nullable": true,
                     "default": null,
@@ -5717,7 +5441,7 @@
                     "comment": "加入IP"
                 },
                 "join_at": {
-                    "position": 13,
+                    "position": 12,
                     "type": "timestamp",
                     "nullable": true,
                     "default": null,
@@ -5725,7 +5449,7 @@
                     "comment": "加入时间"
                 },
                 "source": {
-                    "position": 14,
+                    "position": 13,
                     "type": "varchar(200)",
                     "nullable": true,
                     "default": null,
@@ -5733,7 +5457,7 @@
                     "comment": "来源"
                 },
                 "password": {
-                    "position": 15,
+                    "position": 14,
                     "type": "varchar(128)",
                     "nullable": false,
                     "default": null,
@@ -5741,7 +5465,7 @@
                     "comment": "密码"
                 },
                 "token_version": {
-                    "position": 16,
+                    "position": 15,
                     "type": "int unsigned",
                     "nullable": false,
                     "default": "0",
@@ -5749,7 +5473,7 @@
                     "comment": "令牌版本"
                 },
                 "logout_at": {
-                    "position": 17,
+                    "position": 16,
                     "type": "timestamp",
                     "nullable": true,
                     "default": null,
@@ -5757,7 +5481,7 @@
                     "comment": "登出时间"
                 },
                 "email_verified_at": {
-                    "position": 18,
+                    "position": 17,
                     "type": "timestamp",
                     "nullable": true,
                     "default": null,
@@ -5765,7 +5489,7 @@
                     "comment": "邮箱验证时间"
                 },
                 "mobile_verified_at": {
-                    "position": 19,
+                    "position": 18,
                     "type": "timestamp",
                     "nullable": true,
                     "default": null,
@@ -5773,7 +5497,7 @@
                     "comment": "手机验证时间"
                 },
                 "notification_settings": {
-                    "position": 20,
+                    "position": 19,
                     "type": "varchar(255)",
                     "nullable": true,
                     "default": null,
@@ -5781,7 +5505,7 @@
                     "comment": "通知设置"
                 },
                 "auto_settings": {
-                    "position": 21,
+                    "position": 20,
                     "type": "varchar(255)",
                     "nullable": true,
                     "default": null,
@@ -5789,7 +5513,7 @@
                     "comment": "自动续费和重签设置"
                 },
                 "status": {
-                    "position": 22,
+                    "position": 21,
                     "type": "tinyint",
                     "nullable": false,
                     "default": "1",
@@ -5797,7 +5521,7 @@
                     "comment": "状态: 0=禁用, 1=启用"
                 },
                 "created_at": {
-                    "position": 23,
+                    "position": 22,
                     "type": "timestamp",
                     "nullable": true,
                     "default": null,
@@ -5805,7 +5529,7 @@
                     "comment": ""
                 },
                 "updated_at": {
-                    "position": 24,
+                    "position": 23,
                     "type": "timestamp",
                     "nullable": true,
                     "default": null,

@@ -183,18 +183,6 @@
                 ¥{{ Math.abs(userInfo.credit_limit || 0).toFixed(2) }}
               </span>
             </div>
-            <div
-              v-if="userInfo.invoice_limit !== undefined"
-              class="flex items-center min-h-[28px]"
-            >
-              <span
-                class="min-w-[80px] md:min-w-[80px] font-medium text-gray-500 text-right md:text-right"
-                >发票额度：</span
-              >
-              <span class="flex-1 font-semibold text-gray-800">
-                ¥{{ userInfo.invoice_limit || "0.00" }}
-              </span>
-            </div>
           </div>
         </div>
 

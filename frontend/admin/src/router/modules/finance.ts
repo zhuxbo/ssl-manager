@@ -27,26 +27,6 @@ export default {
         title: "交易记录",
         keepAlive: true
       }
-    },
-    {
-      path: "/invoice",
-      name: "Invoice",
-      component: () => import("@/views/invoice/index.vue"),
-      meta: {
-        icon: "ri:file-text-line",
-        title: "发票管理",
-        keepAlive: true
-      }
-    },
-    {
-      path: "/invoice-limit",
-      name: "InvoiceLimit",
-      component: () => import("@/views/invoiceLimit/index.vue"),
-      meta: {
-        icon: "ri:money-dollar-box-line",
-        title: "发票额度",
-        keepAlive: true
-      }
     }
   ]
 } satisfies RouteConfigsTable;

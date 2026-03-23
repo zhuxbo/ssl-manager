@@ -29,26 +29,6 @@ export default {
       }
     },
     {
-      path: "/invoice",
-      name: "Invoice",
-      component: () => import("@/views/invoice/index.vue"),
-      meta: {
-        icon: "ri:file-text-line",
-        title: "发票管理",
-        keepAlive: true
-      }
-    },
-    {
-      path: "/invoice-limit",
-      name: "InvoiceLimit",
-      component: () => import("@/views/invoiceLimit/index.vue"),
-      meta: {
-        icon: "ri:money-dollar-box-line",
-        title: "发票额度",
-        keepAlive: true
-      }
-    },
-    {
       path: "/tid/:tid",
       name: "PlatformRecharge",
       redirect: ((to: { params: { tid: string } }) => {

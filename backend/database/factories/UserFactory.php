@@ -25,7 +25,6 @@ class UserFactory extends Factory
             'balance' => '0.00',
             'level_code' => 'standard',
             'credit_limit' => '0.00',
-            'invoice_limit' => '0.00',
             'join_ip' => fake()->ipv4(),
             'join_at' => now(),
             'source' => 'web',

@@ -29,18 +29,19 @@ skills/         # 开发规范（详细文档）
 
 详细规范见 `skills/SKILL.md`，按领域组织：
 
-| Skill | 内容 |
-|-------|------|
-| `skills/backend-dev.md` | Laravel API、ACME 协议、升级系统 |
-| `skills/frontend-dev.md` | Vue 3、Monorepo、共享组件 |
-| `skills/deploy-ops.md` | Docker、宝塔、环境配置 |
-| `skills/build-release.md` | 版本发布、打包、CI/CD |
-| `skills/plugin-dev.md` | 插件系统、IIFE 打包、安装/更新/卸载 |
-| `skills/acme-e2e-test/` | Docker certbot 端到端测试（Manager + Gateway） |
+| Skill                     | 内容                                           |
+| ------------------------- | ---------------------------------------------- |
+| `skills/backend-dev.md`   | Laravel API、ACME 协议、升级系统               |
+| `skills/frontend-dev.md`  | Vue 3、Monorepo、共享组件                      |
+| `skills/deploy-ops.md`    | Docker、宝塔、环境配置                         |
+| `skills/build-release.md` | 版本发布、打包、CI/CD                          |
+| `skills/plugin-dev.md`    | 插件系统、IIFE 打包、安装/更新/卸载            |
+| `skills/acme-e2e-test/`   | Docker certbot 端到端测试（Manager + 上游系统） |
 
 ## 知识积累
 
 开发中确定的信息写入对应 skill 文件：
+
 - 新的架构约定或设计模式
 - 疑难问题的解决方案
 - 文档中缺失的重要信息
@@ -71,17 +72,17 @@ skills/         # 开发规范（详细文档）
 ### ACME 订阅管理
 
 - **模型**：单一 `Acme` 模型（`App\Models\Acme`，表 `acmes`），`eab_hmac` 加密存储且默认 hidden
-- **计费流程**：`Action` 三步流程：`new(array $params)`（unpaid/待支付）→ `pay(int $id)`（pending/待提交）→ `commit(int $id)`（提交 Gateway → active）；`newAndCommit(array $params)` 一步完成三步（事务保护，失败回滚）
+- **计费流程**：`Action` 三步流程：`new(array $params)`（unpaid/待支付）→ `pay(int $id)`（pending/待提交）→ `commit(int $id)`（提交 上游系统 → active）；`newAndCommit(array $params)` 一步完成三步（事务保护，失败回滚）
 - **取消流程**：`commitCancel(int $id)`（标记 cancelling + 创建 Task `cancel_acme` + TaskJob 延时 123s）→ `cancel(int $id)`（由 TaskJob 调用，调 Api->cancel() + 退费），与传统订单共用 Task + TaskJob 机制
 - **Transaction 类型**：`acme_order`/`acme_cancel`
 - **产品标识**：`products.product_type = 'acme'`
-- **Source API 层**：`Services/Acme/Api/` 按 `product.source` 路由，仅 `default` 源（和 Order 一致），`AcmeSourceApiInterface` 统一 `new`/`get`/`cancel`/`getProducts` 接口，`default/Sdk` 通过系统设置 `ca.acme_url`/`ca.acme_token`（回落到 `ca.url`/`ca.token`）调用 Gateway `/api/acme/*` 端点
+- **Source API 层**：`Services/Acme/Api/` 按 `product.source` 路由，仅 `default` 源（和 Order 一致），`AcmeSourceApiInterface` 统一 `new`/`get`/`cancel`/`getProducts` 接口，`default/Sdk` 通过系统设置 `ca.acme_url`/`ca.acme_token`（回落到 `ca.url`/`ca.token`）调用 上游系统 `/api/acme/*` 端点
 - **产品导入**：`Order\Action::importProduct()` 同时查询 Order 和 ACME 两端产品，合并后按 `api_id` 去重
 - **控制器路由**：
-  - API：`/api/acme/` — new, get, cancel, get-products（对下游代理，与 Gateway 对齐）
-  - Admin：`/api/admin/acme/` — index, show, new, pay, commit, sync, commit-cancel, remark
-  - User：`/api/user/acme/` — index, show, new, pay, commit, commit-cancel（限当前用户）
-  - Deploy：`/api/deploy/acme/` — new（一步到位：创建+支付+提交）, get（含 EAB）
+    - API：`/api/acme/` — new, get, cancel, get-products（对下游代理，与 上游系统 对齐）
+    - Admin：`/api/admin/acme/` — index, show, new, pay, commit, sync, commit-cancel, remark
+    - User：`/api/user/acme/` — index, show, new, pay, commit, commit-cancel（限当前用户）
+    - Deploy：`/api/deploy/acme/` — new（一步到位：创建+支付+提交）, get（含 EAB）
 - **产品 API 分离**：`/api/v2/get-products` 排除 ACME 产品，`/api/acme/get-products` 仅返回 ACME 产品
 - **传统流程完全隔离**：ACME 通过独立控制器、服务和前端模块处理，与传统订单无交集
 
@@ -92,19 +93,19 @@ skills/         # 开发规范（详细文档）
 - **取消/吊销不静默成功**：上游接口未返回明确成功时，一律返回失败；不允许跳过上游调用直接标记本地状态
 - **ACME 计费流程**：`Action` 三步流程 `new→pay→commit` 详见"ACME 订阅管理"章节
 - **ACME 取消策略**：未提交上游（无 api_id）的 pending 订单直接退费取消；已提交上游的订单通过延时任务调 Api->cancel() 后退费
-- **Action 无 userId 构造参数**：`Acme\Action` 和 `Order\Action` 均无 `userId` 构造参数，通过 `app(Action::class)` 获取实例。用户隔离由 UserScope 全局作用域保证（`Authenticate`/`ApiAuthenticate` 中间件注册 Acme、ApiToken、Callback、CnameDelegation、Order、Fund、Transaction、Invoice、InvoiceLimit、Organization、Contact、OrderDocument、OrderVerificationReport），控制器在创建方法的 params 中传入 `user_id`。UserScope `apply()` 无条件执行 `where('user_id', ...)`，不做零值跳过
+- **Action 无 userId 构造参数**：`Acme\Action` 和 `Order\Action` 均无 `userId` 构造参数，通过 `app(Action::class)` 获取实例。用户隔离由 UserScope 全局作用域保证（`Authenticate`/`ApiAuthenticate` 中间件注册 Acme、ApiToken、Callback、CnameDelegation、Order、Fund、Transaction、Organization、Contact、OrderDocument、OrderVerificationReport），控制器在创建方法的 params 中传入 `user_id`。UserScope `apply()` 无条件执行 `where('user_id', ...)`，不做零值跳过
 - **ACME Action 统一封装上游 API 调用**：所有上游 API 调用（new/get/cancel 等）必须通过 `Services/Acme/Action`，不允许控制器直接调 `Api`。操作方法接收 ID（int），创建方法接收参数数组。内部负责模型查询、参数过滤、返回值校正、重复提交防护、状态入库。控制器仅做请求验证 + 一行调用 Action
 
 ### Certum 验证文档上传
 
 - **独立表**：`order_documents`（本地上传的文档）、`order_verification_reports`（验证报告表单）
 - **不改 Cert.documents**：该字段仅存 Certum 同步回来的审核状态（只读），职责不同
-- **多级代理传递**：用户/Admin 上传 → `order_documents` 表 → Admin 提交到上游（base64 via V2 API）→ 逐级到 Gateway → Certum SOAP
+- **多级代理传递**：用户/Admin 上传 → `order_documents` 表 → Admin 提交到上游（base64 via V2 API）→ 逐级到 上游系统 → Certum SOAP
 - **V2 端点**：`POST /api/v2/upload-document`（接收下游 base64）、`POST /api/v2/save-verification-report`（接收报告 JSON，仅存库）
-- **验证报告**：Manager 采集表单 → JSON 提交到 Gateway → Gateway 生成 PDF（dompdf）→ 管理员签名 → 上传 Certum
+- **验证报告**：Manager 采集表单 → JSON 提交到 上游系统 → 上游系统 生成 PDF（dompdf）→ 管理员签名 → 上传 Certum
 - **显示条件**：`brand.toLowerCase() === 'certum'` 且 `validation_type !== 'dv'`
 - **文件限制**：单文件 5MB，类型 PDF/JPG/PNG/DOC/DOCX/XADES，控制器层 `mimes` 验证
-- **Gateway 清理**：移除 quickOrder 中的可选字段 streetAddress/postalCode
+- **上游系统 清理**：移除 quickOrder 中的可选字段 streetAddress/postalCode
 
 ### 自动续费/重签
 
@@ -122,7 +123,7 @@ skills/         # 开发规范（详细文档）
 ### M4 测试覆盖
 
 - **Commands**（9 文件 55 用例）：AutoRenew、Expire、DelegationCheck、DelegationCleanup、Validate、Purge、ResetAdminPassword、ClearAllCache、UserData
-- **Models**（15 文件 163 用例）：Order、User、Cert、Admin、Product、Notification、NotificationTemplate、Contact、Organization、Fund、Invoice、Transaction、CnameDelegation、ApiToken、Task
+- **Models**（14 文件）：Order、User、Cert、Admin、Product、Notification、NotificationTemplate、Contact、Organization、Fund、Transaction、CnameDelegation、ApiToken、Task
 - **Middleware**（8 文件）：AdminAuthenticate、UserAuthenticate、ApiAuthenticate、DeployAuthenticate、LogOperation、RateLimiter、LoginRateLimiter、FlushLogs
 - **ACME**：Unit/Services/Acme/ActionTest（27 用例）、Feature/Controllers/Admin/AcmeControllerTest（11 用例）、Feature/Controllers/User/AcmeControllerTest（9 用例）、Feature/Controllers/Deploy/AcmeControllerTest（5 用例）
 - **Deploy**：Feature/Controllers/Deploy/OrderControllerTest（39 用例）：query（21）、callback（7）、update（8）、认证（2）、数据结构（1）

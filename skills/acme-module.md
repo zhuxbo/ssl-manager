@@ -4,12 +4,12 @@ description: ACME 模块 - 封装下单 + 交付 EAB 模式、订阅计费、取
 
 # ACME 模块
 
-Manager 作为 ACME 订阅管理平台，通过 REST API 连接 Gateway，向用户交付 EAB 凭据（eab_kid + eab_hmac）。
+Manager 作为 ACME 订阅管理平台，通过 REST API 连接 上游系统，向用户交付 EAB 凭据（eab_kid + eab_hmac）。
 
 ## 架构
 
 ```
-用户/Deploy API → Manager (ACME 订阅) → Gateway REST API → Certum
+用户/Deploy API → Manager (ACME 订阅) → 上游系统 REST API → Certum
 ```
 
 简化为"封装下单 + 交付 EAB"模式，不再实现 RFC 8555 协议服务端。
@@ -42,7 +42,7 @@ unpaid ──[pay]──→ pending ──[commit]──→ active ──[到期
 
 1. **`new`**（创建 unpaid 订单）：计算金额，不扣费
 2. **`pay`**（支付 → pending）：扣费 + 创建 `acme_order` 交易记录
-3. **`commit`**（提交 Gateway → active）：调 `Api->new()`，成功后写入 `api_id`/`eab_kid`/`eab_hmac`/`period_from`/`period_till`，状态 → active。**失败保持 pending，不退费**（用户可重试或取消）
+3. **`commit`**（提交 上游系统 → active）：调 `Api->new()`，成功后写入 `api_id`/`eab_kid`/`eab_hmac`/`period_from`/`period_till`，状态 → active。**失败保持 pending，不退费**（用户可重试或取消）
 
 ## 取消流程
 
@@ -58,13 +58,13 @@ unpaid ──[pay]──→ pending ──[commit]──→ active ──[到期
 
 `Services/Acme/Api/Api.php` — 路由器，按 `product.source` 分发：
 
-- `certum/Api.php` → `certum/Sdk.php`（HTTP 调用 Gateway）
+- `certum/Api.php` → `certum/Sdk.php`（HTTP 调用 上游系统）
 - `certumcnssl/Api.php`（继承 certum）
 - `certumtest/Api.php`（继承 certum）
 
 统一接口 `AcmeSourceApiInterface`：`new`/`get`/`cancel`
 
-Gateway 端点（RPC 风格，通过 `order_id` 传参）：
+上游系统 端点（RPC 风格，通过 `order_id` 传参）：
 - `POST /api/acme/new` — 创建订单
 - `GET /api/acme/get?order_id=` — 查询订单
 - `POST /api/acme/sync` — 同步订单
@@ -80,7 +80,7 @@ Gateway 端点（RPC 风格，通过 `order_id` 传参）：
 | GET | `/acme/{id}` | 详情（含 EAB） |
 | POST | `/acme/new` | 创建订单 |
 | POST | `/acme/pay/{id}` | 支付 |
-| POST | `/acme/commit/{id}` | 提交 Gateway |
+| POST | `/acme/commit/{id}` | 提交 上游系统 |
 | POST | `/acme/sync/{id}` | 同步状态（status 白名单校验） |
 | POST | `/acme/commit-cancel/{id}` | 取消 |
 | POST | `/acme/remark/{id}` | 管理员备注 |
