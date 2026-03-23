@@ -112,6 +112,8 @@ declare global {
     Brands?: string[];
     DnsTools?: string[];
     Beian?: string;
+    Acme?: boolean;
+    AutoDeploy?: boolean;
   }
 
   /**
