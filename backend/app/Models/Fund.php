@@ -130,52 +130,10 @@ class Fund extends BaseModel
     {
         DB::beginTransaction();
         try {
-            self::createTransaction($model);
-            self::createInvoiceLimit($model);
-            DB::commit();
-        } catch (Throwable $e) {
-            DB::rollBack();
-            throw $e;
-        }
-    }
-
-    /**
-     * @throws Throwable
-     */
-    protected static function createTransaction($model): void
-    {
-        DB::beginTransaction();
-        try {
             $transaction['transaction_id'] = $model->id;
             $transaction = self::getTypeAmount($model, $transaction);
 
             Transaction::create($transaction);
-            DB::commit();
-        } catch (Throwable $e) {
-            DB::rollBack();
-            throw $e;
-        }
-    }
-
-    /**
-     * @throws Throwable
-     */
-    protected static function createInvoiceLimit($model): void
-    {
-        if ($model->type == 'deduct' || $model->type == 'reverse') {
-            return;
-        }
-
-        if (isset($model->pay_method) && ! in_array($model->pay_method, ['alipay', 'wechat', 'credit', 'other'])) {
-            return;
-        }
-
-        DB::beginTransaction();
-        try {
-            $invoiceLimit['limit_id'] = $model->id;
-            $invoiceLimit = self::getTypeAmount($model, $invoiceLimit);
-
-            InvoiceLimit::create($invoiceLimit);
             DB::commit();
         } catch (Throwable $e) {
             DB::rollBack();

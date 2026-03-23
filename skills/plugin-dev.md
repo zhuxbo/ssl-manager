@@ -143,6 +143,95 @@ bash plugins/release-plugin.sh {name} --version x.y.z --build-only
 
 插件 `vite.config.ts` 中通过 `external` 和 `globals` 引用，不重复打包。
 
+### 全局注册的组件
+
+主系统在 `main.ts` 中全局注册了以下组件，插件可直接在模板中使用（无需 import）：
+
+| 组件 | admin | user | 说明 |
+|------|:-----:|:----:|------|
+| `PureTableBar` | ✅ | ✅ | 表格工具栏（列显隐、刷新、全屏） |
+| `ReRemoteSelect` | ✅ | - | 远程搜索选择器 |
+| `Auth` / `Perms` | ✅ | ✅ | 权限控制 |
+| `IconifyIconOffline/Online` | ✅ | ✅ | 图标 |
+
+插件中使用全局组件时，通过 `resolveComponent()` 动态解析（TSX 中）或直接在 `<template>` 中使用。
+
+### 样式注意事项（重要）
+
+#### 1. 禁止在插件中导入 plus-pro-components 的 CSS
+
+```typescript
+// ❌ 错误：会打包 183KB 的 Element Plus 完整 CSS，与主系统样式冲突
+import "plus-pro-components/es/components/search/style/css";
+import "plus-pro-components/es/components/drawer-form/style/css";
+
+// ✅ 正确：只导入组件本身，CSS 由主系统全局提供
+import { PlusSearch, PlusDrawerForm } from "plus-pro-components";
+```
+
+**原因**：`plus-pro-components/es/components/*/style/css` 会级联导入完整的 Element Plus 组件 CSS（含 `:root` 变量、Drawer header/footer 边框等），与主系统已加载的 CSS 产生冲突，导致样式覆盖（如抽屉出现边框、表单间距异常）。
+
+主系统已在 `main.ts` 中全局加载了 `PlusSearch` 的 CSS：
+```typescript
+import "plus-pro-components/es/components/search/style/css";
+```
+
+#### 2. 不要使用非常规 Tailwind class
+
+插件目录不在主系统 Tailwind 的 `content` 扫描范围内，因此**插件模板中使用的 Tailwind class 必须在主系统其他页面中也有使用**，否则不会生成对应 CSS。
+
+```html
+<!-- ✅ 安全：这些 class 在主系统中广泛使用 -->
+<div class="bg-bg_color w-[99/100] pl-4 pr-4 pt-[24px] pb-[12px]">
+
+<!-- ❌ 危险：p-6、mb-3、gap-12 等可能不在主系统 CSS 中 -->
+<div class="p-6 mb-3 gap-12">
+
+<!-- ✅ 推荐：对不确定的样式使用内联 style -->
+<div style="padding: 20px 24px; margin-bottom: 12px">
+```
+
+**经验法则**：布局类的 padding/margin/gap 如果值不常见，优先用内联 `style`。
+
+#### 3. 插件路由和 API 路径
+
+**后端路由**：主系统 RouteServiceProvider 统一加 `api/` 前缀。admin 路由文件内部自带 `Route::prefix('admin')`，user 路由文件**没有** prefix。插件路由同理：
+
+```php
+// admin 路由 → /api/admin/invoice
+Route::prefix('api/admin')->middleware(['global', 'api.admin'])->group(...);
+
+// user 路由 → /api/invoice（没有 /user/）
+Route::prefix('api')->middleware(['global', 'api.user'])->group(...);
+```
+
+**前端 API**：admin 端 http 自动带 `/admin` 前缀，user 端**不带**额外前缀，路径直接对应后端路由：
+
+```typescript
+// admin 端
+http.get("/invoice", { params })  // → GET /api/admin/invoice
+
+// user 端（不加 /user/）
+http.get("/invoice", { params })  // → GET /api/invoice
+```
+
+#### 4. IIFE 插件中不能使用 useRoute/useRouter
+
+`vue-router` 被 external 后，`useRoute()`/`useRouter()` 因 Symbol 注入不匹配会返回 undefined。必须通过组件实例获取：
+
+```typescript
+import { getCurrentInstance } from "vue";
+
+// ❌ 错误：IIFE 插件中 Symbol 不匹配，生产环境报错
+import { useRoute } from "vue-router";
+const route = useRoute();
+
+// ✅ 正确：通过组件实例的全局属性获取
+const instance = getCurrentInstance();
+const route = instance?.appContext.config.globalProperties.$route;
+const router = instance?.appContext.config.globalProperties.$router;
+```
+
 ### 加载机制
 
 1. 公共接口 `GET /api/plugins` 返回已安装插件的 bundle/css 路径
@@ -203,7 +292,6 @@ window.__registerPlugin({
 | `order` | `views/order/dictionary` | `channelOptions`、`channel`、`channelType`、`productTypeOptions`、`productType` |
 | `system` | `views/system/dictionary` | `brandOptionsAll`、`productTypeOptions`、`productTypeLabels` |
 | `task` | `views/task/dictionary` | `actionLabels`、`actionTypes`、`statusLabels`、`statusTypes` |
-| `invoiceLimit` | `views/invoiceLimit/dictionary` | `invoiceLimitTypeOptions`、`invoiceLimitTypeMap` |
 | `notificationRecord` | `views/notification/record/dictionary` | `availableChannels`、`statusOptions` |
 | `notificationTemplate` | `views/notification/template/dictionary` | `statusOptions`、`channelOptions` |
 

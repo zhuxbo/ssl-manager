@@ -1,6 +1,6 @@
 <template>
   <div v-if="documents.length > 0" class="documents">
-    <div style="font-size: 13px; font-weight: 500; margin-bottom: 8px">
+    <div style="margin-bottom: 8px; font-size: 13px; font-weight: 500">
       审核状态
     </div>
     <el-table :data="documents" size="small" :style="{ width: '100%' }">

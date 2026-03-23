@@ -10,7 +10,7 @@ jobs:
   check-secrets:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -99,11 +99,13 @@ jobs:
 
           found_credentials=false
           for pattern in "${patterns[@]}"; do
-            if grep -rEi "$pattern" \
+            matches=$(grep -rEi "$pattern" \
                  --include="*.php" --include="*.js" --include="*.ts" \
                  --exclude-dir=".git" --exclude-dir="vendor" --exclude-dir="node_modules" \
-                 --exclude="*.example*" --exclude="*test*" --exclude="*Test*" \
-                 . 2>/dev/null | grep -v "env(" | grep -v "getenv(" | grep -v "config(" | head -5; then
+                 . 2>/dev/null | grep -v "env(" | grep -v "getenv(" | grep -v "config(" \
+                 | grep -vi "/tests/" | grep -vi "test\.php" | grep -vi "\.example" || true)
+            if [ -n "$matches" ]; then
+              echo "$matches" | head -5
               found_credentials=true
             fi
           done

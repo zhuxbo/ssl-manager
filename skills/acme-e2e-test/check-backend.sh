@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 #
 # ACME E2E 后端检查脚本
-# 检查 Manager、Gateway、ACME directory、Docker 是否就绪
+# 检查 Manager、上游系统、ACME directory、Docker 是否就绪
 # 任一检查失败则终止并给出排查建议
 #
 
 set -euo pipefail
 
 MANAGER_URL="${MANAGER_URL:-http://localhost:5300}"
-GATEWAY_URL="${GATEWAY_URL:-http://localhost:6300}"
+UPSTREAM_URL="${UPSTREAM_URL:-http://localhost:6300}"
 CURL_TIMEOUT=5
 
 has_failure=false
@@ -26,7 +26,7 @@ check_fail() {
 echo "=== ACME E2E 后端检查 ==="
 echo ""
 echo "Manager: $MANAGER_URL"
-echo "Gateway: $GATEWAY_URL"
+echo "上游系统: $UPSTREAM_URL"
 echo ""
 
 # --- 检查 1: Docker 可用 ---
@@ -58,12 +58,12 @@ else
     check_fail "ACME directory 有效" "跳过（Manager 不可达）"
 fi
 
-# --- 检查 4: Gateway 端口可达 ---
-gateway_status=$(curl -s -o /dev/null -w "%{http_code}" --max-time "$CURL_TIMEOUT" "$GATEWAY_URL/api/acme/orders" 2>&1) || gateway_status="000"
-if [ "$gateway_status" != "000" ]; then
-    check_pass "Gateway $GATEWAY_URL 可达 (HTTP ${gateway_status})"
+# --- 检查 4: 上游系统 端口可达 ---
+upstream_status=$(curl -s -o /dev/null -w "%{http_code}" --max-time "$CURL_TIMEOUT" "$UPSTREAM_URL/api/acme/orders" 2>&1) || upstream_status="000"
+if [ "$upstream_status" != "000" ]; then
+    check_pass "上游系统 $UPSTREAM_URL 可达 (HTTP ${upstream_status})"
 else
-    check_fail "Gateway $GATEWAY_URL 可达" "无法连接，确认 Gateway 已启动且端口正确（docker ps | grep gateway）"
+    check_fail "上游系统 $UPSTREAM_URL 可达" "无法连接，确认 上游系统 已启动且端口正确（docker ps | grep upstream）"
 fi
 
 # --- 汇总 ---
@@ -75,9 +75,9 @@ if [ "$has_failure" = true ]; then
     echo "排查建议："
     echo "  1. 确认容器运行中：docker ps"
     echo "  2. Manager 配置：system_settings 表 group='ca' 的 acmeUrl / acmeToken"
-    echo "  3. Gateway 配置：system_settings 表 group='ca' 的 Certum CA 信息"
+    echo "  3. 上游系统 配置：system_settings 表 group='ca' 的 Certum CA 信息"
     echo "  4. Docker 网络：docker network inspect cnssl-dev-network"
-    echo "  5. 查看日志：docker logs manager-backend / docker logs gateway-backend"
+    echo "  5. 查看日志：docker logs manager-backend / docker logs upstream-backend"
     exit 1
 fi
 

@@ -6,8 +6,6 @@ use App\Http\Controllers\User\ContactController;
 use App\Http\Controllers\User\DashboardController;
 use App\Http\Controllers\User\DelegationController;
 use App\Http\Controllers\User\FundController;
-use App\Http\Controllers\User\InvoiceController;
-use App\Http\Controllers\User\InvoiceLimitController;
 use App\Http\Controllers\User\OrderController;
 use App\Http\Controllers\User\OrganizationController;
 use App\Http\Controllers\User\ProductController;
@@ -106,14 +104,6 @@ Route::middleware('api.user')->group(function () {
     Route::prefix('fund')->group(function () {
         Route::get('/', [FundController::class, 'index']);
         Route::post('check/{id}', [FundController::class, 'check'])->where('id', '[0-9]+');
-    });
-
-    // 发票路由
-    RouteHelper::registerResourceRoutes('invoice', InvoiceController::class);
-
-    // 发票额度路由
-    Route::prefix('invoice-limit')->group(function () {
-        Route::get('/', [InvoiceLimitController::class, 'index']);
     });
 
     // 组织路由

@@ -121,3 +121,8 @@ export function batchDestroy(ids: number[]): Promise<BaseResponse> {
 export function clearCache(): Promise<BaseResponse> {
   return http.request<BaseResponse>("post", "/setting/clear-cache");
 }
+
+// 清除系统全部缓存
+export function clearAllCache(): Promise<BaseResponse> {
+  return http.request<BaseResponse>("post", "/setting/clear-all-cache");
+}

@@ -52,10 +52,14 @@ app.component("IconifyIconOnline", IconifyIconOnline);
 app.component("FontIcon", FontIcon);
 
 // 全局注册按钮级别权限组件
-import { Auth, Perms, PureTableBar } from "@shared/components";
+import { Auth, Perms, PureTableBar, ReRemoteSelect } from "@shared/components";
 app.component("Auth", Auth);
 app.component("Perms", Perms);
 app.component("PureTableBar", PureTableBar);
+app.component("ReRemoteSelect", ReRemoteSelect);
+
+// 全局加载 PlusSearch 样式（插件依赖）
+import "plus-pro-components/es/components/search/style/css";
 
 // 全局注册vue-tippy
 import "tippy.js/dist/tippy.css";
@@ -92,7 +96,6 @@ getPlatformConfig(app).then(async config => {
     orderDict,
     systemDict,
     taskDict,
-    invoiceLimitDict,
     notificationRecordDict,
     notificationTemplateDict
   ] = await Promise.all([
@@ -101,7 +104,6 @@ getPlatformConfig(app).then(async config => {
     import("@/views/order/dictionary"),
     import("@/views/system/dictionary"),
     import("@/views/task/dictionary"),
-    import("@/views/invoiceLimit/dictionary"),
     import("@/views/notification/record/dictionary"),
     import("@/views/notification/template/dictionary")
   ]);
@@ -111,7 +113,6 @@ getPlatformConfig(app).then(async config => {
     order: orderDict,
     system: systemDict,
     task: taskDict,
-    invoiceLimit: invoiceLimitDict,
     notificationRecord: notificationRecordDict,
     notificationTemplate: notificationTemplateDict
   });

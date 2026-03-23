@@ -1,4 +1,3 @@
-import "plus-pro-components/es/components/search/style/css";
 import type { PlusColumn } from "plus-pro-components";
 import { getPickerShortcuts } from "../../../shared/utils";
 

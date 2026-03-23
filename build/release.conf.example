@@ -13,8 +13,8 @@
 # - URL: 公网访问 URL（用于替换脚本中的 RELEASE_URL）
 
 SERVERS=(
-    "cn,release-cn.example.com,22,/var/www/release,https://release-cn.example.com"
-    "us,release-us.example.com,22,/var/www/release,https://release-us.example.com"
+    "cn,release-cn.example.com,22,/var/www/release/manager,https://release-cn.example.com/manager"
+    "us,release-us.example.com,22,/var/www/release/manager,https://release-us.example.com/manager"
 )
 
 # ========================================

@@ -1,6 +1,7 @@
 {
   "name": "manager",
   "private": true,
+  "type": "module",
   "packageManager": "pnpm@9.0.0",
   "scripts": {
     "dev": "pnpm --filter admin --filter user --parallel dev",

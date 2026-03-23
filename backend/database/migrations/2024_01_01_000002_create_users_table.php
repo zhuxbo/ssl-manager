@@ -17,7 +17,6 @@ return new class extends Migration
             $table->string('level_code', 50)->default('standard')->index()->comment('级别号');
             $table->string('custom_level_code', 100)->nullable()->index()->comment('定制级别号');
             $table->decimal('credit_limit', 10)->default(0)->comment('信用额度');
-            $table->decimal('invoice_limit', 10)->default(0)->comment('发票额度');
             $table->timestamp('last_login_at')->nullable()->comment('上次登录时间');
             $table->string('last_login_ip', 50)->nullable()->comment('上次登录IP');
             $table->string('join_ip', 50)->nullable()->comment('加入IP');

@@ -235,7 +235,9 @@ export function useOrderTable() {
           : "-";
         return (
           <div class="flex flex-col">
-            <span style={expiryColor(row.latest_cert?.expires_at)}>{expires}</span>
+            <span style={expiryColor(row.latest_cert?.expires_at)}>
+              {expires}
+            </span>
             <span class="text-xs text-gray-400">{issued}</span>
           </div>
         );

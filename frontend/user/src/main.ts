@@ -52,9 +52,13 @@ app.component("IconifyIconOnline", IconifyIconOnline);
 app.component("FontIcon", FontIcon);
 
 // 全局注册按钮级别权限组件
-import { Auth, Perms } from "@shared/components";
+import { Auth, Perms, PureTableBar } from "@shared/components";
 app.component("Auth", Auth);
 app.component("Perms", Perms);
+app.component("PureTableBar", PureTableBar);
+
+// 全局加载 PlusSearch 样式（插件依赖）
+import "plus-pro-components/es/components/search/style/css";
 
 // 全局注册vue-tippy
 import "tippy.js/dist/tippy.css";
@@ -85,20 +89,19 @@ getPlatformConfig(app).then(async config => {
   // .use(useEcharts);
 
   // 合并插件字典
-  const [fundsDict, transactionDict, orderDict, systemDict, invoiceLimitDict] =
-    await Promise.all([
+  const [fundsDict, transactionDict, orderDict, systemDict] = await Promise.all(
+    [
       import("@/views/funds/dictionary"),
       import("@/views/transaction/dictionary"),
       import("@/views/order/dictionary"),
-      import("@/views/system/dictionary"),
-      import("@/views/invoiceLimit/dictionary")
-    ]);
+      import("@/views/system/dictionary")
+    ]
+  );
   mergePluginDictionaries({
     funds: fundsDict,
     transaction: transactionDict,
     order: orderDict,
-    system: systemDict,
-    invoiceLimit: invoiceLimitDict
+    system: systemDict
   });
 
   app.mount("#app");

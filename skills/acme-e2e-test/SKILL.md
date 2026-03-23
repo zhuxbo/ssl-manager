@@ -9,7 +9,7 @@ certbot (Docker)
     ↓ RFC 8555
 Manager backend (:5300)
     ↓ REST API (/api/acme/*)
-Gateway backend (:6300)
+上游系统 backend (:6300)
     ↓ Certum REST API v0.2
 Certum CA
 ```
@@ -18,7 +18,7 @@ Certum CA
 
 运行 E2E 测试前，确认以下配置已就绪：
 
-### Gateway 配置
+### 上游系统 配置
 
 `system_settings` 表 `group='ca'` 需包含 Certum CA 信息：
 
@@ -31,7 +31,7 @@ Certum CA
 | `certumPassword` | OAuth 密码 |
 | `certumAcmeDirectory` | Certum ACME 目录地址 |
 
-Gateway `users` 表需有 API 用户，其 `api_token` 供 Manager 调用。
+上游系统 `users` 表需有 API 用户，其 `api_token` 供 Manager 调用。
 `products` 表需有 `support_acme = 1` 且 `status = 1` 的 ACME 产品。
 
 ### Manager 配置
@@ -40,8 +40,8 @@ Gateway `users` 表需有 API 用户，其 `api_token` 供 Manager 调用。
 
 | key | 说明 | 值 |
 |-----|------|----|
-| `acmeUrl` | Gateway ACME API 地址 | `http://gateway-backend:8000/api/acme` |
-| `acmeToken` | Gateway 用户的 api_token | 从 Gateway users 表获取 |
+| `acmeUrl` | 上游系统 ACME API 地址 | `http://upstream-backend:8000/api/acme` |
+| `acmeToken` | 上游系统用户的 api_token | 从上游系统 users 表获取 |
 
 Manager 还需要：
 - `products` 表有 `support_acme = 1` 的 ACME 产品
@@ -65,12 +65,12 @@ Manager 还需要：
 1. Docker 可用
 2. Manager :5300 端口可达
 3. ACME directory 有效（包含 newAccount / newOrder）
-4. Gateway :6300 端口可达
+4. 上游系统 :6300 端口可达
 
 任一检查失败则终止并给出排查建议。
 
 ```bash
-# 默认检查（Manager :5300, Gateway :6300）
+# 默认检查（Manager :5300, 上游系统 :6300）
 bash manager/skills/acme-e2e-test/check-backend.sh
 
 # 自定义端口
@@ -163,10 +163,10 @@ FROM certs WHERE channel = 'acme' ORDER BY id DESC LIMIT 5;
 
 确保本地已安装并运行 MySQL 和 Redis。
 
-### 2. Gateway 环境
+### 2. 上游系统环境
 
 ```bash
-cd gateway/backend
+cd upstream/backend
 cp .env.example .env
 composer install
 php artisan migrate
@@ -183,7 +183,7 @@ php artisan migrate
 php artisan serve --port=5300
 ```
 
-> **网络说明**：Manager 通过 `ca.acmeUrl` 配置访问 Gateway ACME API（如 `http://localhost:6300/api/acme`）。
+> **网络说明**：Manager 通过 `ca.acmeUrl` 配置访问 上游系统 ACME API（如 `http://localhost:6300/api/acme`）。
 
 ## 手动测试流程
 
@@ -305,9 +305,9 @@ bash manager/skills/acme-e2e-test/run-e2e.sh --clean
 
 | 问题 | 排查 |
 |------|------|
-| Manager 连不上 Gateway | 确认同一 Docker 网络，检查 `ca.acmeUrl`/`ca.acmeToken` |
+| Manager 连不上 上游系统 | 确认同一 Docker 网络，检查 `ca.acmeUrl`/`ca.acmeToken` |
 | certbot 连不上 Manager | Docker 中用 `host.docker.internal` 替代 `localhost` |
-| Gateway Certum OAuth 失败 | 检查 system_settings 中 certumUsername/certumPassword，清 Redis 缓存 |
+| 上游系统 Certum OAuth 失败 | 检查 system_settings 中 certumUsername/certumPassword，清 Redis 缓存 |
 | EAB 获取失败 | 确认有 `support_acme=1` 的产品和有效 Order |
 | `encrypted` cast 报错 | APP_KEY 变更后需清空 `acme_ca_accounts` 重建 |
 | 验证超时 | DNS TXT 记录传播需 1-2 分钟，`dig TXT _acme-challenge.xxx +short` 确认 |
@@ -322,7 +322,7 @@ bash manager/skills/acme-e2e-test/run-e2e.sh --clean
 
 Token: `system_settings('ca', 'acmeToken')` → 回落 `system_settings('ca', 'token')`
 
-### Gateway ACME API 认证
+### 上游系统 ACME API 认证
 
 `api.v2` 中间件 → `ApiAuthenticate` → 通过 `Authorization: Bearer <api_token>` 匹配 users 表。
 
@@ -331,4 +331,4 @@ Token: `system_settings('ca', 'acmeToken')` → 回落 `system_settings('ca', 't
 | 服务 | 端口 |
 |------|------|
 | Manager backend | 5300 |
-| Gateway backend | 6300 |
+| 上游系统 backend | 6300 |

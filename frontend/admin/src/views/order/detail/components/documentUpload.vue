@@ -3,9 +3,16 @@
     <!-- 本地文档列表 -->
     <div
       v-if="documents.length > 0"
-      style="font-size: 13px; font-weight: 500; margin: 10px 0 8px"
+      style="margin: 10px 0 8px; font-size: 13px; font-weight: 500"
     >
-      本地文档
+      本地文档<span
+        style="
+          font-weight: normal;
+          color: var(--el-text-color-secondary);
+          font-size: 12px;
+        "
+        >（签发后 24 小时内删除）</span
+      >
     </div>
     <el-table
       v-if="documents.length > 0"
@@ -64,10 +71,6 @@
         </template>
       </el-table-column>
     </el-table>
-
-    <el-alert type="info" :closable="false" show-icon style="margin-top: 8px">
-      本系统不保留文档，证书签发后 24 小时内清理。
-    </el-alert>
 
     <div style="display: flex; gap: 8px; margin-top: 8px">
       <el-button
@@ -256,8 +259,8 @@ onMounted(loadDocuments);
 
 .section-header {
   display: flex;
-  align-items: center;
   gap: 10px;
+  align-items: center;
   margin-bottom: 10px;
 }
 

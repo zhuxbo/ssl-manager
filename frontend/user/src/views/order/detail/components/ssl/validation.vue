@@ -36,9 +36,9 @@
       <table>
         <thead>
           <tr>
-            <th style="text-align: left; padding: 8px 8px 8px 0">主机记录</th>
-            <th style="text-align: center; padding: 8px">解析类型</th>
-            <th style="text-align: left; padding: 8px 0 8px 8px; width: 400px">
+            <th style="padding: 8px 8px 8px 0; text-align: left">主机记录</th>
+            <th style="padding: 8px; text-align: center">解析类型</th>
+            <th style="width: 400px; padding: 8px 0 8px 8px; text-align: left">
               记录值
             </th>
           </tr>

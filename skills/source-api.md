@@ -52,7 +52,7 @@ $class = __NAMESPACE__.'\\'.strtolower($source).'\\Api';
 
 未找到类 → `$this->error()` 抛异常终止。
 
-**空 source 必须报错，禁止回落 default**：`product.source` 为空说明数据有问题，回落会掩盖配置错误。调用方传 `$product->source ?? ''`，由工厂的 `! $source` 检查报错。此原则适用于 Manager 和 Gateway 两个项目的 ACME 和传统 API。
+**空 source 必须报错，禁止回落 default**：`product.source` 为空说明数据有问题，回落会掩盖配置错误。调用方传 `$product->source ?? ''`，由工厂的 `! $source` 检查报错。此原则适用于 Manager 和上游系统两个项目的 ACME 和传统 API。
 
 ## ACME Source API 接口
 

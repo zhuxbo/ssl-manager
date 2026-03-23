@@ -298,6 +298,11 @@ publish_remote() {
         log_info "  build/release.conf（主系统共享）"
         exit 1
     fi
+    # 回落到主系统配置时，plugins 目录与主系统目录同级，需要去掉最后一段路径
+    local is_fallback_config=false
+    if [[ "$config_file" == *"build/release.conf"* ]]; then
+        is_fallback_config=true
+    fi
     source "$config_file"
 
     if [ ${#SERVERS[@]} -eq 0 ] || [ -z "$SSH_USER" ] || [ -z "$SSH_KEY" ]; then
@@ -324,7 +329,13 @@ publish_remote() {
 
         log_step "发布到 $srv_name ($srv_host) ..."
 
-        local remote_plugin_dir="$srv_dir/plugins/$NAME"
+        local remote_plugin_dir
+        if [ "$is_fallback_config" = true ]; then
+            # 回落主系统配置：plugins 与主系统目录同级
+            remote_plugin_dir="$(dirname "$srv_dir")/plugins/$NAME"
+        else
+            remote_plugin_dir="$srv_dir/plugins/$NAME"
+        fi
         local remote_version_dir="$remote_plugin_dir/v$VERSION"
         local rel_url="v$VERSION/$OUTPUT_FILE"
 
@@ -404,7 +415,13 @@ print(' | '.join(parts))
 PYEOF"
 
         log_success "$srv_name: 发布完成"
-        log_info "验证: curl $srv_url/plugins/$NAME/releases.json | jq ."
+        local verify_base_url
+        if [ "$is_fallback_config" = true ]; then
+            verify_base_url="${srv_url%/*}"
+        else
+            verify_base_url="$srv_url"
+        fi
+        log_info "验证: curl $verify_base_url/plugins/$NAME/releases.json | jq ."
     done
 }
 
