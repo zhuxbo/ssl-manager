@@ -168,7 +168,6 @@ Route::prefix('admin')->middleware('api.admin')->group(function () {
     RouteHelper::registerResourceRoutes('notification-template', NotificationTemplateController::class);
     Route::prefix('setting')->group(function () {
         Route::get('group/{groupId}', [SettingController::class, 'getByGroup']);
-        Route::get('config', [SettingController::class, 'getConfig']);
         Route::put('batch-update', [SettingController::class, 'batchUpdate']);
         Route::post('clear-cache', [SettingController::class, 'clearCache']);
         Route::post('clear-all-cache', [SettingController::class, 'clearAllCache']);

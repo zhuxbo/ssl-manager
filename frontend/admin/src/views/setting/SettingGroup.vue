@@ -23,10 +23,6 @@ const props = defineProps({
     type: Object,
     required: true
   },
-  config: {
-    type: Object,
-    default: () => ({ locked: false })
-  },
   onRefresh: {
     type: Function,
     default: () => {}
@@ -110,7 +106,7 @@ const handleAddSetting = () => {
 
 // 编辑设置项
 const handleEditSetting = id => {
-  openStoreForm(id, null, props.config.locked);
+  openStoreForm(id);
 };
 
 // 删除设置项
@@ -237,20 +233,11 @@ onMounted(() => {
       </div>
       <div class="group-actions flex gap-2">
         <template v-if="!isEditing">
-          <el-button
-            v-if="!config.locked"
-            type="primary"
-            @click="handleAddSetting"
+          <el-button type="primary" @click="handleAddSetting"
             >添加设置项</el-button
           >
-          <el-button
-            v-if="!config.locked"
-            type="warning"
-            @click="handleEditGroup"
-            >编辑组</el-button
-          >
+          <el-button type="warning" @click="handleEditGroup">编辑组</el-button>
           <el-popconfirm
-            v-if="!config.locked"
             title="确定要删除此设置组吗？这将同时删除组内所有设置项！"
             width="300"
             @confirm="handleDeleteGroup"
@@ -303,17 +290,12 @@ onMounted(() => {
             </template>
           </el-table-column>
           <el-table-column prop="description" label="描述" min-width="100" />
-          <el-table-column
-            label="操作"
-            :width="config.locked ? 70 : 110"
-            fixed="right"
-          >
+          <el-table-column label="操作" width="110" fixed="right">
             <template #default="{ row }">
               <el-button type="primary" link @click="handleEditSetting(row.id)">
                 编辑
               </el-button>
               <el-popconfirm
-                v-if="!config.locked"
                 title="确定要删除此设置项吗？"
                 width="200"
                 @confirm="handleDeleteSetting(row.id)"
@@ -428,10 +410,7 @@ onMounted(() => {
 
       <div v-else class="empty-settings text-center py-8">
         <p class="text-gray-500 mb-4">此组暂无设置项</p>
-        <el-button
-          v-if="!config.locked"
-          type="primary"
-          @click="handleAddSetting"
+        <el-button type="primary" @click="handleAddSetting"
           >添加设置项</el-button
         >
       </div>

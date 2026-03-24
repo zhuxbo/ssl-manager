@@ -37,11 +37,6 @@ export type GroupParams = {
   [K in keyof typeof GROUP_PARAMS_DEFAULT]?: (typeof GROUP_PARAMS_DEFAULT)[K];
 };
 
-// 获取设置配置
-export function getSettingConfig(): Promise<BaseResponse> {
-  return http.request<BaseResponse>("get", "/setting/config");
-}
-
 // 获取所有设置
 export function getAllSettings(): Promise<BaseResponse> {
   return http.request<BaseResponse>("get", "/setting");

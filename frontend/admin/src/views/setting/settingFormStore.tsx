@@ -26,7 +26,6 @@ export function useSettingFormStore(onSuccess) {
   const storeRef = ref();
   const storeId = ref(0);
   const storeValues = ref<FormParams>({});
-  const isFormLocked = ref(false);
 
   // 使用计算属性控制表单列的显示
   const storeColumns: PlusColumn[] = [
@@ -35,10 +34,7 @@ export function useSettingFormStore(onSuccess) {
       prop: "key",
       valueType: "input",
       fieldProps: {
-        placeholder: "请输入键名",
-        get disabled() {
-          return isFormLocked.value && storeId.value > 0;
-        }
+        placeholder: "请输入键名"
       }
     },
     {
@@ -46,10 +42,7 @@ export function useSettingFormStore(onSuccess) {
       prop: "type",
       valueType: "select",
       fieldProps: {
-        placeholder: "请选择类型",
-        get disabled() {
-          return isFormLocked.value && storeId.value > 0;
-        }
+        placeholder: "请选择类型"
       },
       options: [
         {
@@ -148,7 +141,7 @@ export function useSettingFormStore(onSuccess) {
           case "array":
             // 使用修改后的 ArrayInput
             return h(ArrayInput, {
-              modelValue: value || [],
+              modelValue: Array.isArray(value) ? value : [],
               "onUpdate:modelValue": onChange
             });
           case "select":
@@ -196,10 +189,7 @@ export function useSettingFormStore(onSuccess) {
       valueType: "textarea",
       fieldProps: {
         placeholder: "请输入描述",
-        rows: 3,
-        get disabled() {
-          return isFormLocked.value && storeId.value > 0;
-        }
+        rows: 3
       }
     },
     {
@@ -211,10 +201,7 @@ export function useSettingFormStore(onSuccess) {
         min: 0,
         max: 10000,
         step: 1,
-        controlsPosition: "right",
-        get disabled() {
-          return isFormLocked.value && storeId.value > 0;
-        }
+        controlsPosition: "right"
       }
     },
     {
@@ -223,11 +210,6 @@ export function useSettingFormStore(onSuccess) {
       valueType: "switch",
       initialValue: false,
       hideInForm: computed(() => storeValues.value.type !== "select"),
-      fieldProps: {
-        get disabled() {
-          return isFormLocked.value && storeId.value > 0;
-        }
-      },
       onChange: val => handleMultipleChange(val as boolean)
     },
     {
@@ -239,10 +221,7 @@ export function useSettingFormStore(onSuccess) {
         const optionsValue = Array.isArray(value) ? value : [];
         return h(KeyValueInput, {
           modelValue: optionsValue,
-          "onUpdate:modelValue": onChange,
-          get disabled() {
-            return isFormLocked.value && storeId.value > 0;
-          }
+          "onUpdate:modelValue": onChange
         });
       }
     }
@@ -316,9 +295,8 @@ export function useSettingFormStore(onSuccess) {
   });
 
   // 打开表单
-  function openStoreForm(id = 0, groupId = null, locked = false) {
+  function openStoreForm(id = 0, groupId = null) {
     showStore.value = true;
-    isFormLocked.value = locked;
 
     if (id > 0) {
       // 编辑模式

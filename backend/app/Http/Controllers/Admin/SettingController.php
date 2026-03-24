@@ -8,25 +8,12 @@ use App\Http\Requests\Setting\UpdateRequest;
 use App\Models\Setting;
 use App\Models\SettingGroup;
 use Illuminate\Support\Facades\Artisan;
-use Illuminate\Support\Facades\Config;
 
 class SettingController extends BaseController
 {
     public function __construct()
     {
         parent::__construct();
-    }
-
-    /**
-     * 获取当前设置配置
-     */
-    public function getConfig(): void
-    {
-        $config = [
-            'locked' => Config::get('settings.locked', false),
-        ];
-
-        $this->success($config);
     }
 
     /**
@@ -70,11 +57,6 @@ class SettingController extends BaseController
      */
     public function store(StoreRequest $request): void
     {
-        // 检查是否锁定
-        if (Config::get('settings.locked', false)) {
-            $this->error('设置已锁定，禁止添加新设置');
-        }
-
         $setting = Setting::create($request->validated());
 
         if (! $setting->exists) {
@@ -151,14 +133,6 @@ class SettingController extends BaseController
             $this->error('设置不存在');
         }
 
-        // 如果设置已锁定，只允许更新value字段
-        if (Config::get('settings.locked', false)) {
-            $validated = $request->validated();
-            $setting->value = $validated['value'] ?? $setting->value;
-            $setting->save();
-            $this->success();
-        }
-
         $setting->fill($request->validated());
         $setting->save();
 
@@ -170,11 +144,6 @@ class SettingController extends BaseController
      */
     public function destroy($id): void
     {
-        // 检查是否锁定
-        if (Config::get('settings.locked', false)) {
-            $this->error('设置已锁定，禁止删除设置');
-        }
-
         $setting = Setting::find($id);
         if (! $setting) {
             $this->error('设置不存在');
@@ -189,11 +158,6 @@ class SettingController extends BaseController
      */
     public function batchDestroy(GetIdsRequest $request): void
     {
-        // 检查是否锁定
-        if (Config::get('settings.locked', false)) {
-            $this->error('设置已锁定，禁止删除设置');
-        }
-
         $ids = $request->validated('ids');
 
         $settings = Setting::whereIn('id', $ids)->get();
