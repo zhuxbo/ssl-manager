@@ -53,6 +53,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        // 系统采用整体升级方式，不支持回滚操作
+        // 系统不需要支持回滚
     }
 };
