@@ -25,7 +25,6 @@ class Cert extends BaseModel
         'last_cert_id',
         'api_id',
         'vendor_id',
-        'vendor_cert_id',
         'refer_id',
         'unique_value',
         'issuer',

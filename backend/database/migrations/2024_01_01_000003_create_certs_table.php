@@ -14,7 +14,6 @@ return new class extends Migration
             $table->unsignedBigInteger('last_cert_id')->nullable()->unique()->comment('上一个证书ID');
             $table->string('api_id', 200)->nullable()->index()->comment('接口ID');
             $table->string('vendor_id', 200)->nullable()->comment('CA订单ID');
-            $table->string('vendor_cert_id', 200)->nullable()->comment('CA证书ID');
             $table->string('refer_id', 200)->nullable()->unique()->comment('参考ID');
             $table->string('unique_value', 32)->nullable()->comment('唯一值');
             $table->string('issuer', 200)->nullable()->index()->comment('颁发者');

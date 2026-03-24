@@ -1,7 +1,7 @@
 {
     "version": "1.0",
     "mysql_version": "8.0.43",
-    "generated_at": "2026-03-23 12:52:45",
+    "generated_at": "2026-03-24 12:48:56",
     "database": {
         "name": "manager",
         "charset": "utf8mb4",
@@ -1387,16 +1387,8 @@
                     "extra": "",
                     "comment": "CA订单ID"
                 },
-                "vendor_cert_id": {
-                    "position": 6,
-                    "type": "varchar(200)",
-                    "nullable": true,
-                    "default": null,
-                    "extra": "",
-                    "comment": "CA证书ID"
-                },
                 "refer_id": {
-                    "position": 7,
+                    "position": 6,
                     "type": "varchar(200)",
                     "nullable": true,
                     "default": null,
@@ -1404,7 +1396,7 @@
                     "comment": "参考ID"
                 },
                 "unique_value": {
-                    "position": 8,
+                    "position": 7,
                     "type": "varchar(32)",
                     "nullable": true,
                     "default": null,
@@ -1412,7 +1404,7 @@
                     "comment": "唯一值"
                 },
                 "issuer": {
-                    "position": 9,
+                    "position": 8,
                     "type": "varchar(200)",
                     "nullable": true,
                     "default": null,
@@ -1420,7 +1412,7 @@
                     "comment": "颁发者"
                 },
                 "action": {
-                    "position": 10,
+                    "position": 9,
                     "type": "enum('new','renew','reissue')",
                     "nullable": false,
                     "default": "new",
@@ -1428,7 +1420,7 @@
                     "comment": "操作"
                 },
                 "channel": {
-                    "position": 11,
+                    "position": 10,
                     "type": "enum('admin','web','api','deploy')",
                     "nullable": false,
                     "default": null,
@@ -1436,7 +1428,7 @@
                     "comment": ""
                 },
                 "params": {
-                    "position": 12,
+                    "position": 11,
                     "type": "mediumtext",
                     "nullable": true,
                     "default": null,
@@ -1444,7 +1436,7 @@
                     "comment": "参数"
                 },
                 "amount": {
-                    "position": 13,
+                    "position": 12,
                     "type": "decimal(10,2)",
                     "nullable": false,
                     "default": "0.00",
@@ -1452,7 +1444,7 @@
                     "comment": "金额"
                 },
                 "common_name": {
-                    "position": 14,
+                    "position": 13,
                     "type": "varchar(256)",
                     "nullable": false,
                     "default": null,
@@ -1460,7 +1452,7 @@
                     "comment": "通用名称"
                 },
                 "alternative_names": {
-                    "position": 15,
+                    "position": 14,
                     "type": "mediumtext",
                     "nullable": true,
                     "default": null,
@@ -1468,7 +1460,7 @@
                     "comment": "备用名称"
                 },
                 "email": {
-                    "position": 16,
+                    "position": 15,
                     "type": "varchar(500)",
                     "nullable": true,
                     "default": null,
@@ -1476,7 +1468,7 @@
                     "comment": "邮箱地址"
                 },
                 "standard_count": {
-                    "position": 17,
+                    "position": 16,
                     "type": "int",
                     "nullable": false,
                     "default": "0",
@@ -1484,7 +1476,7 @@
                     "comment": "标准域名数"
                 },
                 "wildcard_count": {
-                    "position": 18,
+                    "position": 17,
                     "type": "int",
                     "nullable": false,
                     "default": "0",
@@ -1492,7 +1484,7 @@
                     "comment": "通配符数"
                 },
                 "dcv": {
-                    "position": 19,
+                    "position": 18,
                     "type": "mediumtext",
                     "nullable": true,
                     "default": null,
@@ -1500,7 +1492,7 @@
                     "comment": "验证信息"
                 },
                 "validation": {
-                    "position": 20,
+                    "position": 19,
                     "type": "mediumtext",
                     "nullable": true,
                     "default": null,
@@ -1508,7 +1500,7 @@
                     "comment": "验证"
                 },
                 "documents": {
-                    "position": 21,
+                    "position": 20,
                     "type": "varchar(2000)",
                     "nullable": true,
                     "default": null,
@@ -1516,7 +1508,7 @@
                     "comment": "验证文档列表"
                 },
                 "issued_at": {
-                    "position": 22,
+                    "position": 21,
                     "type": "timestamp",
                     "nullable": true,
                     "default": null,
@@ -1524,7 +1516,7 @@
                     "comment": "颁发时间"
                 },
                 "expires_at": {
-                    "position": 23,
+                    "position": 22,
                     "type": "timestamp",
                     "nullable": true,
                     "default": null,
@@ -1532,7 +1524,7 @@
                     "comment": "过期时间"
                 },
                 "auto_deploy_at": {
-                    "position": 24,
+                    "position": 23,
                     "type": "timestamp",
                     "nullable": true,
                     "default": null,
@@ -1540,7 +1532,7 @@
                     "comment": "自动部署时间"
                 },
                 "csr_md5": {
-                    "position": 25,
+                    "position": 24,
                     "type": "char(32)",
                     "nullable": true,
                     "default": null,
@@ -1548,7 +1540,7 @@
                     "comment": "CSR的MD5"
                 },
                 "csr": {
-                    "position": 26,
+                    "position": 25,
                     "type": "mediumtext",
                     "nullable": true,
                     "default": null,
@@ -1556,7 +1548,7 @@
                     "comment": "CSR"
                 },
                 "private_key": {
-                    "position": 27,
+                    "position": 26,
                     "type": "mediumtext",
                     "nullable": true,
                     "default": null,
@@ -1564,7 +1556,7 @@
                     "comment": "私钥"
                 },
                 "cert": {
-                    "position": 28,
+                    "position": 27,
                     "type": "mediumtext",
                     "nullable": true,
                     "default": null,
@@ -1572,7 +1564,7 @@
                     "comment": "证书"
                 },
                 "serial_number": {
-                    "position": 29,
+                    "position": 28,
                     "type": "varchar(128)",
                     "nullable": true,
                     "default": null,
@@ -1580,7 +1572,7 @@
                     "comment": "序列号"
                 },
                 "fingerprint": {
-                    "position": 30,
+                    "position": 29,
                     "type": "varchar(128)",
                     "nullable": true,
                     "default": null,
@@ -1588,7 +1580,7 @@
                     "comment": "指纹"
                 },
                 "encryption_alg": {
-                    "position": 31,
+                    "position": 30,
                     "type": "varchar(20)",
                     "nullable": true,
                     "default": null,
@@ -1596,7 +1588,7 @@
                     "comment": "加密算法"
                 },
                 "encryption_bits": {
-                    "position": 32,
+                    "position": 31,
                     "type": "smallint unsigned",
                     "nullable": false,
                     "default": "0",
@@ -1604,7 +1596,7 @@
                     "comment": "加密位数"
                 },
                 "signature_digest_alg": {
-                    "position": 33,
+                    "position": 32,
                     "type": "varchar(20)",
                     "nullable": true,
                     "default": null,
@@ -1612,7 +1604,7 @@
                     "comment": "签名摘要算法"
                 },
                 "cert_apply_status": {
-                    "position": 34,
+                    "position": 33,
                     "type": "tinyint",
                     "nullable": false,
                     "default": "0",
@@ -1620,7 +1612,7 @@
                     "comment": "证书申请状态: 0=未提交CA, 2=已提交CA"
                 },
                 "domain_verify_status": {
-                    "position": 35,
+                    "position": 34,
                     "type": "tinyint",
                     "nullable": false,
                     "default": "0",
@@ -1628,7 +1620,7 @@
                     "comment": "域名验证状态: 0=未开始, 1=进行中, 2=已完成"
                 },
                 "org_verify_status": {
-                    "position": 36,
+                    "position": 35,
                     "type": "tinyint",
                     "nullable": false,
                     "default": "0",
@@ -1636,7 +1628,7 @@
                     "comment": "组织验证状态: 0=未开始, 1=进行中, 2=已完成"
                 },
                 "status": {
-                    "position": 37,
+                    "position": 36,
                     "type": "enum('unpaid','pending','processing','approving','active','failed','cancelling','cancelled','revoked','renewed','reissued','expired')",
                     "nullable": false,
                     "default": "unpaid",
@@ -1644,7 +1636,7 @@
                     "comment": "状态"
                 },
                 "created_at": {
-                    "position": 38,
+                    "position": 37,
                     "type": "timestamp",
                     "nullable": true,
                     "default": null,
@@ -1652,7 +1644,7 @@
                     "comment": ""
                 },
                 "updated_at": {
-                    "position": 39,
+                    "position": 38,
                     "type": "timestamp",
                     "nullable": true,
                     "default": null,

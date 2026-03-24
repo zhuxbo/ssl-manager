@@ -393,7 +393,6 @@ class ApiController extends Controller
             'id',
             'order_id',
             'vendor_id',
-            'vendor_cert_id',
             'common_name',
             'alternative_names',
             'dcv',

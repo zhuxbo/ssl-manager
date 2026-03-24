@@ -341,7 +341,6 @@ class ApiController extends Controller
         $orderData = array_intersect_key($orderArray, array_flip(['organization', 'contact', 'period_from', 'period_till']));
         $certData = array_intersect_key($certArray, array_flip([
             'vendor_id',
-            'vendor_cert_id',
             'common_name',
             'alternative_names',
             'dcv',
