@@ -7,9 +7,9 @@
     >
       本地文档<span
         style="
+          font-size: 12px;
           font-weight: normal;
           color: var(--el-text-color-secondary);
-          font-size: 12px;
         "
         >（签发后 24 小时内删除）</span
       >

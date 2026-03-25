@@ -139,9 +139,12 @@ export function useSettingFormStore(onSuccess) {
               inactiveValue: false
             });
           case "array":
-            // 使用修改后的 ArrayInput
             return h(ArrayInput, {
-              modelValue: Array.isArray(value) ? value : [],
+              modelValue:
+                Array.isArray(value) ||
+                (typeof value === "object" && value !== null)
+                  ? value
+                  : [],
               "onUpdate:modelValue": onChange
             });
           case "select":
