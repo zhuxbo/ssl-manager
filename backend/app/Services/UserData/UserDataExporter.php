@@ -56,15 +56,6 @@ class UserDataExporter
                 $this->exportTable($handle, $item, $user);
             }
 
-            // 导出动态表（仅导出用的，排除令牌和日志类）
-            foreach (UserDataTableRegistry::dynamicTables($user->id) as $item) {
-                $count = DB::table($item['table'])->where('user_id', $user->id)->count();
-                if ($count > 0) {
-                    $this->output->writeln("导出{$item['name']} ($count 条)...");
-                    $this->exportDirectTable($handle, $item['table'], $user->id);
-                }
-            }
-
             fwrite($handle, "SET FOREIGN_KEY_CHECKS = 1;\n");
 
             fclose($handle);
@@ -258,6 +249,11 @@ class UserDataExporter
         }
 
         $columns = array_keys($rows[0]);
+
+        // 自增 ID 表排除 id 列，避免跨系统导入冲突
+        if (UserDataTableRegistry::isAutoIncrement($table)) {
+            $columns = array_values(array_filter($columns, fn ($col) => $col !== 'id'));
+        }
         $columnList = implode(', ', array_map(fn ($col) => "`$col`", $columns));
 
         $pdo = DB::connection()->getPdo();
