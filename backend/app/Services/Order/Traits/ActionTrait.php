@@ -10,6 +10,7 @@ use App\Jobs\TaskJob;
 use App\Models\Cert;
 use App\Models\CnameDelegation;
 use App\Models\Order;
+use App\Models\Product;
 use App\Models\Task;
 use App\Models\Transaction;
 use App\Services\Delegation\CnameDelegationService;
@@ -75,6 +76,7 @@ trait ActionTrait
             FindUtil::User($params['user_id'], true);
 
             $product = FindUtil::Product((int) ($params['product_id'] ?? 0), true);
+            $product->product_type === Product::TYPE_ACME && $this->error('此产品不支持通过传统订单流程申请');
             $productType = $product->product_type ?? 'ssl';
 
             // SMIME/CodeSign 不支持批量申请
@@ -524,7 +526,7 @@ trait ActionTrait
                     $prefix = $this->getDelegationPrefixForCa($dcv['ca'] ?? '');
 
                     // 判断是否精确匹配前缀（ACME/DigiCert 需要每个子域单独委托）
-                    $isExactMatch = in_array($prefix, ['_acme-challenge', '_dnsauth']);
+                    $isExactMatch = $prefix === '_dnsauth';
 
                     // 精确匹配：使用完整域名；模糊匹配：使用根域
                     $zone = $isExactMatch
@@ -682,15 +684,14 @@ trait ActionTrait
      * - Sectigo: _pki-validation
      * - Certum: _certum
      * - DigiCert/GeoTrust/Thawte/RapidSSL/TrustAsia: _dnsauth
-     * - 其他（含 ACME CA）: _acme-challenge
+     * - 其他: _dnsauth
      */
     protected function getDelegationPrefixForCa(string $ca): string
     {
         return match (strtolower($ca)) {
             'sectigo', 'comodo' => '_pki-validation',
             'certum' => '_certum',
-            'digicert', 'geotrust', 'thawte', 'rapidssl', 'symantec', 'trustasia' => '_dnsauth',
-            default => '_acme-challenge',
+            default => '_dnsauth',
         };
     }
 

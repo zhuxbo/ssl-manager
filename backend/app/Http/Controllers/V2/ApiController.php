@@ -202,6 +202,9 @@ class ApiController extends Controller
         if (! $product) {
             $this->error('Product not found');
         }
+        if ($product->product_type === Product::TYPE_ACME) {
+            $this->error('ACME products are not supported via this API');
+        }
         $params['product_id'] = $product->id;
 
         $params['user_id'] = $this->user_id;

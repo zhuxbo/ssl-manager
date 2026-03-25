@@ -338,7 +338,9 @@ const loading = ref(false);
 const productQueryParams = computed(() => {
   return {
     domains: isBatchApply.value ? "single" : "",
-    product_type: isBatchApply.value ? "ssl" : ""
+    product_type: isBatchApply.value
+      ? ["ssl"]
+      : ["ssl", "smime", "codesign", "docsign"]
   };
 });
 // 禁用字段列表

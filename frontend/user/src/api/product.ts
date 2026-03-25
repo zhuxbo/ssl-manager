@@ -8,6 +8,7 @@ export interface IndexParams {
   name?: string;
   code?: string;
   brand?: string;
+  product_type?: string | string[];
   encryption_standard?: string;
   encryption_alg?: string;
   validation_type?: string;

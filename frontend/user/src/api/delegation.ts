@@ -5,7 +5,7 @@ export interface IndexParams {
   pageSize?: number;
   quickSearch?: string;
   zone?: string;
-  prefix?: "_certum" | "_pki-validation" | "_dnsauth" | "_acme-challenge";
+  prefix?: "_certum" | "_pki-validation" | "_dnsauth";
   valid?: boolean;
 }
 

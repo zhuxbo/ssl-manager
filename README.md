@@ -116,7 +116,7 @@ deploy/             # 部署脚本
 将域名验证 CNAME 记录指向平台托管域名，实现自动续签：
 
 ```
-_acme-challenge.example.com  →  *******.your-platform.com
+_dnsauth.example.com  →  *******.your-platform.com
 ```
 
 配置后，平台自动完成 DNS 验证，无需手动操作。

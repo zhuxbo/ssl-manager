@@ -103,7 +103,7 @@ class DelegationController extends BaseController
     {
         $validated = request()->validate([
             'zones' => 'required|string',
-            'prefix' => 'required|string|in:_acme-challenge,_dnsauth,_pki-validation,_certum',
+            'prefix' => 'required|string|in:_dnsauth,_pki-validation,_certum',
         ]);
 
         // 解析域名列表（支持逗号、换行、空格分隔）

@@ -65,16 +65,16 @@ test('split prefix and zone', function (string $host, ?string $expectedPrefix, ?
     expect($prefix)->toBe($expectedPrefix);
     expect($zone)->toBe($expectedZone);
 })->with([
-    '_acme-challenge' => ['_acme-challenge.example.com', '_acme-challenge', 'example.com'],
     '_dnsauth' => ['_dnsauth.example.com', '_dnsauth', 'example.com'],
     '_pki-validation' => ['_pki-validation.example.com', '_pki-validation', 'example.com'],
     '_certum' => ['_certum.example.com', '_certum', 'example.com'],
-    '子域名' => ['_acme-challenge.sub.example.com', '_acme-challenge', 'sub.example.com'],
-    '多级子域名' => ['_acme-challenge.a.b.example.com', '_acme-challenge', 'a.b.example.com'],
+    '子域名' => ['_dnsauth.sub.example.com', '_dnsauth', 'sub.example.com'],
+    '多级子域名' => ['_dnsauth.a.b.example.com', '_dnsauth', 'a.b.example.com'],
     '不支持的前缀' => ['_unknown.example.com', null, null],
-    '太短' => ['_acme-challenge.com', null, null],
+    '_acme-challenge不再支持' => ['_acme-challenge.example.com', null, null],
+    '太短' => ['_dnsauth.com', null, null],
     '无前缀' => ['example.com', null, null],
-    '大写转换' => ['_ACME-CHALLENGE.EXAMPLE.COM', '_acme-challenge', 'example.com'],
-    '仅前缀' => ['_acme-challenge', null, null],
-    '两级域名' => ['_acme-challenge.co', null, null],
+    '大写转换' => ['_DNSAUTH.EXAMPLE.COM', '_dnsauth', 'example.com'],
+    '仅前缀' => ['_dnsauth', null, null],
+    '两级域名' => ['_dnsauth.co', null, null],
 ]);

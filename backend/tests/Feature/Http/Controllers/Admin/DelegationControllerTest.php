@@ -72,7 +72,7 @@ test('管理员可以创建委托', function () {
     $response = $this->actingAsAdmin($this->admin)->postJson('/api/admin/delegation', [
         'user_id' => $this->user->id,
         'zone' => 'test.com',
-        'prefix' => '_acme-challenge',
+        'prefix' => '_dnsauth',
     ]);
 
     $response->assertOk()->assertJson(['code' => 1]);
@@ -103,7 +103,7 @@ test('管理员可以批量创建委托', function () {
     $response = $this->actingAsAdmin($this->admin)->postJson('/api/admin/delegation/batch-store', [
         'user_id' => $this->user->id,
         'zones' => "domain1.com\ndomain2.com",
-        'prefix' => '_acme-challenge',
+        'prefix' => '_dnsauth',
     ]);
 
     $response->assertOk()->assertJson(['code' => 1]);

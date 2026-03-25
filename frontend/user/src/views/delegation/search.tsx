@@ -35,7 +35,6 @@ export const useDelegationSearch = (onSearch: () => void) => {
       prop: "prefix",
       valueType: "select",
       options: [
-        { label: "_acme-challenge (ACME)", value: "_acme-challenge" },
         { label: "_dnsauth (DigiCert/TrustAsia)", value: "_dnsauth" },
         { label: "_pki-validation (Sectigo)", value: "_pki-validation" },
         { label: "_certum (Certum)", value: "_certum" }

@@ -344,7 +344,9 @@ const productSelectRef = ref();
 const productQueryParams = computed(() => {
   return {
     domains: isBatchApply.value ? "single" : "",
-    product_type: isBatchApply.value ? "ssl" : "",
+    product_type: isBatchApply.value
+      ? ["ssl"]
+      : ["ssl", "smime", "codesign", "docsign"],
     status: 1
   };
 });

@@ -73,7 +73,7 @@ trait CreatesTestData
             'standard_count' => $overrides['standard_count'] ?? 1,
             'wildcard_count' => $overrides['wildcard_count'] ?? 0,
             'csr' => $overrides['csr'] ?? $this->generateTestCsr(),
-            'dcv' => $overrides['dcv'] ?? ['method' => 'txt', 'dns' => ['host' => '_acme-challenge']],
+            'dcv' => $overrides['dcv'] ?? ['method' => 'txt', 'dns' => ['host' => '_dnsauth']],
             'validation' => $overrides['validation'] ?? [],
             'expires_at' => $overrides['expires_at'] ?? now()->addDays(90),
         ], $overrides));
@@ -90,7 +90,7 @@ trait CreatesTestData
     protected function createTestDelegation(User $user, array $overrides = []): CnameDelegation
     {
         $zone = $overrides['zone'] ?? 'example.com';
-        $prefix = $overrides['prefix'] ?? '_acme-challenge';
+        $prefix = $overrides['prefix'] ?? '_dnsauth';
 
         return CnameDelegation::create(array_merge([
             'user_id' => $user->id,

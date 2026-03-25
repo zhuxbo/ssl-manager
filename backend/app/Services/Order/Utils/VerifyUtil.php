@@ -167,7 +167,7 @@ class VerifyUtil
     /**
      * 验证 CNAME 委托记录，支持故障转移
      *
-     * @param  string  $host  主机名（如 _acme-challenge.example.com）
+     * @param  string  $host  主机名（如 _dnsauth.example.com）
      * @param  string  $expectedTarget  期望的CNAME目标
      * @return bool 是否验证通过
      */

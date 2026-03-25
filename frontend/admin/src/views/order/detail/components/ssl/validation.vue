@@ -6,10 +6,16 @@
   >
     <div style="margin-top: 18px">
       <el-form-item label="主机记录：" label-width="82px">
-        <el-input :model-value="delegationPrefix" spellcheck="false">
+        <el-input
+          :model-value="getDelegationHostInput(uniqueDelegations[0])"
+          spellcheck="false"
+        >
           <template #suffix>
-            <Copy :copied="delegationPrefix" />
+            <Copy :copied="getDelegationHost(uniqueDelegations[0])" />
           </template>
+          <template #append
+            >.{{ getDelegationHostSuffix(uniqueDelegations[0]) }}</template
+          >
         </el-input>
       </el-form-item>
       <el-form-item label="解析类型：" label-width="82px">
@@ -46,11 +52,16 @@
         <tbody>
           <tr v-for="(item, index) in uniqueDelegations" :key="index">
             <td style="padding: 4px 8px 4px 0">
-              <el-input :model-value="delegationPrefix" spellcheck="false">
+              <el-input
+                :model-value="getDelegationHostInput(item)"
+                spellcheck="false"
+              >
                 <template #suffix>
                   <Copy :copied="getDelegationHost(item)" />
                 </template>
-                <template #append>.{{ getDelegationZone(item) }}</template>
+                <template #append
+                  >.{{ getDelegationHostSuffix(item) }}</template
+                >
               </el-input>
             </td>
             <td style="padding: 4px 8px; text-align: center">
@@ -411,9 +422,8 @@
             </el-tag>
           </el-descriptions-item>
           <el-descriptions-item label="查询主机" label-align="right">
-            {{ delegationPrefix }}.{{
-              currentCheckItem.delegation_zone ||
-              currentCheckItem.domain?.replace(/^\*\./, "")
+            {{ getDelegationHostInput(currentCheckItem) }}.{{
+              getDelegationHostSuffix(currentCheckItem)
             }}
           </el-descriptions-item>
           <el-descriptions-item label="期望指向" label-align="right">
@@ -640,15 +650,8 @@ const getDelegationPrefix = (ca?: string) => {
       return "_pki-validation";
     case "certum":
       return "_certum";
-    case "digicert":
-    case "geotrust":
-    case "thawte":
-    case "rapidssl":
-    case "symantec":
-    case "trustasia":
-      return "_dnsauth";
     default:
-      return "_acme-challenge";
+      return "_dnsauth";
   }
 };
 
@@ -665,6 +668,23 @@ const getDelegationZone = (item: any) => {
 // 获取委托验证的完整主机记录
 const getDelegationHost = (item: any) => {
   return `${delegationPrefix.value}.${getDelegationZone(item)}`;
+};
+
+// 委托验证：输入框显示值（_dnsauth 精确匹配时包含子域前缀）
+const getDelegationHostInput = (item: any) => {
+  if (delegationPrefix.value !== "_dnsauth") return delegationPrefix.value;
+  const zone = getDelegationZone(item);
+  const root = getRootDomain(zone) || zone;
+  if (zone === root) return delegationPrefix.value;
+  const sub = zone.slice(0, -(root.length + 1));
+  return `${delegationPrefix.value}.${sub}`;
+};
+
+// 委托验证：append 后缀显示（_dnsauth 时为根域，其他为完整 zone）
+const getDelegationHostSuffix = (item: any) => {
+  if (delegationPrefix.value !== "_dnsauth") return getDelegationZone(item);
+  const zone = getDelegationZone(item);
+  return getRootDomain(zone) || zone;
 };
 
 // 去重后的委托列表（按 delegation_id 去重）

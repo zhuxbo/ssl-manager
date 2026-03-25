@@ -84,10 +84,10 @@ test('fillable 字段可批量赋值', function () {
     $delegation = CnameDelegation::factory()->create([
         'user_id' => $user->id,
         'zone' => 'example.com',
-        'prefix' => '_acme-challenge',
+        'prefix' => '_dnsauth',
         'label' => 'abc123def456abc123def456abc123de',
     ]);
 
     expect($delegation->zone)->toBe('example.com');
-    expect($delegation->prefix)->toBe('_acme-challenge');
+    expect($delegation->prefix)->toBe('_dnsauth');
 });

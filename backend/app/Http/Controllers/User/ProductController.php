@@ -42,7 +42,8 @@ class ProductController extends BaseController
             $query->where('brand', $validated['brand']);
         }
         if (! empty($validated['product_type'])) {
-            $query->where('product_type', $validated['product_type']);
+            $types = (array) $validated['product_type'];
+            $query->whereIn('product_type', $types);
         }
         if (! empty($validated['encryption_standard'])) {
             $query->where('encryption_standard', $validated['encryption_standard']);

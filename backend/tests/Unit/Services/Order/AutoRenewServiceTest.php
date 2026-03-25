@@ -327,10 +327,10 @@ test('check delegation validity uses correct prefix for ca', function () {
         'valid' => true,
     ]);
 
-    // 使用 ACME CA（需要 _acme-challenge 前缀），应该找不到
+    // 使用 ACME CA（需要 _dnsauth 前缀），应该找不到
     $mockDelegationService = Mockery::mock(CnameDelegationService::class)->makePartial();
     $mockDelegationService->shouldReceive('findDelegation')
-        ->with($user->id, 'example.com', '_acme-challenge')
+        ->with($user->id, 'example.com', '_dnsauth')
         ->andReturn(null);
 
     $service = new AutoRenewService($mockDelegationService);

@@ -226,15 +226,8 @@ const getDelegationPrefix = (ca?: string) => {
       return "_pki-validation";
     case "certum":
       return "_certum";
-    case "digicert":
-    case "geotrust":
-    case "thawte":
-    case "rapidssl":
-    case "symantec":
-    case "trustasia":
-      return "_dnsauth";
     default:
-      return "_acme-challenge";
+      return "_dnsauth";
   }
 };
 

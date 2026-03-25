@@ -52,6 +52,7 @@ skills/         # 开发规范（详细文档）
 
 - `delegation` 提交到 CA 时转换为 `txt`，通过 `dcv.is_delegate` 标记区分
 - 产品同步时保留本地的 `delegation` 验证方法
+- **委托前缀**：`_dnsauth`（DigiCert 系，精确匹配子域）、`_pki-validation`（Sectigo，模糊匹配回落根域）、`_certum`（Certum，同 Sectigo）。已移除 `_acme-challenge`（ACME 使用独立体系）
 - 详见 `skills/backend-dev.md` 委托验证章节
 
 ### 插件系统
@@ -83,8 +84,8 @@ skills/         # 开发规范（详细文档）
     - Admin：`/api/admin/acme/` — index, show, new, pay, commit, sync, commit-cancel, remark
     - User：`/api/user/acme/` — index, show, new, pay, commit, commit-cancel（限当前用户）
     - Deploy：`/api/deploy/acme/` — new（一步到位：创建+支付+提交）, get（含 EAB）
-- **产品 API 分离**：`/api/v2/get-products` 排除 ACME 产品，`/api/acme/get-products` 仅返回 ACME 产品
-- **传统流程完全隔离**：ACME 通过独立控制器、服务和前端模块处理，与传统订单无交集
+- **产品 API 分离**：`/api/v2/get-products` 排除 ACME 产品，`/api/acme/get-products` 仅返回 ACME 产品；下单页面产品选择器通过 `exclude_product_type=acme` 过滤
+- **传统流程完全隔离**：ACME 通过独立控制器、服务和前端模块处理，与传统订单无交集；V2 API `new` 和 `Order\Action::initParams` 拒绝 ACME 产品
 
 ## 系统架构约定
 

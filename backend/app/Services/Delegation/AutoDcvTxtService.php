@@ -251,7 +251,7 @@ class AutoDcvTxtService
     /**
      * 拆分 host 为 prefix 和 zone
      *
-     * 例如: _acme-challenge.example.com => ['_acme-challenge', 'example.com']
+     * 例如: _dnsauth.example.com => ['_dnsauth', 'example.com']
      *
      * @param  string  $host  完整主机名
      * @return array{0: string|null, 1: string|null} [prefix, zone]
@@ -275,7 +275,7 @@ class AutoDcvTxtService
 
         // 验证 prefix 是否为支持的类型
         // Todo: 暂时硬编码前缀 以后再处理
-        $supportedPrefixes = ['_certum', '_pki-validation', '_dnsauth', '_acme-challenge'];
+        $supportedPrefixes = ['_certum', '_pki-validation', '_dnsauth'];
         if (! in_array($prefix, $supportedPrefixes, true)) {
             return [null, null];
         }

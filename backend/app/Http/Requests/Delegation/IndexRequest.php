@@ -14,7 +14,7 @@ class IndexRequest extends BaseRequest
             'quickSearch' => 'nullable|string|max:255',
             'user_id' => 'nullable|integer|min:1',
             'zone' => 'nullable|string|max:255',
-            'prefix' => 'nullable|in:_certum,_pki-validation,_dnsauth,_acme-challenge',
+            'prefix' => 'nullable|in:_certum,_pki-validation,_dnsauth',
             'valid' => 'nullable|boolean',
         ];
     }

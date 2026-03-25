@@ -38,6 +38,9 @@
           valueField="id"
           itemsField="items"
           totalField="total"
+          :queryParams="{
+            product_type: ['ssl', 'smime', 'codesign', 'docsign']
+          }"
           placeholder="请选择产品"
           style="width: 100%"
           @change="handleProductChange"

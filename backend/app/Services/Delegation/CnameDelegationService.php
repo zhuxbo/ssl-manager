@@ -67,7 +67,7 @@ class CnameDelegationService
      * 使用用户ID+域名组合确保每个用户的委托label唯一
      *
      * @param  int  $userId  用户ID
-     * @param  string  $delegatedFqdn  委托FQDN（如 _acme-challenge.example.com）
+     * @param  string  $delegatedFqdn  委托FQDN（如 _dnsauth.example.com）
      * @return string 32 字符的哈希标签
      */
     protected function generateLabel(int $userId, string $delegatedFqdn): string
@@ -85,7 +85,7 @@ class CnameDelegationService
     /**
      * 智能匹配委托记录（不检查 valid 状态，用于即时验证场景）
      *
-     * 仅匹配完整 FQDN : _acme-challenge _dnsauth
+     * 仅匹配完整 FQDN : _dnsauth
      * 优先匹配子域，未命中则回落到根域: _certum _pki-validation
      *
      * @param  int  $userId  用户ID
@@ -98,7 +98,7 @@ class CnameDelegationService
         $domain = ltrim(strtolower(DomainUtil::convertToUnicode($domain)), '*.');
 
         // ACME/DigiCert: 仅匹配完整 FQDN（不做 www 归一化，保留精确匹配语义）
-        if ($prefix === '_acme-challenge' || $prefix === '_dnsauth') {
+        if ($prefix === '_dnsauth') {
             return CnameDelegation::where([
                 'user_id' => $userId,
                 'zone' => $domain,
@@ -141,7 +141,7 @@ class CnameDelegationService
     /**
      * 智能匹配有效的委托记录
      *
-     * 仅匹配完整 FQDN : _acme-challenge _dnsauth
+     * 仅匹配完整 FQDN : _dnsauth
      * 优先匹配子域，未命中则回落到根域: _certum _pki-validation
      *
      * @param  int  $userId  用户ID
@@ -154,7 +154,7 @@ class CnameDelegationService
         $domain = ltrim(strtolower(DomainUtil::convertToUnicode($domain)), '*.');
 
         // ACME/DigiCert: 仅匹配完整 FQDN（不做 www 归一化，保留精确匹配语义）
-        if ($prefix === '_acme-challenge' || $prefix === '_dnsauth') {
+        if ($prefix === '_dnsauth') {
             return CnameDelegation::where([
                 'user_id' => $userId,
                 'zone' => $domain,
@@ -300,8 +300,7 @@ class CnameDelegationService
         return match (strtolower($ca)) {
             'sectigo', 'comodo' => '_pki-validation',
             'certum' => '_certum',
-            'digicert', 'geotrust', 'thawte', 'rapidssl', 'symantec', 'trustasia' => '_dnsauth',
-            default => '_acme-challenge',
+            default => '_dnsauth',
         };
     }
 
