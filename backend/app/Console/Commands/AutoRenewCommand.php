@@ -45,10 +45,10 @@ class AutoRenewCommand extends Command
      * 获取需要续费的订单
      * 条件：
      * - auto_renew = true（订单级或用户级）
-     * - DATEDIFF(period_till, NOW()) <= 15（订单剩余时间不超过15天，走续费）
-     * - latestCert.expires_at > now()->subDays(15)（证书未过期超过15天）
-     * - latestCert.expires_at < now()->addDays(14)（证书即将到期）
+     * - 订单未过期且剩余 ≤15 天（走续费）
+     * - latestCert.expires_at < now()+14天（证书即将到期）
      * - latestCert.status = 'active'
+     * - product.status = 1 且 renew = 1
      */
     private function getRenewOrders()
     {
@@ -59,7 +59,6 @@ class AutoRenewCommand extends Command
             })
             ->whereHas('latestCert', function ($query) {
                 $query->where('status', 'active')
-                    ->where('expires_at', '>', now()->subDays(15))
                     ->where('expires_at', '<', now()->addDays(14))
                     // API 订单由下游系统自行处理续费/重签
                     ->where(function ($q) {
@@ -74,8 +73,8 @@ class AutoRenewCommand extends Command
                             ->whereHas('user', fn ($u) => $u->where('auto_settings->auto_renew', true));
                     });
             })
-            // 订单剩余时间不超过15天，走续费
-            ->whereRaw('DATEDIFF(period_till, NOW()) <= 15')
+            // 订单剩余 ≤15 天走续费（active 状态已保证未过期）
+            ->where('period_till', '<=', now()->addDays(15))
             ->get();
     }
 
@@ -83,21 +82,20 @@ class AutoRenewCommand extends Command
      * 获取需要重签的订单
      * 条件：
      * - auto_reissue = true（订单级或用户级）
-     * - DATEDIFF(period_till, NOW()) > 15（订单剩余时间超过15天，走重签）
-     * - latestCert.expires_at > now()->subDays(15)（证书未过期超过15天）
-     * - latestCert.expires_at < now()->addDays(14)（证书即将到期）
+     * - 订单剩余 >15 天（走重签）
+     * - latestCert.expires_at < now()+14天（证书即将到期）
      * - latestCert.status = 'active'
+     * - product.reissue = 1（产品禁用仍可重签）
      */
     private function getReissueOrders()
     {
         return Order::with(['user', 'product', 'latestCert'])
             ->whereHas('user')
             ->whereHas('product', function ($query) {
-                $query->where('status', 1);
+                $query->where('reissue', 1);
             })
             ->whereHas('latestCert', function ($query) {
                 $query->where('status', 'active')
-                    ->where('expires_at', '>', now()->subDays(15))
                     ->where('expires_at', '<', now()->addDays(14))
                     // API 订单由下游系统自行处理续费/重签
                     ->where(function ($q) {
@@ -138,6 +136,7 @@ class AutoRenewCommand extends Command
 
     /**
      * 处理单个订单
+     * 创建续费/重签 → 支付 → 派发延时 commit 任务（分散提交压力）
      */
     private function processOrder(Order $order, string $action): void
     {
@@ -171,61 +170,70 @@ class AutoRenewCommand extends Command
             }
         }
 
-        // 使用委托验证方法
+        // 从原订单提取参数
         $params = [
             'order_id' => $order->id,
             'action' => $action,
             'channel' => 'auto',
-            'csr_generate' => 1,
             'domains' => $cert->alternative_names,
             'validation_method' => 'delegation',
+            'period' => $order->period,
+            'contact' => $order->contact,
         ];
 
-        // 执行续费或重签
-        $actionService = app(Action::class);
+        // CSR：产品支持重用则重用（含私钥），否则自动生成
+        if ($product->reuse_csr ?? false) {
+            $params['csr'] = $cert->csr;
+            if ($cert->private_key) {
+                $params['private_key'] = $cert->private_key;
+            }
+        } else {
+            $params['csr_generate'] = 1;
+        }
 
+        // OV/EV 需要组织信息
+        if ($order->organization) {
+            $params['organization'] = $order->organization;
+        }
+
+        $actionService = app(Action::class);
+        $targetOrderId = null;
+
+        // 1. 创建续费/重签
         try {
             if ($action === 'renew') {
                 $actionService->renew($params);
             } else {
                 $actionService->reissue($params);
             }
-
-            $this->info("订单 #{$order->id} {$action} 成功");
-
-            // 自动支付并提交
-            $this->autoPayAndCommit($order->id);
         } catch (ApiResponseException $e) {
             $result = $e->getApiResponse();
-
-            // 如果返回新订单ID（续费创建了新订单）
-            if (isset($result['data']['order_id'])) {
-                $newOrderId = $result['data']['order_id'];
-                $this->info("订单 #{$order->id} 续费创建新订单 #{$newOrderId}");
-                $this->autoPayAndCommit($newOrderId);
-            } else {
+            if (! isset($result['data']['order_id'])) {
                 throw new \Exception($result['msg'] ?? '操作失败');
             }
+            $targetOrderId = $result['data']['order_id'];
         }
-    }
 
-    /**
-     * 自动支付并提交
-     */
-    private function autoPayAndCommit(int $orderId): void
-    {
-        $actionService = app(Action::class);
+        if ($targetOrderId != $order->id) {
+            $this->info("订单 #{$order->id} 续费创建新订单 #{$targetOrderId}");
+        }
 
+        // 2. 支付（不自动提交，转为 pending 状态）
         try {
-            // 支付订单
-            $actionService->pay($orderId, true);
-            $this->info("订单 #{$orderId} 支付并提交成功");
+            $actionService->pay($targetOrderId, false);
         } catch (ApiResponseException $e) {
             $result = $e->getApiResponse();
-            $this->warn("订单 #{$orderId} 支付提交: ".($result['msg'] ?? '未知状态'));
-        } catch (Throwable $e) {
-            $this->warn("订单 #{$orderId} 支付提交异常: {$e->getMessage()}");
+            if (($result['code'] ?? 0) !== 1) {
+                throw new \Exception('支付失败: '.($result['msg'] ?? '未知错误'));
+            }
         }
+
+        // 3. 创建延时提交任务（随机分布在0~8小时内，8点后人工可检查状态）
+        $delay = random_int(0, 28800);
+        $actionService->createTask($targetOrderId, 'commit', $delay);
+
+        $scheduledAt = now()->addSeconds($delay)->format('m-d H:i');
+        $this->info("订单 #{$targetOrderId} 已支付，计划于 $scheduledAt 提交");
     }
 
     /**

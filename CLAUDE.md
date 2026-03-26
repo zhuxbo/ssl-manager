@@ -113,7 +113,10 @@ skills/         # 开发规范（详细文档）
 - `orders.auto_renew`: 订单级自动续费开关（null 时回落到用户设置）
 - `orders.auto_reissue`: 订单级自动重签开关（null 时回落到用户设置）
 - `users.auto_settings`: 用户级默认设置 `{"auto_renew": false, "auto_reissue": false}`
-- `AutoRenewCommand` 每小时执行：证书到期前 14 天触发，订单剩余 ≤15 天续费、>15 天重签；API channel 订单由下游控制，不处理
+- `AutoRenewCommand` 每天 00:00 执行：证书到期前 14 天触发，订单剩余 ≤15 天续费、>15 天重签；API channel 订单由下游控制，不处理
+- **延时提交**：Command 创建续费/重签 + 支付后不立即 commit，通过 Task 表创建延时 commit 任务（随机 0~8 小时），分散上游压力，8 点后人工可检查状态
+- **产品条件**：续费要求 `product.status=1 && renew=1`；重签仅要求 `reissue=1`（产品禁用仍可重签）
+- **参数继承**：从原订单提取 period/contact/organization/domains；CSR 按 `product.reuse_csr` 决定重用或生成
 - **委托前置条件**：缺失委托记录时自动创建（`_dnsauth` 精确域名、回落前缀按根域）；DNS 验证采用宽松策略（所有 dnsTools + 本地全部尝试，任一匹配即有效），目的是尽可能发起续签
 
 ## 测试
