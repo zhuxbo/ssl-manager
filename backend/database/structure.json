@@ -1,7 +1,7 @@
 {
     "version": "1.0",
     "mysql_version": "8.0.43",
-    "generated_at": "2026-03-26 12:33:23",
+    "generated_at": "2026-03-26 14:47:56",
     "database": {
         "name": "manager",
         "charset": "utf8mb4",
@@ -3296,7 +3296,7 @@
                 },
                 "report_data": {
                     "position": 4,
-                    "type": "json",
+                    "type": "text",
                     "nullable": false,
                     "default": null,
                     "extra": "",
