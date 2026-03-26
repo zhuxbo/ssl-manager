@@ -10,6 +10,10 @@ use App\Services\Order\AutoRenewService;
 
 uses(Tests\Traits\CreatesTestData::class);
 
+afterEach(function () {
+    Mockery::close();
+});
+
 beforeEach(function () {
     // Mock AutoRenewService 避免真实 DNS 检查
     $this->autoRenewService = Mockery::mock(AutoRenewService::class);
@@ -39,7 +43,7 @@ test('有续费订单时调用 Action renew', function () {
         'product_id' => $product->id,
         'auto_renew' => true,
         'period_from' => now()->subYear(),
-        'period_till' => now()->addDays(5),
+        'period_till' => now()->addDays(10), // ≤15天，走续费
     ]);
 
     $cert = Cert::factory()->active()->create([
@@ -98,7 +102,7 @@ test('委托检查失败时跳过订单', function () {
         'product_id' => $product->id,
         'auto_renew' => true,
         'period_from' => now()->subYear(),
-        'period_till' => now()->addDays(3),
+        'period_till' => now()->addDays(10), // ≤15天，走续费
     ]);
 
     $cert = Cert::factory()->active()->create([
@@ -127,7 +131,7 @@ test('余额不足时续费失败发送通知', function () {
         'product_id' => $product->id,
         'auto_renew' => true,
         'period_from' => now()->subYear(),
-        'period_till' => now()->addDays(3),
+        'period_till' => now()->addDays(10), // ≤15天，走续费
     ]);
 
     $cert = Cert::factory()->active()->create([

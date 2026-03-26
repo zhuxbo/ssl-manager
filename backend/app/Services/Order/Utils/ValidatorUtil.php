@@ -53,7 +53,7 @@ class ValidatorUtil
                 'rules' => [
                     'action' => ['required', 'in:new,renew,reissue'],
                     // ACME 使用独立表，传统订单 channel 不含 acme
-                    'channel' => ['required', 'in:web,admin,api,deploy'],
+                    'channel' => ['required', 'in:web,admin,api,deploy,auto'],
                     'plus' => ['in:0,1'],
                     'issue_verify' => ['in:0,1'],
                     'refer_id' => ['alpha_num', 'size:32', 'unique:certs,refer_id'],

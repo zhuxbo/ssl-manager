@@ -55,11 +55,11 @@ return new class extends Migration
         // 数据迁移 channel='acme' → 'api'
         DB::table('certs')->where('channel', 'acme')->update(['channel' => 'api']);
 
-        // 修改 channel 枚举，移除 'acme'
+        // 修改 channel 枚举：移除 'acme'，添加 'auto'（自动续签发起）
         $channelCol = collect(Schema::getColumns('certs'))->firstWhere('name', 'channel');
-        if ($channelCol && str_contains($channelCol['type'], "'acme'")) {
+        if ($channelCol && (str_contains($channelCol['type'], "'acme'") || ! str_contains($channelCol['type'], "'auto'"))) {
             Schema::table('certs', function (Blueprint $table) {
-                $table->enum('channel', ['admin', 'web', 'api', 'deploy'])->comment('渠道')->change();
+                $table->enum('channel', ['admin', 'web', 'api', 'deploy', 'auto'])->comment('渠道')->change();
             });
         }
 

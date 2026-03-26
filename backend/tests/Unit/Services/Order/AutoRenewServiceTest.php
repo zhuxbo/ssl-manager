@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\CnameDelegation;
 use App\Services\Delegation\CnameDelegationService;
 use App\Services\Order\AutoRenewService;
 use Database\Seeders\DatabaseSeeder;
@@ -61,11 +62,11 @@ test('will auto renew execute falls back to user setting', function () {
     $product = $this->createTestProduct(['status' => 1, 'renew' => 1]);
     $order = $this->createTestOrder($user, $product, [
         'auto_renew' => null, // 回落到用户设置
-        'period_till' => now()->addDays(30),
+        'period_till' => now()->addDays(10), // ≤15天，走续费
     ]);
     $this->createTestCert($order, [
         'channel' => 'api',
-        'expires_at' => now()->addDays(28),
+        'expires_at' => now()->addDays(5),
     ]);
 
     $order->refresh();
@@ -110,16 +111,16 @@ test('will auto renew execute returns false when product not renewable', functio
     expect($result)->toBeFalse();
 });
 
-test('will auto renew execute returns false when period diff too large', function () {
+test('will auto renew execute returns false when order has too many days remaining', function () {
     $user = $this->createTestUser(['auto_settings' => ['auto_renew' => true, 'auto_reissue' => false]]);
     $product = $this->createTestProduct(['status' => 1, 'renew' => 1]);
     $order = $this->createTestOrder($user, $product, [
         'auto_renew' => true,
-        'period_till' => now()->addDays(30),
+        'period_till' => now()->addDays(20), // >15天，应走重签而非续费
     ]);
     $this->createTestCert($order, [
         'channel' => 'api',
-        'expires_at' => now()->addDays(20), // period_till - expires_at = 10天，超过7天阈值
+        'expires_at' => now()->addDays(10),
     ]);
 
     $order->refresh();
@@ -128,16 +129,16 @@ test('will auto renew execute returns false when period diff too large', functio
     expect($result)->toBeFalse();
 });
 
-test('will auto renew execute returns true when period diff within threshold', function () {
+test('will auto renew execute returns true when order days remaining within threshold', function () {
     $user = $this->createTestUser(['auto_settings' => ['auto_renew' => true, 'auto_reissue' => false]]);
     $product = $this->createTestProduct(['status' => 1, 'renew' => 1]);
     $order = $this->createTestOrder($user, $product, [
         'auto_renew' => true,
-        'period_till' => now()->addDays(30),
+        'period_till' => now()->addDays(10), // ≤15天，走续费
     ]);
     $this->createTestCert($order, [
         'channel' => 'api',
-        'expires_at' => now()->addDays(25), // 差5天，在7天阈值内
+        'expires_at' => now()->addDays(5),
     ]);
 
     $order->refresh();
@@ -146,22 +147,40 @@ test('will auto renew execute returns true when period diff within threshold', f
     expect($result)->toBeTrue();
 });
 
-test('will auto renew execute boundary 7 days', function () {
+test('will auto renew execute boundary 15 days returns true', function () {
     $user = $this->createTestUser(['auto_settings' => ['auto_renew' => true, 'auto_reissue' => false]]);
     $product = $this->createTestProduct(['status' => 1, 'renew' => 1]);
     $order = $this->createTestOrder($user, $product, [
         'auto_renew' => true,
-        'period_till' => now()->addDays(30),
+        'period_till' => now()->addDays(15), // 正好15天，≤15 走续费
     ]);
     $this->createTestCert($order, [
         'channel' => 'api',
-        'expires_at' => now()->addDays(23), // period_till - expires_at = 7天，刚好达到阈值
+        'expires_at' => now()->addDays(5),
     ]);
 
     $order->refresh();
     $result = $this->service->willAutoRenewExecute($order, $user);
 
-    expect($result)->toBeFalse(); // 等于7天应该返回false（不续费）
+    expect($result)->toBeTrue(); // 等于15天应该返回true（走续费）
+});
+
+test('will auto renew execute boundary 16 days returns false', function () {
+    $user = $this->createTestUser(['auto_settings' => ['auto_renew' => true, 'auto_reissue' => false]]);
+    $product = $this->createTestProduct(['status' => 1, 'renew' => 1]);
+    $order = $this->createTestOrder($user, $product, [
+        'auto_renew' => true,
+        'period_till' => now()->addDays(16), // >15天，走重签
+    ]);
+    $this->createTestCert($order, [
+        'channel' => 'api',
+        'expires_at' => now()->addDays(5),
+    ]);
+
+    $order->refresh();
+    $result = $this->service->willAutoRenewExecute($order, $user);
+
+    expect($result)->toBeFalse(); // 超过15天应该返回false（走重签）
 });
 
 // ==================== willAutoReissueExecute ====================
@@ -211,7 +230,7 @@ test('will auto reissue execute falls back to user setting', function () {
     ]);
     $this->createTestCert($order, [
         'channel' => 'api',
-        'expires_at' => now()->addDays(10), // period_till - expires_at = 20天，超过7天
+        'expires_at' => now()->addDays(10),
     ]);
 
     $order->refresh();
@@ -238,16 +257,16 @@ test('will auto reissue execute returns false when product disabled', function (
     expect($result)->toBeFalse();
 });
 
-test('will auto reissue execute returns false when period diff too small', function () {
+test('will auto reissue execute returns false when order days remaining too small', function () {
     $user = $this->createTestUser(['auto_settings' => ['auto_renew' => false, 'auto_reissue' => true]]);
     $product = $this->createTestProduct(['status' => 1]);
     $order = $this->createTestOrder($user, $product, [
         'auto_reissue' => true,
-        'period_till' => now()->addDays(30),
+        'period_till' => now()->addDays(10), // ≤15天，应走续费而非重签
     ]);
     $this->createTestCert($order, [
         'channel' => 'api',
-        'expires_at' => now()->addDays(28), // 差2天，小于7天阈值
+        'expires_at' => now()->addDays(5),
     ]);
 
     $order->refresh();
@@ -256,16 +275,16 @@ test('will auto reissue execute returns false when period diff too small', funct
     expect($result)->toBeFalse();
 });
 
-test('will auto reissue execute returns true when period diff exceeds threshold', function () {
+test('will auto reissue execute returns true when order days remaining exceeds threshold', function () {
     $user = $this->createTestUser(['auto_settings' => ['auto_renew' => false, 'auto_reissue' => true]]);
     $product = $this->createTestProduct(['status' => 1]);
     $order = $this->createTestOrder($user, $product, [
         'auto_reissue' => true,
-        'period_till' => now()->addDays(30),
+        'period_till' => now()->addDays(30), // >15天，走重签
     ]);
     $this->createTestCert($order, [
         'channel' => 'api',
-        'expires_at' => now()->addDays(10), // period_till - expires_at = 20天，超过7天
+        'expires_at' => now()->addDays(10),
     ]);
 
     $order->refresh();
@@ -274,33 +293,57 @@ test('will auto reissue execute returns true when period diff exceeds threshold'
     expect($result)->toBeTrue();
 });
 
-test('will auto reissue execute boundary 7 days', function () {
+test('will auto reissue execute boundary 15 days returns false', function () {
     $user = $this->createTestUser(['auto_settings' => ['auto_renew' => false, 'auto_reissue' => true]]);
     $product = $this->createTestProduct(['status' => 1]);
     $order = $this->createTestOrder($user, $product, [
         'auto_reissue' => true,
-        'period_till' => now()->addDays(30),
+        'period_till' => now()->addDays(15), // 正好15天，≤15 不走重签
     ]);
     $this->createTestCert($order, [
         'channel' => 'api',
-        'expires_at' => now()->addDays(23), // 正好差7天
+        'expires_at' => now()->addDays(5),
     ]);
 
     $order->refresh();
     $result = $this->service->willAutoReissueExecute($order, $user);
 
-    expect($result)->toBeFalse(); // 等于7天应该返回false
+    expect($result)->toBeFalse(); // 等于15天应该返回false（走续费）
+});
+
+test('will auto reissue execute boundary 16 days returns true', function () {
+    $user = $this->createTestUser(['auto_settings' => ['auto_renew' => false, 'auto_reissue' => true]]);
+    $product = $this->createTestProduct(['status' => 1]);
+    $order = $this->createTestOrder($user, $product, [
+        'auto_reissue' => true,
+        'period_till' => now()->addDays(16), // >15天，走重签
+    ]);
+    $this->createTestCert($order, [
+        'channel' => 'api',
+        'expires_at' => now()->addDays(5),
+    ]);
+
+    $order->refresh();
+    $result = $this->service->willAutoReissueExecute($order, $user);
+
+    expect($result)->toBeTrue(); // 超过15天应该返回true（走重签）
 });
 
 // ==================== checkDelegationValidity ====================
 
-test('check delegation validity returns false when no delegation', function () {
+test('check delegation validity auto creates delegation when missing', function () {
     $user = $this->createTestUser();
-    // 不创建委托记录
+    // 不手动创建委托记录
 
     $result = $this->service->checkDelegationValidity($user->id, 'example.com', 'sectigo');
 
+    // 验证失败（无真实 DNS），但委托记录已自动创建
     expect($result)->toBeFalse();
+    expect(CnameDelegation::where([
+        'user_id' => $user->id,
+        'zone' => 'example.com',
+        'prefix' => '_pki-validation',
+    ])->exists())->toBeTrue();
 });
 
 test('check delegation validity returns false when verification fails', function () {
@@ -327,11 +370,20 @@ test('check delegation validity uses correct prefix for ca', function () {
         'valid' => true,
     ]);
 
-    // 使用 ACME CA（需要 _dnsauth 前缀），应该找不到
+    // 使用 ACME CA（需要 _dnsauth 前缀），findDelegation 找不到 → 自动创建 → 验证失败
     $mockDelegationService = Mockery::mock(CnameDelegationService::class)->makePartial();
     $mockDelegationService->shouldReceive('findDelegation')
         ->with($user->id, 'example.com', '_dnsauth')
         ->andReturn(null);
+    $mockDelegationService->shouldReceive('createOrGet')
+        ->with($user->id, 'example.com', '_dnsauth')
+        ->once()
+        ->andReturn($this->createTestDelegation($user, [
+            'zone' => 'example.com',
+            'prefix' => '_dnsauth',
+        ]));
+    $mockDelegationService->shouldReceive('checkAndUpdateValidity')
+        ->andReturn(false);
 
     $service = new AutoRenewService($mockDelegationService);
     $result = $service->checkDelegationValidity($user->id, 'example.com', 'letsencrypt');
@@ -339,22 +391,99 @@ test('check delegation validity uses correct prefix for ca', function () {
     expect($result)->toBeFalse();
 });
 
-test('check delegation validity handles multiple domains', function () {
+test('check delegation validity handles multiple domains auto creates missing', function () {
     $user = $this->createTestUser();
-    $this->createTestDelegation($user, [
+    $existingDelegation = $this->createTestDelegation($user, [
         'zone' => 'example.com',
         'prefix' => '_pki-validation',
-        'valid' => true,
     ]);
-    // 不创建 other.com 的委托
+    $newDelegation = $this->createTestDelegation($user, [
+        'zone' => 'other.com',
+        'prefix' => '_pki-validation',
+    ]);
 
-    $result = $this->service->checkDelegationValidity(
+    // mock：findDelegation 对 example.com 返回已有记录，对 other.com 返回 null
+    $mockService = Mockery::mock(CnameDelegationService::class)->makePartial();
+    $mockService->shouldReceive('findDelegation')
+        ->with($user->id, 'example.com', '_pki-validation')
+        ->andReturn($existingDelegation);
+    $mockService->shouldReceive('findDelegation')
+        ->with($user->id, 'other.com', '_pki-validation')
+        ->andReturn(null);
+    $mockService->shouldReceive('createOrGet')
+        ->with($user->id, 'other.com', '_pki-validation')
+        ->once()
+        ->andReturn($newDelegation);
+    $mockService->shouldReceive('checkAndUpdateValidity')
+        ->andReturn(true);
+
+    $service = new AutoRenewService($mockService);
+    $result = $service->checkDelegationValidity(
         $user->id,
         'example.com,other.com',
         'sectigo'
     );
 
-    expect($result)->toBeFalse();
+    expect($result)->toBeTrue();
+});
+
+test('check delegation validity auto creates dnsauth with exact domain', function () {
+    $user = $this->createTestUser();
+
+    $this->service->checkDelegationValidity($user->id, 'sub.example.com', 'letsencrypt');
+
+    // _dnsauth 应按精确域名创建
+    expect(CnameDelegation::where([
+        'user_id' => $user->id,
+        'zone' => 'sub.example.com',
+        'prefix' => '_dnsauth',
+    ])->exists())->toBeTrue();
+});
+
+test('check delegation validity auto creates pki-validation with root domain', function () {
+    $user = $this->createTestUser();
+
+    $this->service->checkDelegationValidity($user->id, 'sub.example.com', 'sectigo');
+
+    // _pki-validation 应按根域创建
+    expect(CnameDelegation::where([
+        'user_id' => $user->id,
+        'zone' => 'example.com',
+        'prefix' => '_pki-validation',
+    ])->exists())->toBeTrue();
+
+    // 不应创建子域级别的记录
+    expect(CnameDelegation::where([
+        'user_id' => $user->id,
+        'zone' => 'sub.example.com',
+        'prefix' => '_pki-validation',
+    ])->exists())->toBeFalse();
+});
+
+test('check delegation validity auto creates certum with root domain', function () {
+    $user = $this->createTestUser();
+
+    $this->service->checkDelegationValidity($user->id, 'sub.example.com', 'certum');
+
+    // _certum 应按根域创建
+    expect(CnameDelegation::where([
+        'user_id' => $user->id,
+        'zone' => 'example.com',
+        'prefix' => '_certum',
+    ])->exists())->toBeTrue();
+});
+
+test('check delegation validity auto creates strips wildcard prefix', function () {
+    $user = $this->createTestUser();
+
+    $this->service->checkDelegationValidity($user->id, '*.example.com', 'letsencrypt');
+
+    // 通配符应去除后按 example.com 创建
+    expect(CnameDelegation::where([
+        'user_id' => $user->id,
+        'zone' => 'example.com',
+        'prefix' => '_dnsauth',
+    ])->exists())->toBeTrue();
 });
 
 test('check delegation validity skips empty domains', function () {

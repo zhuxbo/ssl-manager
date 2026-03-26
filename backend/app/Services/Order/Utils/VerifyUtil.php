@@ -165,7 +165,11 @@ class VerifyUtil
     }
 
     /**
-     * 验证 CNAME 委托记录，支持故障转移
+     * 验证 CNAME 委托记录
+     *
+     * 宽松策略：所有 dnsTools 节点 + 本地检测全部尝试，任一匹配即判定有效。
+     * 目的是为自动续签放宽验证条件，尽可能发起续签，避免因 DNS 传播延迟
+     * 或单节点缓存过期导致误判失败。
      *
      * @param  string  $host  主机名（如 _dnsauth.example.com）
      * @param  string  $expectedTarget  期望的CNAME目标
@@ -233,14 +237,15 @@ class VerifyUtil
                     }
                 }
 
-                // 找到了记录但不匹配
-                Log::warning('CNAME委托验证失败：记录不匹配', [
+                // 记录不匹配，继续下一个节点（可能是 DNS 传播延迟或缓存过期）
+                Log::info('CNAME委托验证：当前节点不匹配，尝试下一个', [
                     'host' => $host,
                     'expected' => $expectedTarget,
+                    'url' => $url,
                     'records' => $records,
                 ]);
 
-                return false;
+                continue;
             } catch (GuzzleException $e) {
                 Log::error('DNS Tools CNAME验证API 请求失败', [
                     'url' => $url,
@@ -251,7 +256,8 @@ class VerifyUtil
             }
         }
 
-        // 如果所有API都失败，回退到本地验证
+        // 所有 dnsTools 均未匹配（API 异常/无记录/不匹配），本地验证兜底
+        // 即使远程节点返回了不匹配的记录，仍给本地一次机会，最大化验证通过率
         return self::checkCnameRecordLocal($host, $expectedTarget);
     }
 

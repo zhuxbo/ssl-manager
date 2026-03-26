@@ -7,6 +7,7 @@ namespace App\Services\Order;
 use App\Models\Order;
 use App\Models\User;
 use App\Services\Delegation\CnameDelegationService;
+use App\Services\Order\Utils\DomainUtil;
 
 /**
  * 自动续费/重签判定服务
@@ -24,7 +25,7 @@ class AutoRenewService
      * 条件：
      * - auto_renew = true（订单级或用户级）
      * - 产品 status=1 且 renew=1
-     * - period_till - expires_at < 7天（订单周期与证书到期接近）
+     * - period_till - now() <= 15天（订单剩余时间不超过15天，走续费）
      */
     public function willAutoRenewExecute(Order $order, User $user): bool
     {
@@ -40,15 +41,11 @@ class AutoRenewService
             return false;
         }
 
-        // 检查订单周期与证书到期时间相差小于7天
-        // period_till - expires_at < 7 时执行续费
-        $cert = $order->latestCert;
+        // 订单剩余时间不超过15天时执行续费，超过15天走重签
         $periodTill = $order->period_till;
-        $expiresAt = $cert->expires_at;
-        if ($periodTill && $expiresAt) {
-            // diffInDays 返回 period_till - expires_at 的天数
-            $daysDiff = $expiresAt->diffInDays($periodTill, false);
-            if ($daysDiff >= 7) {
+        if ($periodTill) {
+            $daysRemaining = now()->diffInDays($periodTill, false);
+            if ($daysRemaining > 15) {
                 return false;
             }
         }
@@ -62,7 +59,7 @@ class AutoRenewService
      * 条件：
      * - auto_reissue = true（订单级或用户级）
      * - 产品 status=1
-     * - period_till - expires_at > 7天（订单周期还有余量）
+     * - period_till - now() > 15天（订单剩余时间超过15天，走重签）
      */
     public function willAutoReissueExecute(Order $order, User $user): bool
     {
@@ -78,15 +75,11 @@ class AutoRenewService
             return false;
         }
 
-        // 检查订单周期与证书到期时间相差大于7天
-        // period_till - expires_at > 7 时执行重签
-        $cert = $order->latestCert;
+        // 订单剩余时间超过15天时执行重签，不超过15天走续费
         $periodTill = $order->period_till;
-        $expiresAt = $cert->expires_at;
-        if ($periodTill && $expiresAt) {
-            // diffInDays 返回 period_till - expires_at 的天数
-            $daysDiff = $expiresAt->diffInDays($periodTill, false);
-            if ($daysDiff <= 7) {
+        if ($periodTill) {
+            $daysRemaining = now()->diffInDays($periodTill, false);
+            if ($daysRemaining <= 15) {
                 return false;
             }
         }
@@ -95,7 +88,12 @@ class AutoRenewService
     }
 
     /**
-     * 检查所有域名是否都有有效委托记录（即时验证）
+     * 自动续签前置条件：确保所有域名都有有效委托
+     *
+     * 设计目的：尽可能让自动续签成功发起，而非严格拦截。
+     * - 缺失委托记录时自动创建（首次创建后 DNS 未配置会验证失败，下次执行时重试）
+     * - 创建策略：_dnsauth 按精确域名；_pki-validation/_certum 按根域（一条覆盖所有子域）
+     * - DNS 验证采用宽松策略：所有 dnsTools + 本地检测全部尝试，任一匹配即有效
      *
      * @param  int  $userId  用户ID
      * @param  string  $domains  域名列表（逗号分隔）
@@ -116,8 +114,10 @@ class AutoRenewService
             // 查找委托记录（不检查 valid 状态）
             $delegation = $this->delegationService->findDelegation($userId, $domain, $prefix);
 
+            // 缺失则自动创建
             if (! $delegation) {
-                return false;
+                $zone = $this->resolveZoneForCreation($domain, $prefix);
+                $delegation = $this->delegationService->createOrGet($userId, $zone, $prefix);
             }
 
             // 即时验证 CNAME 记录
@@ -127,6 +127,33 @@ class AutoRenewService
         }
 
         return true;
+    }
+
+    /**
+     * 根据前缀类型确定自动创建委托的 zone
+     * - _dnsauth：精确域名（去通配符）
+     * - _pki-validation/_certum：根域（一条覆盖所有子域）
+     */
+    private function resolveZoneForCreation(string $domain, string $prefix): string
+    {
+        // 规范化：去通配符前缀，转 Unicode 小写（与 findDelegation 保持一致）
+        $domain = strtolower(DomainUtil::convertToUnicode(ltrim($domain, '*.')));
+
+        // www.根域 归一为根域（条件与 findDelegation 完全一致）
+        if ($prefix !== '_dnsauth' && str_starts_with($domain, 'www.')) {
+            $stripped = substr($domain, 4);
+            if (DomainUtil::getRootDomain($stripped) === $stripped) {
+                $domain = $stripped;
+            }
+        }
+
+        // _dnsauth 精确匹配，直接返回
+        if ($prefix === '_dnsauth') {
+            return $domain;
+        }
+
+        // 回落前缀：使用根域
+        return DomainUtil::getRootDomain($domain) ?: $domain;
     }
 
     /**

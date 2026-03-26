@@ -8,6 +8,7 @@ use App\Services\Notification\DTOs\NotificationIntent;
 use App\Services\Notification\NotificationCenter;
 use App\Services\Order\Action;
 use App\Services\Order\AutoRenewService;
+use App\Services\Order\Utils\OrderUtil;
 use Illuminate\Console\Command;
 use Throwable;
 
@@ -44,7 +45,7 @@ class AutoRenewCommand extends Command
      * 获取需要续费的订单
      * 条件：
      * - auto_renew = true（订单级或用户级）
-     * - period_till - latestCert.expires_at < 7天（订单与证书到期时间接近）
+     * - DATEDIFF(period_till, NOW()) <= 15（订单剩余时间不超过15天，走续费）
      * - latestCert.expires_at > now()->subDays(15)（证书未过期超过15天）
      * - latestCert.expires_at < now()->addDays(14)（证书即将到期）
      * - latestCert.status = 'active'
@@ -73,8 +74,8 @@ class AutoRenewCommand extends Command
                             ->whereHas('user', fn ($u) => $u->where('auto_settings->auto_renew', true));
                     });
             })
-            // 订单到期时间与证书到期时间相差小于7天
-            ->whereRaw('DATEDIFF(period_till, (SELECT expires_at FROM certs WHERE certs.id = orders.latest_cert_id)) < 7')
+            // 订单剩余时间不超过15天，走续费
+            ->whereRaw('DATEDIFF(period_till, NOW()) <= 15')
             ->get();
     }
 
@@ -82,7 +83,7 @@ class AutoRenewCommand extends Command
      * 获取需要重签的订单
      * 条件：
      * - auto_reissue = true（订单级或用户级）
-     * - period_till - latestCert.expires_at > 7天（订单周期还有余量）
+     * - DATEDIFF(period_till, NOW()) > 15（订单剩余时间超过15天，走重签）
      * - latestCert.expires_at > now()->subDays(15)（证书未过期超过15天）
      * - latestCert.expires_at < now()->addDays(14)（证书即将到期）
      * - latestCert.status = 'active'
@@ -104,15 +105,19 @@ class AutoRenewCommand extends Command
                     });
             })
             // 订单级 auto_reissue=true，或订单未设置时回落到用户设置
+            // 注意：auto_reissue 的用户默认值是 true（normalizeAutoSettings），
+            // 数据库 auto_settings 为 null 或不含 auto_reissue 键时视为 true
             ->where(function ($query) {
                 $query->where('auto_reissue', true)
                     ->orWhere(function ($q) {
                         $q->whereNull('auto_reissue')
-                            ->whereHas('user', fn ($u) => $u->where('auto_settings->auto_reissue', true));
+                            ->whereHas('user', fn ($u) => $u->whereNull('auto_settings')
+                                ->orWhere('auto_settings->auto_reissue', true)
+                                ->orWhereNull('auto_settings->auto_reissue'));
                     });
             })
-            // 订单到期时间与证书到期时间相差大于7天
-            ->whereRaw('DATEDIFF(period_till, (SELECT expires_at FROM certs WHERE certs.id = orders.latest_cert_id)) > 7')
+            // 订单剩余时间超过15天，走重签
+            ->whereRaw('DATEDIFF(period_till, NOW()) > 15')
             ->get();
     }
 
@@ -150,13 +155,16 @@ class AutoRenewCommand extends Command
             return;
         }
 
-        // 续费需要检查余额
+        // 续费需要检查余额（使用当前产品价格实时计算）
         if ($action === 'renew') {
-            // 计算可用余额：balance + |credit_limit|
             $availableBalance = bcadd($user->balance, abs($user->credit_limit), 2);
 
-            // 估算续费金额（使用当前证书金额作为参考）
-            $estimatedAmount = $cert->amount ?? '0.00';
+            $estimatedAmount = OrderUtil::getLatestCertAmount(
+                ['user_id' => $user->id, 'product_id' => $product->id, 'period' => $order->period,
+                    'purchased_standard_count' => 0, 'purchased_wildcard_count' => 0],
+                ['standard_count' => $cert->standard_count, 'wildcard_count' => $cert->wildcard_count, 'action' => 'renew'],
+                $product->toArray()
+            );
 
             if (bccomp($availableBalance, $estimatedAmount, 2) < 0) {
                 throw new \Exception("余额不足，可用余额: {$availableBalance}，预计需要: $estimatedAmount");

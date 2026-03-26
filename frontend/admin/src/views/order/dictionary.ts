@@ -205,7 +205,8 @@ export const channel: { [key: string]: string } = {
   admin: "后台",
   web: "网站",
   api: "API",
-  deploy: "部署"
+  deploy: "部署",
+  auto: "自动"
 };
 
 export const channelType: {
@@ -218,7 +219,8 @@ export const channelType: {
   admin: "warning",
   web: "info",
   api: "primary",
-  deploy: "success"
+  deploy: "success",
+  auto: "danger"
 };
 
 export const channelOptions: { label: string; value: string }[] = [
@@ -237,6 +239,10 @@ export const channelOptions: { label: string; value: string }[] = [
   {
     label: "部署",
     value: "deploy"
+  },
+  {
+    label: "自动",
+    value: "auto"
   }
 ];
 
