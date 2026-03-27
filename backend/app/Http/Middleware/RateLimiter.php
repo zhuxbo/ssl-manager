@@ -49,8 +49,8 @@ class RateLimiter
 
         // IP 限流相对宽松，主要防止暴力攻击
         $limit = match ($limiter) {
-            'v1', 'v2', 'deploy', 'acme' => 200,
-            default => 100,
+            'v1', 'v2', 'deploy', 'acme' => 120,
+            default => 60,
         };
 
         $this->checkLimit($key, $limit, 'IP rate limit exceeded');
@@ -119,15 +119,31 @@ class RateLimiter
     }
 
     /**
-     * 执行限流检查
+     * 滑动窗口限流检查
+     *
+     * 用当前窗口 + 上一窗口加权估算，平滑窗口边界突发
+     * 例：窗口 60s，限额 60 次，当前窗口已过 20s（剩余比例 66.7%）
+     * 估算值 = 当前窗口计数 + 上一窗口计数 × 66.7%
      */
     private function checkLimit(string $key, int $limit, string $errorMessage): void
     {
-        // add() 是原子操作（Redis SETNX），key 已存在时不会覆盖
-        Cache::add($key, 0, 60);
-        $current = Cache::increment($key);
+        $window = 60;
+        $now = time();
+        $currentWindow = (int) floor($now / $window);
+        $elapsed = $now % $window;
+        $prevWeight = 1 - $elapsed / $window;
 
-        if ($current > $limit) {
+        $currentKey = "$key:$currentWindow";
+        $prevKey = "$key:".($currentWindow - 1);
+
+        // 当前窗口计数器，TTL 设为 2 个窗口确保上一窗口数据可用
+        Cache::add($currentKey, 0, $window * 2);
+        $currentCount = Cache::increment($currentKey);
+        $prevCount = (int) Cache::get($prevKey, 0);
+
+        $estimated = $prevCount * $prevWeight + $currentCount;
+
+        if ($estimated > $limit) {
             $this->error($errorMessage);
         }
     }
@@ -138,7 +154,7 @@ class RateLimiter
     private function getDefaultTokenLimit(string $limiter): int
     {
         return match ($limiter) {
-            'v1', 'v2' => 60,
+            'v2' => 60,
             default => 30,
         };
     }
