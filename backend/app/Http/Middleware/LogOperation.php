@@ -40,6 +40,7 @@ class LogOperation
     protected array $excludeResponsePaths = [
         '*download*',
         '*export*',
+        '*document-preview*',
     ];
 
     /**

@@ -91,7 +91,11 @@
     <el-dialog v-model="showUploadDialog" title="上传验证文档" width="480px">
       <el-form label-width="80px">
         <el-form-item label="文档类型">
-          <el-select v-model="uploadForm.type" style="width: 100%">
+          <el-select
+            v-model="uploadForm.type"
+            placeholder="请选择文档类型"
+            style="width: 100%"
+          >
             <el-option
               v-for="(label, key) in documentTypes"
               :key="key"
@@ -129,7 +133,7 @@
         <el-button
           type="primary"
           :loading="uploading"
-          :disabled="!uploadForm.file"
+          :disabled="!uploadForm.type || !uploadForm.file"
           @click="handleUpload"
         >
           上传
@@ -167,7 +171,7 @@ const submitting = ref(false);
 const uploadRef = ref();
 
 const uploadForm = ref({
-  type: "APPLICANT",
+  type: "",
   description: "",
   file: null as File | null
 });
@@ -183,9 +187,14 @@ const formatSize = (bytes: number) => {
 };
 
 const handlePreview = async (docId: number) => {
-  const url = await previewDocument(docId);
-  window.open(url, "_blank");
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  const win = window.open("", "_blank");
+  try {
+    const url = await previewDocument(docId);
+    if (win) win.location.href = url;
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  } catch {
+    win?.close();
+  }
 };
 
 const loadDocuments = async () => {

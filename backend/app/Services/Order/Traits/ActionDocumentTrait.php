@@ -10,6 +10,7 @@ use App\Services\Order\Utils\FindUtil;
 use App\Traits\ApiResponse;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Str;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 trait ActionDocumentTrait
 {
@@ -110,7 +111,7 @@ trait ActionDocumentTrait
     /**
      * 预览文档
      */
-    public function previewDocument(int $docId): never
+    public function previewDocument(int $docId): BinaryFileResponse
     {
         $document = OrderDocument::find($docId);
         ! $document && $this->error('文档不存在');
@@ -132,13 +133,11 @@ trait ActionDocumentTrait
         $mime = $mimeTypes[$ext] ?? 'application/octet-stream';
         $safeName = rawurlencode(basename($document->file_name));
 
-        header("Content-Type: $mime");
-        header("Content-Disposition: inline; filename*=UTF-8''$safeName");
-        header('Content-Length: '.filesize($fullPath));
-        header('Cache-Control: private, max-age=3600');
-
-        readfile($fullPath);
-        exit;
+        return response()->file($fullPath, [
+            'Content-Type' => $mime,
+            'Content-Disposition' => "inline; filename*=UTF-8''$safeName",
+            'Cache-Control' => 'private, max-age=3600',
+        ]);
     }
 
     /**
