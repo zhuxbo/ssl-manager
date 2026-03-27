@@ -180,6 +180,62 @@ test('query 按 ID 查询 UserScope 隔离', function () {
 });
 
 // ========================================
+// query() — 已续费订单追踪
+// ========================================
+
+test('query 按 ID 查询已续费订单返回新订单', function () {
+    [$user, $token] = createDeployAuth();
+
+    // 创建旧订单（cert 状态为 renewed）
+    [$oldOrder, $oldCert] = createDeployOrder($user, 'renewed');
+
+    // 创建新订单（续费后的订单）
+    [$newOrder, $newCert] = createDeployOrder($user, 'active');
+    $newCert->update(['last_cert_id' => $oldCert->id]);
+
+    // 用旧订单 ID 查询，应返回新订单
+    $response = deployGet($token, "order=$oldOrder->id")
+        ->assertOk()
+        ->assertJson(['code' => 1]);
+
+    $response->assertJsonPath('data.data.0.order_id', $newOrder->id);
+    $response->assertJsonPath('data.data.0.status', 'active');
+});
+
+test('query 批量查询已续费订单返回新订单', function () {
+    [$user, $token] = createDeployAuth();
+
+    [$oldOrder, $oldCert] = createDeployOrder($user, 'renewed');
+    [$newOrder, $newCert] = createDeployOrder($user, 'active');
+    $newCert->update(['last_cert_id' => $oldCert->id]);
+
+    $response = deployGet($token, "order=$oldOrder->id,$newOrder->id")
+        ->assertOk()
+        ->assertJson(['code' => 1]);
+
+    // 去重后只有一条（旧订单追踪到新订单，和新订单是同一个）
+    expect($response->json('data.data'))->toHaveCount(1);
+    $response->assertJsonPath('data.data.0.order_id', $newOrder->id);
+});
+
+test('query 多级续费链追踪到最新订单', function () {
+    [$user, $token] = createDeployAuth();
+
+    [$order1, $cert1] = createDeployOrder($user, 'renewed');
+    [$order2, $cert2] = createDeployOrder($user, 'renewed');
+    [$order3, $cert3] = createDeployOrder($user, 'active');
+
+    $cert2->update(['last_cert_id' => $cert1->id]);
+    $cert3->update(['last_cert_id' => $cert2->id]);
+
+    $response = deployGet($token, "order=$order1->id")
+        ->assertOk()
+        ->assertJson(['code' => 1]);
+
+    $response->assertJsonPath('data.data.0.order_id', $order3->id);
+});
+
+// ========================================
 // query() — 按域名查询
 // ========================================
 

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Deploy;
 
 use App\Exceptions\ApiResponseException;
 use App\Http\Controllers\Controller;
+use App\Models\Cert;
 use App\Models\Order;
 use App\Services\Order\Action;
 use App\Services\Order\AutoRenewService;
@@ -43,6 +44,8 @@ class ApiController extends Controller
                 if (! $found) {
                     $this->error('未找到匹配的订单');
                 }
+
+                $found = $this->resolveRenewedOrder($found);
 
                 $this->success($this->paginateResult(collect([$found])));
             }
@@ -289,7 +292,10 @@ class ApiController extends Controller
             $orders = Order::with('latestCert')
                 ->whereHas('latestCert')
                 ->whereIn('id', $ids)
-                ->get();
+                ->get()
+                ->map(fn ($o) => $this->resolveRenewedOrder($o))
+                ->unique('id')
+                ->values();
         }
 
         // 按域名逐个查询并合并（去重）
@@ -337,6 +343,37 @@ class ApiController extends Controller
         }
 
         return $result ?? [];
+    }
+
+    /**
+     * 已续费订单追踪到新订单
+     * 通过 cert 的 last_cert_id 链找到续费后的新订单
+     */
+    private function resolveRenewedOrder(Order $order): Order
+    {
+        $cert = $order->latestCert;
+
+        while ($cert && $cert->status === 'renewed') {
+            $nextCert = Cert::where('last_cert_id', $cert->id)->first();
+
+            if (! $nextCert || $nextCert->order_id === $order->id) {
+                break;
+            }
+
+            $newOrder = Order::with('latestCert')
+                ->whereHas('latestCert')
+                ->where('id', $nextCert->order_id)
+                ->first();
+
+            if (! $newOrder) {
+                break;
+            }
+
+            $order = $newOrder;
+            $cert = $order->latestCert;
+        }
+
+        return $order;
     }
 
     /**
