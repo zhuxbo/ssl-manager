@@ -220,7 +220,7 @@ export const channelType: {
   web: "info",
   api: "primary",
   deploy: "success",
-  auto: "danger"
+  auto: "success"
 };
 
 export const channelOptions: { label: string; value: string }[] = [
