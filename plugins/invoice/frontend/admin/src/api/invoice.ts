@@ -61,3 +61,7 @@ export function batchDestroy(ids: number[]) {
 export function quota(userId: number) {
   return http.get(`/invoice/quota/${userId}`);
 }
+
+export function showUser(id: number) {
+  return http.get(`/user/${id}`);
+}

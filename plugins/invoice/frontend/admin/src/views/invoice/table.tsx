@@ -1,7 +1,9 @@
-import { ref } from "vue";
+import { ref, getCurrentInstance } from "vue";
 import dayjs from "dayjs";
 
 export function useInvoiceTable() {
+  const instance = getCurrentInstance();
+  const router = instance?.appContext.config.globalProperties.$router;
   const tableRef = ref();
   const selectedIds = ref<number[]>([]);
 
@@ -34,7 +36,22 @@ export function useInvoiceTable() {
     {
       label: "用户名",
       prop: "user.username",
-      width: 100
+      width: 100,
+      cellRenderer: ({ row }: any) => {
+        const username = row?.user?.username;
+        return (
+          <span
+            class="cursor-pointer"
+            onClick={() => {
+              if (username) {
+                router?.push({ path: "/user", query: { username } });
+              }
+            }}
+          >
+            {username}
+          </span>
+        );
+      }
     },
     {
       label: "金额",
