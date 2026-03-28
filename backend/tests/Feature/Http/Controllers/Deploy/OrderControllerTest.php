@@ -702,3 +702,88 @@ test('无效 token 拒绝访问', function () {
         ->assertOk()
         ->assertJson(['code' => 0]);
 });
+
+// ========================================
+// query() — GET query token 认证
+// ========================================
+
+test('query GET query token 认证通过', function () {
+    [$user, $token] = createDeployAuth();
+    [$order] = createDeployOrder($user, 'active');
+
+    $response = test()->getJson("/api/deploy?token=$token->token&order=$order->id")
+        ->assertOk()
+        ->assertJson(['code' => 1]);
+
+    $response->assertJsonPath('data.data.0.order_id', $order->id);
+});
+
+// ========================================
+// toggleAutoReissue() 测试
+// ========================================
+
+test('toggleAutoReissue 开启自动重签', function () {
+    [$user, $token] = createDeployAuth();
+    [$order] = createDeployOrder($user, 'active', [], ['auto_reissue' => false]);
+
+    $response = deployPost($token, '/api/deploy/auto-reissue', [
+        'order_id' => $order->id,
+        'auto_reissue' => true,
+    ])->assertOk()->assertJson(['code' => 1]);
+
+    expect($response->json('data'))
+        ->order_id->toBe($order->id)
+        ->auto_reissue->toBeTrue();
+
+    expect($order->fresh()->auto_reissue)->toBeTrue();
+});
+
+test('toggleAutoReissue 关闭自动重签', function () {
+    [$user, $token] = createDeployAuth();
+    [$order] = createDeployOrder($user, 'active', [], ['auto_reissue' => true]);
+
+    $response = deployPost($token, '/api/deploy/auto-reissue', [
+        'order_id' => $order->id,
+        'auto_reissue' => false,
+    ])->assertOk()->assertJson(['code' => 1]);
+
+    expect($response->json('data'))
+        ->order_id->toBe($order->id)
+        ->auto_reissue->toBeFalse();
+
+    expect($order->fresh()->auto_reissue)->toBeFalse();
+});
+
+test('toggleAutoReissue 订单不存在', function () {
+    [, $token] = createDeployAuth();
+
+    deployPost($token, '/api/deploy/auto-reissue', [
+        'order_id' => 99999,
+        'auto_reissue' => true,
+    ])->assertOk()->assertJson(['code' => 0]);
+});
+
+test('toggleAutoReissue UserScope 隔离', function () {
+    [, $token] = createDeployAuth();
+    $otherUser = User::factory()->create();
+    [$otherOrder] = createDeployOrder($otherUser, 'active');
+
+    deployPost($token, '/api/deploy/auto-reissue', [
+        'order_id' => $otherOrder->id,
+        'auto_reissue' => true,
+    ])->assertOk()->assertJson(['code' => 0]);
+});
+
+test('toggleAutoReissue 参数验证', function () {
+    [, $token] = createDeployAuth();
+
+    // 缺少必填字段
+    deployPost($token, '/api/deploy/auto-reissue', [])
+        ->assertOk()
+        ->assertJson(['code' => 0]);
+
+    // 缺少 auto_reissue
+    deployPost($token, '/api/deploy/auto-reissue', ['order_id' => 1])
+        ->assertOk()
+        ->assertJson(['code' => 0]);
+});

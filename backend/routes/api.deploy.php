@@ -10,6 +10,7 @@ Route::prefix('deploy')->middleware('api.deploy')->group(function () {
     Route::get('/', [ApiController::class, 'query']);        // 查询订单
     Route::post('/', [ApiController::class, 'update']);      // 更新/续费证书
     Route::post('callback', [ApiController::class, 'callback']); // 部署回调
+    Route::post('auto-reissue', [ApiController::class, 'toggleAutoReissue']); // 切换自动重签
 
     // ACME
     Route::post('acme/new', [AcmeController::class, 'new']);

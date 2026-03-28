@@ -199,6 +199,31 @@ class ApiController extends Controller
     }
 
     /**
+     * 切换订单自动重签开关
+     */
+    public function toggleAutoReissue(Request $request): void
+    {
+        $params = $request->validate([
+            'order_id' => ['required', 'integer'],
+            'auto_reissue' => ['required', 'boolean'],
+        ]);
+
+        $order = Order::find($params['order_id']);
+
+        if (! $order) {
+            $this->error('订单不存在');
+        }
+
+        $order->auto_reissue = $params['auto_reissue'];
+        $order->save();
+
+        $this->success([
+            'order_id' => $order->id,
+            'auto_reissue' => $order->auto_reissue,
+        ]);
+    }
+
+    /**
      * 部署回调接口
      * 部署工具完成部署后调用此接口通知 Manager
      */

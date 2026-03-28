@@ -20,7 +20,7 @@ class DeployAuthenticate
      */
     public function handle(Request $request, Closure $next)
     {
-        $token = $request->bearerToken();
+        $token = $request->bearerToken() ?: $request->query('token');
 
         if (empty($token)) {
             $this->error('Unauthorized');
