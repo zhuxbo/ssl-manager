@@ -107,9 +107,12 @@ class PurgeCommand extends Command
         $this->purgeIssuedOrderDocuments();
 
         // 预同步：距退款期限2-4天的处理中订单，24小时内无同步则创建sync任务
+        // 退款期限<5天的产品跳过由人工控制
+        // 同时避免 refund_period UNSIGNED 减法溢出
         $preSyncOrders = Order::with(['latestCert'])
             ->join('products', 'orders.product_id', '=', 'products.id')
             ->whereHas('latestCert', fn ($query) => $query->where('status', 'processing'))
+            ->where('products.refund_period', '>=', 5)
             ->whereRaw('orders.created_at <= DATE_SUB(NOW(), INTERVAL products.refund_period - 4 DAY)')
             ->whereRaw('orders.created_at > DATE_SUB(NOW(), INTERVAL products.refund_period - 2 DAY)')
             ->select('orders.*')
@@ -126,9 +129,11 @@ class PurgeCommand extends Command
         $this->info("Pre-sync created for $preSyncCount orders");
 
         // 取消临近退款期限的处理中订单（还剩2天内的订单）
+        // 退款期限<5天的产品跳过，同上
         $orders = Order::with(['latestCert'])
             ->join('products', 'orders.product_id', '=', 'products.id')
             ->whereHas('latestCert', fn ($query) => $query->where('status', 'processing'))
+            ->where('products.refund_period', '>=', 5)
             ->whereRaw('orders.created_at > DATE_SUB(NOW(), INTERVAL products.refund_period DAY)')
             ->whereRaw('orders.created_at <= DATE_SUB(NOW(), INTERVAL products.refund_period - 2 DAY)')
             ->select('orders.*')
