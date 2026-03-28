@@ -76,19 +76,17 @@ trait ActionFileTrait
 
         $file = $order->latestCert->dcv['file'];
 
-        if ($file) {
-            $random = sprintf('%04x%04x', mt_rand(0, 0xFFFF), mt_rand(0, 0xFFFF));
-            $tempDir = storage_path('temp-certs/'.$random);
-            mkdir($tempDir, 0755, true);
+        $random = sprintf('%04x%04x', mt_rand(0, 0xFFFF), mt_rand(0, 0xFFFF));
+        $tempDir = storage_path('temp-certs/'.$random);
+        mkdir($tempDir, 0755, true);
 
-            $zip = new ZipArchive;
-            $filename = '订单'.$orderId.'-请放到网站根目录解压.zip';
-            $zip->open($tempDir.'/'.$filename, ZipArchive::CREATE);
-            $zip->addFromString('.well-known/pki-validation/'.($file['name'] ?? 'error.txt'), $file['content'] ?? '');
-            $zip->close();
+        $zip = new ZipArchive;
+        $filename = '订单'.$orderId.'-请放到网站根目录解压.zip';
+        $zip->open($tempDir.'/'.$filename, ZipArchive::CREATE);
+        $zip->addFromString('.well-known/pki-validation/'.($file['name'] ?? 'error.txt'), $file['content'] ?? '');
+        $zip->close();
 
-            $this->downFlow($tempDir.'/'.$filename, $tempDir);
-        }
+        $this->downFlow($tempDir.'/'.$filename, $tempDir);
     }
 
     /**

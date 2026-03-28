@@ -185,7 +185,7 @@ class ValidatorUtil
                 $errors['domains'] = '域名是必填项';
             } else {
                 $domainsErrors = self::validateDomains($params['domains'], $product, $params);
-                if (is_string($domainsErrors) || (is_array($domainsErrors) && ! empty($domainsErrors))) {
+                if (is_string($domainsErrors) || ! empty($domainsErrors)) {
                     $errors['domains'] = $domainsErrors;
                 }
             }

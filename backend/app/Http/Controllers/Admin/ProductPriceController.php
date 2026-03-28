@@ -191,9 +191,10 @@ class ProductPriceController extends BaseController
     {
         $productPriceModel = new ProductPrice;
         $priceData = $productPriceModel
-            ->with(['product', 'userLevel'])
-            ->where('product.status', '=', 1)
-            ->orderBy(['userLevel.lid' => 'asc', 'product.weigh' => 'asc'])
+            ->with(['product', 'level'])
+            ->whereHas('product', fn ($q) => $q->where('status', 1))
+            ->orderBy('level_code')
+            ->orderBy('product_id')
             ->get();
 
         // 创建新的 Spreadsheet 对象
@@ -216,7 +217,7 @@ class ProductPriceController extends BaseController
         $prevProduct = null;
 
         foreach ($priceData as $item) {
-            $currentLevel = $item['userLevel']['level'];
+            $currentLevel = $item['level']['name'];
             $currentProduct = $item['product']['name'];
 
             // 检查会员级别是否变化

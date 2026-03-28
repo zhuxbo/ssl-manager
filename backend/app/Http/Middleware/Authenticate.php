@@ -118,7 +118,7 @@ abstract class Authenticate
         // 从数据库模型获取当前用户版本号 和 登出时间
         $user = $guard->user();
         $userVersion = $user->token_version ?? 0;
-        $logoutAt = $user->logout_at?->timestamp ?? 0;
+        $logoutAt = $user->logout_at->timestamp ?? 0;
 
         // 如果用户模型版本号 > Token 中的版本号，说明是旧令牌，需要进入“宽限期检查”
         if ($userVersion > $tokenVersion) {

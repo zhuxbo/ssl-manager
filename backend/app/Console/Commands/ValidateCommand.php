@@ -103,9 +103,7 @@ class ValidateCommand extends Command
                     // 创建 delegation 任务处理 TXT 记录写入
                     if ($cert->dcv['method'] === 'txt' && ($cert->dcv['is_delegate'] ?? false)) {
                         // 检测 validation 是否为空
-                        $isEmpty = empty($cert->validation) || ! is_array($cert->validation);
-
-                        if (! $isEmpty) {
+                        if (! empty($cert->validation)) {
                             // 检测是需要处理委托
                             $autoDcvService = new AutoDcvTxtService;
                             $shouldProcessDelegation = $autoDcvService->shouldProcessDelegation($order);
@@ -166,7 +164,7 @@ class ValidateCommand extends Command
         $elapsed_minutes = $record->created_at->diffInMinutes(now());
 
         // 找到下一个时间节点
-        $next_time_node = $this->getNextTimeNode($elapsed_minutes);
+        $next_time_node = $this->getNextTimeNode((int) $elapsed_minutes);
 
         if ($next_time_node > 0) {
             // 更新验证记录
@@ -212,7 +210,7 @@ class ValidateCommand extends Command
      */
     protected function checkDelegationValidity(?array $validation): void
     {
-        if (empty($validation) || ! is_array($validation)) {
+        if (empty($validation)) {
             return;
         }
 

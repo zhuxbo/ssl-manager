@@ -61,7 +61,7 @@ class ClientProfile
     private $signMethod;
 
     /**
-     * @var string 忽略内容签名
+     * @var bool 忽略内容签名
      */
     private $unsignedPayload;
 

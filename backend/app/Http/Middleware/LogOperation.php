@@ -155,7 +155,7 @@ class LogOperation
     protected function logApiRequest(Request $request, array $logData): void
     {
         LogBuffer::add(ApiLog::class, array_merge($logData, [
-            'user_id' => Auth::guard('api')->user()?->user_id ?? $request->attributes->get('authenticated_user_id'),
+            'user_id' => Auth::guard('api')->user()->user_id ?? $request->attributes->get('authenticated_user_id'),
             'version' => $this->getApiVersion($request),
         ]));
     }
@@ -240,7 +240,7 @@ class LogOperation
 
             $parts = explode('@', $controller);
 
-            return $parts[0] ?? 'Unknown';
+            return $parts[0];
         }
 
         return 'Unknown';

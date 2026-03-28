@@ -377,9 +377,7 @@ class OrderUtil
                 $customLevelPrice->alternative_wildcard_price ?? null
             ) ?? '0';
 
-        return array_filter($minPrice, function ($value) {
-            return ! is_null($value);
-        });
+        return $minPrice;
     }
 
     /**

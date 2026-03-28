@@ -36,10 +36,10 @@ class NotificationCenter
         $channelTemplates = $selection->channelTemplates();
 
         $guardResult = $this->guardManager->filter($notifiable, $intent, $channelTemplates);
-        $allowedChannels = $guardResult['allowed'] ?? [];
+        $allowedChannels = $guardResult['allowed'];
 
         if (empty($allowedChannels)) {
-            $this->logSkip($intent, '所有通道被 Guard 拦截', $guardResult['rejected'] ?? []);
+            $this->logSkip($intent, '所有通道被 Guard 拦截', $guardResult['rejected']);
 
             return;
         }

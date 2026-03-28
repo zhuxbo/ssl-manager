@@ -16,6 +16,7 @@ class MailChannel implements ChannelInterface
      */
     public function send(Notification $notification): array
     {
+        /** @var \App\Models\User|null $notifiable */
         $notifiable = $notification->notifiable;
         $email = $notification->data['email'] ?? $notifiable?->email;
         if (! $email) {
@@ -34,8 +35,10 @@ class MailChannel implements ChannelInterface
             return ['code' => 0, 'msg' => '邮件服务未配置'];
         }
 
-        $subject = $meta['subject'] ?? $notification->template?->name ?? '通知';
-        $body = $meta['content'] ?? $notification->template?->render($notification->data ?? []) ?? '';
+        /** @var \App\Models\NotificationTemplate|null $template */
+        $template = $notification->template;
+        $subject = $meta['subject'] ?? $template?->name ?? '通知'; // @phpstan-ignore nullsafe.neverNull
+        $body = $meta['content'] ?? $template?->render($notification->data ?? []) ?? '';
 
         $mail->addAddress($email, $notifiable?->username);
         $mail->setSubject($subject);

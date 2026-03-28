@@ -37,7 +37,7 @@ class AutoRenewService
 
         // 检查产品是否支持续费
         $product = $order->product;
-        if (! $product || $product->status != 1 || ! $product->renew) {
+        if ($product->status != 1 || ! $product->renew) {
             return false;
         }
 
@@ -71,7 +71,7 @@ class AutoRenewService
 
         // 检查产品状态
         $product = $order->product;
-        if (! $product || $product->status != 1) {
+        if ($product->status != 1) {
             return false;
         }
 

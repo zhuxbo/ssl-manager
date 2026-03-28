@@ -579,7 +579,7 @@ trait ActionTrait
      */
     public function isValidationReady(?array $validation, ?string $method): bool
     {
-        if (empty($validation) || ! is_array($validation)) {
+        if (empty($validation)) {
             return false;
         }
 

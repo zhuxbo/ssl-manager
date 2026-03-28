@@ -133,7 +133,7 @@ class AuthController extends BaseController
      */
     public function logout(): void
     {
-        /** @var AdminRefreshToken $refreshToken */
+        /** @var AdminRefreshToken|null $refreshToken */
         $refreshToken = Auth::guard('admin-refresh-token')->user();
 
         if ($refreshToken && $refreshToken->admin_id === $this->guard->id()) {

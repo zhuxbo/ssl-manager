@@ -104,7 +104,7 @@ class FilterUtil
             $product = $productId ? FindUtil::Product($productId) : null;
         }
 
-        return $product?->product_type ?? 'ssl';
+        return $product->product_type ?? 'ssl';
     }
 
     public static function filterParamsField(array $params): array

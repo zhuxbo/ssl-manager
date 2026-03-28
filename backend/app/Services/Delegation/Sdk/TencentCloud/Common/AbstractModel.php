@@ -78,7 +78,7 @@ abstract class AbstractModel
         return $memberRet;
     }
 
-    private function arrayMerge($array, $prepend = null)
+    protected function arrayMerge($array, $prepend = null)
     {
         $results = [];
         foreach ($array as $key => $value) {

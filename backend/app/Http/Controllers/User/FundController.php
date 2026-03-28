@@ -99,8 +99,8 @@ class FundController extends BaseController
             $config = Setting::getByGroupName('alipay');
             Pay::config($config);
             $order = Pay::alipay()->query(['out_trade_no' => $fund->id]);
-            if ($order->trade_status === 'TRADE_SUCCESS' || $order->trade_status === 'TRADE_FINISHED') {
-                $pay_sn = $order->trade_no;
+            if ($order['trade_status'] === 'TRADE_SUCCESS' || $order['trade_status'] === 'TRADE_FINISHED') {
+                $pay_sn = $order['trade_no'];
             }
         }
 
@@ -108,8 +108,8 @@ class FundController extends BaseController
             $config = Setting::getByGroupName('wechat');
             Pay::config($config);
             $order = Pay::wechat()->query(['out_trade_no' => $fund->id]);
-            if ($order->trade_state === 'SUCCESS') {
-                $pay_sn = $order->transaction_id;
+            if ($order['trade_state'] === 'SUCCESS') {
+                $pay_sn = $order['transaction_id'];
             }
         }
 

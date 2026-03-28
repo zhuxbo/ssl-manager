@@ -98,7 +98,7 @@ class ApiController extends Controller
             ->where('id', $params['order_id'])
             ->first();
 
-        if (! $order || ! $order->latestCert) {
+        if (! $order) {
             $this->error('订单不存在');
         }
 
@@ -215,7 +215,7 @@ class ApiController extends Controller
             ->where('id', $params['order_id'])
             ->first();
 
-        if (! $order || ! $order->latestCert) {
+        if (! $order) {
             $this->error('订单不存在');
         }
 
@@ -302,6 +302,7 @@ class ApiController extends Controller
         $existingIds = $orders->pluck('id')->all();
         foreach ($domains as $domain) {
             $found = $this->findOrdersByDomain($domain);
+            /** @var Order $order */
             foreach ($found as $order) {
                 if (! in_array($order->id, $existingIds)) {
                     $orders->push($order);
@@ -353,7 +354,7 @@ class ApiController extends Controller
     {
         $cert = $order->latestCert;
 
-        while ($cert && $cert->status === 'renewed') {
+        while ($cert->status === 'renewed') {
             $nextCert = Cert::where('last_cert_id', $cert->id)->first();
 
             if (! $nextCert || $nextCert->order_id === $order->id) {

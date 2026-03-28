@@ -131,12 +131,10 @@ class ApiController extends Controller
             throw $e;
         }
 
-        if (isset($order_id)) {
-            $order = Order::with(['latestCert'])->where('orders.id', $order_id)->first();
-        }
+        $order = Order::with(['latestCert'])->where('orders.id', $order_id)->first();
 
         $this->success([
-            'oid' => $order_id ?? '',
+            'oid' => $order_id,
             'application_status' => $this->getProcessStatus($order->latestCert->cert_apply_status ?? 0),
             'dcv' => $order->latestCert->dcv ?? null,
             'validation' => $order->latestCert->validation ?? null,
@@ -180,12 +178,10 @@ class ApiController extends Controller
             throw $e;
         }
 
-        if (isset($order_id)) {
-            $order = Order::with(['latestCert'])->where('orders.id', $order_id)->first();
-        }
+        $order = Order::with(['latestCert'])->where('orders.id', $order_id)->first();
 
         $this->success([
-            'oid' => $order_id ?? '',
+            'oid' => $order_id,
             'application_status' => $this->getProcessStatus($order->latestCert->cert_apply_status ?? 0),
             'dcv' => $order->latestCert->dcv ?? null,
             'validation' => $order->latestCert->validation ?? null,
@@ -235,12 +231,10 @@ class ApiController extends Controller
             throw $e;
         }
 
-        if (isset($order_id)) {
-            $order = Order::with(['latestCert'])->where('orders.id', $order_id)->first();
-        }
+        $order = Order::with(['latestCert'])->where('orders.id', $order_id)->first();
 
         $this->success([
-            'oid' => $order_id ?? '',
+            'oid' => $order_id,
             'application_status' => $this->getProcessStatus($order->latestCert->cert_apply_status ?? 0),
             'dcv' => $order->latestCert->dcv ?? null,
             'validation' => $order->latestCert->validation ?? null,
@@ -453,9 +447,6 @@ class ApiController extends Controller
             $this->error("Order cannot be cancelled after $refund_period days");
         }
 
-        if ($status === 'cancelled') {
-            $this->error('Order already cancelled');
-        }
         if ($status === 'expired') {
             $this->error('Order has expired');
         }

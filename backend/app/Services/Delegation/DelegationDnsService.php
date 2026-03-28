@@ -48,7 +48,6 @@ class DelegationDnsService
      *
      * @param  string  $proxyZone  代理域名
      * @param  string  $label  哈希标签
-     * @return bool 是否成功删除
      */
     public function deleteTxtByLabel(string $proxyZone, string $label): void
     {

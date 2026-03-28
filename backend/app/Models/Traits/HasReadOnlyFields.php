@@ -38,9 +38,12 @@ trait HasReadOnlyFields
     /**
      * 获取所有只读字段
      * 子类应该定义 protected array $readOnlyFields 属性
+     *
+     * @return list<string>
      */
     public function getReadOnlyFields(): array
     {
+        /** @phpstan-ignore function.alreadyNarrowedType */
         return property_exists($this, 'readOnlyFields') ? $this->readOnlyFields : [];
     }
 }

@@ -341,9 +341,7 @@ class PluginManager
             // 从备份恢复
             if ($backupDir && is_dir($backupDir)) {
                 Log::warning("[Plugin] 更新失败，恢复备份: $name", ['error' => $e->getMessage()]);
-                if (is_dir($pluginDir)) {
-                    File::deleteDirectory($pluginDir);
-                }
+                File::deleteDirectory($pluginDir);
                 File::moveDirectory($backupDir, $pluginDir);
             }
 

@@ -156,7 +156,7 @@ class AutoRenewCommand extends Command
 
         // 续费需要检查余额（使用当前产品价格实时计算）
         if ($action === 'renew') {
-            $availableBalance = bcadd($user->balance, abs($user->credit_limit), 2);
+            $availableBalance = bcadd($user->balance, (string) abs((float) $user->credit_limit), 2);
 
             $estimatedAmount = OrderUtil::getLatestCertAmount(
                 ['user_id' => $user->id, 'product_id' => $product->id, 'period' => $order->period,
@@ -243,7 +243,7 @@ class AutoRenewCommand extends Command
     {
         $user = $order->user;
 
-        if (! $user || ! $user->email) {
+        if (! $user->email) {
             return;
         }
 

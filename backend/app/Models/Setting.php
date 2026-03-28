@@ -220,10 +220,7 @@ class Setting extends BaseModel
         } catch (JsonException $e) {
             app(ApiExceptions::class)->logException($e);
 
-            return match ($type) {
-                'array', 'select' => $isMultiple ? [] : null,
-                default => null,
-            };
+            return $isMultiple ? [] : null;
         }
     }
 
@@ -249,10 +246,7 @@ class Setting extends BaseModel
         } catch (JsonException $e) {
             app(ApiExceptions::class)->logException($e);
 
-            return match ($type) {
-                'array', 'select' => '[]',
-                default => '',
-            };
+            return '[]';
         }
     }
 

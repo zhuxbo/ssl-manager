@@ -453,7 +453,7 @@ class AuthController extends BaseController
     public function logout(): void
     {
         // 获取刷新token
-        /** @var UserRefreshToken $refreshToken */
+        /** @var UserRefreshToken|null $refreshToken */
         $refreshToken = Auth::guard('user-refresh-token')->user();
 
         if ($refreshToken) {

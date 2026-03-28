@@ -104,7 +104,7 @@ class NotificationJob implements ShouldQueue
         try {
             // Channel::send() 返回格式: ['code' => 1, 'msg' => '可选消息'] 成功，['code' => 0, 'msg' => '错误消息'] 失败
             $sendResult = $channelManager->channel($this->channel)->send($notification);
-            $success = ($sendResult['code'] ?? 0) === 1;
+            $success = $sendResult['code'] === 1;
             $result['status'] = $success ? Notification::STATUS_SENT : Notification::STATUS_FAILED;
             $result['message'] = $sendResult['msg'] ?? null;
             $result['timestamp'] = now()->toDateTimeString();

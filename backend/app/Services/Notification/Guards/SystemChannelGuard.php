@@ -26,7 +26,7 @@ class SystemChannelGuard implements ChannelGuardInterface
             return false;
         }
 
-        if (method_exists($channelDriver, 'isAvailable') && ! $channelDriver->isAvailable()) {
+        if (! $channelDriver->isAvailable()) {
             $this->reasonMessage = '通道未配置';
 
             return false;

@@ -229,17 +229,15 @@ class ProxyDNS
 
                 $resp = $this->client->DescribeRecordList($req);
 
-                if (isset($resp->RecordList) && is_array($resp->RecordList)) {
-                    foreach ($resp->RecordList as $record) {
-                        $records[] = [
-                            'id' => (string) $record->RecordId,
-                            'name' => $record->Name,
-                            'value' => $record->Value,
-                        ];
-                    }
+                foreach ($resp->RecordList as $record) {
+                    $records[] = [
+                        'id' => (string) $record->RecordId,
+                        'name' => $record->Name,
+                        'value' => $record->Value,
+                    ];
                 }
 
-                $totalCount = $resp->RecordCountInfo->TotalCount ?? 0;
+                $totalCount = $resp->RecordCountInfo->TotalCount;
                 $offset += $limit;
 
                 // 如果已经获取了所有记录，退出循环

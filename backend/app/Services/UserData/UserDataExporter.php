@@ -132,6 +132,7 @@ class UserDataExporter
             'direct' => $this->exportDirectTable($handle, $item['table'], $user->id),
             'indirect' => $this->exportIndirectTable($handle, $item['table'], $user->id),
             'notification' => $this->exportNotifications($handle, $user),
+            default => null,
         };
     }
 

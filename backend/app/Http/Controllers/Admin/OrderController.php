@@ -305,7 +305,7 @@ class OrderController extends BaseController
         }
 
         $cert = $order->latestCert;
-        if (! $cert || $cert->status !== 'unpaid') {
+        if ($cert->status !== 'unpaid') {
             $this->error('只有未支付状态的订单可以修改价格');
         }
 

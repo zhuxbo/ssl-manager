@@ -77,6 +77,7 @@ class DashboardController extends Controller
             // 新增用户统计：日/周/月（一条 SQL）
             // 跨月周场景下 $thisWeekMonday 可能早于 $thisMonth，取较早者避免周统计被截断
             $rangeStart = min($thisWeekMonday, $thisMonth);
+            /** @var object $userRow */
             $userRow = User::where('created_at', '>=', $rangeStart)
                 ->selectRaw('SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) as monthly', [$thisMonth])
                 ->selectRaw('SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) as weekly', [$thisWeekMonday])
@@ -89,6 +90,7 @@ class DashboardController extends Controller
             ];
 
             // 新增有效订单统计：日/周/月（一条 SQL）
+            /** @var object $orderRow */
             $orderRow = Order::where('orders.created_at', '>=', $rangeStart)
                 ->whereHas('latestCert', function ($q) {
                     $q->whereIn('status', self::ACTIVATING_STATUSES);
@@ -257,12 +259,12 @@ class DashboardController extends Controller
                 ->limit($limit)
                 ->with('product')
                 ->get()
-                ->map(function ($item) {
+                ->map(function (Order $item) {
                     return [
                         'product_id' => $item->product_id,
-                        'product_name' => $item->product ? $item->product->name : '未知产品',
-                        'order_count' => $item->order_count,
-                        'sales_amount' => (float) $item->sales_amount,
+                        'product_name' => $item->product->name ?? '未知产品',
+                        'order_count' => $item->getAttribute('order_count'),
+                        'sales_amount' => (float) $item->getAttribute('sales_amount'),
                     ];
                 })->toArray();
         });
@@ -293,11 +295,11 @@ class DashboardController extends Controller
                 ->groupByRaw('LOWER(products.brand)')
                 ->orderByDesc('revenue')
                 ->get()
-                ->map(function ($item) {
+                ->map(function (Order $item) {
                     return [
-                        'brand' => $item->brand,
-                        'orders' => $item->total_orders,
-                        'revenue' => (float) $item->revenue,
+                        'brand' => $item->getAttribute('brand'),
+                        'orders' => $item->getAttribute('total_orders'),
+                        'revenue' => (float) $item->getAttribute('revenue'),
                     ];
                 })->toArray();
         });
@@ -318,11 +320,11 @@ class DashboardController extends Controller
                 ->selectRaw('COUNT(*) as user_count')
                 ->groupBy('level_code')
                 ->get()
-                ->map(function ($item) {
+                ->map(function (User $item) {
                     return [
                         'level_code' => $item->level_code,
                         'level_name' => $this->getLevelName($item->level_code),
-                        'user_count' => $item->user_count,
+                        'user_count' => $item->getAttribute('user_count'),
                     ];
                 })->toArray();
         });
@@ -474,16 +476,18 @@ class DashboardController extends Controller
         $errorCalls = $versionRows->sum('error_calls');
         $errorRate = $totalCalls > 0 ? round(($errorCalls / $totalCalls) * 100, 2) : 0;
 
-        $versionStats = $versionRows->map(function ($item) {
-            $successRate = $item->total_calls > 0
-                ? round(($item->success_calls / $item->total_calls) * 100, 2)
+        $versionStats = $versionRows->map(function (ApiLog $item) {
+            $totalCalls = $item->getAttribute('total_calls');
+            $successCalls = $item->getAttribute('success_calls');
+            $successRate = $totalCalls > 0
+                ? round(($successCalls / $totalCalls) * 100, 2)
                 : 0;
 
             return [
                 'version' => $item->version ?: '未知版本',
-                'total_calls' => $item->total_calls,
-                'success_calls' => $item->success_calls,
-                'error_calls' => $item->error_calls,
+                'total_calls' => $totalCalls,
+                'success_calls' => $successCalls,
+                'error_calls' => $item->getAttribute('error_calls'),
                 'success_rate' => $successRate,
             ];
         })->toArray();

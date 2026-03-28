@@ -34,10 +34,6 @@ class AutoDcvTxtService
     {
         $cert = $order->latestCert;
 
-        if (! $cert) {
-            return false;
-        }
-
         if ($cert->dcv['method'] !== 'txt' || ! ($cert->dcv['is_delegate'] ?? false)) {
             return false;
         }
@@ -45,7 +41,7 @@ class AutoDcvTxtService
         // 获取 validation 数组
         $validation = $cert->validation;
 
-        if (empty($validation) || ! is_array($validation)) {
+        if (empty($validation)) {
             Log::info("订单 #$order->id validation为空或不是数组", [
                 'order_id' => $order->id,
                 'cert_id' => $cert->id,

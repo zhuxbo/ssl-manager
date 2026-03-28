@@ -105,6 +105,7 @@ class DashboardController extends Controller
             $trends = [];
             for ($i = $days - 1; $i >= 0; $i--) {
                 $dateStr = now()->subDays($i)->format('Y-m-d');
+                /** @var object|null $row */
                 $row = $rows[$dateStr] ?? null;
                 $trends[] = [
                     'date' => $dateStr,
@@ -205,6 +206,7 @@ class DashboardController extends Controller
         $expiring30Days = 0;
 
         foreach ($certStats as $row) {
+            /** @var object $row */
             $statusDistribution[$row->status] = (int) $row->count;
             if ($row->status === 'active') {
                 $activeOrders = (int) $row->count;
@@ -214,6 +216,7 @@ class DashboardController extends Controller
         }
 
         // 单次查询：总数 + 取消数 + 本月统计
+        /** @var object $orderStats */
         $orderStats = Order::where('user_id', $userId)
             ->selectRaw('COUNT(*) as total,
                 SUM(CASE WHEN cancelled_at IS NOT NULL THEN 1 ELSE 0 END) as cancelled,

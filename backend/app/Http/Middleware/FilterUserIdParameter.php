@@ -29,7 +29,7 @@ class FilterUserIdParameter
             $compiledRoute = $route->getCompiled();
 
             // 检查 user_id 是否为路由必需参数
-            if (isset($parameters['user_id']) && ! $compiledRoute->getPathVariables('user_id')) {
+            if (isset($parameters['user_id']) && ! in_array('user_id', $compiledRoute->getPathVariables())) {
                 $route->forgetParameter('user_id');
             }
         }

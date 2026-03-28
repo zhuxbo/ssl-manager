@@ -51,6 +51,8 @@ class NotificationRepository
      */
     public function createNotification(Model $notifiable, NotificationTemplate $template, array $payload): Notification
     {
+        /** @var \App\Models\User $notifiable */
+        /** @var Notification */
         return $notifiable->notifications()->create([
             'template_id' => $template->id,
             'data' => $payload,
