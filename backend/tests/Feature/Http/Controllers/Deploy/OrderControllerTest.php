@@ -106,15 +106,15 @@ test('query 空参数分页', function () {
         createDeployOrder($user, 'active');
     }
 
-    $response = deployGet($token, 'pageSize=2&currentPage=1')
+    $response = deployGet($token, 'page_size=2&page=1')
         ->assertOk()->assertJson(['code' => 1]);
 
     expect($response->json('data.data'))->toHaveCount(2);
     expect($response->json('data.total'))->toBe(5);
-    expect($response->json('data.pageSize'))->toBe(2);
-    expect($response->json('data.currentPage'))->toBe(1);
+    expect($response->json('data.page_size'))->toBe(2);
+    expect($response->json('data.page'))->toBe(1);
 
-    $response2 = deployGet($token, 'pageSize=2&currentPage=3')
+    $response2 = deployGet($token, 'page_size=2&page=3')
         ->assertOk()->assertJson(['code' => 1]);
 
     expect($response2->json('data.data'))->toHaveCount(1);
@@ -377,7 +377,7 @@ test('query 批量查询分页', function () {
 
     $allIds = Order::withoutGlobalScopes()->pluck('id')->implode(',');
 
-    $response = deployGet($token, "order=$allIds&pageSize=2&currentPage=1")
+    $response = deployGet($token, "order=$allIds&page_size=2&page=1")
         ->assertOk()->assertJson(['code' => 1]);
 
     expect($response->json('data.data'))->toHaveCount(2);

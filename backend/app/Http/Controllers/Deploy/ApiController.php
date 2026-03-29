@@ -22,8 +22,8 @@ class ApiController extends Controller
     {
         $request->validate([
             'order' => ['nullable', 'string'],
-            'currentPage' => ['nullable', 'integer', 'min:1'],
-            'pageSize' => ['nullable', 'integer', 'min:1', 'max:100'],
+            'page' => ['nullable', 'integer', 'min:1'],
+            'page_size' => ['nullable', 'integer', 'min:1', 'max:100'],
         ]);
 
         $order = trim($request->input('order', ''));
@@ -61,21 +61,22 @@ class ApiController extends Controller
         }
 
         // 空参数：返回最新 active 订单（数据库级分页）
-        $currentPage = (int) $request->input('currentPage', 1);
-        $pageSize = (int) ($request->input('pageSize', 100) ?? 100);
+        $page = (int) $request->input('page', 1);
+        $page_size = (int) ($request->input('page_size', 100) ?? 100);
 
         $query = Order::with('latestCert')
             ->whereHas('latestCert', fn ($q) => $q->where('status', 'active'))
             ->orderByDesc('created_at');
 
         $total = $query->count();
-        $data = $query->offset(($currentPage - 1) * $pageSize)
-            ->limit($pageSize)
+        $data = $query->offset(($page - 1) * $page_size)
+            ->limit($page_size)
             ->get()
             ->map(fn ($o) => $this->getOrderData($o))
             ->toArray();
 
-        $this->success(compact('total', 'currentPage', 'pageSize', 'data'));
+        $renew_before_days = (int) get_system_setting('site', 'renewBeforeDays', 14);
+        $this->success(compact('total', 'page', 'page_size', 'data', 'renew_before_days'));
     }
 
     /**
@@ -194,6 +195,7 @@ class ApiController extends Controller
         }
 
         $data = $this->getOrderData($order);
+        $data['renew_before_days'] = (int) get_system_setting('site', 'renewBeforeDays', 14);
 
         $this->success($data);
     }
@@ -267,6 +269,7 @@ class ApiController extends Controller
             'order_id' => $params['order_id'],
             'status' => $params['status'],
             'recorded' => $params['status'] === 'success',
+            'renew_before_days' => (int) get_system_setting('site', 'renewBeforeDays', 14),
         ]);
     }
 
@@ -275,14 +278,16 @@ class ApiController extends Controller
      */
     private function paginateResult(\Illuminate\Support\Collection $orders, ?Request $request = null): array
     {
-        $currentPage = $request ? (int) $request->input('currentPage', 1) : 1;
-        $pageSize = $request ? (int) ($request->input('pageSize', 100) ?? 100) : 100;
+        $page = $request ? (int) $request->input('page', 1) : 1;
+        $page_size = $request ? (int) ($request->input('page_size', 100) ?? 100) : 100;
         $total = $orders->count();
 
-        $data = $orders->slice(($currentPage - 1) * $pageSize, $pageSize)->values()
+        $data = $orders->slice(($page - 1) * $page_size, $page_size)->values()
             ->map(fn ($o) => $this->getOrderData($o))->toArray();
 
-        return compact('total', 'currentPage', 'pageSize', 'data');
+        $renew_before_days = (int) get_system_setting('site', 'renewBeforeDays', 14);
+
+        return compact('total', 'page', 'page_size', 'data', 'renew_before_days');
     }
 
     /**
