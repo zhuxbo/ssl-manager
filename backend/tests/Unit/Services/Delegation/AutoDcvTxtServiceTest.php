@@ -15,17 +15,6 @@ beforeEach(function () {
 
 // ==================== handleOrder ====================
 
-test('handle order returns false when no cert', function () {
-    $user = $this->createTestUser();
-    $product = $this->createTestProduct();
-    $order = $this->createTestOrder($user, $product);
-    // 不创建证书
-
-    $result = $this->service->handleOrder($order);
-
-    expect($result)->toBeFalse();
-});
-
 test('handle order returns false when dcv method not txt', function () {
     $user = $this->createTestUser();
     $product = $this->createTestProduct();

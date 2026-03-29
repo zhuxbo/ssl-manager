@@ -34,7 +34,7 @@ class AutoDcvTxtService
     {
         $cert = $order->latestCert;
 
-        if (! $cert || $cert->dcv['method'] !== 'txt' || ! ($cert->dcv['is_delegate'] ?? false)) {
+        if ($cert->dcv['method'] !== 'txt' || ! ($cert->dcv['is_delegate'] ?? false)) {
             return false;
         }
 
