@@ -7,6 +7,9 @@ import { useProductSearch } from "./search";
 import { useProductTable } from "./table";
 import ProductExport from "./export.vue";
 import { IconifyIconOffline } from "@shared/components/ReIcon";
+import { getPluginWidgets } from "@shared/utils/plugin-loader";
+
+const productTopWidgets = getPluginWidgets("user-product-top");
 
 defineOptions({
   name: "Product"
@@ -59,6 +62,12 @@ onMounted(() => {
 
 <template>
   <div class="main">
+    <component
+      :is="w.component"
+      v-for="w in productTopWidgets"
+      :key="w.name"
+      class="mb-3"
+    />
     <div
       class="search bg-bg_color w-[99/100] pl-4 pr-4 pt-[24px] pb-[12px] overflow-auto"
     >

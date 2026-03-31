@@ -21,6 +21,20 @@ const typeOptions = [
   { label: "危险", value: "error" }
 ];
 
+const positionOptions = [
+  { label: "首页", value: "dashboard" },
+  { label: "订单页", value: "order" },
+  { label: "购买页", value: "product" },
+  { label: "弹窗", value: "popup" }
+];
+
+const positionLabelMap: Record<string, string> = {
+  dashboard: "首页",
+  order: "订单页",
+  product: "购买页",
+  popup: "弹窗"
+};
+
 const typeTagMap: Record<string, string> = {
   info: "info",
   warning: "warning",
@@ -36,6 +50,7 @@ const form = reactive({
   title: "",
   content: "",
   type: "info",
+  position: "dashboard",
   sort: 0
 });
 
@@ -72,6 +87,7 @@ const openCreate = () => {
   form.title = "";
   form.content = "";
   form.type = "info";
+  form.position = "dashboard";
   form.sort = 0;
   dialogVisible.value = true;
 };
@@ -82,6 +98,7 @@ const openEdit = (row: any) => {
   form.title = row.title;
   form.content = row.content;
   form.type = row.type;
+  form.position = row.position;
   form.sort = row.sort;
   dialogVisible.value = true;
 };
@@ -167,6 +184,11 @@ onMounted(() => fetchList());
             </el-tag>
           </template>
         </el-table-column>
+        <el-table-column prop="position" label="显示位置" width="100">
+          <template #default="{ row }">
+            {{ positionLabelMap[row.position] || row.position }}
+          </template>
+        </el-table-column>
         <el-table-column prop="sort" label="排序" width="80" />
         <el-table-column prop="is_active" label="状态" width="100">
           <template #default="{ row }">
@@ -240,6 +262,16 @@ onMounted(() => fetchList());
           <el-select v-model="form.type" class="w-full">
             <el-option
               v-for="o in typeOptions"
+              :key="o.value"
+              :label="o.label"
+              :value="o.value"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="显示位置">
+          <el-select v-model="form.position" class="w-full">
+            <el-option
+              v-for="o in positionOptions"
               :key="o.value"
               :label="o.label"
               :value="o.value"

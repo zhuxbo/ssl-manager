@@ -2,7 +2,11 @@
 import { ref, onMounted } from "vue";
 import { getActive } from "../api/notice";
 
-const STORAGE_KEY = "notice-dismissed-ids";
+const props = withDefaults(defineProps<{ position?: string }>(), {
+  position: "dashboard"
+});
+
+const STORAGE_KEY = `notice-dismissed-${props.position}`;
 
 interface NoticeItem {
   id: number;
@@ -33,7 +37,7 @@ function dismiss(id: number) {
 
 onMounted(async () => {
   try {
-    const { data } = await getActive();
+    const { data } = await getActive(props.position);
     const all = data as NoticeItem[];
     const dismissed = getDismissedIds();
 
@@ -44,7 +48,7 @@ onMounted(async () => {
     const cleaned = dismissed.filter(id => activeIds.has(id));
     localStorage.setItem(STORAGE_KEY, JSON.stringify(cleaned));
   } catch {
-    // 静默失败，不影响 Dashboard
+    // 静默失败，不影响页面
   }
 });
 </script>
@@ -59,6 +63,7 @@ onMounted(async () => {
       :type="(notice.type as any) || 'info'"
       show-icon
       closable
+      close-text="不再显示"
       @close="dismiss(notice.id)"
     />
   </div>

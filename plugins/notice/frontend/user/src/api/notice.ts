@@ -1,5 +1,5 @@
 import { http } from "../http";
 
-export function getActive() {
-  return http.get("/notice/active");
+export function getActive(position?: string) {
+  return http.get("/notice/active", { params: position ? { position } : {} });
 }

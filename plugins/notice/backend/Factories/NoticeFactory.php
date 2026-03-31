@@ -15,6 +15,7 @@ class NoticeFactory extends Factory
             'title' => fake()->sentence(4),
             'content' => fake()->paragraph(),
             'type' => fake()->randomElement(['info', 'warning', 'success', 'error']),
+            'position' => fake()->randomElement(['dashboard', 'order', 'product', 'popup']),
             'is_active' => true,
             'sort' => fake()->numberBetween(0, 100),
         ];
