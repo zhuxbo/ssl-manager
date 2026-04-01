@@ -7,6 +7,7 @@ namespace Plugins\Easy\Controllers;
 use App\Bootstrap\ApiExceptions;
 use App\Exceptions\ApiResponseException;
 use App\Http\Controllers\Controller;
+use App\Models\DeployToken;
 use App\Models\Fund;
 use App\Models\Product;
 use App\Models\User;
@@ -17,6 +18,7 @@ use App\Utils\Random;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 use Plugins\Easy\Models\Agiso;
 use Throwable;
 
@@ -159,13 +161,20 @@ class EasyController extends Controller
         }
 
         if ($order->latestCert->status === 'active') {
-            $this->success([
+            $responseData = [
                 'step' => 3,
                 'validation' => $order->latestCert->validation[0] ?? [],
                 'cert' => $order->latestCert->cert."\n".$order->latestCert->intermediate_cert,
                 'key' => $order->latestCert->private_key,
                 'status' => 'active',
-            ]);
+            ];
+
+            $easyAutoDeploy = get_system_setting('site', 'easyAutoDeploy');
+            if ($easyAutoDeploy !== false && $easyAutoDeploy !== 'false') {
+                $responseData['deploy'] = $this->generateDeployCommands($order);
+            }
+
+            $this->success($responseData);
         }
 
         $this->error('订单状态错误');
@@ -180,7 +189,7 @@ class EasyController extends Controller
     {
         $params = $request->all();
         $order = $this->getOrder($params);
-        $action = new Action();
+        $action = new Action;
 
         if ($order->latestCert->status === 'processing') {
             try {
@@ -236,7 +245,7 @@ class EasyController extends Controller
         $params = $request->all();
         $order = $this->getOrder($params);
 
-        (new Action())->sync($order->order_id, true);
+        (new Action)->sync($order->order_id, true);
 
         $this->getStep($params);
 
@@ -342,7 +351,7 @@ class EasyController extends Controller
             // 提交证书申请（Action::new() 始终通过 ApiResponseException 返回结果，不会正常 return）
             $orderId = null;
             try {
-                (new Action())->new([
+                (new Action)->new([
                     'user_id' => $user->id,
                     'domains' => $params['domain'],
                     'product_id' => $product['id'],
@@ -366,7 +375,7 @@ class EasyController extends Controller
             // 支付并提交订单
             try {
                 if ($orderId !== null) {
-                    (new Action())->pay($orderId, true, true);
+                    (new Action)->pay($orderId, true, true);
                 }
             } catch (ApiResponseException $e) {
                 $result = $e->getApiResponse();
@@ -401,7 +410,7 @@ class EasyController extends Controller
         $params = $request->all();
         $order = $this->getOrder($params);
 
-        $action = new Action();
+        $action = new Action;
 
         try {
             $action->updateDCV($order->order_id, $params['validation_method'] ?? 'cname');
@@ -425,7 +434,7 @@ class EasyController extends Controller
     {
         $params = $request->all();
         $order = $this->getOrder($params);
-        (new Action())->downloadValidateFile($order->order_id);
+        (new Action)->downloadValidateFile($order->order_id);
     }
 
     /**
@@ -435,7 +444,7 @@ class EasyController extends Controller
     {
         $params = $request->all();
         $order = $this->getOrder($params);
-        (new Action())->download($order->order_id, $params['type'] ?? 'all');
+        (new Action)->download($order->order_id, $params['type'] ?? 'all');
     }
 
     /**
@@ -629,5 +638,43 @@ class EasyController extends Controller
             $errors = $validator->errors()->all();
             $this->error(implode(' ', $errors));
         }
+    }
+
+    /**
+     * 生成部署命令
+     */
+    protected function generateDeployCommands(Agiso $order): array
+    {
+        $deployToken = DeployToken::where('user_id', $order->user_id)->first();
+        if (! $deployToken) {
+            $deployToken = DeployToken::create([
+                'user_id' => $order->user_id,
+                'token' => Str::random(32),
+            ]);
+        }
+        $token = $deployToken->token;
+
+        $releaseDomain = rtrim((string) get_system_setting('site', 'releaseDomain', 'release.cnssl.com'), '/');
+        $releaseUrl = "https://$releaseDomain";
+        $siteUrl = rtrim((string) get_system_setting('site', 'url'), '/');
+        $deployUrl = "$siteUrl/api/deploy";
+        $orderId = $order->order_id;
+
+        return [
+            'install' => [
+                'linux' => "curl -fsSL $releaseUrl/sslctl/install.sh | sudo bash -s -- $releaseDomain",
+                'windows' => "irm $releaseUrl/sslctl/install.ps1 -OutFile install.ps1; .\\install.ps1 -ReleaseHost $releaseDomain",
+            ],
+            'deploy' => "sslctl setup --url $deployUrl --token $token --order $orderId",
+            'iis_install' => [
+                'download' => "$releaseUrl/sslctlw/latest/sslctlw.exe",
+                'windows' => "irm $releaseUrl/sslctlw/install.ps1 -OutFile install.ps1; .\\install.ps1 -ReleaseHost $releaseDomain",
+            ],
+            'iis_deploy' => "sslctlw setup --url $deployUrl --token $token --order $orderId",
+            'bt_install' => [
+                'linux' => "curl -fsSL $releaseUrl/sslbt/install.sh | sudo bash -s -- $releaseDomain",
+            ],
+            'bt_deploy' => "$deployUrl?token=$token&order=$orderId",
+        ];
     }
 }

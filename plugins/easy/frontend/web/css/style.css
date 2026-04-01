@@ -845,3 +845,110 @@ body {
     margin-left: auto;
   }
 }
+
+/* 自动部署 tab 导航 */
+.deploy-tabs-container {
+  flex: 1;
+}
+
+.deploy-tab-nav {
+  display: flex;
+  gap: 0;
+}
+
+.deploy-tab-btn {
+  padding: 5px 14px;
+  height: 30px;
+  font-size: 13px;
+  border: 1px solid var(--border-base, #dcdfe6);
+  background: white;
+  color: var(--text-secondary, #909399);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.deploy-tab-btn:first-child {
+  border-radius: 4px 0 0 4px;
+}
+
+.deploy-tab-btn:last-child {
+  border-radius: 0 4px 4px 0;
+}
+
+.deploy-tab-btn:not(:first-child) {
+  margin-left: -1px;
+}
+
+.deploy-tab-btn.active {
+  color: var(--primary-color);
+  border-color: var(--primary-color);
+  background: var(--primary-light-9, #ecf5ff);
+  position: relative;
+  z-index: 1;
+}
+
+.deploy-tab-btn:hover {
+  color: var(--primary-color);
+}
+
+.deploy-tab-content {
+  margin-top: 4px;
+}
+
+/* Windows 版本 toggle */
+.deploy-win-toggle {
+  display: inline-flex;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+.deploy-win-btn {
+  padding: 1px 8px;
+  height: 22px;
+  font-size: 11px;
+  line-height: 20px;
+  border: 1px solid var(--border-base, #dcdfe6);
+  background: white;
+  color: var(--text-secondary, #909399);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.deploy-win-btn:first-child {
+  border-radius: 3px 0 0 3px;
+}
+
+.deploy-win-btn:last-child {
+  border-radius: 0 3px 3px 0;
+  border-left: none;
+}
+
+.deploy-win-btn.active {
+  background: var(--primary-color);
+  border-color: var(--primary-color);
+  color: white;
+}
+
+/* 部署输入框带复制按钮 */
+.input-with-copy {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.input-with-copy input {
+  flex: 1;
+  font-family: Consolas, Monaco, monospace;
+  font-size: 12px;
+}
+
+.input-with-copy .copy-btn {
+  flex-shrink: 0;
+}
+
+@media (max-width: 768px) {
+  .deploy-tab-btn {
+    padding: 6px 12px;
+    font-size: 13px;
+  }
+}
