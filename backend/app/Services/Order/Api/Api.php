@@ -118,6 +118,7 @@ class Api
         $api = $this->getSourceApi($order->product->source ?? '');
         $this->checkMethodExists($api, 'uploadDocument');
 
+        /** @phpstan-ignore method.notFound */
         return $api->uploadDocument($data);
     }
 
@@ -130,6 +131,7 @@ class Api
         $api = $this->getSourceApi($order->product->source ?? '');
         $this->checkMethodExists($api, 'submitVerificationReport');
 
+        /** @phpstan-ignore method.notFound */
         return $api->submitVerificationReport($data);
     }
 

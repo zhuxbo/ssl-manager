@@ -51,7 +51,7 @@ test('dcv 字段为 JSON cast', function () {
 
     $cert = Cert::factory()->create([
         'order_id' => $order->id,
-        'dcv' => ['method' => 'txt', 'dns' => ['host' => '_acme-challenge']],
+        'dcv' => ['method' => 'txt', 'dns' => ['host' => '_dnsauth']],
     ]);
 
     $cert->refresh();

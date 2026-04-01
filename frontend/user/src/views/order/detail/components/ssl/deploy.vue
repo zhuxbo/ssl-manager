@@ -54,15 +54,25 @@
             </div>
           </div>
           <div class="command-block">
-            <div class="command-label">Windows (PowerShell)</div>
+            <div class="command-label">
+              Windows (PowerShell)
+              <el-radio-group
+                v-model="winVersion"
+                size="small"
+                style="margin-left: 12px"
+              >
+                <el-radio-button value="2016">2016+</el-radio-button>
+                <el-radio-button value="2012">2012</el-radio-button>
+              </el-radio-group>
+            </div>
             <div class="command-line">
-              <code>{{ commands.install?.windows }}</code>
+              <code>{{ windowsInstallCmd }}</code>
               <el-button
                 type="primary"
                 link
                 size="small"
                 :disabled="!isActive"
-                @click="copy(commands.install?.windows)"
+                @click="copy(windowsInstallCmd)"
                 >复制</el-button
               >
             </div>
@@ -114,15 +124,25 @@
             </div>
           </div>
           <div class="command-block">
-            <div class="command-label">Windows (PowerShell)</div>
+            <div class="command-label">
+              Windows (PowerShell)
+              <el-radio-group
+                v-model="winVersion"
+                size="small"
+                style="margin-left: 12px"
+              >
+                <el-radio-button value="2016">2016+</el-radio-button>
+                <el-radio-button value="2012">2012</el-radio-button>
+              </el-radio-group>
+            </div>
             <div class="command-line">
-              <code>{{ commands.iis_install?.windows }}</code>
+              <code>{{ iisWindowsInstallCmd }}</code>
               <el-button
                 type="primary"
                 link
                 size="small"
                 :disabled="!isActive"
-                @click="copy(commands.iis_install?.windows)"
+                @click="copy(iisWindowsInstallCmd)"
                 >复制</el-button
               >
             </div>
@@ -159,8 +179,22 @@ const cert = inject("cert") as any;
 
 const commands = ref<any>({});
 const activeTab = ref("bt");
+const winVersion = ref("2016");
 
 const isActive = computed(() => cert.value?.status === "active");
+
+const tls12Prefix =
+  "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12;";
+
+const windowsInstallCmd = computed(() => {
+  const base = commands.value.install?.windows || "";
+  return winVersion.value === "2012" ? `${tls12Prefix}\n${base}` : base;
+});
+
+const iisWindowsInstallCmd = computed(() => {
+  const base = commands.value.iis_install?.windows || "";
+  return winVersion.value === "2012" ? `${tls12Prefix}\n${base}` : base;
+});
 
 watch(
   isActive,
@@ -215,6 +249,8 @@ const copy = (content: string) => {
 }
 
 .command-label {
+  display: flex;
+  align-items: center;
   margin-bottom: 2px;
   font-size: 12px;
   color: var(--el-text-color-secondary);

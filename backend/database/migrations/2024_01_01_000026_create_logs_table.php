@@ -6,10 +6,8 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /** @noinspection DuplicatedCode */
     public function up(): void
     {
-        // 使用 hasTable 检查避免并行测试冲突
         if (! Schema::hasTable('ca_logs')) {
             Schema::create('ca_logs', function (Blueprint $table) {
                 $table->id();
@@ -18,7 +16,7 @@ return new class extends Migration
                 $table->mediumtext('params')->nullable()->comment('请求参数');
                 $table->mediumtext('response')->nullable()->comment('响应内容');
                 $table->integer('status_code')->default(200)->index()->comment('状态码');
-                $table->tinyInteger('status')->default(0)->index()->comment('状态: 0=失败, 1=成功');
+                $table->unsignedTinyInteger('status')->default(0)->index()->comment('状态: 0=失败, 1=成功');
                 $table->decimal('duration')->default(0)->comment('耗时(秒)');
                 $table->timestamp('created_at')->nullable()->comment('创建时间');
             });
@@ -32,7 +30,7 @@ return new class extends Migration
                 $table->mediumtext('params')->comment('回调参数');
                 $table->mediumtext('response')->nullable()->comment('响应内容');
                 $table->string('ip', 100)->nullable()->comment('IP地址');
-                $table->tinyInteger('status')->default(0)->index()->comment('状态: 0=失败, 1=成功');
+                $table->unsignedTinyInteger('status')->default(0)->index()->comment('状态: 0=失败, 1=成功');
                 $table->timestamp('created_at')->nullable()->comment('创建时间');
             });
         }
@@ -47,11 +45,11 @@ return new class extends Migration
                 $table->mediumtext('params')->nullable()->comment('请求参数');
                 $table->mediumtext('response')->nullable()->comment('响应内容');
                 $table->integer('status_code')->default(200)->index()->comment('状态码');
-                $table->tinyInteger('status')->default(0)->index()->comment('状态: 0=失败, 1=成功');
+                $table->unsignedTinyInteger('status')->default(0)->index()->comment('状态: 0=失败, 1=成功');
                 $table->decimal('duration')->default(0)->comment('耗时(秒)');
                 $table->string('ip', 100)->nullable()->comment('IP地址');
                 $table->string('user_agent', 500)->nullable()->comment('User Agent');
-                $table->timestamp('created_at')->nullable()->comment('创建时间');
+                $table->timestamp('created_at')->nullable()->index()->comment('创建时间');
             });
         }
 
@@ -66,7 +64,7 @@ return new class extends Migration
                 $table->mediumtext('params')->nullable()->comment('请求参数');
                 $table->mediumtext('response')->nullable()->comment('响应内容');
                 $table->integer('status_code')->default(200)->index()->comment('状态码');
-                $table->tinyInteger('status')->default(0)->index()->comment('状态: 0=失败, 1=成功');
+                $table->unsignedTinyInteger('status')->default(0)->index()->comment('状态: 0=失败, 1=成功');
                 $table->decimal('duration')->default(0)->comment('耗时(秒)');
                 $table->string('ip', 100)->nullable()->comment('IP地址');
                 $table->string('user_agent', 500)->nullable()->comment('User Agent');
@@ -85,7 +83,7 @@ return new class extends Migration
                 $table->mediumtext('params')->nullable()->comment('请求参数');
                 $table->mediumtext('response')->nullable()->comment('响应内容');
                 $table->integer('status_code')->default(200)->index()->comment('状态码');
-                $table->tinyInteger('status')->default(0)->index()->comment('状态: 0=失败, 1=成功');
+                $table->unsignedTinyInteger('status')->default(0)->index()->comment('状态: 0=失败, 1=成功');
                 $table->decimal('duration')->default(0)->comment('耗时(秒)');
                 $table->string('ip', 100)->nullable()->comment('IP地址');
                 $table->string('user_agent', 500)->nullable()->comment('User Agent');

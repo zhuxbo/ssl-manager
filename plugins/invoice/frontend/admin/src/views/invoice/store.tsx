@@ -5,6 +5,7 @@ import {
   show,
   store,
   update,
+  showUser,
   FORM_PARAMS_DEFAULT,
   FORM_PARAMS_KEYS,
   type FormParams
@@ -19,11 +20,21 @@ export function useInvoiceStore(onSearch: () => void) {
   const isEdit = computed(() => storeId.value > 0);
   const status = ref(0);
 
-  const statusOptions: Ref<{ label: string; value: number }[]> = computed(() => {
-    if (status.value === 0) return [{ label: "处理中", value: 0 }, { label: "已开票", value: 1 }];
-    if (status.value === 1) return [{ label: "已开票", value: 1 }, { label: "已作废", value: 2 }];
-    return [{ label: "已作废", value: 2 }];
-  });
+  const statusOptions: Ref<{ label: string; value: number }[]> = computed(
+    () => {
+      if (status.value === 0)
+        return [
+          { label: "处理中", value: 0 },
+          { label: "已开票", value: 1 }
+        ];
+      if (status.value === 1)
+        return [
+          { label: "已开票", value: 1 },
+          { label: "已作废", value: 2 }
+        ];
+      return [{ label: "已作废", value: 2 }];
+    }
+  );
 
   const storeColumns: PlusColumn[] = [
     {
@@ -41,7 +52,18 @@ export function useInvoiceStore(onSearch: () => void) {
           itemsField: "items",
           totalField: "total",
           placeholder: "请选择用户",
-          onChange,
+          onChange: (val: any) => {
+            onChange(val);
+            if (val) {
+              showUser(val)
+                .then((res: any) => {
+                  if (res.data?.email) {
+                    storeValues.value.email = res.data.email;
+                  }
+                })
+                .catch(() => {});
+            }
+          },
           refreshKey: storeId.value,
           disabled: isEdit.value
         });

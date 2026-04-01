@@ -291,10 +291,8 @@ class UpgradeService
 
         } catch (\Exception $e) {
             // 标记当前步骤失败
-            if (! empty($steps)) {
-                $steps[count($steps) - 1]['status'] = 'failed';
-                $steps[count($steps) - 1]['error'] = $e->getMessage();
-            }
+            $steps[count($steps) - 1]['status'] = 'failed';
+            $steps[count($steps) - 1]['error'] = $e->getMessage();
 
             // 尝试恢复
             try {

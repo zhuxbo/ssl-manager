@@ -34,8 +34,8 @@ Schedule::command('delegation:cleanup')
     ->name('cleanup-delegation-dns')
     ->description('清理非processing状态订单的委托DNS记录');
 
-// 自动续费/重签任务 - 每小时执行
+// 自动续费/重签任务 - 每天0点执行，commit 分散在0~8点
 Schedule::command('schedule:auto-renew')
-    ->hourly()
+    ->dailyAt('00:00')
     ->name('auto-renew-certificates')
     ->description('自动续费/重签即将到期的证书');

@@ -72,11 +72,11 @@ class AuthController extends BaseController
                 'max:20',
                 'unique:users',
                 function ($attribute, $value, $fail) {
+                    if (! preg_match('/^[a-zA-Z0-9\x{4e00}-\x{9fa5}_-]+$/u', $value)) {
+                        $fail('用户名只能包含字母、数字、中文、下划线和短横线');
+                    }
                     if (preg_match('/^1[3-9]\d{9}$/', $value)) {
                         $fail('用户名不能是手机号');
-                    }
-                    if (filter_var($value, FILTER_VALIDATE_EMAIL)) {
-                        $fail('用户名不能是邮箱格式');
                     }
                 },
             ],
@@ -155,11 +155,11 @@ class AuthController extends BaseController
                 'max:20',
                 'unique:users',
                 function ($attribute, $value, $fail) {
+                    if (! preg_match('/^[a-zA-Z0-9\x{4e00}-\x{9fa5}_-]+$/u', $value)) {
+                        $fail('用户名只能包含字母、数字、中文、下划线和短横线');
+                    }
                     if (preg_match('/^1[3-9]\d{9}$/', $value)) {
                         $fail('用户名不能是手机号');
-                    }
-                    if (filter_var($value, FILTER_VALIDATE_EMAIL)) {
-                        $fail('用户名不能是邮箱格式');
                     }
                 },
             ],
@@ -246,7 +246,21 @@ class AuthController extends BaseController
         $validator = Validator::make([
             'username' => $username,
         ], [
-            'username' => 'required|string|min:3|max:20|unique:users,username,'.$user->id,
+            'username' => [
+                'required',
+                'string',
+                'min:3',
+                'max:20',
+                'unique:users,username,'.$user->id,
+                function ($attribute, $value, $fail) {
+                    if (! preg_match('/^[a-zA-Z0-9\x{4e00}-\x{9fa5}_-]+$/u', $value)) {
+                        $fail('用户名只能包含字母、数字、中文、下划线和短横线');
+                    }
+                    if (preg_match('/^1[3-9]\d{9}$/', $value)) {
+                        $fail('用户名不能是手机号');
+                    }
+                },
+            ],
         ]);
 
         if ($validator->fails()) {
@@ -453,7 +467,7 @@ class AuthController extends BaseController
     public function logout(): void
     {
         // 获取刷新token
-        /** @var UserRefreshToken $refreshToken */
+        /** @var UserRefreshToken|null $refreshToken */
         $refreshToken = Auth::guard('user-refresh-token')->user();
 
         if ($refreshToken) {

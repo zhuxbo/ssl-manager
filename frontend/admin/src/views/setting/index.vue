@@ -1,12 +1,7 @@
 <script setup lang="tsx">
 import { onMounted, ref } from "vue";
 import { PlusDrawerForm } from "plus-pro-components";
-import {
-  getAllSettings,
-  destroyGroup,
-  getSettingConfig,
-  clearCache
-} from "@/api/setting";
+import { getAllSettings, destroyGroup, clearCache } from "@/api/setting";
 import { useSettingGroupStore } from "./groupStore";
 import { ElButton, ElPopconfirm } from "element-plus";
 import SettingGroup from "./SettingGroup.vue";
@@ -24,11 +19,6 @@ const { drawerSize } = useDrawerSize();
 const loading = ref(false);
 // 设置组列表
 const groups = ref([]);
-// 设置配置
-const settingConfig = ref({
-  locked: false
-});
-
 // 创建设置组表单
 const {
   groupFormRef,
@@ -41,13 +31,6 @@ const {
   confirmGroupForm,
   closeGroupForm
 } = useSettingGroupStore(() => loadSettings());
-
-// 获取设置配置
-const loadConfig = () => {
-  getSettingConfig().then(({ data }) => {
-    settingConfig.value = data;
-  });
-};
 
 // 加载所有设置
 const loadSettings = () => {
@@ -84,7 +67,6 @@ const handleClearCache = () => {
 };
 
 onMounted(() => {
-  loadConfig();
   loadSettings();
 });
 </script>
@@ -105,12 +87,7 @@ onMounted(() => {
             <el-button type="warning">清除缓存</el-button>
           </template>
         </el-popconfirm>
-        <el-button
-          v-if="!settingConfig.locked"
-          type="primary"
-          @click="handleAddGroup"
-          >添加设置组</el-button
-        >
+        <el-button type="primary" @click="handleAddGroup">添加设置组</el-button>
       </div>
     </div>
 
@@ -120,7 +97,6 @@ onMounted(() => {
           v-for="group in groups"
           :key="group.id"
           :group="group"
-          :config="settingConfig"
           :onRefresh="loadSettings"
           @edit-group="handleEditGroup"
           @delete-group="handleDeleteGroup"
@@ -129,12 +105,7 @@ onMounted(() => {
 
       <div v-else class="empty-groups text-center py-8 bg-bg_color rounded">
         <p class="text-gray-500 mb-4">暂无设置组</p>
-        <el-button
-          v-if="!settingConfig.locked"
-          type="primary"
-          @click="handleAddGroup"
-          >添加设置组</el-button
-        >
+        <el-button type="primary" @click="handleAddGroup">添加设置组</el-button>
       </div>
     </div>
 

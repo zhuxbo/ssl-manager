@@ -44,8 +44,7 @@ export const useDelegationStore = (
       options: [
         { label: "_certum (Certum)", value: "_certum" },
         { label: "_pki-validation (Sectigo)", value: "_pki-validation" },
-        { label: "_dnsauth (DigiCert/TrustAsia)", value: "_dnsauth" },
-        { label: "_acme-challenge (ACME)", value: "_acme-challenge" }
+        { label: "_dnsauth (DigiCert/TrustAsia)", value: "_dnsauth" }
       ],
       fieldProps: {
         placeholder: "请选择委托前缀"
@@ -141,8 +140,7 @@ export const useDelegationStore = (
       options: [
         { label: "_certum (Certum)", value: "_certum" },
         { label: "_pki-validation (Sectigo)", value: "_pki-validation" },
-        { label: "_dnsauth (DigiCert/TrustAsia)", value: "_dnsauth" },
-        { label: "_acme-challenge (ACME)", value: "_acme-challenge" }
+        { label: "_dnsauth (DigiCert/TrustAsia)", value: "_dnsauth" }
       ],
       fieldProps: {
         placeholder: "请选择委托前缀"
@@ -157,7 +155,7 @@ export const useDelegationStore = (
 
   function openBatchStoreForm() {
     showBatchStore.value = true;
-    batchStoreValues.value = { zones: "", prefix: "_acme-challenge" };
+    batchStoreValues.value = { zones: "", prefix: "_dnsauth" };
   }
 
   function confirmBatchStoreForm() {

@@ -42,7 +42,7 @@ test('创建委托', function () {
     $this->actingAsUser($user)
         ->postJson('/api/delegation', [
             'zone' => 'example.com',
-            'prefix' => '_acme-challenge',
+            'prefix' => '_dnsauth',
         ])
         ->assertOk()
         ->assertJson(['code' => 1]);
@@ -91,7 +91,7 @@ test('批量创建委托', function () {
     $this->actingAsUser($user)
         ->postJson('/api/delegation/batch-store', [
             'zones' => "example1.com\nexample2.com",
-            'prefix' => '_acme-challenge',
+            'prefix' => '_dnsauth',
         ])
         ->assertOk()
         ->assertJson(['code' => 1])

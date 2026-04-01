@@ -35,7 +35,15 @@ cd backend && php artisan test --parallel
 - ACME 控制器：`tests/Feature/Controllers/Admin/AcmeControllerTest.php`、`tests/Feature/Controllers/User/AcmeControllerTest.php`
 - Deploy 控制器：`tests/Feature/Controllers/Deploy/`
 
-### 2.3 Laravel 专项检查
+### 2.3 PHPStan 静态分析
+
+```bash
+cd backend && ./vendor/bin/phpstan analyse --level=5
+```
+
+有错误必须修复。
+
+### 2.4 Laravel 专项检查
 
 - [ ] 迁移幂等（`Schema::hasColumn`/`Schema::hasTable` 守卫），不写 down
 - [ ] Model 的 `$fillable`、`$casts`、`$hidden` 是否需要更新
@@ -47,7 +55,7 @@ cd backend && php artisan test --parallel
 - [ ] 队列 Job 在测试环境同步执行（`QUEUE_CONNECTION=sync`）
 - [ ] Observer 改动是否影响已有事件触发链
 
-### 2.4 PHP 8.3 规范
+### 2.5 PHP 8.3 规范
 
 - [ ] 双引号变量不加大括号（`"$var"` 而非 `"{$var}"`）
 - [ ] 例外：变量后紧跟中文等非 ASCII 字符时必须加（`"{$var}，中文"`）

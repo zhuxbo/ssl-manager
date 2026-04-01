@@ -296,8 +296,15 @@ const loadReport = async () => {
   }
 };
 
-const handleSave = async () => {
+const syncAuthData = () => {
+  if (authMode.value !== "custom") {
+    handleAuthModeChange(authMode.value);
+  }
   form.value.authorization.auth_mode = authMode.value;
+};
+
+const handleSave = async () => {
+  syncAuthData();
   saving.value = true;
   try {
     const res = await saveVerificationReport(order.id, form.value);

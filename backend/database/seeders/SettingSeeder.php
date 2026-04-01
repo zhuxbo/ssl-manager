@@ -17,11 +17,12 @@ class SettingSeeder extends Seeder
         $settingGroupsData = [
             ['name' => 'site', 'title' => '站点设置', 'description' => null, 'weight' => 1],
             ['name' => 'ca', 'title' => '证书接口', 'description' => null, 'weight' => 2],
-            ['name' => 'mail', 'title' => '邮件设置', 'description' => null, 'weight' => 3],
-            ['name' => 'sms', 'title' => '短信设置', 'description' => null, 'weight' => 4],
-            ['name' => 'alipay', 'title' => '支付宝设置', 'description' => null, 'weight' => 5],
-            ['name' => 'wechat', 'title' => '微信支付设置', 'description' => null, 'weight' => 6],
-            ['name' => 'bankAccount', 'title' => '银行账户设置', 'description' => null, 'weight' => 7],
+            ['name' => 'callback', 'title' => '回调设置', 'description' => null, 'weight' => 3],
+            ['name' => 'mail', 'title' => '邮件设置', 'description' => null, 'weight' => 4],
+            ['name' => 'sms', 'title' => '短信设置', 'description' => null, 'weight' => 5],
+            ['name' => 'alipay', 'title' => '支付宝设置', 'description' => null, 'weight' => 6],
+            ['name' => 'wechat', 'title' => '微信支付设置', 'description' => null, 'weight' => 7],
+            ['name' => 'bankAccount', 'title' => '银行账户设置', 'description' => null, 'weight' => 8],
         ];
 
         // 创建 setting groups 并保存到数组中，用 name 作为 key
@@ -39,7 +40,6 @@ class SettingSeeder extends Seeder
             'site' => [
                 ['key' => 'url', 'type' => 'string', 'options' => null, 'is_multiple' => 0, 'value' => null, 'description' => '用户URL', 'weight' => 1],
                 ['key' => 'name', 'type' => 'string', 'options' => null, 'is_multiple' => 0, 'value' => null, 'description' => '站点名称', 'weight' => 2],
-                ['key' => 'callbackToken', 'type' => 'string', 'options' => null, 'is_multiple' => 0, 'value' => null, 'description' => '回调令牌', 'weight' => 3],
                 ['key' => 'dnsTools', 'type' => 'array', 'options' => null, 'is_multiple' => 0, 'value' => ['cn' => 'https://dns-tools-cn.cnssl.com', 'us' => 'https://dns-tools-us.cnssl.com'], 'description' => 'DNS工具', 'weight' => 6],
                 ['key' => 'delegation', 'type' => 'array', 'options' => null, 'is_multiple' => 0, 'value' => ['proxyZone' => '', 'secretId' => '', 'secretKey' => ''], 'description' => 'CNAME委托', 'weight' => 7],
                 ['key' => 'sourceLevel', 'type' => 'array', 'options' => null, 'is_multiple' => 0, 'value' => ['source1' => 'platinum', 'source2' => 'platinum'], 'description' => '用户来源对应级别', 'weight' => 8],
@@ -86,6 +86,9 @@ class SettingSeeder extends Seeder
                 ['key' => 'account', 'type' => 'string', 'options' => null, 'is_multiple' => 0, 'value' => null, 'description' => '账号', 'weight' => 0],
                 ['key' => 'bank', 'type' => 'string', 'options' => null, 'is_multiple' => 0, 'value' => null, 'description' => '开户行', 'weight' => 0],
             ],
+            'callback' => [
+                ['key' => 'default', 'type' => 'array', 'options' => null, 'is_multiple' => 0, 'value' => ['sources' => '', 'token' => '', 'id_field' => 'id', 'allowed_ips' => ''], 'description' => '默认回调配置', 'weight' => 1],
+            ],
         ];
 
         // 创建 settings
@@ -99,6 +102,27 @@ class SettingSeeder extends Seeder
                     );
                 }
             }
+        }
+
+        // 迁移 site.callbackToken → callback.default.token
+        $oldToken = Setting::where('group_id', $groups['site']->id)
+            ->where('key', 'callbackToken')
+            ->first();
+
+        if ($oldToken) {
+            $defaultSetting = Setting::where('group_id', $groups['callback']->id)
+                ->where('key', 'default')
+                ->first();
+
+            if ($defaultSetting && $oldToken->value) {
+                $config = $defaultSetting->value;
+                if (empty($config['token'])) {
+                    $config['token'] = $oldToken->value;
+                    $defaultSetting->update(['value' => $config]);
+                }
+            }
+
+            $oldToken->delete();
         }
     }
 }

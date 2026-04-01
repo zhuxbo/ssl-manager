@@ -38,6 +38,7 @@ export interface PlatformConfigs {
   DnsTools?: string[];
   Beian?: string;
   Acme?: boolean;
+  AutoDeploy?: boolean;
 }
 
 /**

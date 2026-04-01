@@ -161,7 +161,7 @@ class Date
 
         foreach ($chunks as [$seconds, $name]) {
             if (($count = intdiv($timeDiff, $seconds)) > 0) {
-                return __("%d $name 前", [$count]);
+                return __(':count'." $name 前", ['count' => $count]);
             }
         }
 
@@ -216,8 +216,8 @@ class Date
                 ? mktime(0, 0, 0, $month + $offset, 1, $year)
                 : mktime(23, 59, 59, $month + $offset, cal_days_in_month(CAL_GREGORIAN, $month + $offset, $year), $year),
             'quarter' => $isBegin
-                ? mktime(0, 0, 0, 1 + ((ceil($month / 3) + $offset - 1) * 3), 1, $year)
-                : mktime(23, 59, 59, (ceil($month / 3) + $offset) * 3, cal_days_in_month(CAL_GREGORIAN, (ceil($month / 3) + $offset) * 3, $year), $year),
+                ? mktime(0, 0, 0, (int) (1 + ((ceil($month / 3) + $offset - 1) * 3)), 1, $year)
+                : mktime(23, 59, 59, (int) ((ceil($month / 3) + $offset) * 3), cal_days_in_month(CAL_GREGORIAN, (int) ((ceil($month / 3) + $offset) * 3), $year), $year),
             'year' => $isBegin
                 ? mktime(0, 0, 0, 1, 1, $year + $offset)
                 : mktime(23, 59, 59, 12, 31, $year + $offset),

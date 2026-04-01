@@ -31,7 +31,9 @@ import NavDouble from "./components/lay-sidebar/NavDouble.vue";
 import NavVertical from "./components/lay-sidebar/NavVertical.vue";
 import NavHorizontal from "./components/lay-sidebar/NavHorizontal.vue";
 import BackTopIcon from "@/assets/svg/back_top.svg?component";
+import { getPluginWidgets } from "@shared/utils/plugin-loader";
 
+const globalWidgets = getPluginWidgets("user-global");
 const appWrapperRef = ref();
 const { isDark } = useDark();
 const { layout } = useLayout();
@@ -200,6 +202,8 @@ const LayHeader = defineComponent({
     </div>
     <!-- 系统设置 -->
     <LaySetting />
+    <!-- 全局插件 widget -->
+    <component :is="w.component" v-for="w in globalWidgets" :key="w.name" />
   </div>
 </template>
 

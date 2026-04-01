@@ -66,8 +66,8 @@ class TopUpController extends BaseController
                 $this->error('发起支付失败，请联系管理员');
             }
 
-            if ($order->trade_status === 'TRADE_SUCCESS') {
-                $this->addfundsSuccessful($fund->id, $order->trade_no);
+            if ($order['trade_status'] === 'TRADE_SUCCESS') {
+                $this->addfundsSuccessful((string) $fund->id, $order['trade_no']);
                 $this->error('重复相同金额充值，请刷新页面后重试');
             }
         }
@@ -103,13 +103,13 @@ class TopUpController extends BaseController
         $result = Pay::alipay()->callback();
 
         // 支付成功
-        if ($result->trade_status === 'TRADE_SUCCESS') {
+        if ($result['trade_status'] === 'TRADE_SUCCESS') {
             // 使用事务防止重复
             DB::beginTransaction();
             try {
                 $fund = Fund::where([
-                    'id' => $result->out_trade_no,
-                    'amount' => $result->total_amount,
+                    'id' => $result['out_trade_no'],
+                    'amount' => $result['total_amount'],
                     'type' => 'addfunds',
                     'pay_method' => 'alipay',
                     'status' => 0, // processing
@@ -117,7 +117,7 @@ class TopUpController extends BaseController
 
                 if ($fund) {
                     $fund->status = 1; // successful
-                    $fund->pay_sn = $result->trade_no;
+                    $fund->pay_sn = $result['trade_no'];
                     $fund->save();
 
                     DB::commit();
@@ -126,8 +126,8 @@ class TopUpController extends BaseController
                 } else {
                     // 检查是否已经处理过（状态为成功）
                     $existingFund = Fund::where([
-                        'id' => $result->out_trade_no,
-                        'amount' => $result->total_amount,
+                        'id' => $result['out_trade_no'],
+                        'amount' => $result['total_amount'],
                         'type' => 'addfunds',
                         'pay_method' => 'alipay',
                         'status' => 1, // successful
@@ -191,8 +191,8 @@ class TopUpController extends BaseController
                 $this->error('发起支付失败，请联系管理员');
             }
 
-            if ($order->trade_state === 'SUCCESS') {
-                $this->addfundsSuccessful($fund->id, $order->transaction_id);
+            if ($order['trade_state'] === 'SUCCESS') {
+                $this->addfundsSuccessful((string) $fund->id, $order['transaction_id']);
                 $this->error('重复相同金额充值，请刷新页面后重试');
             }
         }
@@ -229,10 +229,10 @@ class TopUpController extends BaseController
         $this->getPayConfig('wechat');
         $result = Pay::wechat()->callback();
 
-        $paymentData = (object) $result->resource['ciphertext'];
+        $paymentData = (object) $result['resource']['ciphertext'];
 
         // 记录调试信息
-        if (! $paymentData) {
+        if (empty((array) $paymentData)) {
             app(ApiExceptions::class)->logException(new Exception('微信支付回调数据结构异常: '.json_encode($result, JSON_UNESCAPED_UNICODE)));
 
             return Pay::wechat()->success();
@@ -324,16 +324,16 @@ class TopUpController extends BaseController
         if ($fund->pay_method === 'alipay') {
             $this->getPayConfig('alipay');
             $order = Pay::alipay()->query(['out_trade_no' => $fund->id]);
-            if ($order->trade_status === 'TRADE_SUCCESS' || $order->trade_status === 'TRADE_FINISHED') {
-                $pay_sn = $order->trade_no;
+            if ($order['trade_status'] === 'TRADE_SUCCESS' || $order['trade_status'] === 'TRADE_FINISHED') {
+                $pay_sn = $order['trade_no'];
             }
         }
 
         if ($fund->pay_method === 'wechat') {
             $this->getPayConfig('wechat');
             $order = Pay::wechat()->query(['out_trade_no' => $fund->id]);
-            if ($order->trade_state === 'SUCCESS') {
-                $pay_sn = $order->transaction_id;
+            if ($order['trade_state'] === 'SUCCESS') {
+                $pay_sn = $order['transaction_id'];
             }
         }
 

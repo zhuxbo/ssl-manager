@@ -78,6 +78,16 @@ abstract class AbstractClient
     private $httpConn;
 
     /**
+     * @var string|null 服务端点
+     */
+    private $endpoint;
+
+    /**
+     * @var string 服务名称
+     */
+    protected $service = '';
+
+    /**
      * 基础client类
      *
      * @param  string  $endpoint  Deprecated, we use service+rootdomain instead
@@ -86,6 +96,7 @@ abstract class AbstractClient
      * @param  string  $region  产品地域
      * @param  ClientProfile  $profile
      */
+    /** @phpstan-ignore constructor.unusedParameter */
     public function __construct($endpoint, $version, $credential, $region, $profile = null)
     {
         $this->path = '/';
@@ -108,6 +119,11 @@ abstract class AbstractClient
 
         $this->httpConn = $this->createConnect();
     }
+
+    /**
+     * 将API响应转换为模型对象
+     */
+    abstract protected function returnResponse($action, $response);
 
     /**
      * 设置产品地域
@@ -231,13 +247,10 @@ abstract class AbstractClient
         switch ($this->profile->getHttpProfile()->getReqMethod()) {
             case HttpProfile::$REQ_GET:
                 return $this->getRequest($action, $request);
-                break;
             case HttpProfile::$REQ_POST:
                 return $this->postRequest($action, $request);
-                break;
             default:
                 throw new TencentCloudSDKException('', 'Method only support (GET, POST)');
-                break;
         }
     }
 
@@ -264,6 +277,7 @@ abstract class AbstractClient
         }
 
         $canonicalUri = $this->path;
+        $canonicalQueryString = '';
 
         $reqmethod = $this->profile->getHttpProfile()->getReqMethod();
         if (HttpProfile::$REQ_GET == $reqmethod) {

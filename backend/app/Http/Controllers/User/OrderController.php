@@ -9,6 +9,7 @@ use App\Models\Order;
 use App\Services\Order\Action;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Throwable;
 
 class OrderController extends BaseController
@@ -345,9 +346,9 @@ class OrderController extends BaseController
     /**
      * 预览文档
      */
-    public function previewDocument(int $id): void
+    public function previewDocument(int $id): BinaryFileResponse
     {
-        $this->action->previewDocument($id);
+        return $this->action->previewDocument($id);
     }
 
     /**

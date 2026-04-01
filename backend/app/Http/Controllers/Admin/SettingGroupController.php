@@ -6,7 +6,6 @@ use App\Http\Requests\SettingGroup\GetIdsRequest;
 use App\Http\Requests\SettingGroup\StoreRequest;
 use App\Http\Requests\SettingGroup\UpdateRequest;
 use App\Models\SettingGroup;
-use Illuminate\Support\Facades\Config;
 
 class SettingGroupController extends BaseController
 {
@@ -34,11 +33,6 @@ class SettingGroupController extends BaseController
      */
     public function store(StoreRequest $request): void
     {
-        // 检查是否锁定
-        if (Config::get('settings.locked', false)) {
-            $this->error('设置已锁定，禁止添加新设置组');
-        }
-
         $group = SettingGroup::create($request->validated());
 
         if (! $group->exists) {
@@ -81,11 +75,6 @@ class SettingGroupController extends BaseController
      */
     public function update(UpdateRequest $request, $id): void
     {
-        // 检查是否锁定
-        if (Config::get('settings.locked', false)) {
-            $this->error('设置已锁定，禁止修改设置组');
-        }
-
         $group = SettingGroup::find($id);
         if (! $group) {
             $this->error('设置组不存在');
@@ -102,11 +91,6 @@ class SettingGroupController extends BaseController
      */
     public function destroy($id): void
     {
-        // 检查是否锁定
-        if (Config::get('settings.locked', false)) {
-            $this->error('设置已锁定，禁止删除设置组');
-        }
-
         $group = SettingGroup::find($id);
         if (! $group) {
             $this->error('设置组不存在');
@@ -122,11 +106,6 @@ class SettingGroupController extends BaseController
      */
     public function batchDestroy(GetIdsRequest $request): void
     {
-        // 检查是否锁定
-        if (Config::get('settings.locked', false)) {
-            $this->error('设置已锁定，禁止删除设置组');
-        }
-
         $ids = $request->input('ids');
 
         $groups = SettingGroup::whereIn('id', $ids)->get();

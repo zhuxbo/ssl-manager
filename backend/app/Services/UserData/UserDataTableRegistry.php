@@ -67,16 +67,41 @@ class UserDataTableRegistry
     }
 
     /**
-     * 获取所有导出用的表（直接+间接+通知）
+     * 雪花 ID 的表（对应模型使用 HasSnowflakeId trait）
+     * 不在此列表中的用户数据表均为自增 ID，导出时去掉 id 列避免跨系统冲突
+     */
+    private static array $snowflakeIdTables = [
+        'users', 'orders', 'acmes', 'contacts', 'organizations',
+        'funds', 'certs', 'cname_delegations',
+    ];
+
+    /**
+     * 判断表是否使用自增 ID（非雪花即自增）
+     */
+    public static function isAutoIncrement(string $table): bool
+    {
+        return ! in_array($table, self::$snowflakeIdTables);
+    }
+
+    /**
+     * 导出用的表，按外键依赖排序（用于跨系统迁移，自增 ID 表去掉 id 列）
      */
     public static function exportTables(): array
     {
-        return array_merge(
-            [['table' => 'users', 'name' => '用户', 'type' => 'user']],
-            array_map(fn ($t) => [...$t, 'type' => 'direct'], self::directTables()),
-            array_map(fn ($t) => [...$t, 'type' => 'indirect'], self::indirectTables()),
-            [['table' => 'notifications', 'name' => '通知', 'type' => 'notification']],
-        );
+        return [
+            // 1. 根表
+            ['table' => 'users', 'name' => '用户', 'type' => 'user'],
+            // 2. user_id 直接关联
+            ['table' => 'orders', 'name' => '订单', 'type' => 'direct'],
+            ['table' => 'acmes', 'name' => 'ACME订单', 'type' => 'direct'],
+            ['table' => 'contacts', 'name' => '联系人', 'type' => 'direct'],
+            ['table' => 'organizations', 'name' => '组织', 'type' => 'direct'],
+            ['table' => 'funds', 'name' => '充值记录', 'type' => 'direct'],
+            ['table' => 'transactions', 'name' => '交易记录', 'type' => 'direct'],
+            ['table' => 'callbacks', 'name' => '回调配置', 'type' => 'direct'],
+            // 3. order_id 间接关联（依赖 orders）
+            ['table' => 'certs', 'name' => '证书', 'type' => 'indirect'],
+        ];
     }
 
     /**

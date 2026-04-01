@@ -272,22 +272,22 @@ class FundController extends BaseController
         if ($fund->pay_method === 'alipay') {
             $this->getPayConfig('alipay');
             $order = Pay::alipay()->query(['out_trade_no' => $fund->id]);
-            if ($order->trade_status === 'TRADE_SUCCESS' || $order->trade_status === 'TRADE_FINISHED') {
-                $pay_sn = $order->trade_no;
+            if ($order['trade_status'] === 'TRADE_SUCCESS' || $order['trade_status'] === 'TRADE_FINISHED') {
+                $pay_sn = $order['trade_no'];
             }
         }
 
         if ($fund->pay_method === 'wechat') {
             $this->getPayConfig('wechat');
             $order = Pay::wechat()->query(['out_trade_no' => $fund->id]);
-            if ($order->trade_state === 'SUCCESS') {
-                $pay_sn = $order->transaction_id;
+            if ($order['trade_state'] === 'SUCCESS') {
+                $pay_sn = $order['transaction_id'];
             }
         }
 
         // 如果支付序列号存在则充值成功
         if (isset($pay_sn)) {
-            $this->addfundsSuccessful($id, $pay_sn);
+            $this->addfundsSuccessful((string) $id, $pay_sn);
             $this->success();
         }
 

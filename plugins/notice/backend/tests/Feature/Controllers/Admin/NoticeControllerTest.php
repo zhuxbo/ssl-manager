@@ -38,12 +38,14 @@ test('store 创建公告', function () {
             'title' => '测试公告',
             'content' => '公告内容',
             'type' => 'warning',
+            'position' => 'order',
             'sort' => 10,
         ]);
 
     $response->assertOk()->assertJson(['code' => 1]);
     expect($response->json('data.title'))->toBe('测试公告');
-    $this->assertDatabaseHas('notice_notices', ['title' => '测试公告', 'type' => 'warning']);
+    expect($response->json('data.position'))->toBe('order');
+    $this->assertDatabaseHas('notice_notices', ['title' => '测试公告', 'type' => 'warning', 'position' => 'order']);
 });
 
 test('store 验证必填字段', function () {
@@ -66,17 +68,42 @@ test('store 验证 type 枚举', function () {
     expect($response->json('errors'))->toHaveKey('type');
 });
 
+test('store 验证 position 枚举', function () {
+    $response = $this->actingAsAdmin($this->admin)
+        ->postJson('/api/admin/notice', [
+            'title' => '测试',
+            'content' => '内容',
+            'position' => 'invalid',
+        ]);
+
+    $response->assertOk()->assertJson(['code' => 0]);
+    expect($response->json('errors'))->toHaveKey('position');
+});
+
+test('store 默认 position 为 dashboard', function () {
+    $response = $this->actingAsAdmin($this->admin)
+        ->postJson('/api/admin/notice', [
+            'title' => '测试公告',
+            'content' => '公告内容',
+        ]);
+
+    $response->assertOk()->assertJson(['code' => 1]);
+    $this->assertDatabaseHas('notice_notices', ['title' => '测试公告', 'position' => 'dashboard']);
+});
+
 test('update 更新公告', function () {
-    $notice = Notice::factory()->create(['title' => '旧标题']);
+    $notice = Notice::factory()->create(['title' => '旧标题', 'position' => 'dashboard']);
 
     $response = $this->actingAsAdmin($this->admin)
         ->putJson("/api/admin/notice/$notice->id", [
             'title' => '新标题',
             'content' => '新内容',
+            'position' => 'popup',
         ]);
 
     $response->assertOk()->assertJson(['code' => 1]);
     expect($notice->fresh()->title)->toBe('新标题');
+    expect($notice->fresh()->position)->toBe('popup');
 });
 
 test('destroy 删除公告', function () {

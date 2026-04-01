@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Deploy;
 
 use App\Exceptions\ApiResponseException;
 use App\Http\Controllers\Controller;
+use App\Models\Cert;
 use App\Models\Order;
 use App\Services\Order\Action;
 use App\Services\Order\AutoRenewService;
@@ -21,8 +22,8 @@ class ApiController extends Controller
     {
         $request->validate([
             'order' => ['nullable', 'string'],
-            'currentPage' => ['nullable', 'integer', 'min:1'],
-            'pageSize' => ['nullable', 'integer', 'min:1', 'max:100'],
+            'page' => ['nullable', 'integer', 'min:1'],
+            'page_size' => ['nullable', 'integer', 'min:1', 'max:100'],
         ]);
 
         $order = trim($request->input('order', ''));
@@ -44,6 +45,8 @@ class ApiController extends Controller
                     $this->error('未找到匹配的订单');
                 }
 
+                $found = $this->resolveRenewedOrder($found);
+
                 $this->success($this->paginateResult(collect([$found])));
             }
 
@@ -58,21 +61,22 @@ class ApiController extends Controller
         }
 
         // 空参数：返回最新 active 订单（数据库级分页）
-        $currentPage = (int) $request->input('currentPage', 1);
-        $pageSize = (int) ($request->input('pageSize', 100) ?? 100);
+        $page = (int) $request->input('page', 1);
+        $page_size = (int) ($request->input('page_size', 100) ?? 100);
 
         $query = Order::with('latestCert')
             ->whereHas('latestCert', fn ($q) => $q->where('status', 'active'))
             ->orderByDesc('created_at');
 
         $total = $query->count();
-        $data = $query->offset(($currentPage - 1) * $pageSize)
-            ->limit($pageSize)
+        $data = $query->offset(($page - 1) * $page_size)
+            ->limit($page_size)
             ->get()
             ->map(fn ($o) => $this->getOrderData($o))
             ->toArray();
 
-        $this->success(compact('total', 'currentPage', 'pageSize', 'data'));
+        $renew_before_days = (int) get_system_setting('site', 'renewBeforeDays', 14);
+        $this->success(compact('total', 'page', 'page_size', 'data', 'renew_before_days'));
     }
 
     /**
@@ -95,7 +99,7 @@ class ApiController extends Controller
             ->where('id', $params['order_id'])
             ->first();
 
-        if (! $order || ! $order->latestCert) {
+        if (! $order) {
             $this->error('订单不存在');
         }
 
@@ -191,8 +195,34 @@ class ApiController extends Controller
         }
 
         $data = $this->getOrderData($order);
+        $data['renew_before_days'] = (int) get_system_setting('site', 'renewBeforeDays', 14);
 
         $this->success($data);
+    }
+
+    /**
+     * 切换订单自动重签开关
+     */
+    public function toggleAutoReissue(Request $request): void
+    {
+        $params = $request->validate([
+            'order_id' => ['required', 'integer'],
+            'auto_reissue' => ['required', 'boolean'],
+        ]);
+
+        $order = Order::find($params['order_id']);
+
+        if (! $order) {
+            $this->error('订单不存在');
+        }
+
+        $order->auto_reissue = $params['auto_reissue'];
+        $order->save();
+
+        $this->success([
+            'order_id' => $order->id,
+            'auto_reissue' => $order->auto_reissue,
+        ]);
     }
 
     /**
@@ -212,7 +242,7 @@ class ApiController extends Controller
             ->where('id', $params['order_id'])
             ->first();
 
-        if (! $order || ! $order->latestCert) {
+        if (! $order) {
             $this->error('订单不存在');
         }
 
@@ -239,6 +269,7 @@ class ApiController extends Controller
             'order_id' => $params['order_id'],
             'status' => $params['status'],
             'recorded' => $params['status'] === 'success',
+            'renew_before_days' => (int) get_system_setting('site', 'renewBeforeDays', 14),
         ]);
     }
 
@@ -247,14 +278,16 @@ class ApiController extends Controller
      */
     private function paginateResult(\Illuminate\Support\Collection $orders, ?Request $request = null): array
     {
-        $currentPage = $request ? (int) $request->input('currentPage', 1) : 1;
-        $pageSize = $request ? (int) ($request->input('pageSize', 100) ?? 100) : 100;
+        $page = $request ? (int) $request->input('page', 1) : 1;
+        $page_size = $request ? (int) ($request->input('page_size', 100) ?? 100) : 100;
         $total = $orders->count();
 
-        $data = $orders->slice(($currentPage - 1) * $pageSize, $pageSize)->values()
+        $data = $orders->slice(($page - 1) * $page_size, $page_size)->values()
             ->map(fn ($o) => $this->getOrderData($o))->toArray();
 
-        return compact('total', 'currentPage', 'pageSize', 'data');
+        $renew_before_days = (int) get_system_setting('site', 'renewBeforeDays', 14);
+
+        return compact('total', 'page', 'page_size', 'data', 'renew_before_days');
     }
 
     /**
@@ -289,13 +322,17 @@ class ApiController extends Controller
             $orders = Order::with('latestCert')
                 ->whereHas('latestCert')
                 ->whereIn('id', $ids)
-                ->get();
+                ->get()
+                ->map(fn ($o) => $this->resolveRenewedOrder($o))
+                ->unique('id')
+                ->values();
         }
 
         // 按域名逐个查询并合并（去重）
         $existingIds = $orders->pluck('id')->all();
         foreach ($domains as $domain) {
             $found = $this->findOrdersByDomain($domain);
+            /** @var Order $order */
             foreach ($found as $order) {
                 if (! in_array($order->id, $existingIds)) {
                     $orders->push($order);
@@ -337,6 +374,37 @@ class ApiController extends Controller
         }
 
         return $result ?? [];
+    }
+
+    /**
+     * 已续费订单追踪到新订单
+     * 通过 cert 的 last_cert_id 链找到续费后的新订单
+     */
+    private function resolveRenewedOrder(Order $order): Order
+    {
+        $cert = $order->latestCert;
+
+        while ($cert->status === 'renewed') {
+            $nextCert = Cert::where('last_cert_id', $cert->id)->first();
+
+            if (! $nextCert || $nextCert->order_id === $order->id) {
+                break;
+            }
+
+            $newOrder = Order::with('latestCert')
+                ->whereHas('latestCert')
+                ->where('id', $nextCert->order_id)
+                ->first();
+
+            if (! $newOrder) {
+                break;
+            }
+
+            $order = $newOrder;
+            $cert = $order->latestCert;
+        }
+
+        return $order;
     }
 
     /**

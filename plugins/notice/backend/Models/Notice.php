@@ -16,6 +16,7 @@ class Notice extends Model
         'title',
         'content',
         'type',
+        'position',
         'is_active',
         'sort',
     ];

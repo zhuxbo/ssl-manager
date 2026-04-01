@@ -62,8 +62,6 @@ class UpgradeController extends BaseController
         // 检查是否已有升级任务在运行
         if ($this->statusManager->isRunning()) {
             $this->error('已有升级任务在运行中');
-
-            return;
         }
 
         // 清理旧的状态文件
@@ -122,8 +120,6 @@ class UpgradeController extends BaseController
             }
 
             $this->error($errorMessage);
-
-            return;
         }
 
         $this->success([
@@ -145,8 +141,6 @@ class UpgradeController extends BaseController
                 'status' => 'idle',
                 'message' => '没有进行中的升级任务',
             ]);
-
-            return;
         }
 
         $this->success($status);

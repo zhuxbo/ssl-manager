@@ -1,5 +1,5 @@
-<script setup lang="tsx">
-import { onMounted, ref, reactive } from "vue";
+<script setup lang="ts">
+import { onMounted, ref, reactive, h, resolveComponent } from "vue";
 import { PlusSearch, PlusDrawerForm } from "plus-pro-components";
 import type { PlusColumn } from "plus-pro-components";
 import type { PaginationProps } from "@pureadmin/table";
@@ -18,7 +18,11 @@ defineOptions({ name: "Invoice" });
 const { drawerSize } = useDrawerSize();
 
 // 额度
-const quotaInfo = reactive({ recharge: "0.00", invoiced: "0.00", quota: "0.00" });
+const quotaInfo = reactive({
+  recharge: "0.00",
+  invoiced: "0.00",
+  quota: "0.00"
+});
 const fetchQuota = async () => {
   try {
     const { data } = await invoiceApi.quota();
@@ -62,13 +66,23 @@ function onSearch() {
     });
 }
 
-const handleSizeChange = (val: number) => { pagination.pageSize = val; onSearch(); };
-const handleCurrentChange = (val: number) => { pagination.currentPage = val; onSearch(); };
+const handleSizeChange = (val: number) => {
+  pagination.pageSize = val;
+  onSearch();
+};
+const handleCurrentChange = (val: number) => {
+  pagination.currentPage = val;
+  onSearch();
+};
 const onReset = () => onSearch();
-const onCollapse = () => setTimeout(() => window.dispatchEvent(new Event("resize")), 500);
+const onCollapse = () =>
+  setTimeout(() => window.dispatchEvent(new Event("resize")), 500);
 
 const handleDestroy = (id: number) => {
-  invoiceApi.destroy(id).then(() => { onSearch(); fetchQuota(); });
+  invoiceApi.destroy(id).then(() => {
+    onSearch();
+    fetchQuota();
+  });
 };
 
 // 搜索列
@@ -115,22 +129,31 @@ const statusMap: Record<number, { label: string; type: string }> = {
   2: { label: "已作废", type: "danger" }
 };
 const tableColumns: any[] = [
-  { label: "ID", prop: "id", width: 130 },
-  { label: "金额", prop: "amount", width: 100 },
   { label: "组织", prop: "organization", minWidth: 150 },
+  { label: "金额", prop: "amount", width: 100 },
   { label: "邮箱", prop: "email", minWidth: 150 },
   { label: "备注", prop: "remark", minWidth: 150 },
   {
-    label: "状态", prop: "status", width: 100,
-    cellRenderer: ({ row, props }: any) => (
-      <el-tag size={props.size} type={statusMap[row.status]?.type} effect="plain">
-        {statusMap[row.status]?.label}
-      </el-tag>
-    )
+    label: "状态",
+    prop: "status",
+    width: 100,
+    cellRenderer: ({ row, props }: any) =>
+      h(
+        resolveComponent("ElTag"),
+        {
+          size: props.size,
+          type: statusMap[row.status]?.type,
+          effect: "plain"
+        },
+        () => statusMap[row.status]?.label
+      )
   },
   {
-    label: "创建时间", prop: "created_at", width: 160,
-    formatter: ({ created_at }: any) => created_at ? dayjs(created_at).format("YYYY-MM-DD HH:mm:ss") : "-"
+    label: "创建时间",
+    prop: "created_at",
+    width: 160,
+    formatter: ({ created_at }: any) =>
+      created_at ? dayjs(created_at).format("YYYY-MM-DD HH:mm:ss") : "-"
   },
   { label: "操作", fixed: "right", width: 80, slot: "operation" }
 ];
@@ -140,16 +163,47 @@ const showStore = ref(false);
 const storeRef = ref();
 const storeValues = ref<Record<string, any>>({});
 const storeColumns: PlusColumn[] = [
-  { label: "金额", prop: "amount", valueType: "input-number", fieldProps: { placeholder: "请输入金额", min: 1, precision: 2, controlsPosition: "right" } },
-  { label: "组织", prop: "organization", valueType: "input", fieldProps: { placeholder: "请输入组织名称" } },
-  { label: "税号", prop: "taxation", valueType: "input", fieldProps: { placeholder: "请输入税号" } },
-  { label: "邮箱", prop: "email", valueType: "input", fieldProps: { placeholder: "请输入邮箱" } },
-  { label: "备注", prop: "remark", valueType: "textarea", fieldProps: { placeholder: "请输入备注", rows: 3 } }
+  {
+    label: "金额",
+    prop: "amount",
+    valueType: "input-number",
+    fieldProps: {
+      placeholder: "请输入金额",
+      min: 1,
+      precision: 2,
+      controlsPosition: "right"
+    }
+  },
+  {
+    label: "组织",
+    prop: "organization",
+    valueType: "input",
+    fieldProps: { placeholder: "请输入组织名称" }
+  },
+  {
+    label: "税号",
+    prop: "taxation",
+    valueType: "input",
+    fieldProps: { placeholder: "请输入税号" }
+  },
+  {
+    label: "邮箱",
+    prop: "email",
+    valueType: "input",
+    fieldProps: { placeholder: "请输入邮箱" }
+  },
+  {
+    label: "备注",
+    prop: "remark",
+    valueType: "textarea",
+    fieldProps: { placeholder: "请输入备注", rows: 3 }
+  }
 ];
 const storeRules: FormRules = {
   amount: [{ required: true, message: "请输入金额", trigger: "blur" }],
-  organization: [{ required: true, message: "请输入组织名称", trigger: "blur" }],
-  taxation: [{ required: true, message: "请输入税号", trigger: "blur" }],
+  organization: [
+    { required: true, message: "请输入组织名称", trigger: "blur" }
+  ],
   email: [
     { required: true, message: "请输入邮箱", trigger: "blur" },
     { type: "email", message: "请输入正确的邮箱格式", trigger: "blur" }
@@ -185,24 +239,48 @@ onMounted(() => {
 <template>
   <div class="main">
     <!-- 额度信息 -->
-    <div class="bg-bg_color w-[99/100]" style="padding: 20px 24px; margin-bottom: 8px">
+    <div
+      class="bg-bg_color w-[99/100]"
+      style="padding: 20px 24px; margin-bottom: 8px"
+    >
       <div style="display: flex; gap: 48px">
         <div>
-          <span style="font-size: 13px; color: var(--el-text-color-secondary)">年度充值</span>
-          <div style="font-size: 18px; font-weight: bold; margin-top: 4px">¥{{ quotaInfo.recharge }}</div>
+          <span style="font-size: 13px; color: var(--el-text-color-secondary)"
+            >年度充值</span
+          >
+          <div style="font-size: 18px; font-weight: bold; margin-top: 4px">
+            ¥{{ quotaInfo.recharge }}
+          </div>
         </div>
         <div>
-          <span style="font-size: 13px; color: var(--el-text-color-secondary)">已开票</span>
-          <div style="font-size: 18px; font-weight: bold; margin-top: 4px">¥{{ quotaInfo.invoiced }}</div>
+          <span style="font-size: 13px; color: var(--el-text-color-secondary)"
+            >已开票</span
+          >
+          <div style="font-size: 18px; font-weight: bold; margin-top: 4px">
+            ¥{{ quotaInfo.invoiced }}
+          </div>
         </div>
         <div>
-          <span style="font-size: 13px; color: var(--el-text-color-secondary)">可开票</span>
-          <div style="font-size: 18px; font-weight: bold; margin-top: 4px; color: var(--el-color-primary)">¥{{ quotaInfo.quota }}</div>
+          <span style="font-size: 13px; color: var(--el-text-color-secondary)"
+            >可开票</span
+          >
+          <div
+            style="
+              font-size: 18px;
+              font-weight: bold;
+              margin-top: 4px;
+              color: var(--el-color-primary);
+            "
+          >
+            ¥{{ quotaInfo.quota }}
+          </div>
         </div>
       </div>
     </div>
 
-    <div class="search bg-bg_color w-[99/100] pl-4 pr-4 pt-[24px] pb-[12px] overflow-auto">
+    <div
+      class="search bg-bg_color w-[99/100] pl-4 pr-4 pt-[24px] pb-[12px] overflow-auto"
+    >
       <PlusSearch
         v-model="search"
         :columns="searchColumns"
@@ -254,7 +332,12 @@ onMounted(() => {
               @confirm="handleDestroy(row.id)"
             >
               <template #reference>
-                <el-button class="reset-margin !outline-none" link type="danger" :size="size">
+                <el-button
+                  class="reset-margin !outline-none"
+                  link
+                  type="danger"
+                  :size="size"
+                >
                   删除
                 </el-button>
               </template>
@@ -268,7 +351,12 @@ onMounted(() => {
       ref="storeRef"
       v-model="storeValues"
       :visible="showStore"
-      :form="{ columns: storeColumns, rules: storeRules, labelPosition: 'right', labelSuffix: '' }"
+      :form="{
+        columns: storeColumns,
+        rules: storeRules,
+        labelPosition: 'right',
+        labelSuffix: ''
+      }"
       :size="drawerSize"
       :closeOnClickModal="true"
       title="申请开票"

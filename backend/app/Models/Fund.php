@@ -130,6 +130,7 @@ class Fund extends BaseModel
     {
         DB::beginTransaction();
         try {
+            /** @var \App\Models\Fund $model */
             $transaction['transaction_id'] = $model->id;
             $transaction = self::getTypeAmount($model, $transaction);
 

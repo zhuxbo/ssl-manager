@@ -2,13 +2,17 @@
 
 use App\Models\Acme;
 use App\Models\ApiToken;
+use App\Models\Cert;
+use App\Models\CnameDelegation;
 use App\Models\Contact;
 use App\Models\DeployToken;
 use App\Models\Fund;
 use App\Models\Order;
 use App\Models\Organization;
+use App\Models\Task;
 use App\Models\Transaction;
 use App\Models\User;
+use App\Services\UserData\UserDataTableRegistry;
 use Illuminate\Support\Facades\File;
 
 beforeEach(function () {
@@ -210,6 +214,142 @@ test('purge 满足条件后清理用户数据', function () {
     expect(Acme::where('user_id', $user->id)->count())->toBe(0);
     expect(DeployToken::where('user_id', $user->id)->count())->toBe(0);
     expect(ApiToken::where('user_id', $user->id)->count())->toBe(0);
+});
+
+// ===================== 导出范围与自增 ID =====================
+
+test('export 只导出核心表，不含运营数据', function () {
+    $user = User::factory()->create();
+    $order = Order::factory()->create(['user_id' => $user->id]);
+    Cert::factory()->create(['order_id' => $order->id]);
+    Contact::factory()->create(['user_id' => $user->id]);
+    Fund::factory()->create(['user_id' => $user->id]);
+    Transaction::factory()->create(['user_id' => $user->id, 'type' => 'order']);
+    CnameDelegation::factory()->create(['user_id' => $user->id]);
+    Task::factory()->create(['order_id' => $order->id]);
+
+    $this->artisan("user:data export {$user->id} --force")->assertSuccessful();
+
+    $files = glob(storage_path("app/private/exports/users/{$user->id}_*.sql"));
+    $content = file_get_contents($files[0]);
+
+    // 核心表应包含
+    expect($content)
+        ->toContain('INSERT INTO `users`')
+        ->toContain('INSERT INTO `orders`')
+        ->toContain('INSERT INTO `certs`')
+        ->toContain('INSERT INTO `contacts`')
+        ->toContain('INSERT INTO `funds`')
+        ->toContain('INSERT INTO `transactions`');
+
+    // 运营数据不导出
+    expect($content)
+        ->not->toContain('INSERT INTO `cname_delegations`')
+        ->not->toContain('INSERT INTO `tasks`')
+        ->not->toContain('INSERT INTO `notifications`');
+});
+
+test('export 导出顺序满足外键依赖', function () {
+    $user = User::factory()->create();
+    $order = Order::factory()->create(['user_id' => $user->id]);
+    Cert::factory()->create(['order_id' => $order->id]);
+
+    $this->artisan("user:data export {$user->id} --force")->assertSuccessful();
+
+    $files = glob(storage_path("app/private/exports/users/{$user->id}_*.sql"));
+    $content = file_get_contents($files[0]);
+
+    // users 在 orders 之前，orders 在 certs 之前
+    $usersPos = strpos($content, 'INSERT INTO `users`');
+    $ordersPos = strpos($content, 'INSERT INTO `orders`');
+    $certsPos = strpos($content, 'INSERT INTO `certs`');
+
+    expect($usersPos)->toBeLessThan($ordersPos);
+    expect($ordersPos)->toBeLessThan($certsPos);
+});
+
+test('export 导出后导入可恢复数据', function () {
+    $user = User::factory()->create();
+    $order = Order::factory()->create(['user_id' => $user->id]);
+    Cert::factory()->create(['order_id' => $order->id]);
+    Fund::factory()->create(['user_id' => $user->id]);
+
+    // 导出
+    $this->artisan("user:data export {$user->id} --force")->assertSuccessful();
+    $files = glob(storage_path("app/private/exports/users/{$user->id}_*.sql"));
+    $filePath = $files[0];
+
+    // 删除数据（子表先删）
+    Cert::where('order_id', $order->id)->delete();
+    Fund::where('user_id', $user->id)->delete();
+    Order::where('user_id', $user->id)->delete();
+    $user->delete();
+
+    // 导入
+    $this->artisan("user:data import {$user->id} --force --file=$filePath")
+        ->assertSuccessful()
+        ->expectsOutputToContain('导入完成');
+
+    expect(User::find($user->id))->not->toBeNull();
+    expect(Order::where('user_id', $user->id)->count())->toBe(1);
+    expect(Cert::where('order_id', $order->id)->count())->toBe(1);
+    expect(Fund::where('user_id', $user->id)->count())->toBe(1);
+});
+
+test('exportTables 白名单含 callbacks 不含运营数据', function () {
+    $tables = array_column(UserDataTableRegistry::exportTables(), 'table');
+
+    expect($tables)
+        ->toContain('users')
+        ->toContain('orders')
+        ->toContain('certs')
+        ->toContain('funds')
+        ->toContain('transactions')
+        ->toContain('callbacks')
+        ->not->toContain('cname_delegations')
+        ->not->toContain('tasks')
+        ->not->toContain('domain_validation_records')
+        ->not->toContain('notifications')
+        ->not->toContain('order_documents')
+        ->not->toContain('order_verification_reports');
+});
+
+test('export 自增 ID 表不导出 id 列', function () {
+    $user = User::factory()->create();
+    Transaction::factory()->create(['user_id' => $user->id, 'type' => 'order']);
+
+    $this->artisan("user:data export {$user->id} --force")->assertSuccessful();
+
+    $files = glob(storage_path("app/private/exports/users/{$user->id}_*.sql"));
+    $content = file_get_contents($files[0]);
+
+    // transactions（自增）不含 `id` 列
+    preg_match('/INSERT INTO `transactions` \(([^)]+)\)/', $content, $matches);
+    expect($matches)->not->toBeEmpty();
+    expect($matches[1])->not->toContain('`id`');
+
+    // orders（雪花）保留 `id` 列
+    preg_match('/INSERT INTO `orders` \(([^)]+)\)/', $content, $matches);
+    if (! empty($matches)) {
+        expect($matches[1])->toContain('`id`');
+    }
+});
+
+test('export 自增 ID 表导入不冲突', function () {
+    $user = User::factory()->create();
+    Transaction::factory()->create(['user_id' => $user->id, 'type' => 'order']);
+
+    // 导出
+    $this->artisan("user:data export {$user->id} --force")->assertSuccessful();
+    $files = glob(storage_path("app/private/exports/users/{$user->id}_*.sql"));
+    $filePath = $files[0];
+
+    // 不删除原数据，直接导入 — 自增 ID 表不应冲突
+    $this->artisan("user:data import {$user->id} --force --file=$filePath")
+        ->assertSuccessful();
+
+    // transactions 应新增一条（自动分配新 id）
+    expect(Transaction::where('user_id', $user->id)->count())->toBe(2);
 });
 
 // ===================== 参数验证 =====================

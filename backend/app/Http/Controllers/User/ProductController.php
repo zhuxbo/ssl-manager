@@ -42,7 +42,8 @@ class ProductController extends BaseController
             $query->where('brand', $validated['brand']);
         }
         if (! empty($validated['product_type'])) {
-            $query->where('product_type', $validated['product_type']);
+            $types = (array) $validated['product_type'];
+            $query->whereIn('product_type', $types);
         }
         if (! empty($validated['encryption_standard'])) {
             $query->where('encryption_standard', $validated['encryption_standard']);
@@ -78,12 +79,12 @@ class ProductController extends BaseController
                 foreach ($item->periods as $period) {
                     $prices[$period] = array_filter(OrderUtil::getMinPrice($this->guard->user()->id, $item->id, (int) $period));
                 }
-                $item->prices = $prices;
+                $item->setAttribute('prices', $prices);
                 // 保留最小周期的 price 字段，兼容列表默认显示
                 $minPeriod = min($item->periods);
                 $price = $prices[$minPeriod] ?? [];
                 $price['period'] = $minPeriod;
-                $item->price = $price;
+                $item->setAttribute('price', $price);
             }
         }
 
@@ -111,7 +112,7 @@ class ProductController extends BaseController
             foreach ($product->periods as $period) {
                 $price[$period] = array_filter(OrderUtil::getMinPrice($this->guard->user()->id, $product->id, (int) $period));
             }
-            $product->price = $price;
+            $product->setAttribute('price', $price);
         }
 
         $product->makeHidden([
@@ -177,7 +178,7 @@ class ProductController extends BaseController
 
         // 应用价格倍率
         $data = $data->map(function ($item) use ($priceRate) {
-            $item->price_rate = $priceRate;
+            $item->setAttribute('price_rate', $priceRate);
 
             return $item;
         });

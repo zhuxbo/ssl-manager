@@ -109,7 +109,7 @@ class ApiController extends Controller
             $cost = [];
             $skipProduct = false;
 
-            /** @var Product $item */
+            /** @var int $period */
             foreach ($item->periods as $period) {
                 $minPrice = OrderUtil::getMinPrice($this->user_id, $item->id, (int) $period);
 

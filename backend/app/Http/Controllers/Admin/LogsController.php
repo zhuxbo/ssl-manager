@@ -36,7 +36,12 @@ class LogsController extends BaseController
             'callback' => CallbackLog::find($id),
             'ca' => CaLog::find($id),
             'error' => ErrorLog::find($id),
+            default => null,
         };
+
+        if (! $model) {
+            $this->error('日志不存在');
+        }
 
         $this->success($model->toArray());
     }

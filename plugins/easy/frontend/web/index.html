@@ -406,9 +406,234 @@
                   <a href="#" class="download-link" data-type="all">全部</a>
                 </div>
               </div>
+              <!-- 自动部署 -->
+              <div id="deploy-section" style="display: none">
+                <div class="divider"></div>
+                <div class="form-group">
+                  <label>自动部署</label>
+                  <div class="deploy-tabs-container">
+                    <div class="deploy-tab-nav">
+                      <button
+                        type="button"
+                        class="deploy-tab-btn active"
+                        data-deploy-tab="bt"
+                      >
+                        宝塔面板
+                      </button>
+                      <button
+                        type="button"
+                        class="deploy-tab-btn"
+                        data-deploy-tab="nginx"
+                      >
+                        Nginx / Apache
+                      </button>
+                      <button
+                        type="button"
+                        class="deploy-tab-btn"
+                        data-deploy-tab="iis"
+                      >
+                        IIS
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 宝塔面板 -->
+                <div class="deploy-tab-content" id="deploy-tab-bt">
+                  <div class="form-group">
+                    <label>安装 sslbt (Linux)</label>
+                    <div class="input-with-copy">
+                      <input
+                        type="text"
+                        id="deploy-bt-install"
+                        readonly
+                      />
+                      <button
+                        type="button"
+                        class="copy-btn"
+                        data-copy="deploy-bt-install"
+                      >
+                        复制
+                      </button>
+                    </div>
+                  </div>
+                  <div class="form-group">
+                    <label>一键部署</label>
+                    <div class="input-with-copy">
+                      <input
+                        type="text"
+                        id="deploy-bt-deploy"
+                        readonly
+                      />
+                      <button
+                        type="button"
+                        class="copy-btn"
+                        data-copy="deploy-bt-deploy"
+                      >
+                        复制
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Nginx / Apache -->
+                <div
+                  class="deploy-tab-content"
+                  id="deploy-tab-nginx"
+                  style="display: none"
+                >
+                  <div class="form-group">
+                    <label>安装 sslctl (Linux)</label>
+                    <div class="input-with-copy">
+                      <input
+                        type="text"
+                        id="deploy-install-linux"
+                        readonly
+                      />
+                      <button
+                        type="button"
+                        class="copy-btn"
+                        data-copy="deploy-install-linux"
+                      >
+                        复制
+                      </button>
+                    </div>
+                  </div>
+                  <div class="form-group">
+                    <label>
+                      安装 sslctl (Windows)
+                      <span class="deploy-win-toggle" data-target="deploy-install-windows" data-source="install">
+                        <button
+                          type="button"
+                          class="deploy-win-btn active"
+                          data-win-ver="2016"
+                        >
+                          2016+
+                        </button>
+                        <button
+                          type="button"
+                          class="deploy-win-btn"
+                          data-win-ver="2012"
+                        >
+                          2012
+                        </button>
+                      </span>
+                    </label>
+                    <div class="input-with-copy">
+                      <input
+                        type="text"
+                        id="deploy-install-windows"
+                        readonly
+                      />
+                      <button
+                        type="button"
+                        class="copy-btn"
+                        data-copy="deploy-install-windows"
+                      >
+                        复制
+                      </button>
+                    </div>
+                  </div>
+                  <div class="form-group">
+                    <label>一键部署</label>
+                    <div class="input-with-copy">
+                      <input
+                        type="text"
+                        id="deploy-nginx-deploy"
+                        readonly
+                      />
+                      <button
+                        type="button"
+                        class="copy-btn"
+                        data-copy="deploy-nginx-deploy"
+                      >
+                        复制
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- IIS -->
+                <div
+                  class="deploy-tab-content"
+                  id="deploy-tab-iis"
+                  style="display: none"
+                >
+                  <div class="form-group">
+                    <label>下载 sslctlw</label>
+                    <div class="input-with-copy">
+                      <input
+                        type="text"
+                        id="deploy-iis-download"
+                        readonly
+                      />
+                      <button
+                        type="button"
+                        class="copy-btn"
+                        data-copy="deploy-iis-download"
+                      >
+                        复制
+                      </button>
+                    </div>
+                  </div>
+                  <div class="form-group">
+                    <label>
+                      安装 sslctlw (Windows)
+                      <span class="deploy-win-toggle" data-target="deploy-iis-install-windows" data-source="iis_install">
+                        <button
+                          type="button"
+                          class="deploy-win-btn active"
+                          data-win-ver="2016"
+                        >
+                          2016+
+                        </button>
+                        <button
+                          type="button"
+                          class="deploy-win-btn"
+                          data-win-ver="2012"
+                        >
+                          2012
+                        </button>
+                      </span>
+                    </label>
+                    <div class="input-with-copy">
+                      <input
+                        type="text"
+                        id="deploy-iis-install-windows"
+                        readonly
+                      />
+                      <button
+                        type="button"
+                        class="copy-btn"
+                        data-copy="deploy-iis-install-windows"
+                      >
+                        复制
+                      </button>
+                    </div>
+                  </div>
+                  <div class="form-group">
+                    <label>一键部署</label>
+                    <div class="input-with-copy">
+                      <input
+                        type="text"
+                        id="deploy-iis-deploy"
+                        readonly
+                      />
+                      <button
+                        type="button"
+                        class="copy-btn"
+                        data-copy="deploy-iis-deploy"
+                      >
+                        复制
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               <div class="divider"></div>
               <div class="form-group">
-                <label>安装帮助</label>
+                <label>手动部署</label>
                 <a id="help-url-link" href="#" target="_blank"></a>
               </div>
             </div>

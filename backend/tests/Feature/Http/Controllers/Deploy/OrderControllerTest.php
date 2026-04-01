@@ -106,15 +106,15 @@ test('query 空参数分页', function () {
         createDeployOrder($user, 'active');
     }
 
-    $response = deployGet($token, 'pageSize=2&currentPage=1')
+    $response = deployGet($token, 'page_size=2&page=1')
         ->assertOk()->assertJson(['code' => 1]);
 
     expect($response->json('data.data'))->toHaveCount(2);
     expect($response->json('data.total'))->toBe(5);
-    expect($response->json('data.pageSize'))->toBe(2);
-    expect($response->json('data.currentPage'))->toBe(1);
+    expect($response->json('data.page_size'))->toBe(2);
+    expect($response->json('data.page'))->toBe(1);
 
-    $response2 = deployGet($token, 'pageSize=2&currentPage=3')
+    $response2 = deployGet($token, 'page_size=2&page=3')
         ->assertOk()->assertJson(['code' => 1]);
 
     expect($response2->json('data.data'))->toHaveCount(1);
@@ -177,6 +177,62 @@ test('query 按 ID 查询 UserScope 隔离', function () {
     deployGet($token, "order=$otherOrder->id")
         ->assertOk()
         ->assertJson(['code' => 0]);
+});
+
+// ========================================
+// query() — 已续费订单追踪
+// ========================================
+
+test('query 按 ID 查询已续费订单返回新订单', function () {
+    [$user, $token] = createDeployAuth();
+
+    // 创建旧订单（cert 状态为 renewed）
+    [$oldOrder, $oldCert] = createDeployOrder($user, 'renewed');
+
+    // 创建新订单（续费后的订单）
+    [$newOrder, $newCert] = createDeployOrder($user, 'active');
+    $newCert->update(['last_cert_id' => $oldCert->id]);
+
+    // 用旧订单 ID 查询，应返回新订单
+    $response = deployGet($token, "order=$oldOrder->id")
+        ->assertOk()
+        ->assertJson(['code' => 1]);
+
+    $response->assertJsonPath('data.data.0.order_id', $newOrder->id);
+    $response->assertJsonPath('data.data.0.status', 'active');
+});
+
+test('query 批量查询已续费订单返回新订单', function () {
+    [$user, $token] = createDeployAuth();
+
+    [$oldOrder, $oldCert] = createDeployOrder($user, 'renewed');
+    [$newOrder, $newCert] = createDeployOrder($user, 'active');
+    $newCert->update(['last_cert_id' => $oldCert->id]);
+
+    $response = deployGet($token, "order=$oldOrder->id,$newOrder->id")
+        ->assertOk()
+        ->assertJson(['code' => 1]);
+
+    // 去重后只有一条（旧订单追踪到新订单，和新订单是同一个）
+    expect($response->json('data.data'))->toHaveCount(1);
+    $response->assertJsonPath('data.data.0.order_id', $newOrder->id);
+});
+
+test('query 多级续费链追踪到最新订单', function () {
+    [$user, $token] = createDeployAuth();
+
+    [$order1, $cert1] = createDeployOrder($user, 'renewed');
+    [$order2, $cert2] = createDeployOrder($user, 'renewed');
+    [$order3, $cert3] = createDeployOrder($user, 'active');
+
+    $cert2->update(['last_cert_id' => $cert1->id]);
+    $cert3->update(['last_cert_id' => $cert2->id]);
+
+    $response = deployGet($token, "order=$order1->id")
+        ->assertOk()
+        ->assertJson(['code' => 1]);
+
+    $response->assertJsonPath('data.data.0.order_id', $order3->id);
 });
 
 // ========================================
@@ -321,7 +377,7 @@ test('query 批量查询分页', function () {
 
     $allIds = Order::withoutGlobalScopes()->pluck('id')->implode(',');
 
-    $response = deployGet($token, "order=$allIds&pageSize=2&currentPage=1")
+    $response = deployGet($token, "order=$allIds&page_size=2&page=1")
         ->assertOk()->assertJson(['code' => 1]);
 
     expect($response->json('data.data'))->toHaveCount(2);
@@ -643,6 +699,91 @@ test('未认证拒绝访问', function () {
 test('无效 token 拒绝访问', function () {
     test()->withHeaders(['Authorization' => 'Bearer invalid-token'])
         ->getJson('/api/deploy/')
+        ->assertOk()
+        ->assertJson(['code' => 0]);
+});
+
+// ========================================
+// query() — GET query token 认证
+// ========================================
+
+test('query GET query token 认证通过', function () {
+    [$user, $token] = createDeployAuth();
+    [$order] = createDeployOrder($user, 'active');
+
+    $response = test()->getJson("/api/deploy?token=$token->token&order=$order->id")
+        ->assertOk()
+        ->assertJson(['code' => 1]);
+
+    $response->assertJsonPath('data.data.0.order_id', $order->id);
+});
+
+// ========================================
+// toggleAutoReissue() 测试
+// ========================================
+
+test('toggleAutoReissue 开启自动重签', function () {
+    [$user, $token] = createDeployAuth();
+    [$order] = createDeployOrder($user, 'active', [], ['auto_reissue' => false]);
+
+    $response = deployPost($token, '/api/deploy/auto-reissue', [
+        'order_id' => $order->id,
+        'auto_reissue' => true,
+    ])->assertOk()->assertJson(['code' => 1]);
+
+    expect($response->json('data'))
+        ->order_id->toBe($order->id)
+        ->auto_reissue->toBeTrue();
+
+    expect($order->fresh()->auto_reissue)->toBeTrue();
+});
+
+test('toggleAutoReissue 关闭自动重签', function () {
+    [$user, $token] = createDeployAuth();
+    [$order] = createDeployOrder($user, 'active', [], ['auto_reissue' => true]);
+
+    $response = deployPost($token, '/api/deploy/auto-reissue', [
+        'order_id' => $order->id,
+        'auto_reissue' => false,
+    ])->assertOk()->assertJson(['code' => 1]);
+
+    expect($response->json('data'))
+        ->order_id->toBe($order->id)
+        ->auto_reissue->toBeFalse();
+
+    expect($order->fresh()->auto_reissue)->toBeFalse();
+});
+
+test('toggleAutoReissue 订单不存在', function () {
+    [, $token] = createDeployAuth();
+
+    deployPost($token, '/api/deploy/auto-reissue', [
+        'order_id' => 99999,
+        'auto_reissue' => true,
+    ])->assertOk()->assertJson(['code' => 0]);
+});
+
+test('toggleAutoReissue UserScope 隔离', function () {
+    [, $token] = createDeployAuth();
+    $otherUser = User::factory()->create();
+    [$otherOrder] = createDeployOrder($otherUser, 'active');
+
+    deployPost($token, '/api/deploy/auto-reissue', [
+        'order_id' => $otherOrder->id,
+        'auto_reissue' => true,
+    ])->assertOk()->assertJson(['code' => 0]);
+});
+
+test('toggleAutoReissue 参数验证', function () {
+    [, $token] = createDeployAuth();
+
+    // 缺少必填字段
+    deployPost($token, '/api/deploy/auto-reissue', [])
+        ->assertOk()
+        ->assertJson(['code' => 0]);
+
+    // 缺少 auto_reissue
+    deployPost($token, '/api/deploy/auto-reissue', ['order_id' => 1])
         ->assertOk()
         ->assertJson(['code' => 0]);
 });

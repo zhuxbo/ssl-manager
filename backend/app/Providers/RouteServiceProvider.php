@@ -21,8 +21,11 @@ class RouteServiceProvider extends ServiceProvider
                     Route::middleware('global')->group($routeFile);
                 }
             });
+        });
 
-            Route::middleware('global')->group($routePath.'/callback.php');
+        // callback 通配路由最后注册，确保插件的具体回调路由优先匹配
+        $this->app->booted(function () {
+            Route::middleware('global')->group(base_path('routes/callback.php'));
         });
     }
 }

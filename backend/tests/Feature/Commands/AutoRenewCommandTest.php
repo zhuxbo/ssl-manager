@@ -10,6 +10,10 @@ use App\Services\Order\AutoRenewService;
 
 uses(Tests\Traits\CreatesTestData::class);
 
+afterEach(function () {
+    Mockery::close();
+});
+
 beforeEach(function () {
     // Mock AutoRenewService 避免真实 DNS 检查
     $this->autoRenewService = Mockery::mock(AutoRenewService::class);
@@ -31,7 +35,7 @@ test('无需续费或重签订单时正常退出', function () {
         ->assertSuccessful();
 });
 
-test('有续费订单时调用 Action renew', function () {
+test('有续费订单时调用 renew → pay(不提交) → 创建延时 commit', function () {
     $user = User::factory()->withBalance('1000.00')->withAutoRenew()->create();
     $product = Product::factory()->create(['status' => 1, 'renew' => 1]);
     $order = Order::factory()->create([
@@ -39,7 +43,7 @@ test('有续费订单时调用 Action renew', function () {
         'product_id' => $product->id,
         'auto_renew' => true,
         'period_from' => now()->subYear(),
-        'period_till' => now()->addDays(5),
+        'period_till' => now()->addDays(10), // ≤15天，走续费
     ]);
 
     $cert = Cert::factory()->active()->create([
@@ -53,15 +57,19 @@ test('有续费订单时调用 Action renew', function () {
     $this->autoRenewService->shouldReceive('checkDelegationValidity')
         ->andReturn(true);
 
-    // Mock Action 来拦截续费调用
+    // Mock Action：renew 和 pay 通过 ApiResponseException 返回成功
     $actionMock = Mockery::mock(Action::class);
-    $actionMock->shouldReceive('renew')->once();
-    $actionMock->shouldReceive('pay')->once();
+    $actionMock->shouldReceive('renew')->once()
+        ->andThrow(new \App\Exceptions\ApiResponseException('', null, ['order_id' => $order->id], 1));
+    $actionMock->shouldReceive('pay')->once()->with($order->id, false)
+        ->andThrow(new \App\Exceptions\ApiResponseException('', null, null, 1));
+    $actionMock->shouldReceive('createTask')->once()
+        ->with($order->id, 'commit', Mockery::type('int'));
     $this->app->bind(Action::class, fn () => $actionMock);
 
-    // 由于 Action 在命令中是 new 出来的，我们需要用不同的方式验证
-    // 这里验证命令不会抛出异常
-    $this->artisan('schedule:auto-renew')->assertSuccessful();
+    $this->artisan('schedule:auto-renew')
+        ->expectsOutputToContain('计划于')
+        ->assertSuccessful();
 });
 
 test('有重签订单时处理重签逻辑', function () {
@@ -98,7 +106,7 @@ test('委托检查失败时跳过订单', function () {
         'product_id' => $product->id,
         'auto_renew' => true,
         'period_from' => now()->subYear(),
-        'period_till' => now()->addDays(3),
+        'period_till' => now()->addDays(10), // ≤15天，走续费
     ]);
 
     $cert = Cert::factory()->active()->create([
@@ -127,7 +135,7 @@ test('余额不足时续费失败发送通知', function () {
         'product_id' => $product->id,
         'auto_renew' => true,
         'period_from' => now()->subYear(),
-        'period_till' => now()->addDays(3),
+        'period_till' => now()->addDays(10), // ≤15天，走续费
     ]);
 
     $cert = Cert::factory()->active()->create([

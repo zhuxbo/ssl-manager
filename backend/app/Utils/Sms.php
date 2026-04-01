@@ -96,7 +96,7 @@ class Sms
                         break;
                 }
 
-                if (empty($config['gateways'][$defaultGateway]) || ! is_array($config['gateways'][$defaultGateway])) {
+                if (empty($config['gateways'][$defaultGateway])) {
                     $this->configured = false;
                 } else {
                     foreach ($config['gateways'][$defaultGateway] as $value) {

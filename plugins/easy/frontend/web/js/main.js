@@ -792,6 +792,33 @@
       helpLink.href = installUrl;
       helpLink.textContent = installUrl;
     }
+
+    // 自动部署区域
+    const deploySection = document.getElementById("deploy-section");
+    if (deploySection && data.deploy) {
+      deploySection.style.display = "block";
+      window.appState.deployData = data.deploy;
+
+      const setVal = (id, val) => {
+        const el = document.getElementById(id);
+        if (el) el.value = val || "";
+      };
+      setVal("deploy-bt-install", data.deploy.bt_install?.linux);
+      setVal("deploy-bt-deploy", data.deploy.bt_deploy);
+      setVal("deploy-install-linux", data.deploy.install?.linux);
+      setVal("deploy-install-windows", data.deploy.install?.windows);
+      setVal("deploy-nginx-deploy", data.deploy.deploy);
+      setVal("deploy-iis-download", data.deploy.iis_install?.download);
+      setVal("deploy-iis-install-windows", data.deploy.iis_install?.windows);
+      setVal("deploy-iis-deploy", data.deploy.iis_deploy);
+
+      // 重置 Windows 版本 toggle 为 2016+
+      document.querySelectorAll(".deploy-win-btn").forEach(btn => {
+        btn.classList.toggle("active", btn.getAttribute("data-win-ver") === "2016");
+      });
+    } else if (deploySection) {
+      deploySection.style.display = "none";
+    }
   }
 
   // 处理申请提交
@@ -1542,6 +1569,46 @@
         e.preventDefault();
         const type = this.getAttribute("data-type");
         downloadCert(type);
+      });
+    });
+
+    // 部署 tab 切换
+    document.querySelectorAll(".deploy-tab-btn").forEach(btn => {
+      btn.addEventListener("click", function () {
+        document
+          .querySelectorAll(".deploy-tab-btn")
+          .forEach(b => b.classList.remove("active"));
+        this.classList.add("active");
+        const tab = this.getAttribute("data-deploy-tab");
+        document
+          .querySelectorAll(".deploy-tab-content")
+          .forEach(c => (c.style.display = "none"));
+        const target = document.getElementById("deploy-tab-" + tab);
+        if (target) target.style.display = "block";
+      });
+    });
+
+    // 部署 Windows 版本 toggle（2016+ / 2012）
+    const tls12Line =
+      "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12;";
+    document.querySelectorAll(".deploy-win-toggle").forEach(toggle => {
+      const targetId = toggle.getAttribute("data-target");
+      const source = toggle.getAttribute("data-source");
+      toggle.querySelectorAll(".deploy-win-btn").forEach(btn => {
+        btn.addEventListener("click", function () {
+          toggle
+            .querySelectorAll(".deploy-win-btn")
+            .forEach(b => b.classList.remove("active"));
+          this.classList.add("active");
+          const ver = this.getAttribute("data-win-ver");
+          const baseCmd =
+            window.appState.deployData?.[source]?.windows || "";
+          const field = document.getElementById(targetId);
+          if (field) {
+            field.value =
+              ver === "2012" ? tls12Line + "\n" + baseCmd : baseCmd;
+          }
+        });
       });
     });
 

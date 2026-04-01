@@ -70,7 +70,7 @@ class ApiController extends Controller
             $cost = [];
             $skipProduct = false; // 标记是否跳过当前产品
 
-            /** @var Product $item */
+            /** @var int $period */
             foreach ($item->periods as $period) {
                 $minPrice = OrderUtil::getMinPrice($this->user_id, $item->id, (int) $period);
 
@@ -202,6 +202,9 @@ class ApiController extends Controller
         if (! $product) {
             $this->error('Product not found');
         }
+        if ($product->product_type === Product::TYPE_ACME) {
+            $this->error('ACME products are not supported via this API');
+        }
         $params['product_id'] = $product->id;
 
         $params['user_id'] = $this->user_id;
@@ -223,9 +226,7 @@ class ApiController extends Controller
             throw $e;
         }
 
-        if (isset($order_id)) {
-            $order = Order::with(['latestCert'])->where('orders.id', $order_id)->first();
-        }
+        $order = Order::with(['latestCert'])->where('orders.id', $order_id)->first();
 
         $cleaned = $this->cleanDcvAndValidation(
             $order->latestCert->dcv ?? null,
@@ -233,7 +234,7 @@ class ApiController extends Controller
         );
 
         $this->success([
-            'order_id' => $order_id ?? '',
+            'order_id' => $order_id,
             'cert_apply_status' => $order->latestCert->cert_apply_status ?? 0,
             ...$cleaned,
         ]);
@@ -279,9 +280,7 @@ class ApiController extends Controller
             throw $e;
         }
 
-        if (isset($order_id)) {
-            $order = Order::with(['latestCert'])->where('orders.id', $order_id)->first();
-        }
+        $order = Order::with(['latestCert'])->where('orders.id', $order_id)->first();
 
         $cleaned = $this->cleanDcvAndValidation(
             $order->latestCert->dcv ?? null,
@@ -289,7 +288,7 @@ class ApiController extends Controller
         );
 
         $this->success([
-            'order_id' => $order_id ?? '',
+            'order_id' => $order_id,
             'cert_apply_status' => $order->latestCert->cert_apply_status ?? 0,
             ...$cleaned,
         ]);
@@ -341,9 +340,7 @@ class ApiController extends Controller
             throw $e;
         }
 
-        if (isset($order_id)) {
-            $order = Order::with(['latestCert'])->where('orders.id', $order_id)->first();
-        }
+        $order = Order::with(['latestCert'])->where('orders.id', $order_id)->first();
 
         $cleaned = $this->cleanDcvAndValidation(
             $order->latestCert->dcv ?? null,
@@ -351,7 +348,7 @@ class ApiController extends Controller
         );
 
         $this->success([
-            'order_id' => $order_id ?? '',
+            'order_id' => $order_id,
             'cert_apply_status' => $order->latestCert->cert_apply_status ?? 0,
             ...$cleaned,
         ]);
@@ -393,7 +390,6 @@ class ApiController extends Controller
             'id',
             'order_id',
             'vendor_id',
-            'vendor_cert_id',
             'common_name',
             'alternative_names',
             'dcv',
@@ -547,9 +543,6 @@ class ApiController extends Controller
             $this->error("Order cannot be cancelled after $refund_period days");
         }
 
-        if ($status === 'cancelled') {
-            $this->error('Order already cancelled');
-        }
         if ($status === 'expired') {
             $this->error('Order has expired');
         }

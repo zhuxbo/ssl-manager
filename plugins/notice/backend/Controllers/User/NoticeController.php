@@ -9,10 +9,15 @@ class NoticeController extends BaseController
 {
     public function active(): void
     {
-        $notices = Notice::where('is_active', true)
-            ->orderByDesc('sort')
+        $query = Notice::where('is_active', true);
+
+        if (request()->filled('position')) {
+            $query->where('position', request('position'));
+        }
+
+        $notices = $query->orderByDesc('sort')
             ->orderByDesc('id')
-            ->select(['id', 'title', 'content', 'type'])
+            ->select(['id', 'title', 'content', 'type', 'position'])
             ->limit(5)
             ->get();
 

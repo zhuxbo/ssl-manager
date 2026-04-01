@@ -10,6 +10,7 @@ class SmsChannel implements ChannelInterface
 {
     public function send(Notification $notification): array
     {
+        /** @var \App\Models\User|null $notifiable */
         $notifiable = $notification->notifiable;
         $mobile = $notification->data['mobile'] ?? $notifiable?->mobile;
 
@@ -27,7 +28,9 @@ class SmsChannel implements ChannelInterface
             return ['code' => 0, 'msg' => '短信服务未配置'];
         }
 
-        $templateCode = $notification->template?->code;
+        /** @var \App\Models\NotificationTemplate|null $template */
+        $template = $notification->template;
+        $templateCode = $template?->code;
         if (! $templateCode) {
             return ['code' => 0, 'msg' => '短信模板类型不存在'];
         }

@@ -52,6 +52,7 @@ skills/         # 开发规范（详细文档）
 
 - `delegation` 提交到 CA 时转换为 `txt`，通过 `dcv.is_delegate` 标记区分
 - 产品同步时保留本地的 `delegation` 验证方法
+- **委托前缀**：`_dnsauth`（DigiCert 系，精确匹配子域）、`_pki-validation`（Sectigo，模糊匹配回落根域）、`_certum`（Certum，同 Sectigo）。已移除 `_acme-challenge`（ACME 使用独立体系）
 - 详见 `skills/backend-dev.md` 委托验证章节
 
 ### 插件系统
@@ -83,8 +84,8 @@ skills/         # 开发规范（详细文档）
     - Admin：`/api/admin/acme/` — index, show, new, pay, commit, sync, commit-cancel, remark
     - User：`/api/user/acme/` — index, show, new, pay, commit, commit-cancel（限当前用户）
     - Deploy：`/api/deploy/acme/` — new（一步到位：创建+支付+提交）, get（含 EAB）
-- **产品 API 分离**：`/api/v2/get-products` 排除 ACME 产品，`/api/acme/get-products` 仅返回 ACME 产品
-- **传统流程完全隔离**：ACME 通过独立控制器、服务和前端模块处理，与传统订单无交集
+- **产品 API 分离**：`/api/v2/get-products` 排除 ACME 产品，`/api/acme/get-products` 仅返回 ACME 产品；下单页面产品选择器通过 `exclude_product_type=acme` 过滤
+- **传统流程完全隔离**：ACME 通过独立控制器、服务和前端模块处理，与传统订单无交集；V2 API `new` 和 `Order\Action::initParams` 拒绝 ACME 产品
 
 ## 系统架构约定
 
@@ -112,7 +113,11 @@ skills/         # 开发规范（详细文档）
 - `orders.auto_renew`: 订单级自动续费开关（null 时回落到用户设置）
 - `orders.auto_reissue`: 订单级自动重签开关（null 时回落到用户设置）
 - `users.auto_settings`: 用户级默认设置 `{"auto_renew": false, "auto_reissue": false}`
-- `AutoRenewCommand` 同时处理续费和重签，根据订单周期与证书到期时间差判断
+- `AutoRenewCommand` 每天 00:00 执行：证书到期前 14 天触发，订单剩余 ≤15 天续费、>15 天重签；API channel 订单由下游控制，不处理
+- **延时提交**：Command 创建续费/重签 + 支付后不立即 commit，通过 Task 表创建延时 commit 任务（随机 0~8 小时），分散上游压力，8 点后人工可检查状态
+- **产品条件**：续费要求 `product.status=1 && renew=1`；重签仅要求 `reissue=1`（产品禁用仍可重签）
+- **参数继承**：从原订单提取 period/contact/organization/domains；CSR 按 `product.reuse_csr` 决定重用或生成
+- **委托前置条件**：缺失委托记录时自动创建（`_dnsauth` 精确域名、回落前缀按根域）；DNS 验证采用宽松策略（所有 dnsTools + 本地全部尝试，任一匹配即有效），目的是尽可能发起续签
 
 ## 测试
 

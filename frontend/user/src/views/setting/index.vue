@@ -7,6 +7,9 @@ import { useCallback } from "./callback";
 import { useProfile, VerifyDialog } from "./profile";
 import { useNotificationPreference } from "./notification";
 import { useAutoPreference } from "./auto";
+import { getConfig } from "@/config";
+
+const showAutoDeploy = getConfig()?.AutoDeploy !== false;
 
 defineOptions({
   name: "Setting"
@@ -83,7 +86,11 @@ const { autoSettings, autoLoading, handleAutoToggle } = useAutoPreference();
         :onReset="resetPassword"
       />
     </el-card>
-    <el-card shadow="never" :style="{ border: 'none', paddingTop: '20px' }">
+    <el-card
+      v-if="showAutoDeploy"
+      shadow="never"
+      :style="{ border: 'none', paddingTop: '20px' }"
+    >
       <PlusForm
         v-model="deployValues"
         :columns="deployColumns"

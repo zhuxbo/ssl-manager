@@ -2,21 +2,12 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
     public function up(): void
     {
-        // 1. 幂等删除旧 ACME 相关表（禁用外键检查避免依赖顺序问题）
-        DB::statement('SET FOREIGN_KEY_CHECKS=0');
-        foreach (['acme_authorizations', 'acme_certs', 'acme_orders', 'acme_accounts'] as $table) {
-            Schema::dropIfExists($table);
-        }
-        DB::statement('SET FOREIGN_KEY_CHECKS=1');
-
-        // 2. 创建统一的 acmes 表
         if (! Schema::hasTable('acmes')) {
             Schema::create('acmes', function (Blueprint $table) {
                 $table->bigInteger('id')->unsigned()->primary()->comment('Snowflake ID');
@@ -41,5 +32,10 @@ return new class extends Migration
                 $table->timestamps();
             });
         }
+    }
+
+    public function down(): void
+    {
+        // 系统不需要支持回滚
     }
 };

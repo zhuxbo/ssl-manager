@@ -69,18 +69,20 @@
           <td class="label" />
           <td class="content"><Install /></td>
         </tr>
-        <tr>
-          <td class="label">
-            <el-icon :size="16" class="icon" :color="issuedColor">
-              <Select />
-            </el-icon>
-          </td>
-          <td class="content">自动部署</td>
-        </tr>
-        <tr>
-          <td class="label" />
-          <td class="content"><Deploy /></td>
-        </tr>
+        <template v-if="showAutoDeploy">
+          <tr>
+            <td class="label">
+              <el-icon :size="16" class="icon" :color="issuedColor">
+                <Select />
+              </el-icon>
+            </td>
+            <td class="content">自动部署</td>
+          </tr>
+          <tr>
+            <td class="label" />
+            <td class="content"><Deploy /></td>
+          </tr>
+        </template>
       </tbody>
     </table>
   </el-card>
@@ -88,6 +90,7 @@
 <script setup lang="ts">
 import { computed, inject, onMounted, ref } from "vue";
 import { statusType, status } from "@/views/order/dictionary";
+import { getConfig } from "@/config";
 import Operate from "./operate.vue";
 import Validation from "./validation.vue";
 import Install from "./install.vue";
@@ -95,6 +98,8 @@ import Deploy from "./deploy.vue";
 import Documents from "../documents.vue";
 import DocumentUpload from "../documentUpload.vue";
 import VerificationReport from "../verificationReport.vue";
+
+const showAutoDeploy = getConfig()?.AutoDeploy !== false;
 import { ElButton } from "element-plus";
 import { Select } from "@element-plus/icons-vue";
 import dayjs from "dayjs";

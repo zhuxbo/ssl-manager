@@ -72,7 +72,7 @@ class DelegationCleanupCommand extends Command
                 $cert = $order->latestCert;
                 $validations = $cert->validation;
 
-                if (empty($validations) || ! is_array($validations)) {
+                if (empty($validations)) {
                     continue;
                 }
 
@@ -150,7 +150,7 @@ class DelegationCleanupCommand extends Command
             $cert = $order->latestCert;
             $validations = $cert->validation;
 
-            if (empty($validations) || ! is_array($validations)) {
+            if (empty($validations)) {
                 continue;
             }
 

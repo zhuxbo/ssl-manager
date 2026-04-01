@@ -18,16 +18,16 @@ test('get delegation prefix for ca', function (string $ca, string $expected) {
     'RapidSSL' => ['RapidSSL', '_dnsauth'],
     'Symantec' => ['Symantec', '_dnsauth'],
     'TrustAsia' => ['TrustAsia', '_dnsauth'],
-    'LetsEncrypt' => ['LetsEncrypt', '_acme-challenge'],
-    'ZeroSSL' => ['ZeroSSL', '_acme-challenge'],
-    '未知CA' => ['Unknown', '_acme-challenge'],
+    'LetsEncrypt' => ['LetsEncrypt', '_dnsauth'],
+    'ZeroSSL' => ['ZeroSSL', '_dnsauth'],
+    '未知CA' => ['Unknown', '_dnsauth'],
 ]);
 
 /**
- * 未知 CA 返回 _acme-challenge（ACME 使用独立表，不再通过 channel 判断）
+ * 未知 CA 返回 _dnsauth
  */
-test('unknown ca returns acme challenge prefix', function (string $ca) {
-    expect(CnameDelegationService::getDelegationPrefixForCa($ca))->toBe('_acme-challenge');
+test('unknown ca returns dnsauth prefix', function (string $ca) {
+    expect(CnameDelegationService::getDelegationPrefixForCa($ca))->toBe('_dnsauth');
 })->with([
     'LetsEncrypt' => ['LetsEncrypt'],
     'ZeroSSL' => ['ZeroSSL'],

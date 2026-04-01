@@ -107,7 +107,7 @@ class UserDataImporter
                         // 粗略统计（按 VALUES 中的行数）
                         $imported += substr_count($sql, '),(') + 1;
                     } catch (\Throwable $e) {
-                        $skipped++;
+                        $skipped += substr_count($sql, '),(') + 1;
                         if (str_contains($e->getMessage(), 'Duplicate entry')) {
                             // 冲突跳过
                             continue;

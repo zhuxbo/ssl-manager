@@ -1,6 +1,6 @@
 {
   "name": "notice",
-  "requires": ">=0.3.11",
+  "requires": ">=0.4.2",
   "description": "公告系统插件",
   "provider": "NoticeServiceProvider",
   "admin_bundle": "frontend/admin/notice-plugin.iife.js",

@@ -11,7 +11,10 @@ import OrderButtons from "./buttons.vue";
 import OrderBatch from "./batch.vue";
 import router from "@/router";
 import { useRenderIcon } from "@shared/components/ReIcon/src/hooks";
+import { getPluginWidgets } from "@shared/utils/plugin-loader";
 import CloseBold from "~icons/ep/close-bold";
+
+const orderTopWidgets = getPluginWidgets("user-order-top");
 
 defineOptions({
   name: "Order"
@@ -120,6 +123,12 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="main">
+    <component
+      :is="w.component"
+      v-for="w in orderTopWidgets"
+      :key="w.name"
+      class="mb-3"
+    />
     <div
       class="search bg-bg_color w-[99/100] pl-4 pr-4 pt-6 pb-3 overflow-auto"
     >

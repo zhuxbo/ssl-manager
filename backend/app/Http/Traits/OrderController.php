@@ -128,14 +128,14 @@ trait OrderController
      */
     public function sendActive(int $id): void
     {
-        $email = request()->string('email', '')->trim();
+        $email = (string) request()->string('email', '')->trim();
         $order = Order::with('user:id,email')->find($id);
-        if (! $order || ! $order->user) {
+        if (! $order) {
             $this->error('订单或用户不存在');
         }
 
         $targetEmail = $email ?: $order->user->email;
-        if (! $targetEmail) {
+        if (! $targetEmail) { // @phpstan-ignore booleanNot.alwaysFalse
             $this->error('邮箱为空');
         }
 
@@ -314,14 +314,14 @@ trait OrderController
     protected function clearAutoTxtWrittenMarks(int $orderId): void
     {
         $order = Order::with('latestCert')->find($orderId);
-        if (! $order || ! $order->latestCert) {
+        if (! $order) {
             return;
         }
 
         $cert = $order->latestCert;
         $validation = $cert->validation;
 
-        if (empty($validation) || ! is_array($validation)) {
+        if (empty($validation)) {
             return;
         }
 

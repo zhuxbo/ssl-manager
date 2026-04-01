@@ -13,7 +13,15 @@ class IndexRequest extends BaseRequest
             'pageSize' => 'nullable|integer|min:1|max:100',
             'quickSearch' => 'nullable|string|max:100',
             'brand' => 'nullable|string|max:50',
-            'product_type' => 'nullable|string|in:ssl,codesign,smime,docsign,acme',
+            'product_type' => ['nullable', function ($attribute, $value, $fail) {
+                $allowed = ['ssl', 'codesign', 'smime', 'docsign', 'acme'];
+                $values = is_array($value) ? $value : [$value];
+                foreach ($values as $v) {
+                    if (! in_array($v, $allowed, true)) {
+                        $fail("$attribute 包含无效值: $v");
+                    }
+                }
+            }],
             'encryption_standard' => 'nullable|string|in:international,chinese',
             'encryption_alg' => 'nullable|string|in:rsa,ecdsa,sm2',
             'validation_type' => 'nullable|string|in:dv,ov,ev',

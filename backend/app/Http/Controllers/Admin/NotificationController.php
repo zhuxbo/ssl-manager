@@ -123,8 +123,10 @@ class NotificationController extends BaseController
         $preferredChannels = $this->sanitizeChannels($request->validated('channels'));
 
         try {
+            /** @var \App\Models\NotificationTemplate $template */
+            $template = $notification->template;
             $intent = new NotificationIntent(
-                $notification->template->code,
+                $template->code,
                 $notification->notifiable_type,
                 $notification->notifiable_id,
                 $data,
