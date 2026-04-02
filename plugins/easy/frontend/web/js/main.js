@@ -814,7 +814,7 @@
 
       // 重置 Windows 版本 toggle 为 2016+
       document.querySelectorAll(".deploy-win-btn").forEach(btn => {
-        btn.classList.toggle("active", btn.getAttribute("data-win-ver") === "2016");
+        btn.classList.toggle("active", btn.getAttribute("data-win-ver") === "2019");
       });
     } else if (deploySection) {
       deploySection.style.display = "none";
@@ -1588,7 +1588,7 @@
       });
     });
 
-    // 部署 Windows 版本 toggle（2016+ / 2012）
+    // 部署 Windows 版本 toggle（2019+ / 2016/2012）
     const tls12Line =
       "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12;";
     document.querySelectorAll(".deploy-win-toggle").forEach(toggle => {
@@ -1606,7 +1606,7 @@
           const field = document.getElementById(targetId);
           if (field) {
             field.value =
-              ver === "2012" ? tls12Line + "\n" + baseCmd : baseCmd;
+              ver === "2016" ? tls12Line + "\n" + baseCmd : baseCmd;
           }
         });
       });

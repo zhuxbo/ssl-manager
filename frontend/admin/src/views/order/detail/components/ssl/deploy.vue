@@ -61,8 +61,8 @@
                 size="small"
                 style="margin-left: 12px"
               >
-                <el-radio-button value="2016">2016+</el-radio-button>
-                <el-radio-button value="2012">2012</el-radio-button>
+                <el-radio-button value="2019">2019+</el-radio-button>
+                <el-radio-button value="2016">2016/2012</el-radio-button>
               </el-radio-group>
             </div>
             <div class="command-line">
@@ -131,8 +131,8 @@
                 size="small"
                 style="margin-left: 12px"
               >
-                <el-radio-button value="2016">2016+</el-radio-button>
-                <el-radio-button value="2012">2012</el-radio-button>
+                <el-radio-button value="2019">2019+</el-radio-button>
+                <el-radio-button value="2016">2016/2012</el-radio-button>
               </el-radio-group>
             </div>
             <div class="command-line">
@@ -179,7 +179,7 @@ const cert = inject("cert") as any;
 
 const commands = ref<any>({});
 const activeTab = ref("bt");
-const winVersion = ref("2016");
+const winVersion = ref("2019");
 
 const isActive = computed(() => cert.value?.status === "active");
 
@@ -188,12 +188,12 @@ const tls12Prefix =
 
 const windowsInstallCmd = computed(() => {
   const base = commands.value.install?.windows || "";
-  return winVersion.value === "2012" ? `${tls12Prefix}\n${base}` : base;
+  return winVersion.value === "2016" ? `${tls12Prefix}\n${base}` : base;
 });
 
 const iisWindowsInstallCmd = computed(() => {
   const base = commands.value.iis_install?.windows || "";
-  return winVersion.value === "2012" ? `${tls12Prefix}\n${base}` : base;
+  return winVersion.value === "2016" ? `${tls12Prefix}\n${base}` : base;
 });
 
 watch(
