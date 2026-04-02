@@ -13,7 +13,6 @@ class OrderDocument extends BaseModel
         'file_name',
         'file_path',
         'file_size',
-        'description',
         'uploaded_by',
         'submitted',
     ];

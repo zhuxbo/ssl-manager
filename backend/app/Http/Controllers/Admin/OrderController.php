@@ -343,12 +343,11 @@ class OrderController extends BaseController
         $request->validate([
             'file' => 'required|file|mimes:pdf,jpg,jpeg,png,doc,docx|max:5120',
             'type' => 'required|string',
-            'description' => 'nullable|string|max:255',
         ]);
 
         /** @var UploadedFile $file */
         $file = $request->file('file');
-        $this->action->uploadDocument($id, $file, $request->input('type'), 'admin', $request->input('description'));
+        $this->action->uploadDocument($id, $file, $request->input('type'), 'admin');
     }
 
     /**
@@ -365,6 +364,18 @@ class OrderController extends BaseController
     public function getDocuments(int $id): void
     {
         $this->action->getDocuments($id);
+    }
+
+    /**
+     * 更新文档信息
+     */
+    public function updateDocument(Request $request, int $id): void
+    {
+        $request->validate([
+            'file_name' => 'required|string|max:255',
+            'type' => 'required|string|max:50',
+        ]);
+        $this->action->updateDocument($id, $request->input('file_name'), $request->input('type'));
     }
 
     /**

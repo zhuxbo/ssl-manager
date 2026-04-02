@@ -22,15 +22,9 @@
     >
       <el-table-column prop="file_name" label="文件名" min-width="200">
         <template #default="{ row }">
-          <el-tooltip
-            :content="row.description"
-            :disabled="!row.description"
-            placement="top"
-          >
-            <el-link type="primary" @click="handlePreview(row.id)">
-              {{ row.file_name }}
-            </el-link>
-          </el-tooltip>
+          <el-link type="primary" @click="handlePreview(row)">
+            {{ row.file_name }}
+          </el-link>
         </template>
       </el-table-column>
       <el-table-column prop="type" label="类型" width="120">
@@ -46,8 +40,9 @@
       <el-table-column prop="uploaded_by" label="来源" width="60">
         <template #default="{ row }">
           {{
-            { user: "用户", admin: "管理", api: "API" }[row.uploaded_by] ||
-            row.uploaded_by
+            { user: "用户", admin: "管理", api: "API" }[
+              row.uploaded_by as string
+            ] || row.uploaded_by
           }}
         </template>
       </el-table-column>
@@ -88,13 +83,42 @@
     </div>
 
     <!-- 上传对话框 -->
-    <el-dialog v-model="showUploadDialog" title="上传验证文档" width="480px">
-      <el-form label-width="80px">
-        <el-form-item label="文档类型">
+    <el-dialog
+      v-model="showUploadDialog"
+      title="上传验证文档"
+      width="560px"
+      @closed="resetUploadForm"
+    >
+      <el-upload
+        drag
+        multiple
+        :auto-upload="false"
+        :show-file-list="false"
+        :on-change="handleFileAdd"
+        accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+      >
+        <el-icon class="el-icon--upload"><Upload /></el-icon>
+        <div class="el-upload__text">拖拽文件到此处，或<em>点击选择</em></div>
+        <template #tip>
+          <div class="el-upload__tip">
+            支持 PDF/JPG/PNG/DOC/DOCX，单个不超过 5MB
+          </div>
+        </template>
+      </el-upload>
+
+      <!-- 已选文件列表 -->
+      <div v-if="fileList.length > 0" class="file-list">
+        <div v-for="(item, idx) in fileList" :key="idx" class="file-list-item">
+          <el-icon class="file-icon"><Document /></el-icon>
+          <span class="file-name" :title="item.file.name">
+            {{ item.file.name }}
+          </span>
+          <span class="file-size">{{ formatSize(item.file.size) }}</span>
           <el-select
-            v-model="uploadForm.type"
-            placeholder="请选择文档类型"
-            style="width: 100%"
+            v-model="item.type"
+            placeholder="类型"
+            size="small"
+            style="width: 130px"
           >
             <el-option
               v-for="(label, key) in documentTypes"
@@ -103,42 +127,112 @@
               :value="key"
             />
           </el-select>
-        </el-form-item>
-        <el-form-item label="描述">
-          <el-input
-            v-model="uploadForm.description"
-            placeholder="可选"
-            maxlength="255"
+          <el-button
+            :icon="Close"
+            size="small"
+            type="danger"
+            link
+            @click="fileList.splice(idx, 1)"
           />
-        </el-form-item>
-        <el-form-item label="文件">
-          <el-upload
-            ref="uploadRef"
-            :auto-upload="false"
-            :limit="1"
-            :on-change="handleFileChange"
-            accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-          >
-            <el-button size="small" type="primary">选择文件</el-button>
-            <template #tip>
-              <div class="el-upload__tip">
-                支持 PDF/JPG/PNG/DOC/DOCX，不超过 5MB
-              </div>
-            </template>
-          </el-upload>
-        </el-form-item>
-      </el-form>
+        </div>
+      </div>
+
       <template #footer>
         <el-button @click="showUploadDialog = false">取消</el-button>
         <el-button
           type="primary"
           :loading="uploading"
-          :disabled="!uploadForm.type || !uploadForm.file"
+          :disabled="fileList.length === 0 || !allTypesSelected"
           @click="handleUpload"
         >
-          上传
+          上传{{ fileList.length > 0 ? ` (${fileList.length})` : "" }}
         </el-button>
       </template>
+    </el-dialog>
+
+    <!-- 预览对话框 -->
+    <el-dialog
+      v-model="showPreviewDialog"
+      title="文档预览"
+      width="900px"
+      :destroy-on-close="true"
+    >
+      <div style="display: flex; gap: 12px; margin-bottom: 12px">
+        <el-input
+          v-model="editBaseName"
+          size="small"
+          style="flex: 1"
+          placeholder="文件名"
+        >
+          <template #append>{{ editExt }}</template>
+        </el-input>
+        <el-select
+          v-model="editType"
+          size="small"
+          style="width: 150px"
+          placeholder="类型"
+        >
+          <el-option
+            v-for="(label, key) in documentTypes"
+            :key="key"
+            :label="label"
+            :value="key"
+          />
+        </el-select>
+        <el-button
+          type="primary"
+          size="small"
+          :loading="saving"
+          :disabled="!editBaseName || !editType"
+          @click="handleSave"
+        >
+          保存
+        </el-button>
+        <el-button size="small" style="margin-left: 0" @click="handleDownload">
+          下载
+        </el-button>
+      </div>
+
+      <div
+        style="
+          min-height: 400px;
+          overflow: hidden;
+          border: 1px solid var(--el-border-color-lighter);
+          border-radius: 4px;
+        "
+      >
+        <iframe
+          v-if="previewIsPdf"
+          :src="previewUrl + '#navpanes=0'"
+          style="width: 100%; height: 600px; border: none"
+        />
+        <div
+          v-else-if="previewIsImage"
+          style="padding: 16px; text-align: center"
+        >
+          <img
+            :src="previewUrl"
+            style="max-width: 100%; max-height: 600px"
+            alt="preview"
+          />
+        </div>
+        <div
+          v-else-if="previewUrl"
+          style="
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 400px;
+            color: var(--el-text-color-secondary);
+          "
+        >
+          <el-icon style="margin-bottom: 12px; font-size: 48px"
+            ><Document
+          /></el-icon>
+          <p>该类型文件不支持在线预览</p>
+        </div>
+      </div>
     </el-dialog>
   </div>
 </template>
@@ -150,10 +244,13 @@ import {
   getDocuments,
   deleteDocument,
   submitDocuments,
-  previewDocument
+  updateDocument
 } from "@/api/order";
+import { getToken } from "@/utils/auth";
+import { getConfig } from "@/config";
 import { ElMessage, ElMessageBox } from "element-plus";
 import type { UploadFile } from "element-plus";
+import { Upload, Close, Document } from "@element-plus/icons-vue";
 
 const order = inject("order") as any;
 
@@ -168,17 +265,36 @@ const documents = ref<any[]>([]);
 const showUploadDialog = ref(false);
 const uploading = ref(false);
 const submitting = ref(false);
-const uploadRef = ref();
 
-const uploadForm = ref({
-  type: "",
-  description: "",
-  file: null as File | null
-});
+// 上传文件列表
+const fileList = ref<Array<{ file: File; type: string }>>([]);
+
+const allTypesSelected = computed(() =>
+  fileList.value.every(item => item.type !== "")
+);
 
 const unsubmittedCount = computed(
   () => documents.value.filter(d => !d.submitted).length
 );
+
+// 预览相关
+const showPreviewDialog = ref(false);
+const previewDoc = ref<any>(null);
+const previewUrl = ref("");
+const editBaseName = ref("");
+const editExt = ref("");
+const editType = ref("");
+const saving = ref(false);
+
+const previewIsPdf = computed(() =>
+  previewDoc.value?.file_name?.toLowerCase().endsWith(".pdf")
+);
+const previewIsImage = computed(() => {
+  const name = previewDoc.value?.file_name?.toLowerCase() || "";
+  return (
+    name.endsWith(".jpg") || name.endsWith(".jpeg") || name.endsWith(".png")
+  );
+});
 
 const formatSize = (bytes: number) => {
   if (bytes < 1024) return bytes + "B";
@@ -186,15 +302,58 @@ const formatSize = (bytes: number) => {
   return (bytes / 1024 / 1024).toFixed(1) + "MB";
 };
 
-const handlePreview = async (docId: number) => {
-  const win = window.open("", "_blank");
-  try {
-    const url = await previewDocument(docId);
-    if (win) win.location.href = url;
-    setTimeout(() => URL.revokeObjectURL(url), 60000);
-  } catch {
-    win?.close();
+const buildDocUrl = (docId: number) => {
+  const token = getToken()?.access_token || "";
+  const base = getConfig()?.BaseUrlApi || "";
+  return `${base}/order/document-preview/${docId}?token=${encodeURIComponent(token)}&_t=${Date.now()}`;
+};
+
+const handlePreview = async (row: any) => {
+  await loadDocuments();
+  previewDoc.value = row;
+  previewUrl.value = buildDocUrl(row.id);
+  const dotIdx = row.file_name.lastIndexOf(".");
+  if (dotIdx > 0) {
+    editBaseName.value = row.file_name.substring(0, dotIdx);
+    editExt.value = row.file_name.substring(dotIdx);
+  } else {
+    editBaseName.value = row.file_name;
+    editExt.value = "";
   }
+  editType.value = row.type;
+  showPreviewDialog.value = true;
+};
+
+const handleSave = async () => {
+  if (!previewDoc.value) return;
+  const fileName = editBaseName.value + editExt.value;
+  if (!fileName.trim()) {
+    ElMessage.warning("文件名不能为空");
+    return;
+  }
+  saving.value = true;
+  try {
+    const res = await updateDocument(previewDoc.value.id, {
+      file_name: fileName,
+      type: editType.value
+    });
+    if (res.code === 1) {
+      ElMessage.success("保存成功");
+      showPreviewDialog.value = false;
+      await loadDocuments();
+    }
+  } finally {
+    saving.value = false;
+  }
+};
+
+const handleDownload = () => {
+  if (!previewDoc.value) return;
+  const url = buildDocUrl(previewDoc.value.id);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = previewDoc.value.file_name;
+  a.click();
 };
 
 const loadDocuments = async () => {
@@ -204,30 +363,30 @@ const loadDocuments = async () => {
   }
 };
 
-const handleFileChange = (file: UploadFile) => {
-  uploadForm.value.file = file.raw || null;
+const handleFileAdd = (uploadFile: UploadFile) => {
+  if (uploadFile.raw) {
+    fileList.value.push({ file: uploadFile.raw, type: "" });
+  }
+};
+
+const resetUploadForm = () => {
+  fileList.value = [];
 };
 
 const handleUpload = async () => {
-  if (!uploadForm.value.file) return;
+  if (fileList.value.length === 0) return;
 
   uploading.value = true;
   try {
-    const formData = new FormData();
-    formData.append("file", uploadForm.value.file);
-    formData.append("type", uploadForm.value.type);
-    if (uploadForm.value.description) {
-      formData.append("description", uploadForm.value.description);
+    for (const item of fileList.value) {
+      const formData = new FormData();
+      formData.append("file", item.file);
+      formData.append("type", item.type);
+      await uploadDocument(order.id, formData);
     }
-
-    const res = await uploadDocument(order.id, formData);
-    if (res.code === 1) {
-      ElMessage.success("上传成功");
-      showUploadDialog.value = false;
-      uploadForm.value = { type: "APPLICANT", description: "", file: null };
-      uploadRef.value?.clearFiles();
-      await loadDocuments();
-    }
+    ElMessage.success("上传成功");
+    showUploadDialog.value = false;
+    await loadDocuments();
   } finally {
     uploading.value = false;
   }
@@ -266,16 +425,44 @@ onMounted(loadDocuments);
   margin: 10px 0;
 }
 
-.section-header {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  margin-bottom: 10px;
+.file-list {
+  max-height: 240px;
+  margin-top: 12px;
+  overflow-y: auto;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 4px;
 }
 
-.section-title {
+.file-list-item {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.file-icon {
+  flex-shrink: 0;
+  color: var(--el-text-color-secondary);
+}
+
+.file-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-size: 13px;
-  font-weight: 500;
-  color: var(--el-text-color-primary);
+  white-space: nowrap;
+}
+
+.file-size {
+  flex-shrink: 0;
+  width: 60px;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  text-align: right;
 }
 </style>

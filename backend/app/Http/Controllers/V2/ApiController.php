@@ -689,7 +689,6 @@ class ApiController extends Controller
         $type = $this->request->input('type', '');
         $fileName = $this->request->input('fileName', '');
         $documentContent = $this->request->input('document_content', '');
-        $description = $this->request->input('description');
 
         ! $orderId && $this->error('order_id is required');
         ! $type && $this->error('type is required');
@@ -700,7 +699,7 @@ class ApiController extends Controller
         $order = Order::where('id', $orderId)->where('user_id', $this->user_id)->first();
         ! $order && $this->error('Order not found');
 
-        $this->action->uploadDocumentFromBase64($orderId, $type, $fileName, $documentContent, $description);
+        $this->action->uploadDocumentFromBase64($orderId, $type, $fileName, $documentContent);
     }
 
     /**

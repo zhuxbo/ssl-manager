@@ -25,7 +25,7 @@ trait ActionDocumentTrait
     /**
      * 上传文档（文件方式）
      */
-    public function uploadDocument(int $orderId, UploadedFile $file, string $type, string $uploadedBy, ?string $description = null): void
+    public function uploadDocument(int $orderId, UploadedFile $file, string $type, string $uploadedBy): void
     {
         $order = FindUtil::Order($orderId);
 
@@ -48,7 +48,6 @@ trait ActionDocumentTrait
             'file_name' => $fileName,
             'file_path' => $relativePath,
             'file_size' => $file->getSize(),
-            'description' => $description,
             'uploaded_by' => $uploadedBy,
         ]);
 
@@ -58,7 +57,7 @@ trait ActionDocumentTrait
     /**
      * 上传文档（base64 方式，用于 V2 API 接收）
      */
-    public function uploadDocumentFromBase64(int $orderId, string $type, string $fileName, string $base64Content, ?string $description = null): void
+    public function uploadDocumentFromBase64(int $orderId, string $type, string $fileName, string $base64Content): void
     {
         $order = FindUtil::Order($orderId);
 
@@ -87,7 +86,6 @@ trait ActionDocumentTrait
             'file_name' => $fileName,
             'file_path' => $relativePath,
             'file_size' => strlen($content),
-            'description' => $description,
             'uploaded_by' => 'api',
         ]);
 
@@ -141,6 +139,19 @@ trait ActionDocumentTrait
     }
 
     /**
+     * 更新文档信息
+     */
+    public function updateDocument(int $docId, string $fileName, string $type): void
+    {
+        $document = OrderDocument::findOrFail($docId);
+        $document->update([
+            'file_name' => $fileName,
+            'type' => $type,
+        ]);
+        $this->success();
+    }
+
+    /**
      * 删除文档
      */
     public function deleteDocument(int $docId): void
@@ -187,7 +198,6 @@ trait ActionDocumentTrait
                     'type' => $document->type,
                     'fileName' => $document->file_name,
                     'document_content' => $base64Content,
-                    'description' => $document->description,
                 ]);
 
                 if (($result['code'] ?? 0) === 1) {
@@ -240,6 +250,7 @@ trait ActionDocumentTrait
     public function saveVerificationReport(int $orderId, array $reportData): void
     {
         $order = FindUtil::Order($orderId);
+        $reportData = $this->trimRecursive($reportData);
 
         OrderVerificationReport::updateOrCreate(
             ['order_id' => $orderId],
@@ -272,5 +283,18 @@ trait ActionDocumentTrait
 
         $report->update(['submitted' => 1]);
         $this->success();
+    }
+
+    private function trimRecursive(array $data): array
+    {
+        foreach ($data as $key => $value) {
+            if (is_string($value)) {
+                $data[$key] = trim($value);
+            } elseif (is_array($value)) {
+                $data[$key] = $this->trimRecursive($value);
+            }
+        }
+
+        return $data;
     }
 }
