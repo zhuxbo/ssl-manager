@@ -30,6 +30,7 @@ trait LogSanitizer
         'session_id',
         'csrf_token',
         'direct_login_url',
+        'document_content',
     ];
 
     /**
