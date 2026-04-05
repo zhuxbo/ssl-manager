@@ -114,14 +114,14 @@ class ApiController extends Controller
 
     public function getOrders(): void
     {
-        $page = $this->request->input('page', 1) ?? 1;
+        $page = max((int) ($this->request->input('page', 1) ?? 1), 1);
         $pageSize = min(max((int) ($this->request->input('page_size', 100) ?? 100), 1), 100);
         $status = $this->request->input('status', 'all') ?? 'all';
 
         $whereStatus = [];
         $status !== 'all' && $whereStatus[] = ['status', '=', $status];
 
-        $res = Order::with([
+        $query = Order::with([
             'product' => function ($query) {
                 $query->select(['id', 'code']);
             },
@@ -154,18 +154,20 @@ class ApiController extends Controller
                 'updated_at',
             ])
             ->where('user_id', '=', $this->user_id)
-            ->orderBy('id', 'DESC')
-            ->limit($pageSize)
-            ->offset(($page - 1) * $pageSize)
-            ->get();
+            ->orderBy('id', 'DESC');
+
+        $total = $query->count();
+        $res = $query->limit($pageSize)->offset(($page - 1) * $pageSize)->get();
 
         $data = [];
         /** @var Order $item */
         foreach ($res as $item) {
             $cert = $item->latestCert->toArray();
             unset($cert['id'], $cert['intermediate_cert']);
-            $product = $item->product->toArray();
-            unset($product['id']);
+            $product = $item->product?->toArray();
+            if ($product) {
+                unset($product['id']);
+            }
             $order = $item->toArray();
             unset($order['id'], $order['product_id'], $order['latest_cert_id'], $order['product'], $order['latest_cert']);
 
@@ -176,7 +178,12 @@ class ApiController extends Controller
             ];
         }
 
-        $this->success($data);
+        $this->success([
+            'total' => $total,
+            'page' => $page,
+            'page_size' => $pageSize,
+            'data' => $data,
+        ]);
     }
 
     /**
