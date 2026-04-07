@@ -310,19 +310,12 @@ export function deleteDocument(id: number): Promise<BaseResponse> {
   return http.delete<BaseResponse<null>, any>(`/order/document/${id}`);
 }
 
-/** 获取验证报告 */
-export function getVerificationReport(id: number): Promise<BaseResponse> {
-  return http.get<BaseResponse<null>, any>(`/order/verification-report/${id}`);
-}
-
-/** 保存验证报告 */
-export function saveVerificationReport(
-  id: number,
-  reportData: any
-): Promise<BaseResponse> {
+/** 提交文档到上游 */
+export function submitDocuments(id: number): Promise<BaseResponse> {
   return http.post<BaseResponse<null>, any>(
-    `/order/verification-report/${id}`,
-    { data: { report_data: reportData } }
+    `/order/submit-documents/${id}`,
+    {},
+    { timeout: 300000 }
   );
 }
 

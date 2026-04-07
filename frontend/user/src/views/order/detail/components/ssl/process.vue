@@ -42,7 +42,6 @@
           <td class="content">
             <Documents v-if="hasDocuments" />
             <DocumentUpload />
-            <VerificationReport />
           </td>
         </tr>
         <tr>
@@ -97,7 +96,6 @@ import Install from "./install.vue";
 import Deploy from "./deploy.vue";
 import Documents from "../documents.vue";
 import DocumentUpload from "../documentUpload.vue";
-import VerificationReport from "../verificationReport.vue";
 
 const showAutoDeploy = getConfig()?.AutoDeploy !== false;
 import { ElButton } from "element-plus";

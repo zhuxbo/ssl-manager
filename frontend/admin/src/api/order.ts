@@ -318,31 +318,6 @@ export function submitDocuments(id: number): Promise<BaseResponse> {
   );
 }
 
-/** 获取验证报告 */
-export function getVerificationReport(id: number): Promise<BaseResponse> {
-  return http.get<BaseResponse<null>, any>(`/order/verification-report/${id}`);
-}
-
-/** 保存验证报告 */
-export function saveVerificationReport(
-  id: number,
-  reportData: any
-): Promise<BaseResponse> {
-  return http.post<BaseResponse<null>, any>(
-    `/order/verification-report/${id}`,
-    { data: { report_data: reportData } }
-  );
-}
-
-/** 提交验证报告到上游 */
-export function submitVerificationReport(id: number): Promise<BaseResponse> {
-  return http.post<BaseResponse<null>, any>(
-    `/order/submit-verification-report/${id}`,
-    {},
-    { timeout: 60000 }
-  );
-}
-
 /** 更新订单自动设置 */
 export function updateAutoSettings(
   id: number,

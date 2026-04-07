@@ -95,13 +95,13 @@
         :auto-upload="false"
         :show-file-list="false"
         :on-change="handleFileAdd"
-        accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+        accept=".pdf,.jpg,.jpeg,.png,.xades"
       >
         <el-icon class="el-icon--upload"><Upload /></el-icon>
         <div class="el-upload__text">拖拽文件到此处，或<em>点击选择</em></div>
         <template #tip>
           <div class="el-upload__tip">
-            支持 PDF/JPG/PNG/DOC/DOCX，单个不超过 5MB
+            支持 PDF/JPG/PNG/XADES，单个不超过 5MB
           </div>
         </template>
       </el-upload>

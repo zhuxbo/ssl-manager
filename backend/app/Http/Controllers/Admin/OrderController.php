@@ -341,7 +341,7 @@ class OrderController extends BaseController
     public function uploadDocument(Request $request, int $id): void
     {
         $request->validate([
-            'file' => 'required|file|mimes:pdf,jpg,jpeg,png,doc,docx|max:5120',
+            'file' => 'required|file|mimes:pdf,jpg,jpeg,png,xades|max:5120',
             'type' => 'required|string',
         ]);
 
@@ -392,30 +392,5 @@ class OrderController extends BaseController
     public function submitDocuments(int $id): void
     {
         $this->action->submitDocuments($id);
-    }
-
-    /**
-     * 获取验证报告
-     */
-    public function getVerificationReport(int $id): void
-    {
-        $this->action->getVerificationReport($id);
-    }
-
-    /**
-     * 保存验证报告
-     */
-    public function saveVerificationReport(int $id): void
-    {
-        $reportData = request()->input('report_data', []);
-        $this->action->saveVerificationReport($id, $reportData);
-    }
-
-    /**
-     * 提交验证报告到上游
-     */
-    public function submitVerificationReport(int $id): void
-    {
-        $this->action->submitVerificationReport($id);
     }
 }

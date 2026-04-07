@@ -123,19 +123,6 @@ class Api
     }
 
     /**
-     * 提交验证报告到上游
-     */
-    public function submitVerificationReport(int $orderId, array $data): array
-    {
-        $order = $this->findOrder($orderId);
-        $api = $this->getSourceApi($order->product->source ?? '');
-        $this->checkMethodExists($api, 'submitVerificationReport');
-
-        /** @phpstan-ignore method.notFound */
-        return $api->submitVerificationReport($data);
-    }
-
-    /**
      * 设置产品来源
      */
     private function getSourceApi(string $source): OrderSourceApiInterface

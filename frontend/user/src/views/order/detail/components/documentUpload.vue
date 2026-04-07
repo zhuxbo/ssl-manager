@@ -37,6 +37,13 @@
           {{ formatSize(row.file_size) }}
         </template>
       </el-table-column>
+      <el-table-column prop="submitted" label="状态" width="80">
+        <template #default="{ row }">
+          <el-tag :type="row.submitted ? 'success' : 'warning'" size="small">
+            {{ row.submitted ? "已提交" : "待提交" }}
+          </el-tag>
+        </template>
+      </el-table-column>
       <el-table-column label="操作" width="60">
         <template #default="{ row }">
           <el-button
@@ -51,7 +58,16 @@
       </el-table-column>
     </el-table>
 
-    <div style="margin-top: 8px">
+    <div style="display: flex; gap: 8px; margin-top: 8px">
+      <el-button
+        v-if="unsubmittedCount > 0"
+        size="small"
+        type="success"
+        :loading="submitting"
+        @click="handleSubmit"
+      >
+        提交 ({{ unsubmittedCount }})
+      </el-button>
       <el-button size="small" type="primary" @click="showUploadDialog = true">
         上传文档
       </el-button>
@@ -70,13 +86,13 @@
         :auto-upload="false"
         :show-file-list="false"
         :on-change="handleFileAdd"
-        accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+        accept=".pdf,.jpg,.jpeg,.png,.xades"
       >
         <el-icon class="el-icon--upload"><Upload /></el-icon>
         <div class="el-upload__text">拖拽文件到此处，或<em>点击选择</em></div>
         <template #tip>
           <div class="el-upload__tip">
-            支持 PDF/JPG/PNG/DOC/DOCX，单个不超过 5MB
+            支持 PDF/JPG/PNG/XADES，单个不超过 5MB
           </div>
         </template>
       </el-upload>
@@ -218,7 +234,8 @@ import {
   uploadDocument,
   getDocuments,
   deleteDocument,
-  updateDocument
+  updateDocument,
+  submitDocuments
 } from "@/api/order";
 import { getToken } from "@/utils/auth";
 import { getConfig } from "@/config";
@@ -238,12 +255,17 @@ const documentTypes: Record<string, string> = {
 const documents = ref<any[]>([]);
 const showUploadDialog = ref(false);
 const uploading = ref(false);
+const submitting = ref(false);
 
 // 上传文件列表
 const fileList = ref<Array<{ file: File; type: string }>>([]);
 
 const allTypesSelected = computed(() =>
   fileList.value.every(item => item.type !== "")
+);
+
+const unsubmittedCount = computed(
+  () => documents.value.filter(d => !d.submitted).length
 );
 
 // 预览相关
@@ -367,6 +389,22 @@ const handleDelete = async (docId: number) => {
   if (res.code === 1) {
     ElMessage.success("删除成功");
     await loadDocuments();
+  }
+};
+
+const handleSubmit = async () => {
+  await ElMessageBox.confirm("确定提交所有待提交文档？", "提示", {
+    type: "warning"
+  });
+  submitting.value = true;
+  try {
+    const res = await submitDocuments(order.id);
+    if (res.code === 1) {
+      ElMessage.success("提交成功");
+      await loadDocuments();
+    }
+  } finally {
+    submitting.value = false;
   }
 };
 

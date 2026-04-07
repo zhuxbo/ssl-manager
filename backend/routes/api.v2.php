@@ -23,5 +23,4 @@ Route::prefix('v2')->middleware('api.v2')->group(function () {
     Route::post('update-dcv', [ApiController::class, 'updateDCV']);
     Route::get('download', [ApiController::class, 'download']);
     Route::post('upload-document', [ApiController::class, 'uploadDocument']);
-    Route::post('save-verification-report', [ApiController::class, 'saveVerificationReport']);
 });

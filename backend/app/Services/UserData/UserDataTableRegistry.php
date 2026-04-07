@@ -24,7 +24,6 @@ class UserDataTableRegistry
             ['table' => 'cname_delegations', 'name' => 'CNAME委托'],
             ['table' => 'callbacks', 'name' => '回调配置'],
             ['table' => 'order_documents', 'name' => '订单验证文档'],
-            ['table' => 'order_verification_reports', 'name' => '订单验证报告'],
         ];
     }
 
@@ -118,7 +117,6 @@ class UserDataTableRegistry
             ['table' => 'tasks', 'name' => '任务', 'type' => 'indirect'],
             // 3. 有 order_id 的直接表（在 orders 之前）
             ['table' => 'order_documents', 'name' => '订单验证文档', 'type' => 'direct'],
-            ['table' => 'order_verification_reports', 'name' => '订单验证报告', 'type' => 'direct'],
             // 4. 订单和其他直接表
             ['table' => 'orders', 'name' => '订单', 'type' => 'direct'],
             ['table' => 'acmes', 'name' => 'ACME订单', 'type' => 'direct'],

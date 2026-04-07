@@ -164,7 +164,7 @@ class ApiController extends Controller
         foreach ($res as $item) {
             $cert = $item->latestCert->toArray();
             unset($cert['id'], $cert['intermediate_cert']);
-            $product = $item->product?->toArray();
+            $product = $item->product?->toArray(); // @phpstan-ignore nullsafe.neverNull
             if ($product) {
                 unset($product['id']);
             }
@@ -707,24 +707,6 @@ class ApiController extends Controller
         ! $order && $this->error('Order not found');
 
         $this->action->uploadDocumentFromBase64($orderId, $type, $fileName, $documentContent);
-    }
-
-    /**
-     * 保存验证报告（接收下游报告数据）
-     */
-    public function saveVerificationReport(): void
-    {
-        $orderId = (int) $this->request->input('order_id');
-        $reportData = $this->request->input('report_data', []);
-
-        ! $orderId && $this->error('order_id is required');
-        empty($reportData) && $this->error('report_data is required');
-
-        // 验证订单归属当前用户
-        $order = Order::where('id', $orderId)->where('user_id', $this->user_id)->first();
-        ! $order && $this->error('Order not found');
-
-        $this->action->saveVerificationReport($orderId, $reportData);
     }
 
     /**

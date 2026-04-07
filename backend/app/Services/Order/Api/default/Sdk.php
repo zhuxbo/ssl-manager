@@ -96,14 +96,6 @@ class Sdk
     }
 
     /**
-     * 提交验证报告
-     */
-    public function submitVerificationReport(array $data): array
-    {
-        return $this->call('save-verification-report', $data, 'json');
-    }
-
-    /**
      * 提交接口请求
      */
     protected function call(string $uri, array $data = [], $method = 'post'): array

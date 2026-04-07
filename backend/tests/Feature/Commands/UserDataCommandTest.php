@@ -310,8 +310,7 @@ test('exportTables 白名单含 callbacks 不含运营数据', function () {
         ->not->toContain('tasks')
         ->not->toContain('domain_validation_records')
         ->not->toContain('notifications')
-        ->not->toContain('order_documents')
-        ->not->toContain('order_verification_reports');
+        ->not->toContain('order_documents');
 });
 
 test('export 自增 ID 表不导出 id 列', function () {
