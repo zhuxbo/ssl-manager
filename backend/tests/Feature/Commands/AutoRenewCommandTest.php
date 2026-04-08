@@ -156,3 +156,31 @@ test('余额不足时续费失败发送通知', function () {
         ->expectsOutputToContain('失败')
         ->assertSuccessful();
 });
+
+test('域名包含 IP 地址时跳过订单', function () {
+    $user = User::factory()->withBalance('1000.00')->withAutoRenew()->create();
+    $product = Product::factory()->create(['status' => 1, 'renew' => 1]);
+    $order = Order::factory()->create([
+        'user_id' => $user->id,
+        'product_id' => $product->id,
+        'auto_renew' => true,
+        'period_from' => now()->subYear(),
+        'period_till' => now()->addDays(10),
+    ]);
+
+    $cert = Cert::factory()->active()->create([
+        'order_id' => $order->id,
+        'expires_at' => now()->addDays(5),
+        'alternative_names' => '8.8.8.8',
+        'common_name' => '8.8.8.8',
+        'channel' => 'web',
+    ]);
+    $order->update(['latest_cert_id' => $cert->id]);
+
+    // 不应调用委托检查和 Action
+    $this->autoRenewService->shouldNotReceive('checkDelegationValidity');
+
+    $this->artisan('schedule:auto-renew')
+        ->expectsOutputToContain('域名包含 IP 地址')
+        ->assertSuccessful();
+});
