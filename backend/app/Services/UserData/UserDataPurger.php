@@ -13,10 +13,13 @@ class UserDataPurger
 
     private int $chunkSize;
 
-    public function __construct(OutputInterface $output, int $chunkSize = 1000)
+    private ?string $exportFilePath;
+
+    public function __construct(OutputInterface $output, int $chunkSize = 1000, ?string $exportFilePath = null)
     {
         $this->output = $output;
         $this->chunkSize = $chunkSize;
+        $this->exportFilePath = $exportFilePath;
     }
 
     /**
@@ -35,6 +38,11 @@ class UserDataPurger
                 'indirect' => $this->deleteIndirectTable($item['table'], $item['name'], $user),
                 'direct' => $this->deleteDirectTable($item['table'], $item['name'], $user->id),
             };
+        }
+
+        // 清理孤立的间接关联数据（导入失败导致 orders 缺失时，certs 等无法通过子查询删除）
+        if ($this->exportFilePath) {
+            $this->cleanupOrphans();
         }
 
         // 动态表
@@ -133,6 +141,45 @@ class UserDataPurger
             $count,
             '通知'
         );
+    }
+
+    /**
+     * 清理孤立的间接关联数据
+     * 通过导出文件中记录的雪花 ID 直接定位并删除
+     *
+     * @throws Throwable
+     */
+    private function cleanupOrphans(): void
+    {
+        $importer = new UserDataImporter($this->output);
+        $tableIds = $importer->extractTableIds($this->exportFilePath);
+
+        foreach (UserDataTableRegistry::indirectTables() as $item) {
+            $ids = $tableIds[$item['table']] ?? [];
+            if (empty($ids)) {
+                continue;
+            }
+
+            if (! DB::getSchemaBuilder()->hasTable($item['table'])) {
+                continue;
+            }
+
+            // 查找仍然残留的记录
+            $remaining = [];
+            foreach (array_chunk($ids, 1000) as $chunk) {
+                $found = DB::table($item['table'])->whereIn('id', $chunk)->pluck('id')->all();
+                $remaining = array_merge($remaining, $found);
+            }
+
+            if (empty($remaining)) {
+                continue;
+            }
+
+            $this->output->writeln("清理孤立{$item['name']} (".count($remaining).' 条)...');
+            foreach (array_chunk($remaining, $this->chunkSize) as $chunk) {
+                DB::transaction(fn () => DB::table($item['table'])->whereIn('id', $chunk)->delete());
+            }
+        }
     }
 
     /**

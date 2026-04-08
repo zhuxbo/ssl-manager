@@ -364,3 +364,136 @@ test('签名为 user:data', function () {
 
     $this->artisan("user:data export {$user->id} --force")->assertSuccessful();
 });
+
+// ===================== parseStatements：引号内分号 =====================
+
+test('import 正确处理 VALUES 中包含分号的数据', function () {
+    $user = User::factory()->create();
+    // organization 和 contact 是 text 列，可能包含分号
+    $order = Order::factory()->create([
+        'user_id' => $user->id,
+        'organization' => json_encode(['name' => 'Test; Corp', 'addr' => 'No.1; Street']),
+        'contact' => json_encode(['email' => 'a@b.com; c@d.com']),
+    ]);
+
+    // 导出
+    $this->artisan("user:data export {$user->id} --force")->assertSuccessful();
+    $files = glob(storage_path("app/private/exports/users/{$user->id}_*.sql"));
+    $filePath = $files[0];
+
+    // 确认导出文件确实包含分号数据
+    $content = file_get_contents($filePath);
+    expect($content)->toContain('Test; Corp');
+
+    // 删除原数据
+    Cert::where('order_id', $order->id)->delete();
+    Order::where('id', $order->id)->delete();
+    $user->delete();
+
+    // 导入应成功
+    $this->artisan("user:data import {$user->id} --force --file=$filePath")
+        ->assertSuccessful()
+        ->expectsOutputToContain('导入完成');
+
+    // 验证订单恢复且数据正确
+    $restored = Order::find($order->id);
+    expect($restored)->not->toBeNull();
+    expect(json_decode($restored->organization, true)['name'])->toBe('Test; Corp');
+});
+
+// ===================== adaptColumns：列差异适配 =====================
+
+test('import 自动跳过目标表不存在的列', function () {
+    $user = User::factory()->create();
+    Order::factory()->create(['user_id' => $user->id]);
+
+    // 导出
+    $this->artisan("user:data export {$user->id} --force")->assertSuccessful();
+    $files = glob(storage_path("app/private/exports/users/{$user->id}_*.sql"));
+    $filePath = $files[0];
+
+    // 手动给 orders INSERT 加一个不存在的列
+    $content = file_get_contents($filePath);
+    $content = str_replace(
+        'INSERT INTO `orders` (`id`,',
+        'INSERT INTO `orders` (`id`, `fake_column`,',
+        $content
+    );
+    // 只在 orders 的 VALUES 行插入假值（匹配 orders INSERT 块内的 VALUES）
+    $content = preg_replace(
+        '/(INSERT INTO `orders`[^;]+VALUES)\n\((\d+),/s',
+        "$1\n($2, 'fake_value',",
+        $content
+    );
+    file_put_contents($filePath, $content);
+
+    // 删除原数据
+    Order::where('user_id', $user->id)->delete();
+    $user->delete();
+
+    // 导入应成功，自动跳过 fake_column
+    Illuminate\Support\Facades\Artisan::call('user:data', [
+        'action' => 'import',
+        'user_id' => $user->id,
+        '--force' => true,
+        '--file' => $filePath,
+    ]);
+    $output = Illuminate\Support\Facades\Artisan::output();
+
+    expect($output)->toContain('跳过列')->toContain('fake_column');
+    expect(User::find($user->id))->not->toBeNull();
+    expect(Order::where('user_id', $user->id)->count())->toBe(1);
+});
+
+// ===================== purge：孤立间接记录清理 =====================
+
+test('purge 清理孤立的 certs（orders 缺失时）', function () {
+    $user = User::factory()->create(['status' => 0]);
+    $order = Order::factory()->create(['user_id' => $user->id]);
+    $cert = Cert::factory()->create(['order_id' => $order->id]);
+
+    // 导出（包含 order 和 cert）
+    $this->artisan("user:data export {$user->id} --force")->assertSuccessful();
+
+    // 模拟导入失败场景：删掉 order 但保留 cert（孤立）
+    Order::where('id', $order->id)->delete();
+
+    // cert 通过 orders 子查询已经查不到了
+    expect(Cert::whereIn('order_id', fn ($q) => $q->select('id')->from('orders')->where('user_id', $user->id))->count())->toBe(0);
+    // 但 cert 实际还在
+    expect(Cert::find($cert->id))->not->toBeNull();
+
+    // purge 应该能通过导出文件 ID 清理孤立 cert
+    $this->artisan("user:data purge {$user->id} --force")
+        ->assertSuccessful()
+        ->expectsOutputToContain('清理孤立');
+
+    expect(Cert::find($cert->id))->toBeNull();
+    expect(User::find($user->id))->toBeNull();
+});
+
+// ===================== dryRun：自增表显示修复 =====================
+
+test('dry-run 自增表显示正确的记录数和无法检测提示', function () {
+    $user = User::factory()->create();
+    Transaction::factory()->count(3)->create(['user_id' => $user->id, 'type' => 'order']);
+
+    // 导出
+    $this->artisan("user:data export {$user->id} --force")->assertSuccessful();
+    $files = glob(storage_path("app/private/exports/users/{$user->id}_*.sql"));
+
+    // 删除数据
+    Transaction::where('user_id', $user->id)->delete();
+    $user->delete();
+
+    // dry-run 应显示正确行数和"无法检测"
+    Illuminate\Support\Facades\Artisan::call('user:data', [
+        'action' => 'import',
+        'user_id' => $user->id,
+        '--dry-run' => true,
+        '--file' => $files[0],
+    ]);
+    $output = Illuminate\Support\Facades\Artisan::output();
+
+    expect($output)->toContain('3条')->toContain('无法检测');
+});
