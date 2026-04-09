@@ -100,31 +100,6 @@
           <div class="step-title">第一步：安装 sslctlw</div>
           <div class="command-block">
             <div class="command-label">
-              <el-link
-                v-if="isActive"
-                type="primary"
-                :href="commands.iis_install?.download"
-                target="_blank"
-                :underline="false"
-                style="font-size: inherit; vertical-align: baseline"
-                >下载文件</el-link
-              ><template v-else>下载文件</template
-              >上传到服务器，或复制链接到服务器下载，在服务器内运行
-            </div>
-            <div class="command-line">
-              <code>{{ commands.iis_install?.download }}</code>
-              <el-button
-                type="primary"
-                link
-                size="small"
-                :disabled="!isActive"
-                @click="copy(commands.iis_install?.download)"
-                >复制</el-button
-              >
-            </div>
-          </div>
-          <div class="command-block">
-            <div class="command-label">
               Windows (PowerShell)
               <el-radio-group
                 v-model="winVersion"
@@ -143,6 +118,31 @@
                 size="small"
                 :disabled="!isActive"
                 @click="copy(iisWindowsInstallCmd)"
+                >复制</el-button
+              >
+            </div>
+          </div>
+          <div class="command-block">
+            <div class="command-label">
+              如脚本运行错误，可手动<el-link
+                v-if="isActive"
+                type="primary"
+                :href="commands.iis_install?.download"
+                target="_blank"
+                :underline="false"
+                style="font-size: inherit; vertical-align: baseline"
+                >下载文件</el-link
+              ><template v-else>下载文件</template
+              >上传到服务器，或复制链接到服务器下载，在服务器内运行
+            </div>
+            <div class="command-line">
+              <code>{{ commands.iis_install?.download }}</code>
+              <el-button
+                type="primary"
+                link
+                size="small"
+                :disabled="!isActive"
+                @click="copy(commands.iis_install?.download)"
                 >复制</el-button
               >
             </div>
