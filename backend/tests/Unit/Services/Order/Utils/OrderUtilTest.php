@@ -208,3 +208,16 @@ test('convertNumericValues 跳过含科学计数法格式的字符串', function
         ->and($result['normal_int'])->toBe(42)
         ->and($result['normal_float'])->toBe(3.14);
 });
+
+test('convertNumericValues 跳过超长纯数字字符串', function () {
+    $result = OrderUtil::convertNumericValues([
+        'registration_number' => '123715004950202802',
+        'short_number' => '123456',
+        'fifteen_digits' => '123456789012345',
+        'sixteen_digits' => '1234567890123456',
+    ]);
+    expect($result['registration_number'])->toBe('123715004950202802')
+        ->and($result['short_number'])->toBe(123456)
+        ->and($result['fifteen_digits'])->toBe(123456789012345)
+        ->and($result['sixteen_digits'])->toBe('1234567890123456');
+});
