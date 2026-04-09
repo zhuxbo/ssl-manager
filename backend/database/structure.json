@@ -1,7 +1,7 @@
 {
     "version": "1.0",
     "mysql_version": "8.0.43",
-    "generated_at": "2026-04-02 16:43:36",
+    "generated_at": "2026-04-09 10:28:26",
     "database": {
         "name": "manager",
         "charset": "utf8mb4",
@@ -4667,14 +4667,14 @@
             "engine": "InnoDB",
             "collation": "utf8mb4_0900_ai_ci",
             "comment": "",
-            "auto_increment": 1,
+            "auto_increment": null,
             "columns": {
                 "id": {
                     "position": 1,
                     "type": "bigint unsigned",
                     "nullable": false,
                     "default": null,
-                    "extra": "auto_increment",
+                    "extra": "",
                     "comment": ""
                 },
                 "user_id": {

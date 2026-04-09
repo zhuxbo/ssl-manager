@@ -313,7 +313,7 @@ test('exportTables 白名单含 callbacks 不含运营数据', function () {
         ->not->toContain('order_documents');
 });
 
-test('export 自增 ID 表不导出 id 列', function () {
+test('export 雪花 ID 表保留 id 列', function () {
     $user = User::factory()->create();
     Transaction::factory()->create(['user_id' => $user->id, 'type' => 'order']);
 
@@ -322,10 +322,10 @@ test('export 自增 ID 表不导出 id 列', function () {
     $files = glob(storage_path("app/private/exports/users/{$user->id}_*.sql"));
     $content = file_get_contents($files[0]);
 
-    // transactions（自增）不含 `id` 列
+    // transactions（雪花）保留 `id` 列
     preg_match('/INSERT INTO `transactions` \(([^)]+)\)/', $content, $matches);
     expect($matches)->not->toBeEmpty();
-    expect($matches[1])->not->toContain('`id`');
+    expect($matches[1])->toContain('`id`');
 
     // orders（雪花）保留 `id` 列
     preg_match('/INSERT INTO `orders` \(([^)]+)\)/', $content, $matches);
@@ -334,7 +334,7 @@ test('export 自增 ID 表不导出 id 列', function () {
     }
 });
 
-test('export 自增 ID 表导入不冲突', function () {
+test('export 雪花 ID 表导入跳过重复', function () {
     $user = User::factory()->create();
     Transaction::factory()->create(['user_id' => $user->id, 'type' => 'order']);
 
@@ -343,12 +343,12 @@ test('export 自增 ID 表导入不冲突', function () {
     $files = glob(storage_path("app/private/exports/users/{$user->id}_*.sql"));
     $filePath = $files[0];
 
-    // 不删除原数据，直接导入 — 自增 ID 表不应冲突
+    // 不删除原数据，直接导入 — 雪花 ID 重复应跳过
     $this->artisan("user:data import {$user->id} --force --file=$filePath")
         ->assertSuccessful();
 
-    // transactions 应新增一条（自动分配新 id）
-    expect(Transaction::where('user_id', $user->id)->count())->toBe(2);
+    // transactions 雪花 ID 重复，跳过导入，数量不变
+    expect(Transaction::where('user_id', $user->id)->count())->toBe(1);
 });
 
 // ===================== 参数验证 =====================
@@ -474,7 +474,7 @@ test('purge 清理孤立的 certs（orders 缺失时）', function () {
 
 // ===================== dryRun：自增表显示修复 =====================
 
-test('dry-run 自增表显示正确的记录数和无法检测提示', function () {
+test('dry-run 雪花表显示正确的记录数和冲突检测', function () {
     $user = User::factory()->create();
     Transaction::factory()->count(3)->create(['user_id' => $user->id, 'type' => 'order']);
 
@@ -486,7 +486,7 @@ test('dry-run 自增表显示正确的记录数和无法检测提示', function 
     Transaction::where('user_id', $user->id)->delete();
     $user->delete();
 
-    // dry-run 应显示正确行数和"无法检测"
+    // dry-run 应显示正确行数和冲突检测结果
     Illuminate\Support\Facades\Artisan::call('user:data', [
         'action' => 'import',
         'user_id' => $user->id,
@@ -495,5 +495,5 @@ test('dry-run 自增表显示正确的记录数和无法检测提示', function 
     ]);
     $output = Illuminate\Support\Facades\Artisan::output();
 
-    expect($output)->toContain('3条')->toContain('无法检测');
+    expect($output)->toContain('3条')->toContain('0 条冲突');
 });

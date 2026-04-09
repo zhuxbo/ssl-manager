@@ -10,7 +10,7 @@ return new class extends Migration
     {
         if (! Schema::hasTable('transactions')) {
             Schema::create('transactions', function (Blueprint $table) {
-                $table->id();
+                $table->unsignedBigInteger('id')->primary();
                 $table->unsignedBigInteger('user_id')->index()->comment('用户ID');
                 $table->enum('type', ['order', 'cancel', 'addfunds', 'refunds', 'deduct', 'reverse', 'acme_order', 'acme_cancel'])->index()->comment('类型');
                 $table->unsignedBigInteger('transaction_id')->index()->comment('关联ID（order_id 或 fund_id）');

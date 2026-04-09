@@ -71,7 +71,7 @@ class UserDataTableRegistry
      */
     private static array $snowflakeIdTables = [
         'users', 'orders', 'acmes', 'contacts', 'organizations',
-        'funds', 'certs', 'cname_delegations',
+        'funds', 'certs', 'cname_delegations', 'transactions',
     ];
 
     /**

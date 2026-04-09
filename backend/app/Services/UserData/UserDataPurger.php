@@ -4,6 +4,7 @@ namespace App\Services\UserData;
 
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Symfony\Component\Console\Output\OutputInterface;
 use Throwable;
 
@@ -30,6 +31,9 @@ class UserDataPurger
     public function purge(User $user): void
     {
         $this->output->writeln("分批大小：{$this->chunkSize} 条/批");
+
+        // 清理文档文件（在删除数据库记录之前）
+        $this->deleteDocumentFiles($user->id);
 
         // 按顺序删除
         foreach (UserDataTableRegistry::purgeOrder() as $item) {
@@ -179,6 +183,38 @@ class UserDataPurger
             foreach (array_chunk($remaining, $this->chunkSize) as $chunk) {
                 DB::transaction(fn () => DB::table($item['table'])->whereIn('id', $chunk)->delete());
             }
+        }
+    }
+
+    /**
+     * 清理 order_documents 关联的物理文件
+     */
+    private function deleteDocumentFiles(int $userId): void
+    {
+        if (! DB::getSchemaBuilder()->hasTable('order_documents')) {
+            return;
+        }
+
+        $orderIds = DB::table('order_documents')
+            ->where('user_id', $userId)
+            ->distinct()
+            ->pluck('order_id');
+
+        if ($orderIds->isEmpty()) {
+            return;
+        }
+
+        $fileCount = 0;
+        foreach ($orderIds as $orderId) {
+            $dir = "verification/$orderId";
+            if (Storage::exists($dir)) {
+                Storage::deleteDirectory($dir);
+                $fileCount++;
+            }
+        }
+
+        if ($fileCount > 0) {
+            $this->output->writeln("清理文档文件 ($fileCount 个目录)...");
         }
     }
 
