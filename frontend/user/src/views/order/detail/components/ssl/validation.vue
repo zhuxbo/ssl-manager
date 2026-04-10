@@ -11,7 +11,7 @@
           spellcheck="false"
         >
           <template #suffix>
-            <Copy :copied="getDelegationHost(uniqueDelegations[0])" />
+            <Copy :copied="getDelegationHostInput(uniqueDelegations[0])" />
           </template>
           <template #append
             >.{{ getDelegationHostSuffix(uniqueDelegations[0]) }}</template
@@ -57,7 +57,7 @@
                 spellcheck="false"
               >
                 <template #suffix>
-                  <Copy :copied="getDelegationHost(item)" />
+                  <Copy :copied="getDelegationHostInput(item)" />
                 </template>
                 <template #append
                   >.{{ getDelegationHostSuffix(item) }}</template
@@ -103,12 +103,12 @@
                 style="padding: 0"
               >
                 <el-input
-                  :model-value="item.host"
+                  :model-value="getHostPrefix(item.host, item.domain)"
                   spellcheck="false"
                   :style="{ width: '100%' }"
                 >
                   <template #suffix>
-                    <Copy :copied="item.host" />
+                    <Copy :copied="getHostPrefix(item.host, item.domain)" />
                   </template>
                   <template v-if="cert.validation?.length > 1" #append
                     >.{{
@@ -120,9 +120,19 @@
             </tr>
           </tbody>
         </table>
-        <el-input v-else :model-value="cert.dcv?.dns?.host" spellcheck="false">
+        <el-input
+          v-else
+          :model-value="
+            getHostPrefix(cert.dcv?.dns?.host, cert.validation?.[0]?.domain)
+          "
+          spellcheck="false"
+        >
           <template #suffix>
-            <Copy :copied="cert.dcv?.dns?.host" />
+            <Copy
+              :copied="
+                getHostPrefix(cert.dcv?.dns?.host, cert.validation?.[0]?.domain)
+              "
+            />
           </template>
         </el-input>
       </el-form-item>
@@ -642,6 +652,14 @@ const allVerified = computed(() => {
   return verified;
 });
 
+// 去除主机记录中的域名后缀，只保留 DNS 提供商需要的主机记录部分
+const getHostPrefix = (host: string, domain: string) => {
+  if (!host || !domain) return host || "";
+  const root =
+    getRootDomain(domain.replace("*.", "")) || domain.replace("*.", "");
+  return host.endsWith("." + root) ? host.slice(0, -(root.length + 1)) : host;
+};
+
 // 获取委托验证前缀
 const getDelegationPrefix = (ca?: string) => {
   const caLower = (ca || "").toLowerCase();
@@ -782,7 +800,7 @@ const copyAllRecords = () => {
     uniqueDelegations.value.forEach((item: any) => {
       const zone = getDelegationZone(item);
       records.push(
-        `域名：${zone}\n主机记录：${delegationPrefix.value}\n解析类型：CNAME\n记录值：${item.delegation_target}`
+        `域名：${zone}\n主机记录：${getDelegationHostInput(item)}\n解析类型：CNAME\n记录值：${item.delegation_target}`
       );
     });
   }
@@ -792,14 +810,14 @@ const copyAllRecords = () => {
       (item: { method: string; host: string; domain: string }) => {
         if (item.method === "cname" || item.method === "txt") {
           records.push(
-            `域名：${item.domain}\n主机记录：${item.host}\n解析类型：${cert.value.dcv.dns.type}\n记录值：${cert.value.dcv.dns.value}`
+            `域名：${item.domain}\n主机记录：${getHostPrefix(item.host, item.domain)}\n解析类型：${cert.value.dcv.dns.type}\n记录值：${cert.value.dcv.dns.value}`
           );
         }
       }
     );
   } else {
     records.push(
-      `域名：${cert.value.validation[0].domain}\n主机记录：${cert.value.dcv.dns.host}\n解析类型：${cert.value.dcv.dns.type}\n记录值：${cert.value.dcv.dns.value}`
+      `域名：${cert.value.validation[0].domain}\n主机记录：${getHostPrefix(cert.value.dcv.dns.host, cert.value.validation[0].domain)}\n解析类型：${cert.value.dcv.dns.type}\n记录值：${cert.value.dcv.dns.value}`
     );
   }
 

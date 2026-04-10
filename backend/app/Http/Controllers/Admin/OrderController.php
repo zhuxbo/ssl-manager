@@ -341,14 +341,13 @@ class OrderController extends BaseController
     public function uploadDocument(Request $request, int $id): void
     {
         $request->validate([
-            'file' => 'required|file|mimes:pdf,jpg,jpeg,png,doc,docx|max:5120',
+            'file' => 'required|file|mimes:pdf,jpg,jpeg,png,xades|max:5120',
             'type' => 'required|string',
-            'description' => 'nullable|string|max:255',
         ]);
 
         /** @var UploadedFile $file */
         $file = $request->file('file');
-        $this->action->uploadDocument($id, $file, $request->input('type'), 'admin', $request->input('description'));
+        $this->action->uploadDocument($id, $file, $request->input('type'), 'admin');
     }
 
     /**
@@ -368,6 +367,18 @@ class OrderController extends BaseController
     }
 
     /**
+     * 更新文档信息
+     */
+    public function updateDocument(Request $request, int $id): void
+    {
+        $request->validate([
+            'file_name' => 'required|string|max:255',
+            'type' => 'required|string|max:50',
+        ]);
+        $this->action->updateDocument($id, $request->input('file_name'), $request->input('type'));
+    }
+
+    /**
      * 删除文档
      */
     public function deleteDocument(int $id): void
@@ -381,30 +392,5 @@ class OrderController extends BaseController
     public function submitDocuments(int $id): void
     {
         $this->action->submitDocuments($id);
-    }
-
-    /**
-     * 获取验证报告
-     */
-    public function getVerificationReport(int $id): void
-    {
-        $this->action->getVerificationReport($id);
-    }
-
-    /**
-     * 保存验证报告
-     */
-    public function saveVerificationReport(int $id): void
-    {
-        $reportData = request()->input('report_data', []);
-        $this->action->saveVerificationReport($id, $reportData);
-    }
-
-    /**
-     * 提交验证报告到上游
-     */
-    public function submitVerificationReport(int $id): void
-    {
-        $this->action->submitVerificationReport($id);
     }
 }

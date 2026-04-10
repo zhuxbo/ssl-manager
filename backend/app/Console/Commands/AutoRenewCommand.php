@@ -8,6 +8,7 @@ use App\Services\Notification\DTOs\NotificationIntent;
 use App\Services\Notification\NotificationCenter;
 use App\Services\Order\Action;
 use App\Services\Order\AutoRenewService;
+use App\Services\Order\Utils\DomainUtil;
 use App\Services\Order\Utils\OrderUtil;
 use Illuminate\Console\Command;
 use Throwable;
@@ -145,6 +146,17 @@ class AutoRenewCommand extends Command
         $product = $order->product;
 
         $this->info("处理订单 #{$order->id} ($action): $cert->common_name");
+
+        // 域名包含 IP 地址时跳过（IP 证书不支持委托验证，无法自动续签）
+        $domains = explode(',', $cert->alternative_names);
+        foreach ($domains as $domain) {
+            $type = DomainUtil::getType(trim($domain));
+            if ($type === 'ipv4' || $type === 'ipv6') {
+                $this->warn("订单 #{$order->id} 跳过：域名包含 IP 地址");
+
+                return;
+            }
+        }
 
         // 检查委托有效性，无有效委托则跳过
         $ca = strtolower($product->ca ?? '');

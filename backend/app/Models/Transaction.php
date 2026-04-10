@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Traits\HasSnowflakeId;
 use Exception;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -11,6 +12,7 @@ use Throwable;
 class Transaction extends BaseModel
 {
     use HasFactory;
+    use HasSnowflakeId;
 
     // Laravel 不更新时间戳
     public const null UPDATED_AT = null;

@@ -61,8 +61,8 @@
                 size="small"
                 style="margin-left: 12px"
               >
-                <el-radio-button value="2016">2016+</el-radio-button>
-                <el-radio-button value="2012">2012</el-radio-button>
+                <el-radio-button value="2019">2019+</el-radio-button>
+                <el-radio-button value="2016">2016/2012</el-radio-button>
               </el-radio-group>
             </div>
             <div class="command-line">
@@ -100,7 +100,31 @@
           <div class="step-title">第一步：安装 sslctlw</div>
           <div class="command-block">
             <div class="command-label">
-              <el-link
+              Windows (PowerShell)
+              <el-radio-group
+                v-model="winVersion"
+                size="small"
+                style="margin-left: 12px"
+              >
+                <el-radio-button value="2019">2019+</el-radio-button>
+                <el-radio-button value="2016">2016/2012</el-radio-button>
+              </el-radio-group>
+            </div>
+            <div class="command-line">
+              <code>{{ iisWindowsInstallCmd }}</code>
+              <el-button
+                type="primary"
+                link
+                size="small"
+                :disabled="!isActive"
+                @click="copy(iisWindowsInstallCmd)"
+                >复制</el-button
+              >
+            </div>
+          </div>
+          <div class="command-block">
+            <div class="command-label">
+              如脚本运行错误，可手动<el-link
                 v-if="isActive"
                 type="primary"
                 :href="commands.iis_install?.download"
@@ -119,30 +143,6 @@
                 size="small"
                 :disabled="!isActive"
                 @click="copy(commands.iis_install?.download)"
-                >复制</el-button
-              >
-            </div>
-          </div>
-          <div class="command-block">
-            <div class="command-label">
-              Windows (PowerShell)
-              <el-radio-group
-                v-model="winVersion"
-                size="small"
-                style="margin-left: 12px"
-              >
-                <el-radio-button value="2016">2016+</el-radio-button>
-                <el-radio-button value="2012">2012</el-radio-button>
-              </el-radio-group>
-            </div>
-            <div class="command-line">
-              <code>{{ iisWindowsInstallCmd }}</code>
-              <el-button
-                type="primary"
-                link
-                size="small"
-                :disabled="!isActive"
-                @click="copy(iisWindowsInstallCmd)"
                 >复制</el-button
               >
             </div>
@@ -179,7 +179,7 @@ const cert = inject("cert") as any;
 
 const commands = ref<any>({});
 const activeTab = ref("bt");
-const winVersion = ref("2016");
+const winVersion = ref("2019");
 
 const isActive = computed(() => cert.value?.status === "active");
 
@@ -188,12 +188,12 @@ const tls12Prefix =
 
 const windowsInstallCmd = computed(() => {
   const base = commands.value.install?.windows || "";
-  return winVersion.value === "2012" ? `${tls12Prefix}\n${base}` : base;
+  return winVersion.value === "2016" ? `${tls12Prefix}\n${base}` : base;
 });
 
 const iisWindowsInstallCmd = computed(() => {
   const base = commands.value.iis_install?.windows || "";
-  return winVersion.value === "2012" ? `${tls12Prefix}\n${base}` : base;
+  return winVersion.value === "2016" ? `${tls12Prefix}\n${base}` : base;
 });
 
 watch(

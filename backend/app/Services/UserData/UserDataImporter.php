@@ -30,10 +30,11 @@ class UserDataImporter
 
         foreach ($statements as $table => $inserts) {
             $ids = $this->extractPrimaryKeys($table, $inserts);
-            $totalRecords += count($ids);
+            $rowCount = ! empty($ids) ? count($ids) : $this->countInsertRows($inserts);
+            $totalRecords += $rowCount;
 
             if (empty($ids)) {
-                $report[] = [$table, count($inserts).'条', '0 条冲突', '-'];
+                $report[] = [$table, $rowCount.'条', '无法检测', '自增ID表，重复导入会产生重复数据'];
 
                 continue;
             }
@@ -101,13 +102,22 @@ class UserDataImporter
                 $imported = 0;
                 $skipped = 0;
 
+                // 检测目标表列，用于剔除不存在的列
+                $targetColumns = null;
+                if (DB::getSchemaBuilder()->hasTable($table)) {
+                    $targetColumns = collect(DB::getSchemaBuilder()->getColumns($table))
+                        ->pluck('name')->flip()->all();
+                }
+
                 foreach ($inserts as $sql) {
+                    $sql = $this->adaptColumns($sql, $table, $targetColumns);
+                    $rowCount = preg_match_all('/\)\s*,\s*\(/', $sql) + 1;
+
                     try {
                         DB::unprepared($sql);
-                        // 粗略统计（按 VALUES 中的行数）
-                        $imported += substr_count($sql, '),(') + 1;
+                        $imported += $rowCount;
                     } catch (\Throwable $e) {
-                        $skipped += substr_count($sql, '),(') + 1;
+                        $skipped += $rowCount;
                         if (str_contains($e->getMessage(), 'Duplicate entry')) {
                             // 冲突跳过
                             continue;
@@ -126,6 +136,68 @@ class UserDataImporter
         } finally {
             DB::statement('SET FOREIGN_KEY_CHECKS = 1');
         }
+    }
+
+    /**
+     * 适配列差异：剔除目标表不存在的列及对应 VALUES
+     */
+    private function adaptColumns(string $sql, string $table, ?array $targetColumns): string
+    {
+        if ($targetColumns === null) {
+            return $sql;
+        }
+
+        // 提取列列表
+        if (! preg_match('/INSERT INTO `\w+` \(([^)]+)\) VALUES/s', $sql, $colMatch)) {
+            return $sql;
+        }
+
+        $columns = array_map(fn ($c) => trim($c, " `\t\n\r"), explode(',', $colMatch[1]));
+
+        // 找出需要移除的列索引
+        $removeIndexes = [];
+        foreach ($columns as $i => $col) {
+            if (! isset($targetColumns[$col])) {
+                $removeIndexes[] = $i;
+            }
+        }
+
+        if (empty($removeIndexes)) {
+            return $sql;
+        }
+
+        $removedNames = array_map(fn ($i) => $columns[$i], $removeIndexes);
+        $this->output->writeln("<comment>  跳过列 [$table]：".implode(', ', $removedNames).'</comment>');
+
+        // 构建新的列列表
+        $keepColumns = [];
+        foreach ($columns as $i => $col) {
+            if (! in_array($i, $removeIndexes)) {
+                $keepColumns[] = "`$col`";
+            }
+        }
+        $newColumnList = implode(', ', $keepColumns);
+
+        // 提取 VALUES 部分并逐行移除对应位置的值
+        if (! preg_match('/VALUES\s*(.+);$/s', $sql, $valMatch)) {
+            return $sql;
+        }
+
+        $rows = $this->splitValueRows($valMatch[1]);
+
+        $newRows = [];
+        foreach ($rows as $rowStr) {
+            $values = $this->parseValueRow($rowStr);
+            $kept = [];
+            foreach ($values as $i => $val) {
+                if (! in_array($i, $removeIndexes)) {
+                    $kept[] = $val;
+                }
+            }
+            $newRows[] = '('.implode(', ', $kept).')';
+        }
+
+        return "INSERT INTO `$table` ($newColumnList) VALUES\n".implode(",\n", $newRows).';';
     }
 
     /**
@@ -182,6 +254,7 @@ class UserDataImporter
 
     /**
      * 解析 SQL 文件，按表名分组 INSERT 语句
+     * 使用引号感知的解析，正确处理 VALUES 中包含分号的数据
      *
      * @return array<string, string[]> 表名 => INSERT 语句列表
      */
@@ -189,16 +262,110 @@ class UserDataImporter
     {
         $content = file_get_contents($filePath);
         $statements = [];
+        $length = strlen($content);
+        $search = 'INSERT INTO `';
+        $pos = 0;
 
-        // 匹配所有 INSERT INTO 语句
-        preg_match_all('/INSERT INTO `(\w+)`[^;]+;/s', $content, $matches, PREG_SET_ORDER);
+        while (($pos = strpos($content, $search, $pos)) !== false) {
+            $tableStart = $pos + strlen($search);
+            $tableEnd = strpos($content, '`', $tableStart);
+            if ($tableEnd === false) {
+                break;
+            }
+            $table = substr($content, $tableStart, $tableEnd - $tableStart);
 
-        foreach ($matches as $match) {
-            $table = $match[1];
-            $statements[$table][] = $match[0];
+            // 从表名之后开始，找到引号外的分号作为语句结束
+            $start = $pos;
+            $i = $tableEnd + 1;
+            $inQuote = false;
+            $quoteChar = '';
+            $escaped = false;
+
+            while ($i < $length) {
+                $char = $content[$i];
+
+                if ($escaped) {
+                    $escaped = false;
+                    $i++;
+
+                    continue;
+                }
+
+                if ($char === '\\') {
+                    $escaped = true;
+                    $i++;
+
+                    continue;
+                }
+
+                if (! $inQuote && ($char === '\'' || $char === '"')) {
+                    $inQuote = true;
+                    $quoteChar = $char;
+                    $i++;
+
+                    continue;
+                }
+
+                if ($inQuote && $char === $quoteChar) {
+                    // MySQL 双写转义：'' 或 ""
+                    if (isset($content[$i + 1]) && $content[$i + 1] === $quoteChar) {
+                        $i += 2;
+
+                        continue;
+                    }
+                    $inQuote = false;
+                    $i++;
+
+                    continue;
+                }
+
+                if (! $inQuote && $char === ';') {
+                    $i++;
+
+                    break;
+                }
+
+                $i++;
+            }
+
+            $statements[$table][] = substr($content, $start, $i - $start);
+            $pos = $i;
         }
 
         return $statements;
+    }
+
+    /**
+     * 提取导出文件中各表的雪花 ID（供 purge 清理孤立数据用）
+     *
+     * @return array<string, int[]> 表名 => ID 列表
+     */
+    public function extractTableIds(string $filePath): array
+    {
+        $statements = $this->parseStatements($filePath);
+        $result = [];
+
+        foreach ($statements as $table => $inserts) {
+            $ids = $this->extractPrimaryKeys($table, $inserts);
+            if (! empty($ids)) {
+                $result[$table] = $ids;
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * 统计 INSERT 语句中的实际行数
+     */
+    private function countInsertRows(array $inserts): int
+    {
+        $count = 0;
+        foreach ($inserts as $sql) {
+            $count += preg_match_all('/\)\s*,\s*\(/', $sql) + 1;
+        }
+
+        return $count;
     }
 
     /**
@@ -220,19 +387,12 @@ class UserDataImporter
                 continue;
             }
 
-            // 提取 VALUES 中的每组值
+            // 提取 VALUES 部分并按行分割
             if (! preg_match('/VALUES\s*(.+);$/s', $sql, $valMatch)) {
                 continue;
             }
 
-            // 逐个解析值组 - 按 ),( 分割（简化处理）
-            $valuesStr = $valMatch[1];
-            // 去掉最外层括号
-            $valuesStr = preg_replace('/^\s*\(/', '', $valuesStr);
-            $valuesStr = preg_replace('/\)\s*$/', '', $valuesStr);
-
-            // 按 "),\n(" 或 "),(" 分割各行
-            $rows = preg_split('/\)\s*,\s*\(/', $valuesStr);
+            $rows = $this->splitValueRows($valMatch[1]);
 
             foreach ($rows as $rowStr) {
                 // 解析该行的值，提取第 $idIndex 个
@@ -247,6 +407,87 @@ class UserDataImporter
         }
 
         return $ids;
+    }
+
+    /**
+     * 将 VALUES 部分按行分割（引号感知，不会被字段值中的 ),( 干扰）
+     *
+     * @param  string  $valuesStr  VALUES 后的完整内容（含外层括号和末尾分号）
+     * @return string[] 每行去掉外层括号后的内容
+     */
+    private function splitValueRows(string $valuesStr): array
+    {
+        $rows = [];
+        $length = strlen($valuesStr);
+        $i = 0;
+
+        while ($i < $length) {
+            // 找到行开头的 (
+            $openPos = strpos($valuesStr, '(', $i);
+            if ($openPos === false) {
+                break;
+            }
+
+            // 从 ( 之后开始，找到引号外的 )
+            $j = $openPos + 1;
+            $inQuote = false;
+            $quoteChar = '';
+            $escaped = false;
+
+            while ($j < $length) {
+                $char = $valuesStr[$j];
+
+                if ($escaped) {
+                    $escaped = false;
+                    $j++;
+
+                    continue;
+                }
+
+                if ($char === '\\') {
+                    $escaped = true;
+                    $j++;
+
+                    continue;
+                }
+
+                if (! $inQuote && ($char === '\'' || $char === '"')) {
+                    $inQuote = true;
+                    $quoteChar = $char;
+                    $j++;
+
+                    continue;
+                }
+
+                if ($inQuote && $char === $quoteChar) {
+                    if (isset($valuesStr[$j + 1]) && $valuesStr[$j + 1] === $quoteChar) {
+                        $j += 2;
+
+                        continue;
+                    }
+                    $inQuote = false;
+                    $j++;
+
+                    continue;
+                }
+
+                if (! $inQuote && $char === ')') {
+                    // 提取括号内的内容
+                    $rows[] = substr($valuesStr, $openPos + 1, $j - $openPos - 1);
+                    $i = $j + 1;
+
+                    break;
+                }
+
+                $j++;
+            }
+
+            if ($j >= $length) {
+                break;
+            }
+        }
+
+        return $rows;
     }
 
     /**
@@ -286,6 +527,13 @@ class UserDataImporter
             }
 
             if ($inQuote && $char === $quoteChar) {
+                // MySQL 双写转义：'' 或 ""
+                if (isset($row[$i + 1]) && $row[$i + 1] === $quoteChar) {
+                    $current .= $char.$row[$i + 1];
+                    $i++;
+
+                    continue;
+                }
                 $inQuote = false;
                 $current .= $char;
 

@@ -128,11 +128,9 @@ Route::prefix('admin')->middleware('api.admin')->group(function () {
         Route::post('upload-document/{id}', [OrderController::class, 'uploadDocument'])->where('id', '[0-9]+');
         Route::get('document-preview/{id}', [OrderController::class, 'previewDocument'])->where('id', '[0-9]+');
         Route::get('documents/{id}', [OrderController::class, 'getDocuments'])->where('id', '[0-9]+');
+        Route::patch('document/{id}', [OrderController::class, 'updateDocument'])->where('id', '[0-9]+');
         Route::delete('document/{id}', [OrderController::class, 'deleteDocument'])->where('id', '[0-9]+');
         Route::post('submit-documents/{id}', [OrderController::class, 'submitDocuments'])->where('id', '[0-9]+');
-        Route::get('verification-report/{id}', [OrderController::class, 'getVerificationReport'])->where('id', '[0-9]+');
-        Route::post('verification-report/{id}', [OrderController::class, 'saveVerificationReport'])->where('id', '[0-9]+');
-        Route::post('submit-verification-report/{id}', [OrderController::class, 'submitVerificationReport'])->where('id', '[0-9]+');
     });
 
     // 证书路由

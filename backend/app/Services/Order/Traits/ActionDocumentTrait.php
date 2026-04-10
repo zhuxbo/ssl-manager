@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Services\Order\Traits;
 
 use App\Models\OrderDocument;
-use App\Models\OrderVerificationReport;
 use App\Services\Order\Utils\FindUtil;
 use App\Traits\ApiResponse;
 use Illuminate\Http\UploadedFile;
@@ -16,7 +15,7 @@ trait ActionDocumentTrait
 {
     use ApiResponse;
 
-    private const ALLOWED_EXTENSIONS = ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx', 'xades'];
+    private const ALLOWED_EXTENSIONS = ['pdf', 'jpg', 'jpeg', 'png', 'xades'];
 
     private const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 
@@ -25,7 +24,7 @@ trait ActionDocumentTrait
     /**
      * 上传文档（文件方式）
      */
-    public function uploadDocument(int $orderId, UploadedFile $file, string $type, string $uploadedBy, ?string $description = null): void
+    public function uploadDocument(int $orderId, UploadedFile $file, string $type, string $uploadedBy): void
     {
         $order = FindUtil::Order($orderId);
 
@@ -48,7 +47,6 @@ trait ActionDocumentTrait
             'file_name' => $fileName,
             'file_path' => $relativePath,
             'file_size' => $file->getSize(),
-            'description' => $description,
             'uploaded_by' => $uploadedBy,
         ]);
 
@@ -58,7 +56,7 @@ trait ActionDocumentTrait
     /**
      * 上传文档（base64 方式，用于 V2 API 接收）
      */
-    public function uploadDocumentFromBase64(int $orderId, string $type, string $fileName, string $base64Content, ?string $description = null): void
+    public function uploadDocumentFromBase64(int $orderId, string $type, string $fileName, string $base64Content): void
     {
         $order = FindUtil::Order($orderId);
 
@@ -87,7 +85,6 @@ trait ActionDocumentTrait
             'file_name' => $fileName,
             'file_path' => $relativePath,
             'file_size' => strlen($content),
-            'description' => $description,
             'uploaded_by' => 'api',
         ]);
 
@@ -124,8 +121,6 @@ trait ActionDocumentTrait
             'jpg' => 'image/jpeg',
             'jpeg' => 'image/jpeg',
             'png' => 'image/png',
-            'doc' => 'application/msword',
-            'docx' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
             'xades' => 'application/xml',
         ];
 
@@ -138,6 +133,19 @@ trait ActionDocumentTrait
             'Content-Disposition' => "inline; filename*=UTF-8''$safeName",
             'Cache-Control' => 'private, max-age=3600',
         ]);
+    }
+
+    /**
+     * 更新文档信息
+     */
+    public function updateDocument(int $docId, string $fileName, string $type): void
+    {
+        $document = OrderDocument::findOrFail($docId);
+        $document->update([
+            'file_name' => $fileName,
+            'type' => $type,
+        ]);
+        $this->success();
     }
 
     /**
@@ -162,7 +170,7 @@ trait ActionDocumentTrait
     {
         $order = FindUtil::Order($orderId);
         $apiId = $order->latestCert->api_id;
-        ! $apiId && $this->error('订单尚未提交到上游，无法提交文档');
+        ! $apiId && $this->error('订单尚未提交，无法提交文档');
 
         $documents = OrderDocument::where('order_id', $orderId)
             ->where('submitted', 0)
@@ -187,7 +195,6 @@ trait ActionDocumentTrait
                     'type' => $document->type,
                     'fileName' => $document->file_name,
                     'document_content' => $base64Content,
-                    'description' => $document->description,
                 ]);
 
                 if (($result['code'] ?? 0) === 1) {
@@ -201,76 +208,6 @@ trait ActionDocumentTrait
         }
 
         ! empty($failed) && $this->error('部分文档提交失败', $failed);
-        $this->success();
-    }
-
-    /**
-     * 获取验证报告
-     */
-    public function getVerificationReport(int $orderId): void
-    {
-        $order = FindUtil::Order($orderId);
-        $order->load(['product:id,validation_type', 'latestCert:id,common_name']);
-
-        $report = OrderVerificationReport::where('order_id', $orderId)->first();
-
-        // 尝试从联系人模型获取证件号码
-        $contact = $order->contact ?? [];
-        if (! empty($contact['email'])) {
-            $contactModel = \App\Models\Contact::where('user_id', $order->user_id)
-                ->where('email', $contact['email'])
-                ->first();
-            if ($contactModel?->identification_number) {
-                $contact['identification_number'] = $contactModel->identification_number;
-            }
-        }
-
-        $this->success([
-            'report' => $report?->toArray(),
-            'prefill' => [
-                'organization' => $order->organization,
-                'contact' => $contact,
-            ],
-        ]);
-    }
-
-    /**
-     * 保存验证报告
-     */
-    public function saveVerificationReport(int $orderId, array $reportData): void
-    {
-        $order = FindUtil::Order($orderId);
-
-        OrderVerificationReport::updateOrCreate(
-            ['order_id' => $orderId],
-            ['user_id' => $order->user_id, 'report_data' => $reportData, 'submitted' => 0]
-        );
-
-        $this->success();
-    }
-
-    /**
-     * 提交验证报告到上游
-     */
-    public function submitVerificationReport(int $orderId): void
-    {
-        $order = FindUtil::Order($orderId);
-        $apiId = $order->latestCert->api_id;
-        ! $apiId && $this->error('订单尚未提交到上游，无法提交验证报告');
-
-        $report = OrderVerificationReport::where('order_id', $orderId)->first();
-        ! $report && $this->error('验证报告不存在');
-
-        $result = $this->api->submitVerificationReport($orderId, [
-            'order_id' => $apiId,
-            'report_data' => $report->report_data,
-        ]);
-
-        if (($result['code'] ?? 0) !== 1) {
-            $this->error($result['msg'] ?? '提交失败');
-        }
-
-        $report->update(['submitted' => 1]);
         $this->success();
     }
 }

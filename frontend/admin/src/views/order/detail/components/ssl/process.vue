@@ -31,7 +31,7 @@
           </td>
           <td class="content">企业验证</td>
         </tr>
-        <!-- OV/EV Certum 文档上传和验证报告 -->
+        <!-- OV/EV Certum 文档上传 -->
         <tr
           v-if="
             order.product.validation_type !== 'dv' &&
@@ -42,7 +42,6 @@
           <td class="content">
             <Documents v-if="hasDocuments" />
             <DocumentUpload />
-            <VerificationReport />
           </td>
         </tr>
         <!-- SSL 域名验证 -->
@@ -95,7 +94,6 @@ import Install from "./install.vue";
 import Deploy from "./deploy.vue";
 import Documents from "../documents.vue";
 import DocumentUpload from "../documentUpload.vue";
-import VerificationReport from "../verificationReport.vue";
 import { ElButton } from "element-plus";
 import { Select } from "@element-plus/icons-vue";
 import dayjs from "dayjs";

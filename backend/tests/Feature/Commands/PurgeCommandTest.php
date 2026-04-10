@@ -2,7 +2,6 @@
 
 use App\Models\Fund;
 use App\Models\OrderDocument;
-use App\Models\OrderVerificationReport;
 use App\Models\User;
 use Tests\Traits\CreatesTestData;
 
@@ -114,23 +113,6 @@ test('不清理 unpaid/pending/processing/approving 状态订单的文档', func
         unlink(storage_path("app/$filePath"));
         rmdir($dir);
     }
-});
-
-test('保留验证报告表单', function () {
-    $user = $this->createTestUser();
-    $product = $this->createTestProduct();
-    $order = $this->createTestOrder($user, $product);
-    $this->createTestCert($order, ['status' => 'active']);
-
-    $report = OrderVerificationReport::create([
-        'order_id' => $order->id,
-        'user_id' => $user->id,
-        'report_data' => ['org' => 'Test Corp'],
-    ]);
-
-    $this->artisan('schedule:purge')->assertSuccessful();
-
-    expect(OrderVerificationReport::find($report->id))->not->toBeNull();
 });
 
 test('清理无记录的孤立 verification 目录', function () {

@@ -292,17 +292,12 @@ export function uploadDocument(
   );
 }
 
-/** 预览文档（返回 blob URL） */
-export function previewDocument(id: number): Promise<string> {
-  return http
-    .get<
-      any,
-      any
-    >(`/order/document-preview/${id}`, { params: { _t: Date.now() } }, { responseType: "blob" })
-    .then((res: any) => {
-      const blob = res instanceof Blob ? res : new Blob([res]);
-      return URL.createObjectURL(blob);
-    });
+/** 更新文档信息（文件名、类型） */
+export function updateDocument(
+  id: number,
+  data: { file_name: string; type: string }
+): Promise<BaseResponse> {
+  return http.request<BaseResponse>("patch", `/order/document/${id}`, { data });
 }
 
 /** 获取文档列表 */
@@ -315,19 +310,12 @@ export function deleteDocument(id: number): Promise<BaseResponse> {
   return http.delete<BaseResponse<null>, any>(`/order/document/${id}`);
 }
 
-/** 获取验证报告 */
-export function getVerificationReport(id: number): Promise<BaseResponse> {
-  return http.get<BaseResponse<null>, any>(`/order/verification-report/${id}`);
-}
-
-/** 保存验证报告 */
-export function saveVerificationReport(
-  id: number,
-  reportData: any
-): Promise<BaseResponse> {
+/** 提交文档到上游 */
+export function submitDocuments(id: number): Promise<BaseResponse> {
   return http.post<BaseResponse<null>, any>(
-    `/order/verification-report/${id}`,
-    { data: { report_data: reportData } }
+    `/order/submit-documents/${id}`,
+    {},
+    { timeout: 300000 }
   );
 }
 

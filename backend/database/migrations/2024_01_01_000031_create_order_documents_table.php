@@ -17,7 +17,6 @@ return new class extends Migration
                 $table->string('file_name', 255)->comment('原始文件名');
                 $table->string('file_path', 500)->comment('相对路径');
                 $table->unsignedInteger('file_size')->comment('文件大小(bytes)');
-                $table->string('description', 255)->nullable()->comment('描述');
                 $table->string('uploaded_by', 10)->comment('上传来源: user/admin/api');
                 $table->unsignedTinyInteger('submitted')->default(0)->comment('是否已提交到上游');
                 $table->timestamps();

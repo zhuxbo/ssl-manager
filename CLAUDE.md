@@ -94,19 +94,18 @@ skills/         # 开发规范（详细文档）
 - **取消/吊销不静默成功**：上游接口未返回明确成功时，一律返回失败；不允许跳过上游调用直接标记本地状态
 - **ACME 计费流程**：`Action` 三步流程 `new→pay→commit` 详见"ACME 订阅管理"章节
 - **ACME 取消策略**：未提交上游（无 api_id）的 pending 订单直接退费取消；已提交上游的订单通过延时任务调 Api->cancel() 后退费
-- **Action 无 userId 构造参数**：`Acme\Action` 和 `Order\Action` 均无 `userId` 构造参数，通过 `app(Action::class)` 获取实例。用户隔离由 UserScope 全局作用域保证（`Authenticate`/`ApiAuthenticate` 中间件注册 Acme、ApiToken、Callback、CnameDelegation、Order、Fund、Transaction、Organization、Contact、OrderDocument、OrderVerificationReport），控制器在创建方法的 params 中传入 `user_id`。UserScope `apply()` 无条件执行 `where('user_id', ...)`，不做零值跳过
+- **Action 无 userId 构造参数**：`Acme\Action` 和 `Order\Action` 均无 `userId` 构造参数，通过 `app(Action::class)` 获取实例。用户隔离由 UserScope 全局作用域保证（`Authenticate`/`ApiAuthenticate` 中间件注册 Acme、ApiToken、Callback、CnameDelegation、Order、Fund、Transaction、Organization、Contact、OrderDocument），控制器在创建方法的 params 中传入 `user_id`。UserScope `apply()` 无条件执行 `where('user_id', ...)`，不做零值跳过
 - **ACME Action 统一封装上游 API 调用**：所有上游 API 调用（new/get/cancel 等）必须通过 `Services/Acme/Action`，不允许控制器直接调 `Api`。操作方法接收 ID（int），创建方法接收参数数组。内部负责模型查询、参数过滤、返回值校正、重复提交防护、状态入库。控制器仅做请求验证 + 一行调用 Action
 
 ### Certum 验证文档上传
 
-- **独立表**：`order_documents`（本地上传的文档）、`order_verification_reports`（验证报告表单）
+- **独立表**：`order_documents`（本地上传的文档）
 - **不改 Cert.documents**：该字段仅存 Certum 同步回来的审核状态（只读），职责不同
-- **多级代理传递**：用户/Admin 上传 → `order_documents` 表 → Admin 提交到上游（base64 via V2 API）→ 逐级到 上游系统 → Certum SOAP
-- **V2 端点**：`POST /api/v2/upload-document`（接收下游 base64）、`POST /api/v2/save-verification-report`（接收报告 JSON，仅存库）
-- **验证报告**：Manager 采集表单 → JSON 提交到 上游系统 → 上游系统 生成 PDF（dompdf）→ 管理员签名 → 上传 Certum
+- **多级代理传递**：用户/Admin 上传 → `order_documents` 表 → 提交到上游（base64 via V2 API）→ 逐级到 上游系统 → Certum SOAP
+- **V2 端点**：`POST /api/v2/upload-document`（接收下游 base64）
 - **显示条件**：`brand.toLowerCase() === 'certum'` 且 `validation_type !== 'dv'`
-- **文件限制**：单文件 5MB，类型 PDF/JPG/PNG/DOC/DOCX/XADES，控制器层 `mimes` 验证
-- **上游系统 清理**：移除 quickOrder 中的可选字段 streetAddress/postalCode
+- **文件限制**：单文件 5MB，类型 PDF/JPG/JPEG/PNG/XADES，控制器层 `mimes` 验证
+- **提交权限**：Admin 和 User 均可提交文档到上游
 
 ### 自动续费/重签
 

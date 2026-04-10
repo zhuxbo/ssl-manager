@@ -114,14 +114,14 @@ class ApiController extends Controller
 
     public function getOrders(): void
     {
-        $page = $this->request->input('page', 1) ?? 1;
+        $page = max((int) ($this->request->input('page', 1) ?? 1), 1);
         $pageSize = min(max((int) ($this->request->input('page_size', 100) ?? 100), 1), 100);
         $status = $this->request->input('status', 'all') ?? 'all';
 
         $whereStatus = [];
         $status !== 'all' && $whereStatus[] = ['status', '=', $status];
 
-        $res = Order::with([
+        $query = Order::with([
             'product' => function ($query) {
                 $query->select(['id', 'code']);
             },
@@ -154,18 +154,20 @@ class ApiController extends Controller
                 'updated_at',
             ])
             ->where('user_id', '=', $this->user_id)
-            ->orderBy('id', 'DESC')
-            ->limit($pageSize)
-            ->offset(($page - 1) * $pageSize)
-            ->get();
+            ->orderBy('id', 'DESC');
+
+        $total = $query->count();
+        $res = $query->limit($pageSize)->offset(($page - 1) * $pageSize)->get();
 
         $data = [];
         /** @var Order $item */
         foreach ($res as $item) {
             $cert = $item->latestCert->toArray();
             unset($cert['id'], $cert['intermediate_cert']);
-            $product = $item->product->toArray();
-            unset($product['id']);
+            $product = $item->product?->toArray(); // @phpstan-ignore nullsafe.neverNull
+            if ($product) {
+                unset($product['id']);
+            }
             $order = $item->toArray();
             unset($order['id'], $order['product_id'], $order['latest_cert_id'], $order['product'], $order['latest_cert']);
 
@@ -176,7 +178,12 @@ class ApiController extends Controller
             ];
         }
 
-        $this->success($data);
+        $this->success([
+            'total' => $total,
+            'page' => $page,
+            'page_size' => $pageSize,
+            'data' => $data,
+        ]);
     }
 
     /**
@@ -689,7 +696,6 @@ class ApiController extends Controller
         $type = $this->request->input('type', '');
         $fileName = $this->request->input('fileName', '');
         $documentContent = $this->request->input('document_content', '');
-        $description = $this->request->input('description');
 
         ! $orderId && $this->error('order_id is required');
         ! $type && $this->error('type is required');
@@ -700,25 +706,7 @@ class ApiController extends Controller
         $order = Order::where('id', $orderId)->where('user_id', $this->user_id)->first();
         ! $order && $this->error('Order not found');
 
-        $this->action->uploadDocumentFromBase64($orderId, $type, $fileName, $documentContent, $description);
-    }
-
-    /**
-     * 保存验证报告（接收下游报告数据）
-     */
-    public function saveVerificationReport(): void
-    {
-        $orderId = (int) $this->request->input('order_id');
-        $reportData = $this->request->input('report_data', []);
-
-        ! $orderId && $this->error('order_id is required');
-        empty($reportData) && $this->error('report_data is required');
-
-        // 验证订单归属当前用户
-        $order = Order::where('id', $orderId)->where('user_id', $this->user_id)->first();
-        ! $order && $this->error('Order not found');
-
-        $this->action->saveVerificationReport($orderId, $reportData);
+        $this->action->uploadDocumentFromBase64($orderId, $type, $fileName, $documentContent);
     }
 
     /**

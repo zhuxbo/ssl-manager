@@ -231,7 +231,7 @@ class OrderUtil
             if (is_array($value)) {
                 // 如果是数组，递归调用
                 $newArray[$key] = self::convertNumericValues($value);
-            } elseif (is_numeric($value) && (! is_string($value) || ! preg_match('/[eE]/', $value))) {
+            } elseif (is_numeric($value) && (! is_string($value) || (! preg_match('/[eE]/', $value) && strlen($value) <= 15))) {
                 $newArray[$key] = $value + 0;
             } else {
                 // 非数字保持原样

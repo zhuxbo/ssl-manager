@@ -264,14 +264,6 @@ class Api implements OrderSourceApiInterface
     }
 
     /**
-     * 提交验证报告到上游
-     */
-    public function submitVerificationReport(array $data): array
-    {
-        return $this->sdk->submitVerificationReport($data);
-    }
-
-    /**
      * 生成唯一值 Unique Value
      */
     protected function generateUniqueValue(): string

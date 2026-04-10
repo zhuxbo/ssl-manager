@@ -229,7 +229,7 @@ class UserDataCommand extends Command
         $this->info("\n开始清理用户数据...");
 
         try {
-            $purger = new UserDataPurger($this->output, $chunkSize);
+            $purger = new UserDataPurger($this->output, $chunkSize, $latestFile);
             $purger->purge($user);
 
             $this->newLine();

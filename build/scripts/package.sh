@@ -329,7 +329,7 @@ if [ -d "$PRODUCTION_DIR/frontend" ]; then
             create_exclude_file "upgrade" "$FRONTEND_EXCLUDE_FILE" "frontend/$app/"
 
             rsync -a --exclude-from="$FRONTEND_EXCLUDE_FILE" "$PRODUCTION_DIR/frontend/$app/" "$UPGRADE_DIR/frontend/$app/"
-            log_info "升级包已包含前端: $app（已排除用户配置）"
+            log_info "升级包已包含前端: $app (已排除用户配置)"
         fi
     done
 fi

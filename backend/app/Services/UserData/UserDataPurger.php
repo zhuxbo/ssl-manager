@@ -4,6 +4,7 @@ namespace App\Services\UserData;
 
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Symfony\Component\Console\Output\OutputInterface;
 use Throwable;
 
@@ -13,10 +14,13 @@ class UserDataPurger
 
     private int $chunkSize;
 
-    public function __construct(OutputInterface $output, int $chunkSize = 1000)
+    private ?string $exportFilePath;
+
+    public function __construct(OutputInterface $output, int $chunkSize = 1000, ?string $exportFilePath = null)
     {
         $this->output = $output;
         $this->chunkSize = $chunkSize;
+        $this->exportFilePath = $exportFilePath;
     }
 
     /**
@@ -28,6 +32,9 @@ class UserDataPurger
     {
         $this->output->writeln("分批大小：{$this->chunkSize} 条/批");
 
+        // 清理文档文件（在删除数据库记录之前）
+        $this->deleteDocumentFiles($user->id);
+
         // 按顺序删除
         foreach (UserDataTableRegistry::purgeOrder() as $item) {
             match ($item['type']) {
@@ -35,6 +42,11 @@ class UserDataPurger
                 'indirect' => $this->deleteIndirectTable($item['table'], $item['name'], $user),
                 'direct' => $this->deleteDirectTable($item['table'], $item['name'], $user->id),
             };
+        }
+
+        // 清理孤立的间接关联数据（导入失败导致 orders 缺失时，certs 等无法通过子查询删除）
+        if ($this->exportFilePath) {
+            $this->cleanupOrphans();
         }
 
         // 动态表
@@ -133,6 +145,77 @@ class UserDataPurger
             $count,
             '通知'
         );
+    }
+
+    /**
+     * 清理孤立的间接关联数据
+     * 通过导出文件中记录的雪花 ID 直接定位并删除
+     *
+     * @throws Throwable
+     */
+    private function cleanupOrphans(): void
+    {
+        $importer = new UserDataImporter($this->output);
+        $tableIds = $importer->extractTableIds($this->exportFilePath);
+
+        foreach (UserDataTableRegistry::indirectTables() as $item) {
+            $ids = $tableIds[$item['table']] ?? [];
+            if (empty($ids)) {
+                continue;
+            }
+
+            if (! DB::getSchemaBuilder()->hasTable($item['table'])) {
+                continue;
+            }
+
+            // 查找仍然残留的记录
+            $remaining = [];
+            foreach (array_chunk($ids, 1000) as $chunk) {
+                $found = DB::table($item['table'])->whereIn('id', $chunk)->pluck('id')->all();
+                $remaining = array_merge($remaining, $found);
+            }
+
+            if (empty($remaining)) {
+                continue;
+            }
+
+            $this->output->writeln("清理孤立{$item['name']} (".count($remaining).' 条)...');
+            foreach (array_chunk($remaining, $this->chunkSize) as $chunk) {
+                DB::transaction(fn () => DB::table($item['table'])->whereIn('id', $chunk)->delete());
+            }
+        }
+    }
+
+    /**
+     * 清理 order_documents 关联的物理文件
+     */
+    private function deleteDocumentFiles(int $userId): void
+    {
+        if (! DB::getSchemaBuilder()->hasTable('order_documents')) {
+            return;
+        }
+
+        $orderIds = DB::table('order_documents')
+            ->where('user_id', $userId)
+            ->distinct()
+            ->pluck('order_id');
+
+        if ($orderIds->isEmpty()) {
+            return;
+        }
+
+        $fileCount = 0;
+        foreach ($orderIds as $orderId) {
+            $dir = "verification/$orderId";
+            if (Storage::exists($dir)) {
+                Storage::deleteDirectory($dir);
+                $fileCount++;
+            }
+        }
+
+        if ($fileCount > 0) {
+            $this->output->writeln("清理文档文件 ($fileCount 个目录)...");
+        }
     }
 
     /**

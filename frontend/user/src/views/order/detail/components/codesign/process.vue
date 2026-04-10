@@ -42,7 +42,6 @@
           <td class="content">
             <Documents v-if="hasDocuments" />
             <DocumentUpload />
-            <VerificationReport />
           </td>
         </tr>
         <tr>
@@ -64,7 +63,6 @@ import { statusType, status } from "@/views/order/dictionary";
 import Operate from "./operate.vue";
 import Documents from "../documents.vue";
 import DocumentUpload from "../documentUpload.vue";
-import VerificationReport from "../verificationReport.vue";
 import { ElButton } from "element-plus";
 import { Select } from "@element-plus/icons-vue";
 import dayjs from "dayjs";

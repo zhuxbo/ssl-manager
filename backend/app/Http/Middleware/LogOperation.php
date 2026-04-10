@@ -30,6 +30,7 @@ class LogOperation
         'api/v2/*/health',
         'acme/*',
         '.well-known/*',
+        '*document-preview*',
         '_debugger/*',
         '_ignition/*',
     ];
@@ -40,7 +41,6 @@ class LogOperation
     protected array $excludeResponsePaths = [
         '*download*',
         '*export*',
-        '*document-preview*',
     ];
 
     /**
