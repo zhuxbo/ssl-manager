@@ -546,7 +546,7 @@ show_summary() {
     echo "将部署以下服务:"
     echo "  - Nginx (Web 服务器)"
     echo "  - PHP-FPM 8.3 (应用服务器)"
-    [ "$USE_CONTAINER_DB" = true ] && echo "  - MySQL 8.0 (数据库)"
+    [ "$USE_CONTAINER_DB" = true ] && echo "  - MySQL 8.4 (数据库, $MYSQL_PROFILE)"
     [ "$USE_CONTAINER_REDIS" = true ] && echo "  - Redis 7 (缓存)"
     echo "  - Queue Worker (队列处理)"
     echo "  - Scheduler (定时任务)"

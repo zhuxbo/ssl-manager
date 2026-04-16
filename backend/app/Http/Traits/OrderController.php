@@ -285,10 +285,20 @@ trait OrderController
         }
         $token = $deployToken->token;
 
-        $releaseDomain = rtrim(get_system_setting('site', 'releaseDomain', 'release.cnssl.com'), '/');
-        $releaseUrl = "https://$releaseDomain";
         $siteUrl = rtrim(get_system_setting('site', 'url'), '/');
         $deployUrl = "$siteUrl/api/deploy";
+        $releaseDomain = rtrim((string) get_system_setting('site', 'releaseDomain'), '/');
+
+        if ($releaseDomain) {
+            $releaseUrl = "https://$releaseDomain";
+        } else {
+            $releaseDomain = parse_url($siteUrl, PHP_URL_HOST);
+            $port = parse_url($siteUrl, PHP_URL_PORT);
+            if ($port) {
+                $releaseDomain .= ":$port";
+            }
+            $releaseUrl = "$siteUrl/release";
+        }
 
         $this->success([
             'install' => [

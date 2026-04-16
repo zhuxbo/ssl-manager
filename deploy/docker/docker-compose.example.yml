@@ -123,7 +123,8 @@ services:
     container_name: ssl-manager-mysql
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      # MySQL root 密码与应用账户密码共用（仅首次初始化数据卷时使用）
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
       MYSQL_DATABASE: ${DB_DATABASE:-ssl_manager}
       MYSQL_USER: ${DB_USERNAME:-ssl_manager}
       MYSQL_PASSWORD: ${DB_PASSWORD}
