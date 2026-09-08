@@ -1,5 +1,6 @@
 <?php
 
+use AlibabaCloud\Oss\V2\Exception\ServiceException;
 use AlibabaCloud\Tea\Exception\TeaError;
 use App\Models\Cert;
 use App\Models\Chain;
@@ -7,13 +8,17 @@ use App\Models\Order;
 use App\Models\User;
 use App\Services\Notification\DTOs\NotificationIntent;
 use App\Services\Notification\NotificationCenter;
+use Aws\Command;
+use Aws\Exception\AwsException;
 use Darabonba\OpenApi\Exceptions\ClientException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Plugins\CloudDeploy\Deployers\Aliyun\AliyunCasDeployer;
+use Plugins\CloudDeploy\Deployers\Aliyun\AliyunCasUploader;
 use Plugins\CloudDeploy\Deployers\Aliyun\AliyunErrorSanitizer;
+use Plugins\CloudDeploy\Deployers\Aws\AwsAcmUploader;
 use Plugins\CloudDeploy\Deployers\Contracts\AbstractDeployer;
 use Plugins\CloudDeploy\Deployers\Contracts\CertificateDeliveryMode;
 use Plugins\CloudDeploy\Deployers\Contracts\CertUploaderInterface;
@@ -25,6 +30,7 @@ use Plugins\CloudDeploy\Deployers\Contracts\SelectsCertificateDeliveryMode;
 use Plugins\CloudDeploy\Deployers\Registry;
 use Plugins\CloudDeploy\Deployers\Tencent\TencentErrorSanitizer;
 use Plugins\CloudDeploy\Deployers\Tencent\TencentSslUpdateDeployer;
+use Plugins\CloudDeploy\Deployers\Tencent\TencentSslUploader;
 use Plugins\CloudDeploy\Jobs\CloudDeployJob;
 use Plugins\CloudDeploy\Models\CloudDeployAccess;
 use Plugins\CloudDeploy\Models\CloudDeployLog;
@@ -1695,3 +1701,67 @@ test('真实阿里云 CAS 出站拒绝保留具体原因到部署日志且不抛
     $log = CloudDeployLog::where('target_id', $target->id)->sole();
     expect($log->message)->toContain('DNS 解析失败')->not->toContain('OutboundDestinationException');
 });
+
+test('阿里签名错误的请求回显不会经上传器进入部署日志', function (string $sdk) {
+    $echo = 'Specified signature does not match our calculation. server StringToSign is [ACS3-HMAC-SHA256 HASH] '
+        .'server CanonicalRequest is [POST / Cert=-----BEGIN CERTIFICATE-----%0ACERT-BODY&Key=-----BEGIN PRIVATE KEY-----%0APRIVATE-BODY]';
+    $error = match ($sdk) {
+        'tea' => new TeaError(['code' => 'SignatureDoesNotMatch', 'message' => $echo, 'data' => ['Message' => $echo]]),
+        'openapi' => new ClientException([
+            'statusCode' => 403, 'code' => 'SignatureDoesNotMatch', 'message' => $echo,
+            'description' => $echo, 'data' => ['Message' => $echo], 'accessDeniedDetail' => [], 'requestId' => 'test',
+        ]),
+        'oss' => new ServiceException(['code' => 'SignatureDoesNotMatch', 'message' => $echo]),
+    };
+    $uploader = new AliyunCasUploader(fn () => throw $error);
+    try {
+        $uploader->upload('CERT', 'KEY', 'CHAIN', []);
+        test()->fail('上传器应抛出已脱敏异常');
+    } catch (RuntimeException $safe) {
+        expect($safe->getPrevious())->toBeNull();
+        expect($safe->getMessage())->toBe('[SignatureDoesNotMatch] 阿里云请求签名不匹配，请检查 AccessKey ID 与 AccessKey Secret');
+    }
+    bindFakeRegistry('aliyun', 'cdn', fn () => jobThrowingDeployer($safe));
+    [$target, $cert] = makeTargetWithCert('aliyun', 'cdn');
+    Log::shouldReceive('error')->never();
+    foreach ([1, 5] as $attempt) {
+        $job = (new CloudDeployJob($target->id, $cert->id))->withFakeQueueInteractions();
+        $job->job->attempts = $attempt;
+        $job->handle();
+    }
+    expect($target->fresh()->last_error)->toBe($safe->getMessage());
+    expect(CloudDeployLog::where('target_id', $target->id)->pluck('message')->unique()->all())->toBe([$safe->getMessage()]);
+    expect(CloudDeployLog::where('target_id', $target->id)->where('is_final', true)->exists())->toBeTrue();
+})->with(['tea', 'openapi', 'oss']);
+
+test('腾讯和 AWS 上传错误脱敏后写入重试及终态部署日志', function (string $provider) {
+    $message = 'invalid certificate: '.urlencode("-----BEGIN PRIVATE KEY-----\nSYNTHETIC-PRIVATE-BODY\n-----END PRIVATE KEY-----")
+        .' {"api_token":"SYNTHETIC-TOKEN"} CanonicalRequest is [POST / SYNTHETIC-REQUEST-BODY]';
+    $error = $provider === 'tencent'
+        ? new TencentCloudSDKException('InvalidParameter', $message)
+        : new AwsException('SDK request wrapper', new Command('ImportCertificate'), ['code' => 'InvalidParameter', 'message' => $message]);
+    $client = Mockery::mock();
+    $client->shouldReceive($provider === 'tencent' ? 'UploadCertificate' : 'importCertificate')->once()->andThrow($error);
+    $uploader = $provider === 'tencent'
+        ? new TencentSslUploader(fn () => $client)
+        : new AwsAcmUploader(fn () => $client, 'us-east-1');
+    try {
+        $uploader->upload('CERT', 'KEY', 'CHAIN', []);
+        test()->fail('上传器应抛出已脱敏异常');
+    } catch (RuntimeException $safe) {
+        expect($safe->getPrevious())->toBeNull();
+        expect($safe->getMessage())->toContain('[InvalidParameter] invalid certificate:')
+            ->not->toContain('SYNTHETIC-')->not->toContain('BEGIN');
+    }
+    bindFakeRegistry($provider, 'test', fn () => jobThrowingDeployer($safe));
+    [$target, $cert] = makeTargetWithCert($provider, 'test');
+    Log::shouldReceive('error')->never();
+    foreach ([1, 5] as $attempt) {
+        $job = (new CloudDeployJob($target->id, $cert->id))->withFakeQueueInteractions();
+        $job->job->attempts = $attempt;
+        $job->handle();
+    }
+    expect($target->fresh()->last_error)->toBe($safe->getMessage());
+    expect(CloudDeployLog::where('target_id', $target->id)->pluck('message')->unique()->all())->toBe([$safe->getMessage()]);
+    expect(CloudDeployLog::where('target_id', $target->id)->where('is_final', true)->exists())->toBeTrue();
+})->with(['tencent', 'aws']);
