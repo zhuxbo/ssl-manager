@@ -8,6 +8,7 @@ use AlibabaCloud\SDK\Cas\V20200407\Models\UploadUserCertificateResponseBody;
 use Plugins\CloudDeploy\Deployers\Aliyun\AliyunCasDeployer;
 use Plugins\CloudDeploy\Deployers\Aliyun\AliyunCasUploader;
 use Plugins\CloudDeploy\Deployers\Aliyun\AliyunProvider;
+use Plugins\CloudDeploy\Support\OutboundDestinationException;
 use Tests\TestCase;
 
 uses(TestCase::class);
@@ -92,3 +93,16 @@ test('bind 为 no-op：上传已由 RemoteCertStore 完成，无后续动作不�
     $deployer->bind('123456-cn-hangzhou', ['access_key_id' => 'AK', 'access_key_secret' => 'SK'], []);
     expect($deployer->touchedConfigKeys())->toBe([]); // 未读任何 config
 });
+
+test('CAS 出站校验错误保留安全原因而不暴露原始地址', function (string $reason, string $message) {
+    $uploader = new AliyunCasUploader(fn () => throw new OutboundDestinationException($reason));
+    expect(fn () => $uploader->upload('CERT', 'KEY', 'CHAIN', []))
+        ->toThrow(RuntimeException::class, $message);
+})->with([
+    ['dns_resolution_failed', '目标域名 DNS 解析失败'],
+    ['private_not_allowed', '目标私网地址未获授权'],
+    ['forbidden_address', '目标解析到禁止访问的 IP 地址'],
+    ['mixed_address_scope', '目标同时解析到公网和私网地址'],
+    ['invalid_official_host', '目标域名格式无效'],
+    ['https://secret.example/?token=SECRET', '目标地址无效'],
+]);

@@ -15,7 +15,6 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\Middleware\WithoutOverlapping;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 use Plugins\CloudDeploy\Deployers\Contracts\CertificateDeliveryMode;
 use Plugins\CloudDeploy\Deployers\Contracts\DeployBusinessException;
 use Plugins\CloudDeploy\Deployers\Contracts\DeployerInterface;
@@ -38,9 +37,7 @@ class CloudDeployJob implements ShouldQueue
 {
     use Dispatchable, HasUpgradeFreezeMiddleware, InteractsWithQueue, Queueable, SerializesModels;
 
-    // tries=5（原 3）：G2 后长轮询超窗改抛 DeployPollPendingException 走重试通道（占 attempt），
-    // 需更多 attempt 覆盖云端异步落地 + 吸收 freeze release。**不加 maxExceptions**——maxExceptions
-    // 会在首个 pending 异常终结重试链（主控裁决，见 development.md 五节「CloudDeployJob tries」）。
+    // 延迟重试与云端续查共用 attempt 预算，同时给升级冻结 release 留出余量。
     public int $tries = 5;
 
     // 单次 handle 上限 55s < worker --timeout 60、< retry_after 600；SIGALRM 优雅退出（依赖 pcntl，
@@ -71,7 +68,7 @@ class CloudDeployJob implements ShouldQueue
 
     /**
      * WithoutOverlapping 按 target 串行，消除 sweep×trigger 并发双推。
-     * dontRelease()：拿不到锁即丢弃本次（不 release、不增 attempts，避免与 freeze release 叠加耗尽 tries=3）；
+     * dontRelease()：拿不到锁即丢弃本次，避免与 freeze release 叠加耗尽重试预算；
      * 另一同 target Job 正在处理，丢弃安全，下次 sweep 再来。经 HasUpgradeFreezeMiddleware::middleware()
      * 合并到 SkipWhenUpgradeFrozen 之后。
      *
@@ -89,8 +86,6 @@ class CloudDeployJob implements ShouldQueue
         $access = $target ? CloudDeployAccess::withoutGlobalScopes()->find($target->access_id) : null;
 
         if (! $target || ! $cert || ! $access) {
-            $this->skipLog('target_missing', 'target/cert/access 已不存在');
-
             return;
         }
 
@@ -104,7 +99,7 @@ class CloudDeployJob implements ShouldQueue
         // DB 真值确认 active（绕 retrieved 副作用；dispatch 后 cert 可能失效）
         $status = DB::table('certs')->where('id', $cert->id)->value('status');
         if ($status !== 'active') {
-            $this->skipLog('not_active', "证书状态 $status 非 active");
+            $this->writeLog($target, $cert, $access, 'failed', true, null, 'not_active', "证书状态 $status 非 active");
 
             return;
         }
@@ -230,7 +225,7 @@ class CloudDeployJob implements ShouldQueue
             ]);
             $this->writeLog($target, $cert, $access, 'failed', false, null, 'poll_pending', '云端部署任务处理中，待确认');
 
-            throw $e; // 占 attempt 走 backoff 重试（下次 resumePoll 续查同一 jobId）
+            $this->retryOrFinish($e);
         } catch (DeployBusinessException $e) {
             $msg = $this->safeExceptionMessage($e, $deployer, $deliveryMode);
             $target->update(['pending_job' => null, 'last_status' => 'failed', 'last_cert_id' => $cert->id, 'last_error' => mb_substr($msg, 0, 255), 'last_deployed_at' => now()]);
@@ -245,7 +240,7 @@ class CloudDeployJob implements ShouldQueue
             $target->update(['last_status' => 'failed', 'last_cert_id' => $cert->id, 'last_error' => mb_substr($msg, 0, 255), 'last_deployed_at' => now()]);
             $this->writeLog($target, $cert, $access, 'failed', false, null, 'deploy_error', $msg);
 
-            throw $e; // 触发退避重试
+            $this->retryOrFinish($e);
         }
     }
 
@@ -316,27 +311,30 @@ class CloudDeployJob implements ShouldQueue
         $errorCode = $e instanceof DeployPollPendingException ? 'poll_pending' : 'retries_exhausted';
 
         $target = CloudDeployTarget::withoutGlobalScopes()->find($this->targetId);
-        $msg = $this->safeExceptionMessageForTarget($e, $target);
-        if ($target) {
-            // G4：补写 last_deployed_at——failed() 仅末次 attempt 兑现（SIGALRM 击杀链前几次 attempt
-            // handle catch 不跑、target 不写），不补则新 target 的 NULL 落 sweep 条件 A/B 双盲区。
-            // 设 last_cert_id：重试耗尽后 sweep 走条件 B（7 天节流），不每天重扫、不每天发邮件。
-            $target->update(['last_status' => 'failed', 'last_cert_id' => $this->certId, 'last_error' => mb_substr($msg, 0, 255), 'last_deployed_at' => now()]);
-
-            // 设计 §8.3：重试耗尽写一条终态 is_final=true 失败行（handle 每次重试只写 is_final=false）
-            $cert = Cert::find($this->certId);
-            $access = CloudDeployAccess::withoutGlobalScopes()->find($target->access_id);
-            if ($cert && $access) {
-                $this->writeLog($target, $cert, $access, 'failed', true, null, $errorCode, $msg);
-                // 重试耗尽通知 target 所属 user（context 白名单：不放 message 原文，避免 AK 外溢）
-                $this->notifyBusinessFailure($target, $access, $errorCode);
-            } else {
-                $this->skipLog($errorCode, $msg);
-            }
-        } else {
-            $this->skipLog($errorCode, $msg);
+        $cert = Cert::find($this->certId);
+        $access = $target ? CloudDeployAccess::withoutGlobalScopes()->find($target->access_id) : null;
+        if (! $target || ! $cert || ! $access) {
+            return;
         }
-        Log::error('[cloud-deploy.failed] 推送重试耗尽', ['target' => $this->targetId, 'cert' => $this->certId, 'message' => $msg]);
+
+        $msg = $this->safeExceptionMessageForTarget($e, $target);
+        $target->update(['last_status' => 'failed', 'last_cert_id' => $this->certId, 'last_error' => mb_substr($msg, 0, 255), 'last_deployed_at' => now()]);
+        $this->writeLog($target, $cert, $access, 'failed', true, null, $errorCode, $msg);
+        $this->notifyBusinessFailure($target, $access, $errorCode);
+    }
+
+    private function retryOrFinish(Throwable $e): void
+    {
+        // 主动 release 保留退避和 attempt 计数，避免预期部署失败进入全局异常日志。
+        $attempt = max(1, $this->attempts());
+        if ($attempt >= $this->tries) {
+            $this->failed($e);
+
+            return;
+        }
+
+        $backoff = $this->backoff();
+        $this->release($backoff[min($attempt - 1, count($backoff) - 1)]);
     }
 
     private function safeExceptionMessage(Throwable $e, DeployerInterface $deployer, CertificateDeliveryMode $deliveryMode): string
@@ -371,16 +369,6 @@ class CloudDeployJob implements ShouldQueue
             // 注册表或动态模式计算失败时，无法排除异常已接触私钥；fail closed。
             return self::UNRESOLVED_FAILURE_MESSAGE;
         }
-    }
-
-    private function skipLog(string $code, string $message): void
-    {
-        CloudDeployLog::create([
-            'user_id' => 0, 'target_id' => $this->targetId, 'order_id' => 0, 'cert_id' => $this->certId,
-            'provider' => '-', 'product' => '-', 'trigger' => $this->trigger, 'status' => 'failed',
-            'attempt_no' => (int) $this->attempts(), 'is_final' => true, 'error_code' => $code,
-            'message' => $message, 'deployed_at' => now(),
-        ]);
     }
 
     private function writeLog(CloudDeployTarget $target, Cert $cert, CloudDeployAccess $access, string $status, bool $isFinal, ?string $remoteCertId, ?string $errorCode, ?string $message): void

@@ -12,6 +12,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Plugins\CloudDeploy\Deployers\Aliyun\AliyunCasDeployer;
 use Plugins\CloudDeploy\Deployers\Aliyun\AliyunErrorSanitizer;
 use Plugins\CloudDeploy\Deployers\Contracts\AbstractDeployer;
 use Plugins\CloudDeploy\Deployers\Contracts\CertificateDeliveryMode;
@@ -30,6 +31,7 @@ use Plugins\CloudDeploy\Models\CloudDeployLog;
 use Plugins\CloudDeploy\Models\CloudDeployRemoteCert;
 use Plugins\CloudDeploy\Models\CloudDeployTarget;
 use Plugins\CloudDeploy\Notifications\CloudDeployFailedNotificationBuilder;
+use Plugins\CloudDeploy\Support\OutboundDestinationPolicy;
 use TencentCloud\Common\Exception\TencentCloudSDKException;
 use TencentCloud\Ssl\V20191205\SslClient;
 use Tests\TestCase;
@@ -537,15 +539,11 @@ test('动态内联 bind 异常绝不把私钥写入 target、部署日志、pend
     });
 
     $job = new CloudDeployJob($target->id, $cert->id, 'auto');
-    try {
-        $job->handle();
-    } catch (Throwable $e) {
-        $job->failed($e);
-    }
+    $job->handle();
 
     $target->refresh();
     expect($target->pending_job)->toBeNull();
-    expect($logCalls)->not->toBeEmpty();
+    expect($logCalls)->toBeEmpty();
     expectNoCredentialLeak($target->id, ['KEYPEM', 'private key'], $logCalls);
 });
 
@@ -587,8 +585,9 @@ test('真实 Tencent is_replaced：bind 一次后持久化 canonical opaque ID�
         'resource_products' => 'cdn',
     ]]);
 
-    expect(fn () => (new CloudDeployJob($target->id, $cert->id, 'auto'))->handle())
-        ->toThrow(DeployPollPendingException::class);
+    $job = (new CloudDeployJob($target->id, $cert->id, 'auto'))->withFakeQueueInteractions();
+    $job->handle();
+    $job->assertReleased(60);
     expect($target->fresh()->pending_job['job_id'])->toBe('9');
 
     (new CloudDeployJob($target->id, $cert->id, 'auto'))->handle();
@@ -623,8 +622,9 @@ test('真实 Tencent is_replaced：续查同一 ID 终态失败并清 pending，
         'resource_products' => 'cdn',
     ]]);
 
-    expect(fn () => (new CloudDeployJob($target->id, $cert->id, 'auto'))->handle())
-        ->toThrow(DeployPollPendingException::class);
+    $job = (new CloudDeployJob($target->id, $cert->id, 'auto'))->withFakeQueueInteractions();
+    $job->handle();
+    $job->assertReleased(60);
     (new CloudDeployJob($target->id, $cert->id, 'auto'))->handle();
 
     expect($actions)->toBe([
@@ -662,7 +662,7 @@ test('真实 Tencent is_replaced：数据库中非 opaque pending ID 先清理�
     expect(CloudDeployLog::where('target_id', $target->id)->pluck('message')->implode("\n"))->not->toContain('PRIVATE-KEY');
 });
 
-test('failed() 在动态内联 target 删除后只写安全 skipLog 和 Log 上下文', function () {
+test('failed() 在动态内联 target 删除后直接跳过，不写占位记录或系统日志', function () {
     [$target, $cert] = makeTargetWithCert('aliyun', 'apigw');
     $targetId = $target->id;
     $target->delete();
@@ -674,13 +674,13 @@ test('failed() 在动态内联 target 删除后只写安全 skipLog 和 Log 上�
 
     (new CloudDeployJob($targetId, $cert->id, 'auto'))->failed(new RuntimeException('KEYPEM'));
 
-    expect($logCalls)->not->toBeEmpty();
-    expect(CloudDeployLog::where('target_id', $targetId)->where('error_code', 'retries_exhausted')->exists())->toBeTrue();
+    expect($logCalls)->toBeEmpty();
+    expect(CloudDeployLog::where('target_id', $targetId)->where('error_code', 'retries_exhausted')->exists())->toBeFalse();
     expect(CloudDeployLog::where('target_id', $targetId)->pluck('message')->implode("\n"))->not->toContain('KEYPEM');
     expect(json_encode($logCalls, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE))->not->toContain('KEYPEM');
 });
 
-test('failed() 在动态内联 access 删除后不把私钥写入 last_error、skipLog 或 Log 上下文', function () {
+test('failed() 在动态内联 access 删除后直接跳过，不写占位记录或系统日志', function () {
     [$target, $cert, $access] = makeTargetWithCert('aliyun', 'apigw');
     $target->update(['config' => ['domain' => 'cdn.example.com', 'service_type' => 'traditional']]);
     $access->delete();
@@ -692,9 +692,9 @@ test('failed() 在动态内联 access 删除后不把私钥写入 last_error、s
 
     (new CloudDeployJob($target->id, $cert->id, 'auto'))->failed(new RuntimeException('KEYPEM'));
 
-    expect($logCalls)->not->toBeEmpty();
-    expect(CloudDeployLog::where('target_id', $target->id)->where('error_code', 'retries_exhausted')->exists())->toBeTrue();
-    expectNoCredentialLeak($target->id, ['KEYPEM'], $logCalls);
+    expect($logCalls)->toBeEmpty();
+    expect(CloudDeployLog::where('target_id', $target->id)->where('error_code', 'retries_exhausted')->exists())->toBeFalse();
+    expect($target->fresh()->last_error)->toBeNull();
 });
 
 test('仅 opt-in 证书服务型 bind 收到 remote id + leaf/chain，且不含私钥', function () {
@@ -727,7 +727,7 @@ test('缺中间证书 fail closed：不推、记 missing_chain、target failed�
     expect(CloudDeployJobTestSpy::$binds)->toBeEmpty();
 });
 
-test('target 已删（加载不到）→ 写 skip log 退出，不抛', function () {
+test('target 已删（加载不到）→ 直接跳过，不写部署日志', function () {
     bindFakeRegistry('aliyun', 'cdn', fn () => jobFakeInlineDeployer());
     [$target, $cert] = makeTargetWithCert('aliyun', 'cdn');
     $tid = $target->id;
@@ -735,7 +735,7 @@ test('target 已删（加载不到）→ 写 skip log 退出，不抛', function
 
     (new CloudDeployJob($tid, $cert->id, 'auto'))->handle();
 
-    expect(CloudDeployLog::where('target_id', $tid)->where('error_code', 'target_missing')->exists())->toBeTrue();
+    expect(CloudDeployLog::where('target_id', $tid)->exists())->toBeFalse();
 });
 
 test('Job 层第 4 处租户校验：order 属他人 → 记 tenant_mismatch、不推（异步无 UserScope 的纵深防御）', function () {
@@ -787,7 +787,7 @@ test('force=true 绕过幂等强制重推', function () {
     expect(CloudDeployJobTestSpy::$binds)->toHaveCount(1); // 强制重推
 });
 
-test('deployer 抛异常 → target failed + 重抛触发退避，错误信息入库不含敏感（脱敏在 deployer 层保证）', function () {
+test('deployer 抛异常 → target failed + 主动延迟重试，错误信息入库不含敏感（脱敏在 deployer 层保证）', function () {
     bindFakeRegistry('aliyun', 'cdn', function () {
         return new class extends AbstractDeployer
         {
@@ -829,8 +829,9 @@ test('deployer 抛异常 → target failed + 重抛触发退避，错误信息�
     });
     [$target, $cert] = makeTargetWithCert('aliyun', 'cdn');
 
-    expect(fn () => (new CloudDeployJob($target->id, $cert->id, 'auto'))->handle())
-        ->toThrow(RuntimeException::class);
+    $job = (new CloudDeployJob($target->id, $cert->id, 'auto'))->withFakeQueueInteractions();
+    $job->handle();
+    $job->assertReleased(60);
 
     $target->refresh();
     expect($target->last_status)->toBe('failed');
@@ -1014,34 +1015,29 @@ test('落库无凭证（阿里网络错误，TeaError.data=null，message 含签
     bindFakeRegistry('aliyun', 'cdn', fn () => jobLeakyInlineDeployer('aliyun', $leak));
     [$target, $cert] = makeTargetWithCert('aliyun', 'cdn');
 
-    // 提前装好捕获：failed() 里 Log::error($msg, ['target'=>,'cert'=>,'message'=>$msg]) 的实参全收进 $logCalls
+    // 捕获系统日志调用，确认部署失败不会写入。
     $logCalls = [];
     Log::shouldReceive('error')->andReturnUsing(function (...$args) use (&$logCalls) {
         $logCalls[] = $args;
     });
 
-    $captured = [];
-    // handle() 抛 → failed() 写终态行 + Log::error；模拟 worker 重试耗尽链路
-    $job = new CloudDeployJob($target->id, $cert->id, 'auto');
-    try {
-        $job->handle();
-    } catch (Throwable $e) {
-        $captured['handle_rethrow'] = $e->getMessage();
-        $job->failed($e); // 重试耗尽：写 is_final 终态 + Log::error
-    }
+    // 模拟最后一次 attempt：写部署终态，但不抛异常、不写系统日志。
+    $job = (new CloudDeployJob($target->id, $cert->id, 'auto'))->withFakeQueueInteractions();
+    $job->job->attempts = $job->tries;
+    $job->handle();
 
     $target->refresh();
     expect($target->last_status)->toBe('failed');
     // 脱敏后只剩类名文案
     expect($target->last_error)->toContain('阿里云调用失败');
-    // 证 failed() 确实记了日志（否则 context 守门是空跑）
-    expect($logCalls)->not->toBeEmpty();
+    // 部署失败不写系统日志。
+    expect($logCalls)->toBeEmpty();
 
     // last_error + 所有日志行 message + Log::error(message+context) 全部参与守门：签名 URI 子串一个不许漏
     expectNoCredentialLeak(
         $target->id,
         needles: ['TCLOUD_TEST_SECRET_ID', 'AccessKeyId', 'Signature=', 'TCLOUD_TEST_SIGNATURE'],
-        logContexts: [$captured, $logCalls],
+        logContexts: $logCalls,
     );
 });
 
@@ -1058,12 +1054,9 @@ test('落库无凭证（阿里结构化 API 错误，data 数组）：仅 Code+M
     bindFakeRegistry('aliyun', 'cdn', fn () => jobLeakyInlineDeployer('aliyun', $leak));
     [$target, $cert] = makeTargetWithCert('aliyun', 'cdn');
 
-    $job = new CloudDeployJob($target->id, $cert->id, 'auto');
-    try {
-        $job->handle();
-    } catch (Throwable $e) {
-        $job->failed($e);
-    }
+    $job = (new CloudDeployJob($target->id, $cert->id, 'auto'))->withFakeQueueInteractions();
+    $job->job->attempts = $job->tries;
+    $job->handle();
 
     $target->refresh();
     // 安全文案：[code] + 响应体 Message
@@ -1090,12 +1083,9 @@ test('落库无凭证（阿里新一代 openapi-core AlibabaCloudException）：
     bindFakeRegistry('aliyun', 'cdn', fn () => jobLeakyInlineDeployer('aliyun', $leak));
     [$target, $cert] = makeTargetWithCert('aliyun', 'cdn');
 
-    $job = new CloudDeployJob($target->id, $cert->id, 'auto');
-    try {
-        $job->handle();
-    } catch (Throwable $e) {
-        $job->failed($e);
-    }
+    $job = (new CloudDeployJob($target->id, $cert->id, 'auto'))->withFakeQueueInteractions();
+    $job->job->attempts = $job->tries;
+    $job->handle();
 
     $target->refresh();
     // 安全文案：[code] + 响应体 Message（来自 public $code + $data['Message']）
@@ -1117,12 +1107,9 @@ test('落库无凭证（腾讯 bind SDK 异常）：access.credentials 的 secre
         'secret_key' => 'TCLOUD_TEST_SECRET_KEY',
     ]);
 
-    $job = new CloudDeployJob($target->id, $cert->id, 'auto');
-    try {
-        $job->handle();
-    } catch (Throwable $e) {
-        $job->failed($e);
-    }
+    $job = (new CloudDeployJob($target->id, $cert->id, 'auto'))->withFakeQueueInteractions();
+    $job->job->attempts = $job->tries;
+    $job->handle();
 
     $target->refresh();
     expect($target->last_status)->toBe('failed');
@@ -1144,12 +1131,9 @@ test('落库无凭证（证书服务上传环节 SDK 异常）：upload 经 Tenc
         'secret_key' => 'TCLOUD_TEST_SECRET_KEY',
     ]);
 
-    $job = new CloudDeployJob($target->id, $cert->id, 'auto');
-    try {
-        $job->handle();
-    } catch (Throwable $e) {
-        $job->failed($e);
-    }
+    $job = (new CloudDeployJob($target->id, $cert->id, 'auto'))->withFakeQueueInteractions();
+    $job->job->attempts = $job->tries;
+    $job->handle();
 
     $target->refresh();
     expect($target->last_status)->toBe('failed');
@@ -1215,12 +1199,13 @@ test('DeployBusinessException → 不 rethrow、is_final、business_error、不�
         ->where('error_code', 'business_error')->where('is_final', true)->exists())->toBeTrue();
 });
 
-test('普通 Throwable → rethrow 触发退避(瞬态,is_final=false)', function () {
+test('普通 Throwable → 主动退避重试，不抛异常(is_final=false)', function () {
     bindFakeRegistry('aliyun', 'cdn', fn () => jobThrowingDeployer(new RuntimeException('[Timeout] upstream 5xx')));
     [$target, $cert] = makeTargetWithCert('aliyun', 'cdn');
 
-    expect(fn () => (new CloudDeployJob($target->id, $cert->id, 'auto'))->handle())
-        ->toThrow(RuntimeException::class);
+    $job = (new CloudDeployJob($target->id, $cert->id, 'auto'))->withFakeQueueInteractions();
+    $job->handle();
+    $job->assertReleased(60);
 
     expect(CloudDeployLog::where('target_id', $target->id)
         ->where('error_code', 'deploy_error')->where('is_final', false)->exists())->toBeTrue();
@@ -1362,26 +1347,22 @@ function validPendingJob(int $certId, array $overrides = []): array
     ], $overrides);
 }
 
-test('G2 bind 抛 poll_pending → pending_job 与 failed 状态同一次 update 落库并重抛', function () {
+test('G2 bind 抛 poll_pending → pending_job 与 failed 状态同一次 update 落库并主动延迟重试', function () {
     bindFakeRegistry('aliyun', 'cdn', fn () => jobResumableDeployer('job-123'));
     [$target, $cert] = makeTargetWithCert('aliyun', 'cdn');
 
     DB::flushQueryLog();
     DB::enableQueryLog();
-    $thrown = null;
     $expiresAtLowerBound = now()->addDays(10)->timestamp;
-    try {
-        (new CloudDeployJob($target->id, $cert->id, 'auto'))->handle();
-    } catch (DeployPollPendingException $e) {
-        $thrown = $e;
-    }
+    $job = (new CloudDeployJob($target->id, $cert->id, 'auto'))->withFakeQueueInteractions();
+    $job->handle();
+    $job->assertReleased(60);
     $expiresAtUpperBound = now()->addDays(10)->timestamp;
     $targetUpdates = collect(DB::getQueryLog())->filter(
         fn (array $query) => str_starts_with($query['query'], 'update `cloud_deploy_targets` set')
     )->values();
     DB::disableQueryLog();
 
-    expect($thrown)->toBeInstanceOf(DeployPollPendingException::class);
     $target->refresh();
     $pending = $target->pending_job;
     expect($pending)->toBeArray();
@@ -1409,8 +1390,9 @@ test('G2 核心闭环：清 Cache 后续查数据库中同一 jobId，累计只 
     bindFakeRegistry('aliyun', 'cdn', fn () => jobResumableDeployer(bindJobId: 'job-123'));
     [$target, $cert] = makeTargetWithCert('aliyun', 'cdn');
 
-    expect(fn () => (new CloudDeployJob($target->id, $cert->id, 'auto'))->handle())
-        ->toThrow(DeployPollPendingException::class);
+    $job = (new CloudDeployJob($target->id, $cert->id, 'auto'))->withFakeQueueInteractions();
+    $job->handle();
+    $job->assertReleased(60);
     expect($target->fresh()->pending_job['job_id'])->toBe('job-123');
     expect(CloudDeployJobTestSpy::$binds)->toHaveCount(1);
 
@@ -1443,8 +1425,9 @@ test('G2 resumePoll 再次 pending → 复用同一 jobId 并刷新数据库过�
         'expires_at' => $oldExpiresAt,
     ])]);
 
-    expect(fn () => (new CloudDeployJob($target->id, $cert->id, 'auto'))->handle())
-        ->toThrow(DeployPollPendingException::class);
+    $job = (new CloudDeployJob($target->id, $cert->id, 'auto'))->withFakeQueueInteractions();
+    $job->handle();
+    $job->assertReleased(60);
 
     $pending = $target->fresh()->pending_job;
     expect(CloudDeployJobTestSpy::$binds)->toBeEmpty();
@@ -1515,8 +1498,9 @@ test('G2 resumePoll 瞬态异常 保留有效 pending_job', function () {
     $expectedPending = validPendingJob($cert->id, ['job_id' => 'keep-on-throwable']);
     $target->update(['pending_job' => $expectedPending]);
 
-    expect(fn () => (new CloudDeployJob($target->id, $cert->id, 'auto'))->handle())
-        ->toThrow(RuntimeException::class, 'temporary network error');
+    $job = (new CloudDeployJob($target->id, $cert->id, 'auto'))->withFakeQueueInteractions();
+    $job->handle();
+    $job->assertReleased(60);
 
     expect($target->fresh()->pending_job)->toBe($expectedPending);
 });
@@ -1660,4 +1644,54 @@ test('G5：sweep-B 复扫重推同一确定性失败 → 再派一次（每次�
     (new CloudDeployJob($target->id, $cert->id, 'auto'))->handle(); // sweep-B 复扫重推
 
     expect($count)->toBe(2); // 每次终态失败发一次（非「仅一次」永久去重）
+});
+
+test('缺失证书或云凭证时 handle 和 failed 均直接跳过', function (string $missing) {
+    [$target, $cert, $access] = makeTargetWithCert('aliyun', 'cdn');
+    if ($missing === 'cert') {
+        DB::table('certs')->where('id', $cert->id)->delete();
+    } else {
+        $access->delete();
+    }
+    Log::shouldReceive('error')->never();
+    $job = (new CloudDeployJob($target->id, $cert->id))->withFakeQueueInteractions();
+    $job->handle();
+    $job->failed(new RuntimeException('missing dependency'));
+    $job->assertNotReleased();
+    expect(CloudDeployLog::where('target_id', $target->id)->exists())->toBeFalse();
+})->with(['cert', 'access']);
+
+test('主动重试按 attempt 退避并在末次只写部署终态，无系统错误日志', function (int $attempt, bool $pending) {
+    $exception = $pending
+        ? new DeployPollPendingException('job-retry', '云端处理中')
+        : new RuntimeException('upstream timeout');
+    bindFakeRegistry('aliyun', 'cdn', fn () => jobThrowingDeployer($exception));
+    [$target, $cert] = makeTargetWithCert('aliyun', 'cdn');
+    Log::shouldReceive('error')->never();
+    $job = (new CloudDeployJob($target->id, $cert->id))->withFakeQueueInteractions();
+    $job->job->attempts = $attempt;
+    $job->handle();
+    if ($attempt < $job->tries) {
+        $job->assertReleased($attempt === 1 ? 60 : 300);
+        expect(CloudDeployLog::where('target_id', $target->id)->where('is_final', true)->exists())->toBeFalse();
+    } else {
+        $job->assertNotReleased()->assertNotFailed();
+        $final = CloudDeployLog::where('target_id', $target->id)->where('is_final', true)->sole();
+        expect($final->error_code)->toBe($pending ? 'poll_pending' : 'retries_exhausted');
+        expect($final->message)->toBe($pending ? '云端处理中' : 'upstream timeout');
+    }
+})->with([1, 2, 5])->with([false, true]);
+
+test('真实阿里云 CAS 出站拒绝保留具体原因到部署日志且不抛出', function () {
+    app()->instance(OutboundDestinationPolicy::class,
+        new OutboundDestinationPolicy(resolver: fn () => []));
+    bindFakeRegistry('aliyun', 'cas', fn () => new AliyunCasDeployer);
+    [$target, $cert] = makeTargetWithCert('aliyun', 'cas');
+    Log::shouldReceive('error')->never();
+    $job = (new CloudDeployJob($target->id, $cert->id))->withFakeQueueInteractions();
+    $job->handle();
+    $job->assertReleased(60);
+    expect($target->fresh()->last_error)->toContain('DNS 解析失败');
+    $log = CloudDeployLog::where('target_id', $target->id)->sole();
+    expect($log->message)->toContain('DNS 解析失败')->not->toContain('OutboundDestinationException');
 });

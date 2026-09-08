@@ -6,6 +6,7 @@ use AlibabaCloud\Oss\V2\Exception\ServiceException as OssServiceException;
 use AlibabaCloud\Tea\Exception\TeaError;
 use Darabonba\OpenApi\Exceptions\AlibabaCloudException;
 use Plugins\CloudDeploy\Deployers\Contracts\CredentialScrubber;
+use Plugins\CloudDeploy\Support\OutboundDestinationException;
 use Throwable;
 
 /**
@@ -64,6 +65,10 @@ class AliyunErrorSanitizer
 
     private static function build(Throwable $e): string
     {
+        if ($e instanceof OutboundDestinationException) {
+            return $e->getMessage();
+        }
+
         if ($e instanceof AlibabaCloudException) {
             // 新一代 openapi-core 结构化 API 错误：public $code + $data 均取自服务端响应体，不含请求/凭证。
             // 只取 code + 服务端 Message（不整段回传 getMessage()，杜绝潜在 Guzzle URI 泄露）。
