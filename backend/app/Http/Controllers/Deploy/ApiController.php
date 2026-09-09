@@ -714,8 +714,8 @@ class ApiController extends Controller
             // certimate 等单证书自动部署不支持国密，已在 query field 拉取处拒绝。
             if (strtolower((string) $cert->encryption_alg) === 'sm2') {
                 $data['encryption_alg'] = 'sm2';
-                // 加密证书 + 加密私钥成对才下发（与下载包 addSm2CertToZip 成对守卫同口径）：
-                // 缺任一（gateway 未就绪）则不附 enc，避免下游拿到"有证书无私钥"的残缺数据
+                // 保持 Deploy API 透传契约：enc_cert 与 enc_key（GMT-0016）成对下发，enc_key2 可选。
+                // 下载包使用 GMT-0009 解密，拥有独立的就绪条件。
                 if ($cert->enc_cert && $cert->enc_key) {
                     $data['enc_certificate'] = $cert->enc_cert;
                     $data['enc_private_key'] = $cert->enc_key;

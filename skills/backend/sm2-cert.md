@@ -26,11 +26,12 @@
 
 ## 下载
 
-- 国密只出 nginx 双证书包（`_sign.crt`/`_sign.key`/`_enc.crt`/`_enc.key`/`_enc_gmt0009.key`/`_enc_gmt0016.key`/`_sign_ca.crt` + 说明.txt），`ActionFileTrait::addCertToZip` 按 `encryption_alg='sm2'` 走 `addSm2CertToZip`（**与前端 isSM2/Deploy gate 同口径、不按 enc_cert**——enc 空的 SM2 也强制国密包，不掉进普通 PKCS12 逻辑丢签名私钥/iis 报错）；**加密文件需 enc_cert + enc_key 成对才出**（三列独立 nullable、无成对到达约束，缺任一即整组降级仅签名 + 提示，杜绝"有证书无私钥/有私钥无证书"残缺包）
+- 国密按 `encryption_alg=sm2` 只出 nginx 双证书包：`usercert.crt`/`usercert.key`/`encert.crt`/`encert.key` + `说明.txt`，证书文件附带中间证书链。`Sm2KeyUtil` 使用生成 CSR 时的 `private_key` 解开 `enc_key2`（GMT-0009 的 SM4-ECB 密钥信封），通过 OpenSSL SM2 解密会话密钥、PHP OpenSSL SM4 解密私钥，并校验推导公钥与信封及加密证书一致；解密失败拒绝下载，不透传底层输出。`enc_key`（GMT-0016）不用于解密部署私钥，也不作为就绪条件。在 `nginx/` 同级增加 `original/`，按原文保留已有签名证书/私钥、CA 链、加密证书、GMT-0009/GMT-0016 材料及用途说明；缺失项不生成，原始证书不拼接 CA 链。
+- 加密部分需 `enc_cert` + `enc_key2` 齐全；缺少时仅出签名部分与提示。自带 CSR 等无 `private_key` 场景允许下载，输出 `usercert.crt`/`encert.crt`/`encert_gmt0009.key` + `说明.txt`，明确要求用户用生成 CSR 时保留的私钥在本地解密，不输出 `usercert.key`/`encert.key`。临时用户私钥文件权限 0600，finally 清理；密钥不放入命令参数、日志或异常链。
 
 ## 前端 gate
 
-- `install.vue` 两端国密只显 Nginx + `enc_cert`/`enc_key` 任一空即置灰（`encMissing` 与后端成对守卫对齐）；`process.vue` 两端隐藏自动部署；算法字典 `dictionary.ts` 已含 sm2/sm3（无需改）；申请表单 `action.vue` 两端选产品自动校正加密选项（**不兼容才切**：当前算法不在产品 `encryption_alg` 菜单内才切到首选并复用 `handleAlgChange` 联动 bits，摘要同理校正到 `signature_digest_alg` 菜单内，SM2 强制 256+SM3、`keyBitsOptions` 增 SM2 分支只显 256；**仅 apply/batchApply**，续费/重签由 `loadOrderInfo` 回填原算法、不在此覆盖以防静默降级）
+- `install.vue` 两端国密只显 Nginx + `enc_cert`/`enc_key2` 任一空即置灰；无 `private_key` 时提示本地解密（`encMissing` 与后端就绪条件对齐）；`process.vue` 两端隐藏自动部署；算法字典 `dictionary.ts` 已含 sm2/sm3（无需改）；申请表单 `action.vue` 两端选产品自动校正加密选项（**不兼容才切**：当前算法不在产品 `encryption_alg` 菜单内才切到首选并复用 `handleAlgChange` 联动 bits，摘要同理校正到 `signature_digest_alg` 菜单内，SM2 强制 256+SM3、`keyBitsOptions` 增 SM2 分支只显 256；**仅 apply/batchApply**，续费/重签由 `loadOrderInfo` 回填原算法、不在此覆盖以防静默降级）
 
 ## Deploy API gate
 

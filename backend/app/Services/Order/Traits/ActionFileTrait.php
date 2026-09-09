@@ -10,6 +10,7 @@ use App\Models\Product;
 use App\Services\Binary\BinaryLocator;
 use App\Services\Binary\Exceptions\BinaryNotFoundException;
 use App\Services\Notification\Exceptions\TransientBuildException;
+use App\Services\Order\Utils\Sm2KeyUtil;
 use App\Traits\ApiResponse;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\File;
@@ -170,7 +171,7 @@ trait ActionFileTrait
         // SM2，会丢签名私钥、且 iis/tomcat 还会硬报错。加密证书/私钥由上游 CA/KGC 经 get 透传，为空
         // （gateway 未就绪）时 addSm2CertToZip 内部降级仅出签名部分 + 提示。
         if (strtolower((string) ($order->latestCert->encryption_alg ?? '')) === 'sm2') {
-            $this->addSm2CertToZip($zip, $certPath, $certName, $commonName, $cert, $privateKey, $intermediateCert, $order->latestCert->enc_cert ?? '', $order->latestCert->enc_key ?? '', $order->latestCert->enc_key2 ?? '');
+            $this->addSm2CertToZip($zip, $certPath, $cert, $privateKey, $intermediateCert, $order->latestCert->enc_cert ?? '', $order->latestCert->enc_key2 ?? '', $order->latestCert->enc_key ?? '');
 
             return $archiveName;
         }
@@ -777,57 +778,76 @@ trait ActionFileTrait
     }
 
     /**
-     * 生成 SM2 国密 nginx 双证书包（签名证书 + 加密证书）。
-     *
-     * 国密 SSL 双证书：签名证书走用户密钥对，加密证书 + 加密私钥由 CA/KGC 托管下发。
-     * 纯 addFromString 无需 openssl。加密私钥为空（gateway 未就绪）时仅出签名部分。
+     * 生成 SM2 双证书包；GMT-0009 信封解密并校验证书匹配后才输出加密私钥。
      */
     protected function addSm2CertToZip(
         ZipArchive $zip,
         string $certPath,
-        string $certName,
-        string $commonName,
         string $cert,
         string $privateKey,
         string $intermediateCert,
         string $encCert,
-        string $encKey,
-        string $encKey2
+        string $encKey2,
+        string $encKey
     ): void {
         $dir = $certPath.'nginx/';
-
-        $zip->addFromString($dir.$certName.'_sign.crt', $cert);
-        $privateKey && $zip->addFromString($dir.$certName.'_sign.key', $privateKey);
-        $intermediateCert && $zip->addFromString($dir.$certName.'_sign_ca.crt', $intermediateCert);
-        // 加密部分需 enc_cert + enc_key 成对才有效（加密证书 + 对应私钥）；缺任一视为未就绪，降级仅出
-        // 签名，绝不写出"有证书无私钥"或"有私钥无证书"的残缺包（上游异步下发 enc、无成对到达约束）
-        $encReady = $encCert !== '' && $encKey !== '';
-        if ($encReady) {
-            $zip->addFromString($dir.$certName.'_enc.crt', $encCert);
-            $zip->addFromString($dir.$certName.'_enc.key', $encKey);
-            $zip->addFromString($dir.$certName.'_enc_gmt0016.key', $encKey);
-            $encKey2 && $zip->addFromString($dir.$certName.'_enc_gmt0009.key', $encKey2);
+        $encReady = $encCert !== '' && $encKey2 !== '';
+        $encPrivateKey = '';
+        if ($encReady && $privateKey !== '') {
+            try {
+                $encPrivateKey = Sm2KeyUtil::decrypt($encKey2, $privateKey, $encCert);
+            } catch (\RuntimeException $exception) {
+                $this->error($exception->getMessage());
+            }
         }
 
-        $lines = [
-            "{$certName}_sign.crt 签名证书",
-            "{$certName}_sign.key 签名私钥（与签名证书匹配）",
-        ];
-        if ($intermediateCert) {
-            $lines[] = "{$certName}_sign_ca.crt 证书链";
+        $chain = $intermediateCert !== '' ? "\n".trim($intermediateCert)."\n" : '';
+        $zip->addFromString($dir.'usercert.crt', trim($cert).$chain);
+        $privateKey && $zip->addFromString($dir.'usercert.key', $privateKey);
+        $lines = ['usercert.crt 用户证书'];
+        if ($privateKey !== '') {
+            $lines[] = 'usercert.key 用户私钥，与用户证书匹配';
         }
         if ($encReady) {
-            $lines[] = "{$certName}_enc.crt 加密证书";
-            $lines[] = "{$certName}_enc.key 加密私钥（GMT-0016 格式，需解密后使用）";
-            if ($encKey2) {
-                $lines[] = "{$certName}_enc_gmt0009.key 加密私钥（GMT-0009 格式）";
+            $zip->addFromString($dir.'encert.crt', trim($encCert).$chain);
+            $lines[] = 'encert.crt 用户加密证书';
+            if ($privateKey !== '') {
+                $zip->addFromString($dir.'encert.key', $encPrivateKey);
+                $lines[] = 'encert.key 用户加密私钥，与用户加密证书匹配';
+            } else {
+                $zip->addFromString($dir.'encert_gmt0009.key', $encKey2);
+                $lines[] = 'encert_gmt0009.key GMT-0009 密钥信封，不能直接作为部署私钥使用';
+                $lines[] = '';
+                $lines[] = '系统未保存用户私钥（例如使用自带 CSR 申请）。请使用生成该 CSR 时保留的签名私钥作为 usercert.key，并在本地用它解密 encert_gmt0009.key，得到与 encert.crt 匹配的 encert.key 后再部署。';
+                $lines[] = '无法从 CSR 或证书恢复用户私钥；如原私钥已丢失，请重新生成密钥和 CSR 后申请重签。';
             }
         } else {
             $lines[] = '';
-            $lines[] = '注意：加密证书尚未就绪（CA/KGC 下发中），当前仅含签名证书，暂不可用于国密双证书部署，请稍后重新下载完整包。';
+            $lines[] = '注意：缺少加密证书或 GMT-0009 密钥信封，当前仅含签名部分，暂不可用于国密双证书部署。';
         }
 
-        $zip->addFromString($dir.'说明.txt', implode(PHP_EOL, $lines));
+        $zip->addFromString($dir.'说明.txt', implode("\r\n", $lines));
+
+        $originalFiles = [
+            'usercert.crt' => [$cert, '用户签名证书原文，未拼接 CA 链'],
+            'usercert.key' => [$privateKey, '用户签名私钥，与用户签名证书匹配，也用于解密 GMT-0009 密钥信封'],
+            'ca.crt' => [$intermediateCert, 'CA 证书链原文，用于补全签名证书和加密证书的证书链'],
+            'encert.crt' => [$encCert, '用户加密证书原文，未拼接 CA 链'],
+            'encert_gmt0009.key' => [$encKey2, 'GMT-0009 密钥信封，需使用生成 CSR 时的用户签名私钥解密后得到加密私钥'],
+            'encert_gmt0016.key' => [$encKey, 'GMT-0016 加密密钥对保护数据，供支持 SKF 接口的密码设备或兼容工具导入使用'],
+        ];
+        $originalLines = ['本目录保留系统已有的原始文件，缺失的文件不生成。GMT 密钥材料不能直接作为部署私钥使用。', ''];
+        foreach ($originalFiles as $name => [$contents, $description]) {
+            if ($contents !== '') {
+                $zip->addFromString($certPath.'original/'.$name, $contents);
+                $originalLines[] = "$name $description";
+            }
+        }
+        if ($privateKey === '') {
+            $originalLines[] = '';
+            $originalLines[] = '系统未保存用户签名私钥，请使用生成 CSR 时自行保留的私钥。';
+        }
+        $zip->addFromString($certPath.'original/说明.txt', implode("\r\n", $originalLines));
     }
 
     /**

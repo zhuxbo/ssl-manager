@@ -72,7 +72,15 @@
           type="info"
           size="small"
           style="margin-left: 8px"
-          >加密证书生成中，请稍后下载</el-text
+          >加密证书或 GMT-0009 材料未就绪，请稍后下载</el-text
+        >
+        <el-text
+          v-else-if="isSM2 && !cert.private_key"
+          type="info"
+          size="small"
+          style="margin-left: 8px"
+          >下载包含证书和 GMT-0009 材料，需使用生成 CSR
+          时的私钥在本地解密</el-text
         >
       </el-text>
     </table>
@@ -145,12 +153,10 @@ import { message } from "@shared/utils";
 const order = inject("order") as any;
 const cert = inject("cert") as any;
 
-// 国密(SM2)证书：只提供 nginx 国密双证书包；加密证书未就绪（enc_cert 空）时下载置灰
+// 自带 CSR 无私钥时交付证书和密钥信封，由用户在本地解密。
 const isSM2 = computed(() => /sm2/i.test(cert.value?.encryption_alg ?? ""));
-// 加密证书与加密私钥须成对就绪（与后端 addSm2CertToZip 成对守卫对齐）：缺任一即置灰，
-// 避免下载到"有证书无私钥"或"有私钥无证书"的残缺国密包
 const encMissing = computed(
-  () => isSM2.value && (!cert.value?.enc_cert || !cert.value?.enc_key)
+  () => isSM2.value && (!cert.value?.enc_cert || !cert.value?.enc_key2)
 );
 
 const install = ref("");
