@@ -4,9 +4,11 @@ use App\Models\User;
 use App\Models\UserRefreshToken;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
+use Tests\Traits\ActsAsAdmin;
 use Tests\Traits\ActsAsUser;
+use Tymon\JWTAuth\JWT;
 
-uses(ActsAsUser::class);
+uses(ActsAsUser::class, ActsAsAdmin::class);
 
 test('用户登录成功', function () {
     $user = User::factory()->create([
@@ -188,7 +190,7 @@ test('获取用户信息-未认证返回错误', function () {
         ->assertUnauthorized();
 });
 
-test('修改用户名成功', function () {
+test('用户不能修改用户名', function () {
     $user = User::factory()->create();
 
     $this->actingAsUser($user)
@@ -196,9 +198,9 @@ test('修改用户名成功', function () {
             'username' => 'updated_username',
         ])
         ->assertOk()
-        ->assertJson(['code' => 1]);
+        ->assertJson(['code' => 0, 'msg' => '用户名不允许修改']);
 
-    expect($user->fresh()->username)->toBe('updated_username');
+    expect($user->fresh()->username)->toBe($user->username);
 });
 
 test('修改密码成功', function () {
@@ -309,4 +311,42 @@ test('退出登录成功', function () {
     expect($user->token_version)->toBe(1);
     expect($user->logout_at)->not->toBeNull();
     expect(UserRefreshToken::where('user_id', $user->id)->count())->toBe(0);
+});
+
+test('绑定手机号后保存验证时间且管理员详情返回已验证状态', function (?string $originalMobile) {
+    $user = User::factory()->create(['mobile' => $originalMobile]);
+    $mobile = '13800138000';
+    Cache::store('runtime')->put('verify_code_bind_'.$mobile, '123456', 600);
+
+    $this->actingAsUser($user)->patchJson('/api/bind-mobile', [
+        'mobile' => $mobile,
+        'code' => '123456',
+    ])->assertOk()->assertJson(['code' => 1]);
+
+    $user->refresh();
+    expect($user->mobile)->toBe($mobile);
+    expect($user->mobile_verified_at)->not->toBeNull();
+
+    // 模拟独立的管理员请求，清除测试进程复用的用户认证状态。
+    app('auth')->forgetGuards();
+    app(JWT::class)->unsetToken();
+
+    $this->actingAsAdmin()->getJson("/api/admin/user/$user->id")
+        ->assertOk()
+        ->assertJson(['code' => 1])
+        ->assertJsonPath('data.mobile', $mobile)
+        ->assertJsonPath('data.mobile_verified_at', $user->mobile_verified_at);
+})->with([null, '13800138000', '13800138001']);
+
+test('绑定手机号验证码错误不改变号码及验证状态', function () {
+    $user = User::factory()->create(['mobile' => '13800138001']);
+    Cache::store('runtime')->put('verify_code_bind_13800138000', '123456', 600);
+
+    $this->actingAsUser($user)->patchJson('/api/bind-mobile', [
+        'mobile' => '13800138000',
+        'code' => '654321',
+    ])->assertOk()->assertJson(['code' => 0]);
+
+    expect($user->fresh()->mobile)->toBe('13800138001');
+    expect($user->fresh()->mobile_verified_at)->toBeNull();
 });

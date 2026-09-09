@@ -1,5 +1,5 @@
 {
-    "test": "P\\Tests\\Feature\\Http\\Controllers\\User\\AuthControllerTest::__pest_evaluable_修改用户名成功",
+    "test": "P\\Tests\\Feature\\Http\\Controllers\\User\\AuthControllerTest::__pest_evaluable_用户不能修改用户名",
     "version": "1.0.0",
     "calls": [
         {
@@ -10,7 +10,8 @@
             ],
             "response_status": "2xx",
             "response_schema": {
-                "code": "integer"
+                "code": "integer",
+                "msg": "string"
             }
         }
     ]

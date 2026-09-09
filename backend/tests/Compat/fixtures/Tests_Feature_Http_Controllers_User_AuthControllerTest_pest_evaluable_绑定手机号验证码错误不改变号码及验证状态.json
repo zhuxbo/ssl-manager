@@ -1,0 +1,19 @@
+{
+    "test": "P\\Tests\\Feature\\Http\\Controllers\\User\\AuthControllerTest::__pest_evaluable_绑定手机号验证码错误不改变号码及验证状态",
+    "version": "1.0.0",
+    "calls": [
+        {
+            "method": "PATCH",
+            "uri_pattern": "/api/bind-mobile",
+            "request_keys": [
+                "code",
+                "mobile"
+            ],
+            "response_status": "2xx",
+            "response_schema": {
+                "code": "integer",
+                "msg": "string"
+            }
+        }
+    ]
+}

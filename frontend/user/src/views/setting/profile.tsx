@@ -1,6 +1,6 @@
 import { h, onMounted, ref, defineComponent } from "vue";
 import type { PlusColumn } from "plus-pro-components";
-import { getProfile, updateUsername, bindEmail, bindMobile } from "@/api/auth";
+import { getProfile, bindEmail, bindMobile } from "@/api/auth";
 import { sendEmailCode, sendSmsCode } from "@/api/verifyCode";
 import type { FormRules } from "element-plus";
 import { message } from "@shared/utils";
@@ -114,20 +114,8 @@ export const useProfile = () => {
       prop: "username",
       valueType: "input",
       fieldProps: {
-        placeholder: "请输入用户名"
-      },
-      fieldSlots: {
-        append: () =>
-          h(
-            ElButton,
-            {
-              type: "primary",
-              onClick: () => {
-                handleUsernameUpdate();
-              }
-            },
-            () => "保存"
-          )
+        placeholder: "请输入用户名",
+        disabled: true
       }
     },
     {
@@ -183,10 +171,6 @@ export const useProfile = () => {
   });
 
   const profileRules: FormRules = {
-    username: [
-      { required: true, message: "请输入用户名", trigger: "blur" },
-      { min: 3, max: 16, message: "请输入3-16个字符", trigger: "blur" }
-    ],
     email: [
       { required: true, message: "请输入邮箱", trigger: "blur" },
       {
@@ -213,14 +197,6 @@ export const useProfile = () => {
         trigger: "blur"
       }
     ]
-  };
-
-  const handleUsernameUpdate = () => {
-    updateUsername({ username: profileValues.value.username }).then(() => {
-      message("更新成功", {
-        type: "success"
-      });
-    });
   };
 
   const handleEmailUpdate = () => {
