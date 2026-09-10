@@ -116,7 +116,7 @@ dataset('core_seeders', [
                 ->and(app(DelegationConfigService::class)->all())->toBe([])
                 ->and(app(DelegationConfigService::class)->invalidSettings())->toBe([]);
             $dnsTools = Setting::where('group_id', $siteGroup->id)->where('key', 'dnsTools')->first();
-            expect($dnsTools)->toBeNull();
+            expect($dnsTools?->value)->toBe(['https://dns-tools-cn.cnssl.com', 'https://dns-tools-us.cnssl.com']);
             $autoRefundOnSync = Setting::where('group_id', $siteGroup->id)->where('key', 'autoRefundOnSync')->first();
             expect($autoRefundOnSync)->toBeNull();
             $expandedLogo = Setting::where('group_id', $siteGroup->id)->where('key', 'logoExpanded')->first();
@@ -461,4 +461,13 @@ test('SettingSeeder 按现有 ca 权重插入 delegation 且重跑不覆盖人�
     expect((int) SettingGroup::where('name', 'delegation')->value('weight'))->toBe(777)
         ->and((int) SettingGroup::where('name', 'callback')->value('weight'))->toBe(333)
         ->and((int) SettingGroup::where('name', 'mail')->value('weight'))->toBe(41);
+});
+
+test('恢复 dnsTools 默认节点不覆盖管理员显式空数组', function () {
+    $this->seed(SettingSeeder::class);
+    $site = SettingGroup::where('name', 'site')->firstOrFail();
+    $setting = Setting::where('group_id', $site->id)->where('key', 'dnsTools')->firstOrFail();
+    $setting->update(['value' => []]);
+    $this->seed(SettingSeeder::class);
+    expect($setting->fresh()->value)->toBe([]);
 });

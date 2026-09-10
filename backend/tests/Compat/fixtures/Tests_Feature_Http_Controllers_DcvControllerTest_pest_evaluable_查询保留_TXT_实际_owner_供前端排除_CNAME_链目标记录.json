@@ -1,0 +1,27 @@
+{
+    "test": "P\\Tests\\Feature\\Http\\Controllers\\DcvControllerTest::__pest_evaluable_查询保留_TXT_实际_owner_供前端排除_CNAME_链目标记录",
+    "version": "1.0.0",
+    "calls": [
+        {
+            "method": "POST",
+            "uri_pattern": "/api/dns/query",
+            "request_keys": [
+                "domain",
+                "type"
+            ],
+            "response_status": "2xx",
+            "response_schema": {
+                "code": "integer",
+                "data": {
+                    "records": {
+                        "__list_of__": {
+                            "name": "string",
+                            "type": "string",
+                            "value": "string"
+                        }
+                    }
+                }
+            }
+        }
+    ]
+}

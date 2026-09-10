@@ -1,0 +1,29 @@
+{
+    "test": "P\\Tests\\Feature\\Http\\Controllers\\DcvControllerTest::__pest_evaluable_文件回落拒绝内网或跨域请求@('127.0.0.1', 'http://127.0.0.1/.well-known/…st.txt') with data ('127.0.0.1', 'http://127.0.0.1/.well-known/...st.txt')",
+    "version": "1.0.0",
+    "calls": [
+        {
+            "method": "POST",
+            "uri_pattern": "/api/dcv/verify",
+            "request_keys": [
+                "0"
+            ],
+            "response_status": "2xx",
+            "response_schema": {
+                "code": "integer",
+                "data": {
+                    "results": {
+                        "127.0.0.1": {
+                            "domain": "string",
+                            "matched": "string",
+                            "value": "string",
+                            "error": "string",
+                            "content": "string",
+                            "link": "string"
+                        }
+                    }
+                }
+            }
+        }
+    ]
+}

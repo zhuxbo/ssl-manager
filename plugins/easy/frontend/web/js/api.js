@@ -94,6 +94,7 @@ window.API = (function () {
           headers: {
             "Content-Type": "application/json"
           },
+          signal: AbortSignal.timeout(15000),
           body: JSON.stringify([requestData])
         });
 
@@ -102,12 +103,20 @@ window.API = (function () {
           const data = await response.json();
 
           // code=1: API 处理成功，有验证结果
-          if (data.data?.results) {
-            const result = data.data.results[validation.domain];
-            if (result) {
+          if (data.data?.results || Array.isArray(data.errors)) {
+            const result =
+              data.data?.results?.[validation.domain] ||
+              data.errors?.find(error => error.domain === validation.domain);
+            if (
+              result &&
+              (["true", "false"].includes(result.matched) ||
+                endpoint === "/api/dcv/verify")
+            ) {
               return {
                 checked: result.matched === "true",
-                error: result.matched === "false" ? "验证失败" : "",
+                error:
+                  result.error ||
+                  (result.matched === "false" ? "验证失败" : ""),
                 detected_value: result.value || result.content || "",
                 query: result.query,
                 query_sub: result.query_sub,
@@ -139,6 +148,7 @@ window.API = (function () {
         const response = await fetch(endpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          signal: AbortSignal.timeout(15000),
           body: JSON.stringify([
             { domain, method: "cname", host, value: expectedTarget }
           ])
@@ -150,11 +160,16 @@ window.API = (function () {
           if (!result && data.errors?.length) {
             result = data.errors.find(e => e.domain === domain);
           }
-          if (result) {
+          if (
+            result &&
+            (["true", "false"].includes(result.matched) ||
+              endpoint === "/api/dcv/verify")
+          ) {
             return {
               detected_value: result.value || "",
               checked: result.matched === "true",
-              error: result.matched === "false" ? "验证未通过" : ""
+              error:
+                result.error || (result.matched === "false" ? "验证未通过" : "")
             };
           }
           if (data.msg)
@@ -176,10 +191,7 @@ window.API = (function () {
 
   // 委托验证 TXT 检测（使用 /api/dns/query 原始查询）
   async function verifyDelegationTxt(targetFqdn, expectedValue) {
-    const dnsToolsHosts = Config.getConfig("dnsTools") || [
-      "https://dns-tools-cn.cnssl.com",
-      "https://dns-tools-us.cnssl.com"
-    ];
+    const dnsToolsHosts = Config.getDnsToolsHosts();
     const expectedLower = expectedValue.toLowerCase().trim();
 
     for (const baseUrl of dnsToolsHosts) {
@@ -187,17 +199,12 @@ window.API = (function () {
         const response = await fetch(`${baseUrl}/api/dns/query`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          signal: AbortSignal.timeout(15000),
           body: JSON.stringify({ domain: targetFqdn, type: "TXT" })
         });
         if (!response.ok) continue;
         const data = await response.json();
-        if (data.code !== 1) {
-          return {
-            detected_value: "",
-            checked: false,
-            error: "未检测到 TXT 记录"
-          };
-        }
+        if (data.code !== 1 || !Array.isArray(data.data?.records)) continue;
 
         const records = data.data?.records || [];
         const txtValues = records
@@ -227,10 +234,7 @@ window.API = (function () {
 
   // 查询指定 host 的直接 TXT 记录（通过 name 字段精确匹配，排除 CNAME 链解析到的记录）
   async function queryTxtRecords(host) {
-    const dnsToolsHosts = Config.getConfig("dnsTools") || [
-      "https://dns-tools-cn.cnssl.com",
-      "https://dns-tools-us.cnssl.com"
-    ];
+    const dnsToolsHosts = Config.getDnsToolsHosts();
     const normalizedHost = host.toLowerCase().replace(/\.$/, "");
 
     for (const baseUrl of dnsToolsHosts) {
@@ -238,11 +242,12 @@ window.API = (function () {
         const response = await fetch(`${baseUrl}/api/dns/query`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          signal: AbortSignal.timeout(15000),
           body: JSON.stringify({ domain: host, type: "TXT" })
         });
         if (!response.ok) continue;
         const data = await response.json();
-        if (data.code !== 1) return [];
+        if (data.code !== 1 || !Array.isArray(data.data?.records)) continue;
 
         const records = data.data?.records || [];
         return records

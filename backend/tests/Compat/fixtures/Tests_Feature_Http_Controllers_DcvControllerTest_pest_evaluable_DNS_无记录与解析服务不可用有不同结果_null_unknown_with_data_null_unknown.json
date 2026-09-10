@@ -1,0 +1,28 @@
+{
+    "test": "P\\Tests\\Feature\\Http\\Controllers\\DcvControllerTest::__pest_evaluable_DNS_无记录与解析服务不可用有不同结果@(null, 'unknown') with data (null, 'unknown')",
+    "version": "1.0.0",
+    "calls": [
+        {
+            "method": "POST",
+            "uri_pattern": "/api/dcv/verify",
+            "request_keys": [
+                "0"
+            ],
+            "response_status": "2xx",
+            "response_schema": {
+                "code": "integer",
+                "data": {
+                    "results": {
+                        "example.com": {
+                            "domain": "string",
+                            "matched": "string",
+                            "value": "string",
+                            "error": "string",
+                            "query": "string"
+                        }
+                    }
+                }
+            }
+        }
+    ]
+}

@@ -13,6 +13,29 @@ namespace App\Services\Delegation;
  */
 class DnsResolver
 {
+    /** 本地查询并保留记录所属名称；null 表示解析服务失败，空数组表示无记录。 */
+    public function queryRecords(string $host, string $type): ?array
+    {
+        $records = @dns_get_record($host, $type === 'TXT' ? DNS_TXT : DNS_CNAME);
+        if ($records === false) {
+            return null;
+        }
+
+        $result = [];
+        foreach ($records as $record) {
+            if (($record['type'] ?? '') !== $type) {
+                continue;
+            }
+            $result[] = [
+                'name' => $record['host'],
+                'type' => $type,
+                'value' => $type === 'TXT' ? ($record['txt'] ?? '') : ($record['target'] ?? ''),
+            ];
+        }
+
+        return $result;
+    }
+
     /**
      * 查询主机名的 TXT 记录值列表（本地解析，失败/无记录返回空数组）。
      *
