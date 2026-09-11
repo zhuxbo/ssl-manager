@@ -6,7 +6,9 @@ namespace App\Services\Delegation;
 
 use App\Services\Delegation\Dns\DelegationDnsProvider;
 use App\Services\Delegation\Dns\DelegationDnsProviderFactory;
+use App\Services\Delegation\Dns\DnsProviderException;
 use Illuminate\Support\Facades\Log;
+use InvalidArgumentException;
 use Throwable;
 
 /**
@@ -15,6 +17,13 @@ use Throwable;
  */
 class DelegationDnsService
 {
+    private ?string $lastError = null;
+
+    public function lastError(): ?string
+    {
+        return $this->lastError;
+    }
+
     public function __construct(
         private readonly DelegationDnsProviderFactory $factory = new DelegationDnsProviderFactory,
         private readonly DelegationConfigService $configs = new DelegationConfigService,
@@ -30,7 +39,10 @@ class DelegationDnsService
      */
     public function setTxtByLabel(string $proxyDomain, string $label, array $values): bool
     {
+        $this->lastError = null;
         if (empty($proxyDomain) || empty($label) || empty($values)) {
+            $this->lastError = '委托域、记录名或 TXT 值为空';
+
             return false;
         }
 
@@ -40,10 +52,14 @@ class DelegationDnsService
                 array_values(array_unique($values)),
             );
         } catch (Throwable $e) {
+            $this->lastError = $e instanceof DnsProviderException
+                ? $e->getMessage()
+                : ($e instanceof InvalidArgumentException ? '委托 DNS 配置无效或不完整' : '委托 DNS 内部处理异常，请检查服务端日志');
             Log::error('委托 TXT 记录写入失败', [
                 'proxy_domain' => $proxyDomain,
                 'label' => $label,
                 'exception' => $e::class,
+                'reason' => $this->lastError,
             ]);
 
             return false;

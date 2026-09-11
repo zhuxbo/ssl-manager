@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Services\Delegation\Dns\CloudflareDnsProvider;
+use App\Services\Delegation\Dns\DnsProviderException;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
@@ -182,7 +183,7 @@ test('success=false 时失败关闭', function () {
     Http::fake(['*' => Http::response(cloudflareListResponse([], success: false))]);
 
     expect(fn () => cloudflareProvider()->allTxt())
-        ->toThrow(RuntimeException::class, 'Cloudflare DNS 请求失败');
+        ->toThrow(RuntimeException::class, 'Cloudflare DNS 查询记录：服务商拒绝请求，HTTP 200');
 });
 
 test('列表响应畸形时失败关闭', function () {
@@ -202,4 +203,15 @@ test('删除响应畸形时失败关闭', function () {
 
     expect(fn () => cloudflareProvider()->deleteRecords(['r1']))
         ->toThrow(RuntimeException::class, 'Cloudflare DNS 响应格式无效');
+});
+
+test('Cloudflare 认证错误保留安全错误码而不显示远端消息', function () {
+    Http::fake(['*' => Http::response([
+        'success' => false,
+        'errors' => [['code' => 10000, 'message' => 'secret-token https://example.com/?token=secret']],
+    ], 403)]);
+
+    expect(fn () => cloudflareProvider()->allTxt())
+        ->toThrow(DnsProviderException::class,
+            'Cloudflare DNS 查询记录：身份认证失败（10000），HTTP 403');
 });

@@ -982,7 +982,8 @@ class Action
         $isDelegated = $autoDcvService->handleOrder($order);
 
         if (! $isDelegated) {
-            $this->error("订单 #$orderId 委托解析处理失败或未命中配置");
+            $reason = $autoDcvService->lastError() ?? '委托解析处理失败或未命中配置';
+            $this->error("订单 #$orderId 委托解析失败：$reason");
         }
 
         $this->success();

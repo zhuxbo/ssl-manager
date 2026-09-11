@@ -17,6 +17,13 @@ use Throwable;
  */
 class AutoDcvTxtService
 {
+    private ?string $lastError = null;
+
+    public function lastError(): ?string
+    {
+        return $this->lastError;
+    }
+
     protected CnameDelegationService $delegationService;
 
     protected DelegationDnsService $dnsService;
@@ -107,9 +114,12 @@ class AutoDcvTxtService
      */
     public function handleOrder(Order $order): bool
     {
+        $this->lastError = null;
         $cert = $order->latestCert;
 
         if ($cert->dcv['method'] !== 'txt' || ! ($cert->dcv['is_delegate'] ?? false)) {
+            $this->lastError = '订单未使用 TXT 委托验证';
+
             return false;
         }
 
@@ -117,6 +127,7 @@ class AutoDcvTxtService
         $validation = $cert->validation;
 
         if (empty($validation)) {
+            $this->lastError = '订单验证记录为空';
             Log::info("订单 #$order->id validation为空或不是数组", [
                 'order_id' => $order->id,
                 'cert_id' => $cert->id,
@@ -146,6 +157,7 @@ class AutoDcvTxtService
                 );
 
                 if (! $isSuccess) {
+                    $this->lastError = $this->dnsService->lastError() ?? '委托 TXT 写入失败';
                     Log::error("订单 #$order->id 批量写入TXT失败", [
                         'order_id' => $order->id,
                         'delegation_id' => $delegation->id,
@@ -163,6 +175,8 @@ class AutoDcvTxtService
 
             return true;
         }
+
+        $this->lastError ??= '未找到可写入的委托 TXT 记录';
 
         return false;
     }
@@ -211,6 +225,7 @@ class AutoDcvTxtService
             $host = $item['host'] ?? '';
 
             if (empty($domain) || empty($value)) {
+                $this->lastError = '验证记录缺少域名或 TXT 值';
                 Log::warning("订单 #$order->id validation[$index] 配置不完整", [
                     'order_id' => $order->id,
                     'index' => $index,
@@ -228,6 +243,7 @@ class AutoDcvTxtService
             if (empty($host)) {
                 $dcvHost = $cert->dcv['dns']['host'] ?? '';
                 if (empty($dcvHost)) {
+                    $this->lastError = '验证记录缺少主机记录';
                     Log::warning("订单 #$order->id validation[$index] 缺少 host 且 dcv.dns.host 为空", [
                         'order_id' => $order->id,
                         'index' => $index,
@@ -252,6 +268,7 @@ class AutoDcvTxtService
             [$prefix, $zone] = $this->splitPrefixAndZone($host);
 
             if (! $prefix || ! $zone) {
+                $this->lastError = '验证主机记录格式或前缀无效';
                 Log::warning("订单 #$order->id validation[$index] 无法解析host", [
                     'order_id' => $order->id,
                     'index' => $index,
@@ -286,6 +303,7 @@ class AutoDcvTxtService
             }
 
             if (! $delegation) {
+                $this->lastError = '未匹配到委托配置';
                 // 未命中委托配置（源分歧或真实配置缺口两种成因）：记 warning surface 静默 miss
                 Log::warning("订单 #$order->id validation[$index] 未命中委托配置，TXT 不写", [
                     'order_id' => $order->id,
@@ -304,6 +322,7 @@ class AutoDcvTxtService
                 ? $this->delegationService->proxyDomainFromTarget($delegation, $target)
                 : $delegation->proxy_domain;
             if ($writeProxyDomain === null) {
+                $this->lastError = '委托目标无效';
                 Log::warning("订单 #$order->id validation[$index] 委托目标无效，TXT 不写", [
                     'order_id' => $order->id,
                     'delegation_id' => $delegation->id,

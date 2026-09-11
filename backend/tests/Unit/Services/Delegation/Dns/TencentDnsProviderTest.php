@@ -220,7 +220,7 @@ test('Tencent provider 请求错误不泄露凭据或远端详情', function () 
         tencentProvider($secretId, $secretKey)->allTxt();
         test()->fail('Tencent API 错误应失败关闭');
     } catch (RuntimeException $e) {
-        expect($e->getMessage())->toBe('Tencent DNS 请求失败')
+        expect($e->getMessage())->toBe('Tencent DNS DescribeRecordList：SecretId 无效（AuthFailure.SecretIdNotFound）')
             ->and($e->getMessage())->not->toContain($secretId, $secretKey);
     }
 });

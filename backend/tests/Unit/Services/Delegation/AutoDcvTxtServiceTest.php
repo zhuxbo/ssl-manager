@@ -1,13 +1,16 @@
 <?php
 
+use App\Exceptions\ApiResponseException;
 use App\Jobs\CleanupDelegationTxtJob;
 use App\Models\Setting;
 use App\Models\SettingGroup;
 use App\Services\Delegation\AutoDcvTxtService;
 use App\Services\Delegation\DelegationConfigService;
 use App\Services\Delegation\DelegationDnsService;
+use App\Services\Order\Action;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Tests\TestCase;
 use Tests\Traits\CreatesTestData;
@@ -967,4 +970,34 @@ test('异步清理任务序列化后仍使用入队时的原证书验证快照',
     $service->shouldReceive('cleanupCertificate')->once()->withArgs(fn ($snapshot) => $snapshot->id === $cert->id
         && $snapshot->validation === $validation);
     unserialize($payload)->handle($service);
+});
+
+test('委托任务返回服务商安全错误且不标记写入成功', function () {
+    $user = $this->createTestUser();
+    $product = $this->createTestProduct(['ca' => 'sectigo']);
+    $order = $this->createTestOrder($user, $product);
+    configureAutoDcvProxyDomain('proxy.example.com');
+    $delegation = $this->createTestDelegation($user, ['zone' => 'example.com', 'proxy_domain' => 'proxy.example.com']);
+    $cert = $this->createTestCert($order, [
+        'dcv' => ['method' => 'txt', 'is_delegate' => true, 'ca' => 'sectigo'],
+        'validation' => [[
+            'domain' => 'example.com', 'host' => '_dnsauth.example.com',
+            'value' => 'test-token', 'delegation_id' => $delegation->id,
+        ]],
+    ]);
+    Http::fake(['*' => Http::response([
+        'success' => false,
+        'errors' => [['code' => 10000, 'message' => 'never-expose-secret']],
+    ], 403)]);
+
+    try {
+        app(Action::class)->delegation($order->id);
+        test()->fail('委托任务应返回失败');
+    } catch (ApiResponseException $e) {
+        expect($e->getApiResponse())->toMatchArray([
+            'code' => 0,
+            'msg' => "订单 #{$order->id} 委托解析失败：Cloudflare DNS 查询记录：身份认证失败（10000），HTTP 403",
+        ]);
+    }
+    expect($cert->fresh()->validation[0]['auto_txt_written'] ?? false)->toBeFalse();
 });

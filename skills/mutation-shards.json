@@ -78,6 +78,7 @@
         "backend/tests/**/*Order*Test.php",
         "backend/tests/Feature/Services/Order/**/*.php",
         "backend/tests/Unit/Services/Order/**/*.php",
+        "backend/tests/Unit/Services/Delegation/AutoDcvTxtServiceTest.php",
         "backend/tests/Feature/Documents/DocumentSubmitTest.php",
         "backend/tests/Feature/Http/Controllers/Callback/CallbackControllerTest.php",
         "backend/tests/Feature/Http/Controllers/V1/ApiController*Test.php",

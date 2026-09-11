@@ -10,7 +10,6 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
 use InvalidArgumentException;
 use JsonException;
-use RuntimeException;
 use Throwable;
 
 class TencentDnsProvider implements DelegationDnsProvider
@@ -64,11 +63,11 @@ class TencentDnsProvider implements DelegationDnsProvider
                 continue;
             }
             if ($this->errorCode($payload) !== null) {
-                throw new RuntimeException('Tencent DNS 请求失败');
+                throw DnsProviderException::api('Tencent', 'CreateTXTRecord', $this->errorCode($payload));
             }
 
             if (! $this->isPositiveRecordId($payload['RecordId'] ?? null)) {
-                throw new RuntimeException('Tencent DNS 响应格式无效');
+                throw new DnsProviderException('Tencent DNS 响应格式无效：CreateTXTRecord 缺少有效记录 ID');
             }
         }
 
@@ -97,7 +96,7 @@ class TencentDnsProvider implements DelegationDnsProvider
                 'RecordId' => (int) $recordId,
             ]);
             if ($this->errorCode($payload) !== null) {
-                throw new RuntimeException('Tencent DNS 请求失败');
+                throw DnsProviderException::api('Tencent', 'DeleteRecord', $this->errorCode($payload));
             }
         }
     }
@@ -126,14 +125,14 @@ class TencentDnsProvider implements DelegationDnsProvider
                 return $records;
             }
             if ($errorCode !== null) {
-                throw new RuntimeException('Tencent DNS 请求失败');
+                throw DnsProviderException::api('Tencent', 'DescribeRecordList', $errorCode);
             }
 
             $recordCountInfo = $payload['RecordCountInfo'] ?? null;
             $recordList = $payload['RecordList'] ?? null;
             $totalCount = is_array($recordCountInfo) ? ($recordCountInfo['TotalCount'] ?? null) : null;
             if (! is_int($totalCount) || $totalCount < 0 || ! is_array($recordList)) {
-                throw new RuntimeException('Tencent DNS 响应格式无效');
+                throw new DnsProviderException('Tencent DNS 响应格式无效：DescribeRecordList 记录总数或列表无效');
             }
 
             foreach ($recordList as $record) {
@@ -142,7 +141,7 @@ class TencentDnsProvider implements DelegationDnsProvider
                     || ! is_string($record['Name'] ?? null)
                     || ! is_string($record['Value'] ?? null)
                     || ! is_string($record['Type'] ?? null)) {
-                    throw new RuntimeException('Tencent DNS 响应格式无效');
+                    throw new DnsProviderException('Tencent DNS 响应格式无效：DescribeRecordList 记录字段无效');
                 }
                 if ($record['Type'] !== 'TXT'
                     || ($name !== null && $record['Name'] !== $name)) {
@@ -172,7 +171,7 @@ class TencentDnsProvider implements DelegationDnsProvider
                 JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE,
             );
         } catch (JsonException) {
-            throw new RuntimeException('Tencent DNS 请求失败');
+            throw new DnsProviderException("Tencent DNS {$action}：请求参数编码失败");
         }
 
         $timestamp = now('UTC')->timestamp;
@@ -198,19 +197,18 @@ class TencentDnsProvider implements DelegationDnsProvider
                 ->withBody($body, TencentCloudTc3Signer::CONTENT_TYPE)
                 ->post('/');
         } catch (Throwable) {
-            throw new RuntimeException('Tencent DNS 请求失败');
-        }
-
-        if (! $response->successful()) {
-            throw new RuntimeException('Tencent DNS 请求失败');
+            throw new DnsProviderException("Tencent DNS {$action}：网络连接失败或超时");
         }
 
         $json = $response->json();
         $payload = is_array($json) ? ($json['Response'] ?? null) : null;
+        if (! $response->successful()) {
+            throw DnsProviderException::api('Tencent', $action, is_array($payload) ? $this->errorCode($payload) : null, $response->status());
+        }
         if (! is_array($payload)
             || ! is_string($payload['RequestId'] ?? null)
             || trim($payload['RequestId']) === '') {
-            throw new RuntimeException('Tencent DNS 响应格式无效');
+            throw new DnsProviderException("Tencent DNS 响应格式无效：$action 返回结构或错误字段无效");
         }
 
         if (array_key_exists('Error', $payload)) {
@@ -218,7 +216,7 @@ class TencentDnsProvider implements DelegationDnsProvider
             if (! is_array($error)
                 || ! is_string($error['Code'] ?? null) || trim($error['Code']) === ''
                 || ! is_string($error['Message'] ?? null) || trim($error['Message']) === '') {
-                throw new RuntimeException('Tencent DNS 响应格式无效');
+                throw new DnsProviderException("Tencent DNS 响应格式无效：$action 返回结构或错误字段无效");
             }
         }
 

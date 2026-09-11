@@ -59,19 +59,45 @@ window.API = (function () {
     });
   }
 
+  // 正常 HTTP 响应立即采用，只有请求失败才切换节点。
+  async function requestDetection(endpoints, body) {
+    for (const endpoint of endpoints) {
+      let response;
+      try {
+        response = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          signal: AbortSignal.timeout(15000),
+          body: JSON.stringify(body)
+        });
+      } catch {
+        continue;
+      }
+      if (!response.ok) continue;
+      try {
+        return await response.json();
+      } catch {
+        return null;
+      }
+    }
+    throw new Error("检测服务不可用");
+  }
+
+  function readDcvResult(data, domain) {
+    return (
+      data?.data?.results?.[domain] ||
+      (Array.isArray(data?.errors)
+        ? data.errors.find(error => error?.domain === domain)
+        : null)
+    );
+  }
+
   // DCV 验证检测
   async function verifyDCV(validation) {
-    const endpoints = Config.getDCVEndpoints();
-    let lastError = null;
-    let hasResponse = false;
-
-    // 准备请求数据
     const requestData = {
       domain: validation.domain,
       method: validation.method.toLowerCase()
     };
-
-    // 根据验证方法添加相应字段
     if (["txt", "cname"].includes(requestData.method)) {
       requestData.host = validation.host || "@";
       requestData.value = validation.value;
@@ -85,187 +111,111 @@ window.API = (function () {
       requestData.name = name;
       requestData.content = validation.file_content || validation.content;
     }
-
-    // 尝试所有端点
-    for (const endpoint of endpoints) {
-      try {
-        const response = await fetch(endpoint, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          signal: AbortSignal.timeout(15000),
-          body: JSON.stringify([requestData])
-        });
-
-        if (response.ok) {
-          hasResponse = true;
-          const data = await response.json();
-
-          // code=1: API 处理成功，有验证结果
-          if (data.data?.results || Array.isArray(data.errors)) {
-            const result =
-              data.data?.results?.[validation.domain] ||
-              data.errors?.find(error => error.domain === validation.domain);
-            if (
-              result &&
-              (["true", "false"].includes(result.matched) ||
-                endpoint === "/api/dcv/verify")
-            ) {
-              return {
-                checked: result.matched === "true",
-                error:
-                  result.error ||
-                  (result.matched === "false" ? "验证失败" : ""),
-                detected_value: result.value || result.content || "",
-                query: result.query,
-                query_sub: result.query_sub,
-                value_sub: result.value_sub,
-                link: result.link || result.link_https || result.link_http
-              };
-            }
-          }
-          // code=0 或未找到结果，尝试下一端点
-        }
-      } catch (error) {
-        lastError = error;
-      }
-    }
-
-    // 所有端点都失败
-    if (hasResponse) {
-      throw new Error("未获取到验证结果");
-    }
-    throw lastError || new Error("验证服务不可用");
+    const data = await requestDetection(Config.getDCVEndpoints(), [
+      requestData
+    ]);
+    const result = readDcvResult(data, validation.domain);
+    if (!result) throw new Error(data?.msg || "未获取到验证结果");
+    return {
+      checked: result.matched === "true",
+      error:
+        result.error ||
+        (result.matched === "true"
+          ? ""
+          : result.matched === "false"
+            ? "验证失败"
+            : data?.msg || "验证结果无法判定"),
+      detected_value: result.value || result.content || "",
+      query: result.query,
+      query_sub: result.query_sub,
+      value_sub: result.value_sub,
+      link: result.link || result.link_https || result.link_http
+    };
   }
 
   // 委托验证 CNAME 检测
   async function verifyCname(domain, host, expectedTarget) {
-    const endpoints = Config.getDCVEndpoints();
-    let lastMsg = "";
-    for (const endpoint of endpoints) {
-      try {
-        const response = await fetch(endpoint, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          signal: AbortSignal.timeout(15000),
-          body: JSON.stringify([
-            { domain, method: "cname", host, value: expectedTarget }
-          ])
-        });
-        if (response.ok) {
-          const data = await response.json();
-          // code=1 时数据在 data.results，code=0 时在 errors 数组
-          let result = data.data?.results?.[domain];
-          if (!result && data.errors?.length) {
-            result = data.errors.find(e => e.domain === domain);
-          }
-          if (
-            result &&
-            (["true", "false"].includes(result.matched) ||
-              endpoint === "/api/dcv/verify")
-          ) {
-            return {
-              detected_value: result.value || "",
-              checked: result.matched === "true",
-              error:
-                result.error || (result.matched === "false" ? "验证未通过" : "")
-            };
-          }
-          if (data.msg)
-            lastMsg = data.msg.replace(
-              "批量验证失败：部分或全部验证未通过",
-              "验证未通过"
-            );
-        }
-      } catch (error) {
-        continue;
-      }
+    try {
+      const data = await requestDetection(Config.getDCVEndpoints(), [
+        { domain, method: "cname", host, value: expectedTarget }
+      ]);
+      const result = readDcvResult(data, domain);
+      return {
+        detected_value: result?.value || "",
+        checked: result?.matched === "true",
+        error:
+          result?.error ||
+          (result?.matched === "true"
+            ? ""
+            : result?.matched === "false"
+              ? "验证未通过"
+              : data?.msg || "验证结果无法判定")
+      };
+    } catch (error) {
+      return { checked: false, detected_value: "", error: error.message };
     }
-    return {
-      checked: false,
-      detected_value: "",
-      error: lastMsg || "检测服务不可用"
-    };
   }
 
-  // 委托验证 TXT 检测（使用 /api/dns/query 原始查询）
+  // 委托验证 TXT 检测
   async function verifyDelegationTxt(targetFqdn, expectedValue) {
-    const dnsToolsHosts = Config.getDnsToolsHosts();
-    const expectedLower = expectedValue.toLowerCase().trim();
-
-    for (const baseUrl of dnsToolsHosts) {
-      try {
-        const response = await fetch(`${baseUrl}/api/dns/query`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          signal: AbortSignal.timeout(15000),
-          body: JSON.stringify({ domain: targetFqdn, type: "TXT" })
-        });
-        if (!response.ok) continue;
-        const data = await response.json();
-        if (data.code !== 1 || !Array.isArray(data.data?.records)) continue;
-
-        const records = data.data?.records || [];
-        const txtValues = records
-          .filter(r => r.type === "TXT" && r.value)
-          .map(r => r.value.replace(/^"|"$/g, "").trim());
-
-        if (txtValues.length === 0) {
-          return {
-            detected_value: "",
-            checked: false,
-            error: "未检测到 TXT 记录"
-          };
-        }
-
-        const matched = txtValues.some(v => v.toLowerCase() === expectedLower);
+    try {
+      const data = await requestDetection(
+        Config.getDnsToolsHosts().map(host => `${host}/api/dns/query`),
+        { domain: targetFqdn, type: "TXT" }
+      );
+      if (data?.code !== 1 || !Array.isArray(data.data?.records)) {
         return {
-          detected_value: txtValues.join(", "),
-          checked: matched,
-          error: matched ? "" : "TXT 记录不匹配"
+          checked: false,
+          detected_value: "",
+          error: data?.msg || "未获取到 DNS 查询结果"
         };
-      } catch (error) {
-        continue;
       }
+      const txtValues = data.data.records
+        .filter(r => r?.type === "TXT" && typeof r.value === "string")
+        .map(r => r.value.replace(/^"|"$/g, "").trim());
+      if (!txtValues.length) {
+        return {
+          checked: false,
+          detected_value: "",
+          error: "未检测到 TXT 记录"
+        };
+      }
+      const expectedLower = expectedValue.toLowerCase().trim();
+      const matched = txtValues.some(
+        value => value.toLowerCase() === expectedLower
+      );
+      return {
+        checked: matched,
+        detected_value: txtValues.join(", "),
+        error: matched ? "" : "TXT 记录不匹配"
+      };
+    } catch (error) {
+      return { checked: false, detected_value: "", error: error.message };
     }
-    return { checked: false, detected_value: "", error: "检测服务不可用" };
   }
 
-  // 查询指定 host 的直接 TXT 记录（通过 name 字段精确匹配，排除 CNAME 链解析到的记录）
+  // 保留指定主机的直接 TXT 记录，排除 CNAME 链目标。
   async function queryTxtRecords(host) {
-    const dnsToolsHosts = Config.getDnsToolsHosts();
-    const normalizedHost = host.toLowerCase().replace(/\.$/, "");
-
-    for (const baseUrl of dnsToolsHosts) {
-      try {
-        const response = await fetch(`${baseUrl}/api/dns/query`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          signal: AbortSignal.timeout(15000),
-          body: JSON.stringify({ domain: host, type: "TXT" })
-        });
-        if (!response.ok) continue;
-        const data = await response.json();
-        if (data.code !== 1 || !Array.isArray(data.data?.records)) continue;
-
-        const records = data.data?.records || [];
-        return records
-          .filter(r => {
-            if (r.type !== "TXT" || !r.value) return false;
-            // 仅保留 name 与查询主机匹配的 TXT 记录，排除 CNAME 链解析到的记录
-            if (r.name) {
-              const recordName = r.name.toLowerCase().replace(/\.$/, "");
-              if (recordName !== normalizedHost) return false;
-            }
-            return true;
-          })
-          .map(r => r.value.replace(/^"|"$/g, "").trim());
-      } catch (error) {
-        continue;
-      }
+    try {
+      const data = await requestDetection(
+        Config.getDnsToolsHosts().map(baseUrl => `${baseUrl}/api/dns/query`),
+        { domain: host, type: "TXT" }
+      );
+      if (data?.code !== 1 || !Array.isArray(data.data?.records)) return [];
+      const normalizedHost = host.toLowerCase().replace(/\.$/, "");
+      return data.data.records
+        .filter(
+          r =>
+            r?.type === "TXT" &&
+            typeof r.value === "string" &&
+            (!r.name ||
+              (typeof r.name === "string" &&
+                r.name.toLowerCase().replace(/\.$/, "") === normalizedHost))
+        )
+        .map(r => r.value.replace(/^"|"$/g, "").trim());
+    } catch {
+      return [];
     }
-    return [];
   }
 
   return {

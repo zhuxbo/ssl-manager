@@ -196,8 +196,8 @@ test('Aliyun provider 对畸形列表响应失败关闭', function (array $paylo
     ]], 1, 500, 1)],
 ]);
 
-test('Aliyun provider upsert 精确匹配 RR 并仅创建缺失唯一值', function () {
-    Http::fake(function (Request $request) {
+test('Aliyun provider upsert 精确匹配 RR 并仅创建缺失唯一值', function (string $status) {
+    Http::fake(function (Request $request) use ($status) {
         parse_str((string) parse_url($request->url(), PHP_URL_QUERY), $query);
 
         if (($query['Action'] ?? null) === 'DescribeDomainRecords') {
@@ -219,7 +219,7 @@ test('Aliyun provider upsert 精确匹配 RR 并仅创建缺失唯一值', funct
                     'Value' => 'old',
                     'DomainName' => 'proxy.example.com',
                     'TTL' => 600,
-                    'Status' => 'Enable',
+                    'Status' => $status,
                     'Line' => 'default',
                     'Locked' => false,
                 ],
@@ -230,7 +230,7 @@ test('Aliyun provider upsert 精确匹配 RR 并仅创建缺失唯一值', funct
                     'Value' => 'new',
                     'DomainName' => 'proxy.example.com',
                     'TTL' => 600,
-                    'Status' => 'Enable',
+                    'Status' => $status,
                     'Line' => 'default',
                     'Locked' => false,
                 ],
@@ -241,7 +241,7 @@ test('Aliyun provider upsert 精确匹配 RR 并仅创建缺失唯一值', funct
                     'Value' => 'new',
                     'DomainName' => 'proxy.example.com',
                     'TTL' => 600,
-                    'Status' => 'Enable',
+                    'Status' => $status,
                     'Line' => 'default',
                     'Locked' => false,
                 ],
@@ -266,9 +266,9 @@ test('Aliyun provider upsert 精确匹配 RR 并仅创建缺失唯一值', funct
     expect(aliyunProvider()->upsertTxt('label', ['old', 'new', 'new'], 900))->toBeTrue();
 
     Http::assertSentCount(2);
-});
+})->with(['Enable', 'ENABLE', 'enable']);
 
-test('Aliyun provider upsert 在全部值已存在时不调用新增接口', function () {
+test('Aliyun provider upsert 在全部值已存在时不调用新增接口', function (string $status) {
     Http::fake(['*' => Http::response(aliyunListResponse([
         [
             'RecordId' => '101',
@@ -277,7 +277,7 @@ test('Aliyun provider upsert 在全部值已存在时不调用新增接口', fun
             'Value' => 'one',
             'DomainName' => 'proxy.example.com',
             'TTL' => 600,
-            'Status' => 'Enable',
+            'Status' => $status,
             'Line' => 'default',
             'Locked' => false,
         ],
@@ -288,7 +288,7 @@ test('Aliyun provider upsert 在全部值已存在时不调用新增接口', fun
             'Value' => 'two',
             'DomainName' => 'proxy.example.com',
             'TTL' => 600,
-            'Status' => 'Enable',
+            'Status' => $status,
             'Line' => 'default',
             'Locked' => false,
         ],
@@ -297,10 +297,10 @@ test('Aliyun provider upsert 在全部值已存在时不调用新增接口', fun
     expect(aliyunProvider()->upsertTxt('label', ['one', 'two']))->toBeTrue();
 
     Http::assertSentCount(1);
-});
+})->with(['Enable', 'ENABLE', 'enable']);
 
-test('Aliyun provider upsert 不把同值的禁用 TXT 视为已存在', function () {
-    Http::fake(function (Request $request) {
+test('Aliyun provider upsert 不把同值的禁用 TXT 视为已存在', function (string $status) {
+    Http::fake(function (Request $request) use ($status) {
         $query = assertValidAliyunSignedQuery($request, match (count(Http::recorded())) {
             0 => 'DescribeDomainRecords',
             1 => 'DeleteDomainRecord',
@@ -316,7 +316,7 @@ test('Aliyun provider upsert 不把同值的禁用 TXT 视为已存在', functio
                     'Value' => 'token',
                     'DomainName' => 'proxy.example.com',
                     'TTL' => 600,
-                    'Status' => 'Disable',
+                    'Status' => $status,
                     'Line' => 'default',
                     'Locked' => false,
                 ],
@@ -357,7 +357,7 @@ test('Aliyun provider upsert 不把同值的禁用 TXT 视为已存在', functio
             'Value' => 'token',
             'TTL' => '600',
         ]);
-});
+})->with(['Disable', 'DISABLE', 'disable']);
 
 test('Aliyun provider upsert 不把非默认线路的同值 TXT 视为已存在', function () {
     Http::fake(function (Request $request) {
@@ -506,7 +506,7 @@ test('Aliyun provider 拒绝无效记录 ID', function (mixed $recordId) {
     '数组' => [['101']],
 ]);
 
-test('Aliyun provider 对 HTTP 失败和 API 错误均返回固定脱敏异常', function (array|string $body, int $status) {
+test('Aliyun provider 对 HTTP 失败和 API 错误均返回固定脱敏异常', function (array|string $body, int $status, string $expected) {
     $accessKeyId = 'never-expose-access-key-id';
     $accessKeySecret = 'never-expose-access-key-secret';
     Http::fake(['*' => Http::response($body, $status)]);
@@ -515,17 +515,17 @@ test('Aliyun provider 对 HTTP 失败和 API 错误均返回固定脱敏异常',
         aliyunProvider($accessKeyId, $accessKeySecret)->allTxt();
         throw new RuntimeException('远端失败未抛出预期异常');
     } catch (RuntimeException $e) {
-        expect($e->getMessage())->toBe('Aliyun DNS 请求失败')
+        expect($e->getMessage())->toBe($expected)
             ->and($e->getMessage())->not->toContain($accessKeyId)
             ->and($e->getMessage())->not->toContain($accessKeySecret);
     }
 })->with([
-    'HTTP 失败' => ['gateway failure never-expose-access-key-secret', 502],
+    'HTTP 失败' => ['gateway failure never-expose-access-key-secret', 502, 'Aliyun DNS DescribeDomainRecords：服务商拒绝请求，HTTP 502'],
     'API 错误' => [[
         'RequestId' => 'request-id',
         'Code' => 'InvalidAccessKeyId.NotFound',
         'Message' => 'never-expose-access-key-id never-expose-access-key-secret',
-    ], 200],
+    ], 200, 'Aliyun DNS DescribeDomainRecords：AccessKey ID 无效（InvalidAccessKeyId.NotFound），HTTP 200'],
 ]);
 
 test('Aliyun provider 对畸形新增或删除响应失败关闭', function (Closure $operation, array $responses) {

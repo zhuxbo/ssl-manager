@@ -9,7 +9,6 @@ use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
-use RuntimeException;
 use Throwable;
 
 class AliyunDnsProvider implements DelegationDnsProvider
@@ -136,7 +135,8 @@ class AliyunDnsProvider implements DelegationDnsProvider
                     'id' => $record['RecordId'],
                     'name' => $record['RR'],
                     'value' => $record['Value'],
-                    'status' => $record['Status'],
+                    // 阿里云实际响应也可能使用全大写状态，统一后再做启用/禁用判断。
+                    'status' => ucfirst(strtolower($record['Status'])),
                     'line' => $record['Line'],
                     'changed_at' => $this->timestamp($record['CreateTimestamp'] ?? null, $record['UpdateTimestamp'] ?? null),
                 ];
@@ -155,7 +155,7 @@ class AliyunDnsProvider implements DelegationDnsProvider
             || ! is_string($payload['RequestId']) || trim($payload['RequestId']) === ''
             || ! is_string($payload['RecordId']) || trim($payload['RecordId']) === ''
             || ($expectedRecordId !== null && $payload['RecordId'] !== $expectedRecordId)) {
-            throw new RuntimeException('Aliyun DNS 响应格式无效');
+            throw new DnsProviderException('Aliyun DNS 响应格式无效：新增/删除接口缺少有效记录 ID 或请求 ID');
         }
     }
 
@@ -177,19 +177,15 @@ class AliyunDnsProvider implements DelegationDnsProvider
         try {
             $response = $this->client->get('/', $parameters);
         } catch (Throwable) {
-            throw new RuntimeException('Aliyun DNS 请求失败');
-        }
-
-        if (! $response->successful()) {
-            throw new RuntimeException('Aliyun DNS 请求失败');
+            throw new DnsProviderException("Aliyun DNS {$action}：网络连接失败或超时");
         }
 
         $payload = $response->json();
-        if (! is_array($payload)) {
-            throw new RuntimeException('Aliyun DNS 响应格式无效');
+        if (! $response->successful() || (is_array($payload) && isset($payload['Code']))) {
+            throw DnsProviderException::api('Aliyun', $action, is_array($payload) ? ($payload['Code'] ?? null) : null, $response->status());
         }
-        if (isset($payload['Code'])) {
-            throw new RuntimeException('Aliyun DNS 请求失败');
+        if (! is_array($payload)) {
+            throw new DnsProviderException("Aliyun DNS {$action}：响应不是有效 JSON 对象");
         }
 
         return $payload;
@@ -205,7 +201,7 @@ class AliyunDnsProvider implements DelegationDnsProvider
             || ! is_int($payload['PageSize']) || $payload['PageSize'] !== self::PAGE_SIZE
             || ! is_string($payload['RequestId']) || trim($payload['RequestId']) === ''
             || ! is_array($records)) {
-            throw new RuntimeException('Aliyun DNS 响应格式无效');
+            throw new DnsProviderException('Aliyun DNS 响应格式无效：DescribeDomainRecords 分页或记录容器无效');
         }
 
         foreach ($records as $record) {
@@ -214,9 +210,9 @@ class AliyunDnsProvider implements DelegationDnsProvider
                 || ! is_string($record['RecordId']) || ! is_string($record['RR'])
                 || ! is_string($record['Type']) || ! is_string($record['Value'])
                 || ! is_string($record['Status'])
-                || ! in_array($record['Status'], ['Enable', 'Disable'], true)
+                || ! in_array(strtolower($record['Status']), ['enable', 'disable'], true)
                 || ! is_string($record['Line']) || trim($record['Line']) === '') {
-                throw new RuntimeException('Aliyun DNS 响应格式无效');
+                throw new DnsProviderException('Aliyun DNS 响应格式无效：DescribeDomainRecords 记录字段类型、状态或线路无效');
             }
         }
 

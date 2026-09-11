@@ -624,7 +624,7 @@ import { get as getRootDomain } from "psl";
 import * as OrderApi from "@/api/order";
 import ValidationMethods from "./validationMethods.vue";
 import axios from "axios";
-import { verifyDcvWithFallback } from "@shared/utils/dcv";
+import { queryDnsWithFallback, verifyDcvWithFallback } from "@shared/utils/dcv";
 import { debounce } from "lodash-es";
 import { useRoute } from "vue-router";
 import { message } from "@shared/utils";
@@ -856,55 +856,38 @@ async function verifyCname(
 
 // 委托验证 TXT 记录检测函数（使用 /api/dns/query 原始查询）
 async function verifyDelegationTxt(targetFqdn: string, expectedValue: string) {
-  const dnsToolsHosts = [...(getConfig()?.DnsTools || []), ""];
-
-  const expectedLower = expectedValue.toLowerCase().trim();
-  for (const baseUrl of dnsToolsHosts) {
-    try {
-      const response = await axios.post(
-        `${baseUrl}/api/dns/query`,
-        { domain: targetFqdn, type: "TXT" },
-        { timeout: 10000 }
-      );
-
-      if (
-        response.data?.code !== 1 ||
-        !Array.isArray(response.data.data?.records)
-      ) {
-        continue;
-      }
-
-      const records = response.data.data?.records || [];
-      const txtValues = records
-        .filter((r: any) => r.type === "TXT" && r.value)
-        .map((r: any) => r.value.replace(/^"|"$/g, "").trim());
-
-      if (txtValues.length === 0) {
-        return {
-          detected_value: "",
-          checked: false,
-          error: "未检测到 TXT 记录"
-        };
-      }
-
-      const matched = txtValues.some(
-        (v: string) => v.toLowerCase() === expectedLower
-      );
+  try {
+    const data = await queryDnsWithFallback(
+      getConfig()?.DnsTools || [],
+      { domain: targetFqdn, type: "TXT" },
+      async (url, body, timeout) =>
+        (await axios.post(url, body, { timeout })).data
+    );
+    if (data?.code !== 1 || !Array.isArray(data.data?.records)) {
       return {
-        detected_value: txtValues.join(", "),
-        checked: matched,
-        error: matched ? "" : "TXT 记录不匹配"
+        checked: undefined,
+        detected_value: "",
+        error: data?.msg || "未获取到 DNS 查询结果"
       };
-    } catch (error) {
-      console.debug(`Failed to connect to ${baseUrl}, trying next...`);
-      continue;
     }
+    const txtValues = data.data.records
+      .filter((r: any) => r?.type === "TXT" && typeof r.value === "string")
+      .map((r: any) => r.value.replace(/^"|"$/g, "").trim());
+    if (!txtValues.length) {
+      return { checked: false, detected_value: "", error: "未检测到 TXT 记录" };
+    }
+    const expectedLower = expectedValue.toLowerCase().trim();
+    const matched = txtValues.some(
+      (value: string) => value.toLowerCase() === expectedLower
+    );
+    return {
+      checked: matched,
+      detected_value: txtValues.join(", "),
+      error: matched ? "" : "TXT 记录不匹配"
+    };
+  } catch {
+    return { checked: undefined, detected_value: "", error: "检测服务不可用" };
   }
-  return {
-    checked: undefined,
-    detected_value: "",
-    error: "检测服务不可用"
-  };
 }
 
 // 批量检测函数
@@ -945,35 +928,28 @@ async function batchVerifyValidation(validation: any[], ca?: string) {
       const cnameHost = `${delegationPrefix.value}.${zone}`;
       let txtConflict = "";
       try {
-        const dnsToolsHosts = [...(getConfig()?.DnsTools || []), ""];
-        for (const baseUrl of dnsToolsHosts) {
-          try {
-            const res = await axios.post(
-              `${baseUrl}/api/dns/query`,
-              { domain: cnameHost, type: "TXT" },
-              { timeout: 10000 }
-            );
-            if (res.data?.code === 1) {
-              const normalizedHost = cnameHost.toLowerCase().replace(/\.$/, "");
-              // 通过 name 字段精确匹配：仅检测直接属于该主机名的 TXT 记录，排除 CNAME 链解析到的记录
-              const directTxtRecords = (res.data.data?.records || []).filter(
-                (r: any) =>
-                  r.type === "TXT" &&
-                  r.value &&
-                  r.name?.toLowerCase().replace(/\.$/, "") === normalizedHost
-              );
-              if (directTxtRecords.length > 0) {
-                txtConflict = `检测到 ${cnameHost} 存在 TXT 记录，TXT 和 CNAME 同名共存会导致委托不生效，请删除 TXT 记录`;
-              }
-            }
-            if (res.data?.code === 1 && Array.isArray(res.data.data?.records))
-              break;
-          } catch {
-            continue;
+        const data = await queryDnsWithFallback(
+          getConfig()?.DnsTools || [],
+          { domain: cnameHost, type: "TXT" },
+          async (url, body, timeout) =>
+            (await axios.post(url, body, { timeout })).data
+        );
+        if (data?.code === 1 && Array.isArray(data.data?.records)) {
+          const normalizedHost = cnameHost.toLowerCase().replace(/\.$/, "");
+          // 只检查原主机名的 TXT，排除 CNAME 链目标上的记录。
+          const directTxtRecords = data.data.records.filter(
+            (r: any) =>
+              r?.type === "TXT" &&
+              r.value &&
+              typeof r.name === "string" &&
+              r.name.toLowerCase().replace(/\.$/, "") === normalizedHost
+          );
+          if (directTxtRecords.length > 0) {
+            txtConflict = `检测到 ${cnameHost} 存在 TXT 记录，TXT 和 CNAME 同名共存会导致委托不生效，请删除 TXT 记录`;
           }
         }
       } catch {
-        // 非关键检测，忽略错误
+        // 非关键检测，忽略错误。
       }
 
       delegationResults.set(delegationId, {

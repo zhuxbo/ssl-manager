@@ -197,3 +197,5 @@ CA active 只更新证书状态，不切换共享委托
 | `AutoDcvTxtService`      | `Services/Delegation/` | 订单维度的自动 TXT 写入  |
 
 ---
+
+委托 DNS 写入保持布尔返回契约，通过 `lastError()` 将安全原因传给委托任务结果。三家适配器的 `DnsProviderException` 只包含本地文案、操作名、白名单错误码和 HTTP 状态；未知远端错误码、Message、请求 URL、凭据和原始异常不进入任务结果或日志。腾讯云重复记录仍按成功处理。

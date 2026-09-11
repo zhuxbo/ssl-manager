@@ -9,7 +9,6 @@ use Illuminate\Http\Client\Response;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
 use InvalidArgumentException;
-use RuntimeException;
 use Throwable;
 
 class CloudflareDnsProvider implements DelegationDnsProvider
@@ -47,7 +46,7 @@ class CloudflareDnsProvider implements DelegationDnsProvider
                 'content' => $value,
                 'ttl' => $ttl,
                 'proxied' => false,
-            ]));
+            ]), '新增 TXT');
             $this->validateMutationResponse($response);
         }
 
@@ -73,7 +72,8 @@ class CloudflareDnsProvider implements DelegationDnsProvider
             }
 
             $response = $this->request(
-                fn () => $this->client->delete($this->recordsPath().'/'.rawurlencode((string) $recordId))
+                fn () => $this->client->delete($this->recordsPath().'/'.rawurlencode((string) $recordId)),
+                '删除记录',
             );
             $this->validateMutationResponse($response);
         }
@@ -123,16 +123,17 @@ class CloudflareDnsProvider implements DelegationDnsProvider
         return $records;
     }
 
-    private function request(callable $request): Response
+    private function request(callable $request, string $operation = '查询记录'): Response
     {
         try {
             $response = $request();
         } catch (Throwable) {
-            throw new RuntimeException('Cloudflare DNS 请求失败');
+            throw new DnsProviderException("Cloudflare DNS {$operation}：网络连接失败或超时");
         }
 
-        if (! $response instanceof Response || ! $response->successful()) {
-            throw new RuntimeException('Cloudflare DNS 请求失败');
+        $payload = $response->json();
+        if (! $response->successful() || (is_array($payload) && ($payload['success'] ?? null) === false)) {
+            throw DnsProviderException::api('Cloudflare', $operation, $payload['errors'][0]['code'] ?? null, $response->status());
         }
 
         return $response;
@@ -142,7 +143,7 @@ class CloudflareDnsProvider implements DelegationDnsProvider
     {
         $payload = $response->json();
         if (! is_array($payload) || ($payload['success'] ?? null) !== true) {
-            throw new RuntimeException('Cloudflare DNS 请求失败');
+            throw new DnsProviderException('Cloudflare DNS 响应格式无效：查询记录未返回成功标记');
         }
 
         $result = $payload['result'] ?? null;
@@ -152,7 +153,7 @@ class CloudflareDnsProvider implements DelegationDnsProvider
             || ! is_int($resultInfo['page']) || ! is_int($resultInfo['total_pages'])
             || $resultInfo['page'] !== $expectedPage
             || $resultInfo['total_pages'] < $expectedPage) {
-            throw new RuntimeException('Cloudflare DNS 响应格式无效');
+            throw new DnsProviderException('Cloudflare DNS 响应格式无效：查询记录分页结构无效');
         }
 
         foreach ($result as $record) {
@@ -160,7 +161,7 @@ class CloudflareDnsProvider implements DelegationDnsProvider
                 || ! isset($record['id'], $record['name'], $record['type'], $record['content'])
                 || ! is_string($record['id']) || ! is_string($record['name'])
                 || ! is_string($record['type']) || ! is_string($record['content'])) {
-                throw new RuntimeException('Cloudflare DNS 响应格式无效');
+                throw new DnsProviderException('Cloudflare DNS 响应格式无效：查询记录字段无效');
             }
         }
 
@@ -171,12 +172,12 @@ class CloudflareDnsProvider implements DelegationDnsProvider
     {
         $payload = $response->json();
         if (! is_array($payload) || ($payload['success'] ?? null) !== true) {
-            throw new RuntimeException('Cloudflare DNS 请求失败');
+            throw new DnsProviderException('Cloudflare DNS 响应格式无效：新增/删除记录未返回成功标记');
         }
 
         if (! isset($payload['result']) || ! is_array($payload['result'])
             || ! isset($payload['result']['id']) || ! is_string($payload['result']['id'])) {
-            throw new RuntimeException('Cloudflare DNS 响应格式无效');
+            throw new DnsProviderException('Cloudflare DNS 响应格式无效：新增/删除记录缺少有效记录 ID');
         }
     }
 

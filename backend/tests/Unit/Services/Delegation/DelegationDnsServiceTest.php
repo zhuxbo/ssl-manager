@@ -8,6 +8,7 @@ use App\Services\Delegation\DelegationConfigService;
 use App\Services\Delegation\DelegationDnsService;
 use App\Services\Delegation\Dns\DelegationDnsProvider;
 use App\Services\Delegation\Dns\DelegationDnsProviderFactory;
+use App\Services\Delegation\Dns\DnsProviderException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Log;
 use Tests\TestCase;
@@ -142,4 +143,17 @@ test('删除失败且记录仍存在时保持失败关闭', function () {
 
     expect(fn () => delegationDnsServiceWith($provider)->deleteRecords('proxy.example.com', ['r1']))
         ->toThrow(RuntimeException::class, 'permission denied');
+});
+
+test('写入保留安全错误原因并在下一次成功时清空', function () {
+    $provider = Mockery::mock(DelegationDnsProvider::class);
+    $provider->shouldReceive('upsertTxt')->once()->ordered()
+        ->andThrow(new DnsProviderException('Aliyun DNS AddDomainRecord：解析记录已存在'));
+    $provider->shouldReceive('upsertTxt')->once()->ordered()->andReturnTrue();
+    $service = delegationDnsServiceWith($provider);
+
+    expect($service->setTxtByLabel('proxy.example.com', 'label', ['value']))->toBeFalse()
+        ->and($service->lastError())->toBe('Aliyun DNS AddDomainRecord：解析记录已存在');
+    expect($service->setTxtByLabel('proxy.example.com', 'label', ['value']))->toBeTrue()
+        ->and($service->lastError())->toBeNull();
 });
