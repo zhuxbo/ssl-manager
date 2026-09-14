@@ -201,6 +201,7 @@ final class MysqlToolchainChecker
         $vendor = match (true) {
             str_contains($source, 'mariadb') => 'mariadb',
             str_contains($source, 'percona') => 'percona',
+            str_contains($source, '(ubuntu)') && preg_match('/\b\d+\.\d+\.\d+-\d+ubuntu[0-9.]+/i', $version) === 1 => 'mysql',
             str_contains($source, 'mysql community server'),
             str_contains($source, 'mysql enterprise server'),
             str_contains($source, 'oracle mysql'),

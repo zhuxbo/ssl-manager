@@ -80,6 +80,31 @@ test('接受同系列 Oracle MySQL 8.0 与 8.4，补丁版本可不同', functio
     ['8.4.3', '8.4.1', '8.4'],
 ]);
 
+test('接受 Ubuntu 发行包的同系列 MySQL 服务端和客户端', function (string $version, string $series) {
+    $checker = mysqlToolchainChecker($this, [
+        'mysql' => "mysql  Ver $version for Linux on x86_64 ((Ubuntu))",
+        'mysqldump' => "mysqldump  Ver $version for Linux on x86_64 ((Ubuntu))",
+        'gzip' => 'gzip 1.12',
+    ], $version, '(Ubuntu)');
+
+    $inspection = $checker->inspect(true, true);
+
+    expect($inspection['supported'])->toBeTrue()
+        ->and($inspection['server']['vendor'])->toBe('mysql')
+        ->and($inspection['mysql']['series'])->toBe($series)
+        ->and($inspection['mysqldump']['vendor'])->toBe('mysql')
+        ->and($inspection['errors'])->toBe([]);
+})->with([
+    ['8.0.43-0ubuntu0.24.04.2', '8.0'],
+    ['8.4.11-0ubuntu0.26.04.1', '8.4'],
+]);
+
+test('仅 Ubuntu 注释但没有发行包版本标识仍拒绝', function () {
+    $checker = mysqlToolchainChecker($this, ['gzip' => 'gzip 1.12'], '8.4.11', '(Ubuntu)');
+
+    expect($checker->inspect(false, false)['supported'])->toBeFalse();
+});
+
 test('接受宝塔源码安装的 Oracle MySQL Source distribution', function () {
     $checker = mysqlToolchainChecker($this, [
         'mysql' => 'mysql  Ver 8.0.35 for Linux on x86_64 (Source distribution)',
