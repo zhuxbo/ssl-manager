@@ -49,7 +49,9 @@ class Sm2KeyUtil
             }
             // SEC1 私钥不携带公钥，由 OpenSSL 从私钥推导，避免仅比较信封自报的公钥。
             $keyDer = self::wrap(0x30, "\x02\x01\x01".self::wrap(0x04, $scalar).self::wrap(0xA0, self::wrap(0x06, hex2bin('2a811ccf5501822d'))));
-            $keyPem = "-----BEGIN EC PRIVATE KEY-----\n".chunk_split(base64_encode($keyDer), 64, "\n")."-----END EC PRIVATE KEY-----\n";
+            // PKCS#8 显式声明 EC 算法和 SM2 曲线，兼容 OpenSSL 3.0.13 导入无公钥的私钥。
+            $keyDer = self::wrap(0x30, "\x02\x01\x00".hex2bin('301306072a8648ce3d020106082a811ccf5501822d').self::wrap(0x04, $keyDer));
+            $keyPem = "-----BEGIN PRIVATE KEY-----\n".chunk_split(base64_encode($keyDer), 64, "\n")."-----END PRIVATE KEY-----\n";
             $derivedPublic = self::run([$openssl, 'pkey', '-pubout', '-outform', 'DER'], $keyPem);
             $certPublic = self::run([$openssl, 'x509', '-pubkey', '-noout'], $certificate);
             $certPublicDer = self::run([$openssl, 'pkey', '-pubin', '-outform', 'DER'], $certPublic);
