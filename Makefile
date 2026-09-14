@@ -11,11 +11,11 @@
 
 DC := docker compose
 ARGS ?=
-PROCESSES ?= 4 # 并行测试 worker 数（amd64 Rosetta 下不宜过高，防 OOM；机器内存大可调高）
+PROCESSES ?= 8 # 内网数据库下并发分摊 I/O 等待；内存受限或 Rosetta 可用 PROCESSES=4
 
 .DEFAULT_GOAL := help
 
-.PHONY: help up down stop restart build rebuild ps logs shell test test-compat migrate fresh seed \
+.PHONY: help up down stop restart build rebuild ps logs shell test test-snapshot test-compat migrate fresh seed \
         tinker composer artisan php exec pint db db-structure redis-cli front install check-agent-config
 
 help: ## 显示本帮助
@@ -54,6 +54,9 @@ shell: ## 进后端容器 bash
 
 test: ## 默认数据库连接并行测试（隔离库 ssl_manager_test），兼容矩阵由 CI 执行
 	$(DC) exec -e DB_DATABASE=ssl_manager_test app php artisan test --parallel --processes=$(PROCESSES) $(ARGS)
+
+test-snapshot: ## 默认数据库连接并行对比 API 快照，可加 ARGS= / PROCESSES=
+	$(DC) exec -T -e DB_DATABASE=ssl_manager_test app composer run-script --timeout=0 test:snapshot -- --parallel --processes=$(PROCESSES) $(ARGS)
 
 test-compat: ## 依次用 PHP 8.3 / 8.4 跑测试（验证版本兼容）
 	PHP_VERSION=8.3 $(DC) build app && PHP_VERSION=8.3 $(DC) run --rm -e DB_DATABASE=ssl_manager_test app php artisan test --parallel --processes=$(PROCESSES)

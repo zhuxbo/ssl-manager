@@ -48,8 +48,8 @@ bash build/release.sh <版本号>
 
 ```bash
 # 后端（共用测试库故依次跑；命令写全，勿塞进 zsh 未加引号的变量——zsh 不做单词分割会当成一条命令名）
-docker compose exec -T -e DB_DATABASE=ssl_manager_test app composer run-script --timeout=0 test:snapshot                     # ★ main-only，PR 跑不到，必跑
-docker compose exec -T -e DB_DATABASE=ssl_manager_test app php artisan test --parallel --processes=4  # = CI backend-core
+make test-snapshot  # ★ main-only，PR 跑不到，必跑；默认 8 worker，内存受限可 PROCESSES=4
+make test           # 默认测试连接，按 worker 隔离数据库
 for p in easy notice invoice; do docker compose exec -T -e DB_DATABASE=ssl_manager_test app php artisan test ../plugins/$p/backend/tests; done
 # 前端 + 私钥扫描（裸跑 = CI lint + frontend-build + check-secrets）
 pnpm lint:check && pnpm build:admin && pnpm build:user && make plugins-build

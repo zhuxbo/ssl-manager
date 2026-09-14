@@ -3,7 +3,8 @@
   "gates": {
     "make-test": {
       "command": ["make", "test"],
-      "locks": ["backend-runtime:exclusive", "db:exclusive"]
+      "locks": ["backend-runtime:exclusive", "db:exclusive"],
+      "allowed_env": ["PROCESSES"]
     },
     "pint": {
       "command": [
@@ -68,20 +69,9 @@
       "locks": []
     },
     "compat-snapshot": {
-      "command": [
-        "docker",
-        "compose",
-        "exec",
-        "-T",
-        "-e",
-        "DB_DATABASE=ssl_manager_test",
-        "app",
-        "composer",
-        "run-script",
-        "--timeout=0",
-        "test:snapshot"
-      ],
-      "locks": ["backend-runtime:exclusive", "db:exclusive"]
+      "command": ["make", "test-snapshot"],
+      "locks": ["backend-runtime:exclusive", "db:exclusive"],
+      "allowed_env": ["PROCESSES"]
     },
     "deploy-tests": {
       "command": [

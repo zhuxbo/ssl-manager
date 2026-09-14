@@ -442,7 +442,7 @@ final class SnapshotListener
         @file_put_contents(
             $reportPath,
             "# Snapshot Diff Report\n\n".date('c')."\n\n".$report.PHP_EOL,
-            FILE_APPEND
+            FILE_APPEND | LOCK_EX
         );
 
         // 用 PHPUnit 断言失败（必须先有 PHPUnit 上下文，afterEach 内调）

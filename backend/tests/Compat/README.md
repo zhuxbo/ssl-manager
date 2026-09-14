@@ -38,6 +38,8 @@ composer test:snapshot:capture
 COMPAT_COMPARE=true php artisan test tests/Feature/Http/Controllers --parallel
 # 或：
 composer test:snapshot
+# 本机 Docker 并行入口（项目根目录，默认 8 worker，内存受限可 PROCESSES=4）
+make test-snapshot
 
 # Compat 自身的单元测试（SchemaDiffer + 自检）
 php artisan test tests/Unit/Compat/

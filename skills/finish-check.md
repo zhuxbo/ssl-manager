@@ -283,7 +283,7 @@ make test
 
 资金、迁移、结构、原生 SQL 或连接/时区行为变化时，本机仍只在默认配置的测试连接上执行相关检查，不启动 MySQL 5.7 / 8.0 容器。`make test`、`compat-snapshot` 和插件数据库测试沿用当前测试连接，始终保持测试库隔离；专项检查不得改连开发库。
 
-MySQL 5.7 / 8.0 的迁移和行为兼容性由 `.github/workflows/ci.yml` 的核心、插件及 API 快照矩阵承担。快照门禁通过 `composer run-script --timeout=0 test:snapshot` 执行，避免数据库往返较慢时被 Composer 默认 300 秒超时误中止；比较范围和断言不变。
+MySQL 5.7 / 8.0 的迁移和行为兼容性由 `.github/workflows/ci.yml` 的核心、插件及 API 快照矩阵承担。本机 `make test` 与快照门禁 `make test-snapshot` 默认使用 8 个 worker，通过 Laravel 按 worker 隔离数据库与测试 storage；内存受限或 Rosetta 环境可用 `PROCESSES=4` 调低。快照入口仍通过 `composer run-script --timeout=0 test:snapshot` 执行，仅并行运行原有 Controller 比较范围，不减少断言或重新 capture；解除 Composer 默认 300 秒包装超时。两项门禁仍串行持有数据库锁，不同时运行。注册门禁调整并发时使用 `--env PROCESSES=4`，最终 verify 同时声明对应 `--expect-env`，不隐式继承宿主机并发设置。
 
 本机检查完成只证明当前数据库环境通过；尚未推送或 CI 未完成时，不声称这两个版本已经通过。Schema 兼容要求不变，资金审计、迁移最终态及其他适用专项仍须执行。
 
