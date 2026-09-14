@@ -70,6 +70,7 @@ class CertExpireNotificationBuilder implements NotificationBuilderInterface
             $certificates[] = [
                 'domain' => $order->latestCert->common_name,
                 'expire_at' => $order->latestCert->expires_at->format('Y-m-d'),
+                'order_expire_at' => $order->period_till?->format('Y-m-d'),
                 'days_left' => $daysLeft,
                 'delegation_status' => 'need_renew',
                 'product_type' => $productType,

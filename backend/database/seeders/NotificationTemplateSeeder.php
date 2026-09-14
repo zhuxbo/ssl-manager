@@ -395,7 +395,7 @@ HTML;
                                 </p>
 
                                 <p style="margin: 0 0 25px 0; font-size: 15px; line-height: 26px; color: #555555;">
-                                    您的下列证书即将到期。请尽快检查续期安排或联系我们处理，避免证书到期影响对应业务。
+                                    您的下列证书即将到期。订单到期时间表示购买的服务期限，证书到期时间表示当前证书的有效期限，两者可能不同。请尽快检查续期安排或联系我们处理，避免证书到期影响对应业务。
                                 </p>
 
                                 <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" class="data-table" style="margin-bottom: 24px; border-collapse: collapse; width: 100%;">
@@ -404,8 +404,9 @@ HTML;
                                             <th align="left" style="padding: 12px 10px; border-bottom: 2px solid #fcd34d; font-size: 13px; font-weight: 600; color: #92400e; text-transform: uppercase;">序号</th>
                                             <th align="left" style="padding: 12px 10px; border-bottom: 2px solid #fcd34d; font-size: 13px; font-weight: 600; color: #92400e; text-transform: uppercase;">证书类型</th>
                                             <th align="left" style="padding: 12px 10px; border-bottom: 2px solid #fcd34d; font-size: 13px; font-weight: 600; color: #92400e; text-transform: uppercase;">证书标识</th>
-                                            <th align="left" style="padding: 12px 10px; border-bottom: 2px solid #fcd34d; font-size: 13px; font-weight: 600; color: #92400e; text-transform: uppercase;">到期时间</th>
-                                            <th align="center" style="padding: 12px 10px; border-bottom: 2px solid #fcd34d; font-size: 13px; font-weight: 600; color: #92400e; text-transform: uppercase;">剩余</th>
+                                            <th align="left" style="padding: 12px 10px; border-bottom: 2px solid #fcd34d; font-size: 13px; font-weight: 600; color: #92400e; text-transform: uppercase;">订单到期时间</th>
+                                            <th align="left" style="padding: 12px 10px; border-bottom: 2px solid #fcd34d; font-size: 13px; font-weight: 600; color: #92400e;">证书到期时间</th>
+                                            <th align="center" style="padding: 12px 10px; border-bottom: 2px solid #fcd34d; font-size: 13px; font-weight: 600; color: #92400e; text-transform: uppercase;">证书剩余</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -420,6 +421,9 @@ HTML;
                                             </td>
                                             <td align="left" style="padding: 12px 10px; border-bottom: 1px solid #eeeeee; font-size: 14px; font-weight: 600; color: #333333; font-family: monospace;">
                                                 {{ $cert['domain'] }}
+                                            </td>
+                                            <td align="left" style="padding: 12px 10px; border-bottom: 1px solid #eeeeee; font-size: 14px; color: #666666;">
+                                                {{ $cert['order_expire_at'] ?? '未提供' }}
                                             </td>
                                             <td align="left" style="padding: 12px 10px; border-bottom: 1px solid #eeeeee; font-size: 14px; color: #666666;">
                                                 {{ $cert['expire_at'] }}

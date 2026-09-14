@@ -107,3 +107,5 @@ M4 分档在 **send 阶段**，管不到 **build 阶段**（Builder 产出 paylo
 - **前向约定（纵深防线）**：任何生成附件/临时文件的 Builder，其 IO 失败一律抛 `TransientBuildException`（含 ZipArchive 返回值检查），且**异常消息不得携密/PII**——`persistBuildFailure` reason 固定常量为主防线，Builder 侧不携密为纵深；且须在 build 抛异常前自清临时目录（`CertIssued` 已 `File::deleteDirectory($tempDir)`），故 build 失败无 `cleanup_paths` 可泄漏。
 - **测试**：`NotificationJobTest` 断言永久/瞬态分档（release 60/300、末轮 fail、FAILED 行、无 pending 残留）、getMessage 不落库（测试 Builder 把 context 敏感值嵌异常消息、断 json 无明文——固定消息测法断言恒过=伪绿，必须敏感值入 message 才真验）、白名单摘录三形态、DB 写异常降级；`CertIssuedNotificationBuilderTest` 经 `makeZip()` 桩验 close 返 false 抛瞬态 + 子类覆写 `addCertToZip` 验 IO 异常自清 tempDir。
 - **观察项**：build-failed 记录经 `persistBuildFailure` 直建、不落 `context_fingerprint`，故 send 重试轮 `findReusableRow` 的指纹过滤（notify ④）恒不命中 → **不再被误复用翻 SENT**（原「可见性记录被抹除」观察项已随实体指纹关闭）；build-failed 记录不支持专属手动重发（顶层无 order_id → resend 走永久失败 append-only 无害，补齐需存 context 破携密红线或建 idempotency 破零迁移）。
+
+- **到期模板时间口径**：`cert_expire` 每项 `order_expire_at` 取订单 `period_till`，`expire_at` 保留原含义，取当前证书 `expires_at`；`days_left` 仍按证书计算。订单时间缺失展示“未提供”，不以证书时间代替。已安装站点在通知模板管理中重置“证书到期提醒”后启用新版内容，Seeder 不覆盖自定义模板。

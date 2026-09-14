@@ -21,6 +21,7 @@ test('到期汇总模板展示混合产品类型与各自证书标识', function
             [
                 'product_type_label' => 'SSL',
                 'domain' => 'www.example.com',
+                'order_expire_at' => '2027-07-01',
                 'expire_at' => '2026-08-01',
                 'days_left' => 2,
             ],
@@ -47,6 +48,11 @@ test('到期汇总模板展示混合产品类型与各自证书标识', function
 
     expect($rendered)
         ->toContain('证书到期提醒')
+        ->toContain('订单到期时间')
+        ->toContain('证书到期时间')
+        ->toContain('2027-07-01')
+        ->toContain('2026-08-01')
+        ->toContain('未提供')
         ->toContain('SSL')
         ->toContain('www.example.com')
         ->toContain('S/MIME')
