@@ -267,6 +267,7 @@ test('委托已删的孤儿标记只清本地引用且不据此猜测远端归�
 });
 
 test('未满 14 天的孤儿标记保持不动', function () {
+    $writtenAt = now()->subDay()->format('Y-m-d H:i:s');
     $user = $this->createTestUser();
     $order = $this->createTestOrder($user, $this->createTestProduct());
     $cert = $this->createTestCert($order, [
@@ -276,7 +277,7 @@ test('未满 14 天的孤儿标记保持不动', function () {
             'method' => 'txt',
             'delegation_id' => 777777,
             'auto_txt_written' => true,
-            'auto_txt_written_at' => '2026-08-28 03:00:00',
+            'auto_txt_written_at' => $writtenAt,
         ]],
     ]);
     $this->dnsService->shouldReceive('getAllTxtRecords')
@@ -288,7 +289,7 @@ test('未满 14 天的孤儿标记保持不动', function () {
     expect($cert->fresh()->validation[0])->toMatchArray([
         'delegation_id' => 777777,
         'auto_txt_written' => true,
-        'auto_txt_written_at' => '2026-08-28 03:00:00',
+        'auto_txt_written_at' => $writtenAt,
     ]);
 });
 
