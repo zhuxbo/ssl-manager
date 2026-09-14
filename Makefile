@@ -72,9 +72,10 @@ seed: ## 填充种子数据
 	$(DC) exec app php artisan db:seed
 
 db-structure: ## 导出 structure.json（compose 临时干净库，仅主迁移，不碰开发库）
+	$(DC) up -d --wait mysql
 	$(DC) exec -T -e MYSQL_PWD=password mysql mysql -uroot -e "DROP DATABASE IF EXISTS structure_export; CREATE DATABASE structure_export CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci" && \
-	$(DC) exec -T -e DB_DATABASE=structure_export app php artisan migrate:fresh --force --path=database/migrations && \
-	$(DC) exec -T -e DB_DATABASE=structure_export app php artisan db:structure --export --use-local; \
+	$(DC) exec -T -e DB_HOST=mysql -e DB_PORT=3306 -e DB_USERNAME=root -e DB_PASSWORD=password -e DB_DATABASE=structure_export app php artisan migrate:fresh --force --path=database/migrations && \
+	$(DC) exec -T -e DB_HOST=mysql -e DB_PORT=3306 -e DB_USERNAME=root -e DB_PASSWORD=password -e DB_DATABASE=structure_export app php artisan db:structure --export --use-local; \
 	$(DC) exec -T -e MYSQL_PWD=password mysql mysql -uroot -e "DROP DATABASE IF EXISTS structure_export"
 
 tinker: ## 进 tinker
@@ -96,7 +97,7 @@ pint: ## 跑 Laravel Pint 格式化
 	$(DC) exec app ./vendor/bin/pint
 
 db: ## 进 MySQL 客户端
-	$(DC) exec mysql mysql -uroot -ppassword ssl_manager
+	$(DC) exec app php artisan db
 
 redis-cli: ## 进 redis-cli
 	$(DC) exec redis redis-cli
