@@ -213,7 +213,7 @@ cloud-deploy 插件用于把订单证书推送到云平台资源。云凭证在�
 
 启动脚本自动同步 `backend/.env` 和 `backend/.env.testing` 的连接配置，开发库为 `ssl_manager`，测试库为 `ssl_manager_test`；外部服务器需提前建立开发库并准备专用账号，授权开发库、测试库及并行派生库 `ssl_manager_test_test_*`。不要向应用容器全局注入 `DB_DATABASE`，以免覆盖测试库选择。已有数据需先备份迁移；切换选项本身不迁移数据。已有启动配置缓存会在连接切换时清除。
 
-恢复本机模式：从根目录 `.env` 移除 `COMPOSE_FILE` 和 `DEV_DB_*`，然后 `make up`。清理旧 MySQL 容器可执行 `docker compose rm -sf mysql`，保留数据卷；不使用 `down -v`。`make db` 跟随应用当前数据库连接，`make test` 跟随测试连接。`make db-structure` 仍显式启动本机 MySQL，在本机临时库导出结构；兼容性及 mutation 测试继续使用各自隔离实例。
+恢复本机模式：从根目录 `.env` 移除 `COMPOSE_FILE` 和 `DEV_DB_*`，然后 `make up`。清理旧 MySQL 容器可执行 `docker compose rm -sf mysql`，保留数据卷；不使用 `down -v`。`make db` 跟随应用当前数据库连接，`make test` 与本机 finish-check 仅使用默认配置的测试连接（通常 MySQL 8.4），保持测试库隔离，不额外启动其他 MySQL 版本；MySQL 5.7 / 8.0 兼容性由 CI 矩阵验证。`make db-structure` 仍显式启动本机 MySQL，在本机临时库导出结构；mutation 测试继续使用隔离实例。
 
 ## 文档
 

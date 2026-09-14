@@ -61,7 +61,7 @@ pnpm --dir frontend/admin exec stylelint src/...vue
 
 finish-check 的并行单位是**有明确输入和资源锁的只读门禁**，不是任意命令。所有会写源码的动作（ESLint/Prettier/Stylelint `--fix`/`--write`、shfmt `-w`、Pint 修复）必须在冻结前串行完成；冻结后只能跑 check/test/build/package。任何命令改变源码，执行器会把该结果标记为 stale，退出码 86。
 
-本流程是日常完成检查，不等于在本地重跑全部 CI 矩阵。后端优先使用仓库 Docker：默认环境跑主测试，命中 §2.4 时补 MySQL 5.7；当前 CI 另覆盖 PHP 8.3/8.4 × MySQL 5.7 与 PHP 8.4/8.5 × MySQL 8.4，矩阵以 `.github/workflows/ci.yml` 为准。涉及 PHP 版本语法或扩展兼容时补相应环境验证，并明确本地实际覆盖组合。
+本流程是日常完成检查，不在本机重跑数据库版本矩阵。后端优先使用仓库 Docker，主测试、API 快照和插件测试仅使用默认配置的数据库连接（通常 MySQL 8.4），数据库名仍锁定为隔离测试库。MySQL 5.7 / 8.0 兼容性由 CI 验证，不因资金、迁移、SQL 或连接改动追加本机版本检查。CI 另覆盖 PHP 8.3/8.4 × MySQL 5.7、PHP 8.4 × MySQL 8.0 与 PHP 8.4/8.5 × MySQL 8.4，矩阵以 `.github/workflows/ci.yml` 为准。报告本机实际覆盖组合，不将本机通过视为 CI 矩阵通过。
 
 **执行顺序**：先按 §1 确定必跑 gate，再冻结；先完成适用的 `script-checks`、`pint`、`phpstan`、`frontend-lint`、`agent-guards`，失败即修复并重新冻结，避免耗时测试排完后才发现格式或静态错误。随后启动测试、构建与打包；无共享资源的 gate 可并行，`package-invariants` 必须在本轮 `main-package` 成功后运行。Reviewer 可以提前阅读已冻结源码，与耗时门禁重叠；签字前必须核验相关门禁和当前 fingerprint。
 
@@ -85,14 +85,14 @@ python3 skills/scripts/finish-check-exec.py run \
 
 资源规则：
 
-| 资源锁                      | 使用范围                                                                                   |
-| --------------------------- | ------------------------------------------------------------------------------------------ |
-| `source`                    | 执行器自动加共享锁；源码写入只允许发生在 freeze 前                                         |
-| `backend-runtime:exclusive` | Laravel 测试、PHPStan、mutation、会 boot/rebuild Laravel cache 的插件后端命令              |
-| `db:exclusive`              | `make test`、snapshot、插件数据库测试、MySQL 5.7、mutation、reviewer 数据库/运行时失败场景 |
-| `frontend-root:exclusive`   | 根 workspace 的双端 build；shared/source tests 可不加此锁                                  |
-| `plugin-<name>:exclusive`   | 同一插件的 install/build/package，防共享 `node_modules`/`dist`/输出 zip 竞争               |
-| `package:exclusive`         | 主程序 collect/package；不得与另一个主程序打包并行                                         |
+| 资源锁                      | 使用范围                                                                        |
+| --------------------------- | ------------------------------------------------------------------------------- |
+| `source`                    | 执行器自动加共享锁；源码写入只允许发生在 freeze 前                              |
+| `backend-runtime:exclusive` | Laravel 测试、PHPStan、mutation、会 boot/rebuild Laravel cache 的插件后端命令   |
+| `db:exclusive`              | `make test`、snapshot、插件数据库测试、mutation、reviewer 数据库/运行时失败场景 |
+| `frontend-root:exclusive`   | 根 workspace 的双端 build；shared/source tests 可不加此锁                       |
+| `plugin-<name>:exclusive`   | 同一插件的 install/build/package，防共享 `node_modules`/`dist`/输出 zip 竞争    |
+| `package:exclusive`         | 主程序 collect/package；不得与另一个主程序打包并行                              |
 
 mutation gate 由 `skills/scripts/mutation-shards.py` 按精确 PHP 文件编排；缓存未命中的分片再通过 `skills/scripts/run-isolated-mutation.sh` 把冻结后端源码和插件源码复制到 `.superpowers/mutation-workspaces/`，随后一次性物化到 Docker 原生 volume 并在只读根文件系统的具名容器中运行。正式 mutation 不再从 macOS bind mount 高频读取源码/vendor；Pest、Laravel cache/storage 等高频临时写路径使用有大小上限的 `tmpfs`，显式分片缓存仍按需绑定项目内受控目录。插件安装/回滚、mutant 与测试产物只落隔离 volume/tmpfs。取消时必须删除并确认 PHP/MySQL/seed 容器及两个原生 volume 均已退出或移除，之后才释放 runtime/DB 锁。reviewer 可以把**源码阅读**与 mutation 重叠；Pint/PHPStan/Artisan/失败场景仍须按上表等待对应锁。
 
@@ -175,7 +175,7 @@ python3 skills/scripts/finish-check-exec.py run \
 | 实际影响                                   | 完整检查 gate / 专项                                                                                                |
 | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
 | 后端实现、依赖、公共测试入口               | `pint`、`phpstan`、`make-test`；§2.5–§2.7 只看本次涉及条目                                                          |
-| 资金 / 迁移 / 原生 SQL / 连接时区          | 上述后端 gate + `mysql57`；资金补 §2.6，结构变化实跑迁移及结构验证                                                  |
+| 资金 / 迁移 / 原生 SQL / 连接时区          | 默认数据库上的后端 gate；资金补 §2.6，结构变化实跑迁移及结构验证；5.7 / 8.0 由 CI 验证                              |
 | API schema、Controller 测试、snapshot 机制 | `compat-snapshot`；缺失/差异先定位并定向 capture，禁止为放行滥加 `expectsBreakingChange`                            |
 | 前端实现、共享配置或依赖                   | `frontend-lint`、`frontend-build`；shared 行为变化加 `frontend-tests`                                               |
 | 插件后端共享契约 / 生命周期                | `plugin-backend-tests`；仅插件内部变化按快检入口处理                                                                |
@@ -279,27 +279,13 @@ make test
 
 完整检查的后端机械门禁以全量 `make test` 为判据；快检使用前述定向入口。已经执行全量且源码 fingerprint 未变化时，不在最终阶段为了“再确认”重复运行被其完整覆盖的同源定向测试；但 plan 明确要求的特殊环境、OpenSSL/外部协议验收、真实绕过请求、串行/并行差异场景不属于可删除的重复项。全量失败后再跑定向测试定位。
 
-### 2.4 测试 — mysql 5.7 容器（资金或数据库行为变化时）
+### 2.4 数据库兼容性 — 本机默认连接，版本矩阵交给 CI
 
-**何时触发**：实际修改以下行为时执行，路径内纯说明/格式变化不触发：
+资金、迁移、结构、原生 SQL 或连接/时区行为变化时，本机仍只在默认配置的测试连接上执行相关检查，不启动 MySQL 5.7 / 8.0 容器。`make test`、`compat-snapshot` 和插件数据库测试沿用当前测试连接，始终保持测试库隔离；专项检查不得改连开发库。
 
-- Fund / Transaction / 资金记账行为
-- 数据库迁移或结构
-- 原生 SQL（`DB::raw`/`whereRaw`/`DB::statement`）
-- AppServiceProvider 连接/时区注入
+MySQL 5.7 / 8.0 的迁移和行为兼容性由 `.github/workflows/ci.yml` 的核心、插件及 API 快照矩阵承担。快照门禁通过 `composer run-script --timeout=0 test:snapshot` 执行，避免数据库往返较慢时被 Composer 默认 300 秒超时误中止；比较范围和断言不变。
 
-> 本地 MySQL 一般是 8.x，跑过不等于 5.7 兼容；CI 同时覆盖 5.7 与 8.4，本地按本节条件验证 5.7。
-
-**固定入口**（复用 Compose app 容器，在同一 Docker 网络启动隔离的 MySQL 5.7；固定测试库
-`ssl_manager_test` 与 5.7 兼容 collation，自动等待、迁移、测试和清理）：
-
-```bash
-make test-mysql57
-```
-
-> M 系列 Mac 使用 `linux/amd64`（MySQL 5.7 无 arm64 manifest）；qemu 模拟下首次启动通常需
-> 30~60 秒，脚本给 120 秒就绪余量。Compose app 未运行时先执行 `make up`。
-> 脚本使用唯一容器名，并通过 EXIT trap 自动清理；迁移或测试失败时保留原退出码。
+本机检查完成只证明当前数据库环境通过；尚未推送或 CI 未完成时，不声称这两个版本已经通过。Schema 兼容要求不变，资金审计、迁移最终态及其他适用专项仍须执行。
 
 ### 2.5 Laravel 专项检查
 

@@ -77,12 +77,10 @@
         "DB_DATABASE=ssl_manager_test",
         "app",
         "composer",
+        "run-script",
+        "--timeout=0",
         "test:snapshot"
       ],
-      "locks": ["backend-runtime:exclusive", "db:exclusive"]
-    },
-    "mysql57": {
-      "command": ["make", "test-mysql57"],
       "locks": ["backend-runtime:exclusive", "db:exclusive"]
     },
     "deploy-tests": {

@@ -15,7 +15,7 @@ PROCESSES ?= 4 # 并行测试 worker 数（amd64 Rosetta 下不宜过高，防 O
 
 .DEFAULT_GOAL := help
 
-.PHONY: help up down stop restart build rebuild ps logs shell test test-mysql57 test-compat migrate fresh seed \
+.PHONY: help up down stop restart build rebuild ps logs shell test test-compat migrate fresh seed \
         tinker composer artisan php exec pint db db-structure redis-cli front install check-agent-config
 
 help: ## 显示本帮助
@@ -52,11 +52,8 @@ logs: ## 跟踪后端与调度器日志
 shell: ## 进后端容器 bash
 	$(DC) exec app bash
 
-test: ## 并行跑后端测试（隔离测试库 ssl_manager_test），可加 ARGS= / PROCESSES=
+test: ## 默认数据库连接并行测试（隔离库 ssl_manager_test），兼容矩阵由 CI 执行
 	$(DC) exec -e DB_DATABASE=ssl_manager_test app php artisan test --parallel --processes=$(PROCESSES) $(ARGS)
-
-test-mysql57: ## 在隔离 MySQL 5.7 容器中跑主迁移和全量后端测试
-	PROCESSES="$(strip $(PROCESSES))" bash skills/scripts/test-mysql57.sh
 
 test-compat: ## 依次用 PHP 8.3 / 8.4 跑测试（验证版本兼容）
 	PHP_VERSION=8.3 $(DC) build app && PHP_VERSION=8.3 $(DC) run --rm -e DB_DATABASE=ssl_manager_test app php artisan test --parallel --processes=$(PROCESSES)

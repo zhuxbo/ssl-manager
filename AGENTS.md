@@ -34,7 +34,7 @@ ssl-manager 是 Laravel 13 + Vue 3 的证书管理 Monorepo，包含后端、adm
 
 ## 核心命令与平台边界
 
-- `make test`：在容器内并行运行后端测试。
+- `make test`：在容器内使用默认配置的数据库连接并行测试（通常 MySQL 8.4），锁定隔离测试库；本机及 finish-check 不跑数据库版本矩阵，MySQL 5.7 / 8.0 兼容性由 CI 验证。
 - `docker compose exec -T app ./vendor/bin/pint --test`：检查 PHP 格式。
 - `docker compose exec -T app ./vendor/bin/phpstan analyse --level=5 --memory-limit=2G`：运行后端静态分析。
 - `pnpm lint:check`、`pnpm build`：只读检查并构建 admin/user 前端；`pnpm lint` 会修改源码，局部改动的检查入口见完成检查 skill。

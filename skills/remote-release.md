@@ -44,11 +44,11 @@ bash build/release.sh <版本号>
 
 `ci.yml` 的 `compat-snapshot` 带 `if: github.ref == 'refs/heads/main'`——**PR / dev push 都不触发，只有合并到 main 才跑**。新增 HTTP controller 测试漏 capture 快照 fixture 时，PR 全绿、合并后才因 `fixture_missing` 变红（已踩：`3f716ec` 新增 security 测试漏 capture）。合并前本机补跑这套抓出来。
 
-前提：开发容器已起（`make ps` 确认 app/mysql/redis，否则 `make up`）+ 前端依赖已装（`pnpm install --frozen-lockfile`）。后端测试**必须锁测试库 `ssl_manager_test`**，否则 `make exec` 默认碰开发库被 RefreshDatabase 清空：
+前提：开发容器已起（`make ps` 确认 app/redis，默认数据库连接可用，否则 `make up`）+ 前端依赖已装（`pnpm install --frozen-lockfile`）。后端测试**必须锁测试库 `ssl_manager_test`**，否则 `make exec` 默认碰开发库被 RefreshDatabase 清空：
 
 ```bash
 # 后端（共用测试库故依次跑；命令写全，勿塞进 zsh 未加引号的变量——zsh 不做单词分割会当成一条命令名）
-docker compose exec -T -e DB_DATABASE=ssl_manager_test app composer test:snapshot                     # ★ main-only，PR 跑不到，必跑
+docker compose exec -T -e DB_DATABASE=ssl_manager_test app composer run-script --timeout=0 test:snapshot                     # ★ main-only，PR 跑不到，必跑
 docker compose exec -T -e DB_DATABASE=ssl_manager_test app php artisan test --parallel --processes=4  # = CI backend-core
 for p in easy notice invoice; do docker compose exec -T -e DB_DATABASE=ssl_manager_test app php artisan test ../plugins/$p/backend/tests; done
 # 前端 + 私钥扫描（裸跑 = CI lint + frontend-build + check-secrets）
@@ -65,7 +65,7 @@ compat-snapshot 失败处理：
   ```
 - 既有契约 `snapshot diff` → 若是预期破坏性变更，在用例顶部加 `expectsBreakingChange('reason')`；否则当 bug 修代码（**勿改快照迁就 bug**）
 
-覆盖范围（诚实）：快路径只跑 PHP 8.4 + MySQL 8.4 单点。**CI 的 PHP 8.5、MySQL 5.7 各组本机快路径不跑**（8.5 无现成镜像、5.7 需 qemu 慢），合并后仍靠云端 CI 兜；要本机补全矩阵见 finish-check §2.4（5.7 容器）+ `make test-compat`（PHP 8.3/8.4）。
+覆盖范围（诚实）：本机使用当前 PHP 容器和默认配置的数据库连接（通常 PHP 8.4 + MySQL 8.4），并锁定隔离测试库。MySQL 5.7 / 8.0 兼容性统一由 CI 矩阵验证，本机不额外启动这些版本；未完成的 CI 不能算作已通过。
 
 #### 3.1 发布前：合并 dev 领先的提交到 main
 
