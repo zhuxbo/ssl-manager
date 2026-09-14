@@ -7,7 +7,7 @@ use App\Models\Setting;
 class PlatformConfigService
 {
     /**
-     * @return array{Title: string, AllBrands: list<array{label: string, value: string}>, Brands: list<array{label: string, value: string}>, DnsTools: list<string>, Beian: string, CopyStart: string, Favicon: string, Logo: string, LogoExpanded: string, Qrcode: string, LoginImage: string}
+     * @return array{Title: string, AllBrands: list<array{label: string, value: string}>, Brands: list<array{label: string, value: string}>, DnsTools: list<string>, Beian: string, CopyStart: string, Favicon: string, Logo: string, LogoExpanded: string, Qrcode: string, LoginImage: string, BodyCode: string}
      */
     public function get(string $channel): array
     {
@@ -27,6 +27,7 @@ class PlatformConfigService
             'Logo' => $this->stringValue($site['logo'] ?? null, '/logo.svg'),
             'LogoExpanded' => $this->stringValue($site['logoExpanded'] ?? null, ''),
             'Qrcode' => $this->stringValue($site['qrcode'] ?? null, '/qrcode.png'),
+            'BodyCode' => $channel === 'user' ? $this->stringValue($site['bodyCode'] ?? null, '') : '',
             // 空值表示未配置，用户端据此回落默认 login.svg / 纯色面板
             'LoginImage' => $this->stringValue($site['loginImage'] ?? null, ''),
         ];

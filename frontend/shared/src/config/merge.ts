@@ -8,6 +8,7 @@ const backendManagedKeys: (keyof PlatformConfigs)[] = [
   "Beian",
   "CopyStart",
   "Favicon",
+  "BodyCode",
   "Logo",
   "LogoExpanded",
   "Qrcode",

@@ -1,11 +1,13 @@
 {
-    "test": "P\\Tests\\Feature\\Http\\Controllers\\MetaControllerTest::__pest_evaluable_plugins_字段返回_name_和_version_二元组",
+    "test": "P\\Tests\\Feature\\Http\\Controllers\\MetaControllerTest::__pest_evaluable_全站自定义代码仅向用户端提供且保留完整脚本",
     "version": "1.0.0",
     "calls": [
         {
             "method": "GET",
             "uri_pattern": "/api/meta",
-            "request_keys": null,
+            "request_keys": [
+                "channel"
+            ],
             "response_status": "2xx",
             "response_schema": {
                 "code": "integer",
@@ -16,12 +18,7 @@
                         "api": "boolean",
                         "deploy": "boolean"
                     },
-                    "plugins": {
-                        "__list_of__": {
-                            "name": "string",
-                            "version": "string"
-                        }
-                    },
+                    "plugins": "array<unknown>",
                     "version": "string",
                     "platform": {
                         "Title": "string",

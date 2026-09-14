@@ -271,6 +271,7 @@ test('user 平台设置复用 site 并读取独立品牌', function () {
         'Logo' => '/storage/site/logo-abc.png',
         'LogoExpanded' => '/storage/site/logo-expanded-abc.png',
         'Qrcode' => '/storage/site/qrcode-def.png',
+        'BodyCode' => '',
         'LoginImage' => '/api/meta/site-image/login-image-abc.png',
     ]);
     expect($response->headers->get('Cache-Control'))->toContain('no-store');
@@ -386,4 +387,16 @@ test('channel 参数为数组等非字符串形态时回落 user 端而非报错
     $response->assertOk()->assertJsonPath('data.platform.Brands', [
         ['label' => 'Certum', 'value' => 'certum'],
     ]);
+});
+
+test('全站自定义代码仅向用户端提供且保留完整脚本', function () {
+    bindFakePluginManager([]);
+    $code = '<div id="support"></div><script src="https://example.test/support.js"></script>';
+    setPlatformSettings('site', ['bodyCode' => ['type' => 'base64', 'value' => $code]]);
+
+    $this->get('/api/meta?channel=user')->assertJsonPath('data.platform.BodyCode', $code);
+    $this->get('/api/meta?channel=admin')->assertJsonPath('data.platform.BodyCode', '');
+
+    setPlatformSettings('site', ['bodyCode' => ['type' => 'base64', 'value' => '']]);
+    $this->get('/api/meta?channel=user')->assertJsonPath('data.platform.BodyCode', '');
 });

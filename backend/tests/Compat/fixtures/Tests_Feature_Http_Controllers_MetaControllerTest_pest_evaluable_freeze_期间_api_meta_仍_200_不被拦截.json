@@ -39,6 +39,7 @@
                         "Logo": "string",
                         "LogoExpanded": "string",
                         "Qrcode": "string",
+                        "BodyCode": "string",
                         "LoginImage": "string"
                     }
                 }
