@@ -105,7 +105,17 @@ class ProductController extends BaseController
      */
     public function show($id): void
     {
-        $product = Product::where('status', 1)->find($id);
+        $userId = $this->guard->user()->id ?? null;
+        $product = Product::where(function ($query) use ($userId) {
+            $query->where('status', 1);
+            // 禁用产品仅向持有可重签活动订单的用户提供配置。
+            if ($userId) {
+                $query->orWhere(fn ($product) => $product->where('reissue', 1)
+                    ->whereHas('orders', fn ($orders) => $orders->where('user_id', $userId)
+                        ->where('period_till', '>=', now())
+                        ->whereHas('latestCert', fn ($cert) => $cert->where('status', 'active'))));
+            }
+        })->find($id);
         if (! $product) {
             $this->error('产品不存在');
         }

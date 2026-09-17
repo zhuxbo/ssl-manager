@@ -4,6 +4,12 @@ description: Source API 接入 - 新增上游来源的开发指南。修改 Orde
 
 # Source API 接入指南
 
+## 普通订单有效期同步
+
+- `Order\Action::sync` 首次取得完整签发时间且订单尚无 `period_from` 时初始化有效期，上游 `period_till` 优先；已初始化订单不回算。
+- 上游缺少 `period_till` 时，续费以新证书 `issued_at` 与前驱证书所属旧订单 `period_till` 的较晚者为起点，调用 `calculatePeriodTill(..., period, 0)`：承接剩余时间，使用固定天数周期并减 1 秒，不额外赠送 30 天，也不按单张证书期限抬高结果。缺少旧订单关联或旧订单已到期时，从新证书生效时间计算。
+- `period_from` 仍为新证书生效时间。续费字段白名单忽略 `plus`；新购缺少上游有效期时保留原有本地推算及赠送规则。
+
 Manager 通过两套 Source API 分发层与上游交互，均按 `product.source` 字段路由：
 
 | 命名空间        | 职责                                                     | 当前来源  |

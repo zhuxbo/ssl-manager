@@ -614,9 +614,19 @@ class Action
         if (! $order->period_from && ($data['issued_at'] ?? null) && ($data['expires_at'] ?? null)) {
             // 即使传递的是时间戳 赋值给模型属性后会转换为时间格式
             $order->period_from = $data['issued_at'];
-            $plus = ($order->product->product_type ?? '') === 'ssl' ? (int) $order->plus : 0;
-            $periodTill = $this->calculatePeriodTill((int) $data['issued_at'], (int) $order->period, $plus);
-            $order->period_till = max($data['expires_at'], $periodTill);
+            if (! empty($data['period_till'])) {
+                $order->period_till = $data['period_till'];
+            } elseif ($cert->action === 'renew') {
+                // 续费承接旧订单剩余时间，不额外赠送，也不以单张证书期限替代订购周期。
+                $lastCert = Cert::find($cert->last_cert_id);
+                $lastOrder = $lastCert ? Order::find($lastCert->order_id) : null;
+                $periodFrom = max((int) $data['issued_at'], $lastOrder?->period_till->timestamp ?? 0);
+                $order->setAttribute('period_till', $this->calculatePeriodTill($periodFrom, (int) $order->period, 0));
+            } else {
+                $plus = ($order->product->product_type ?? '') === 'ssl' ? (int) $order->plus : 0;
+                $periodTill = $this->calculatePeriodTill((int) $data['issued_at'], (int) $order->period, $plus);
+                $order->period_till = max($data['expires_at'], $periodTill);
+            }
         }
 
         // 同步退款分支：上游 cancelled + 过渡态 + new/renew/reissue + 开关开 → 专用 helper 处理退款。

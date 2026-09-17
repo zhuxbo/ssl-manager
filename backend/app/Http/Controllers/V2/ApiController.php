@@ -247,7 +247,7 @@ class ApiController extends Controller
 
     /**
      * 续费
-     * [(string)refer_id,plus,order_id,period,csr_generate,encryption,csr,issue_verify,
+     * [(string)refer_id,order_id,period,csr_generate,encryption,csr,issue_verify,
      *  validation_method,domains,contact,organization]
      *
      * @throws Throwable

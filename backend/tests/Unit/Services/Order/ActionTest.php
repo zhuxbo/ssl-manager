@@ -1283,6 +1283,55 @@ test('代理前提固化：processing reissue cert issued_at=null，commitCancel
 
 // ==================== sync 终态守卫 ====================
 
+test('sync 订单有效期对齐上游及续费剩余时间', function (
+    string $action, int $months, ?int $remaining, int $plus, ?int $upstreamDays, int $certDays, int $expectedDays, bool $initialized
+) {
+    Queue::fake();
+    $issuedAt = 1750000000;
+    [$oldOrder, $oldCert] = createOrderWithCertForRevoke('renewed', [
+        'period_till' => $issuedAt + ($remaining ?? 0) * 86400,
+    ]);
+    $oldCert->update(['expires_at' => $issuedAt + 5 * 86400]);
+    [$order, $cert] = createOrderWithCertForRevoke('processing', [
+        'period' => $months, 'plus' => $plus,
+        'period_from' => $initialized ? $issuedAt : null,
+        'period_till' => $initialized ? $issuedAt + 200 * 86400 : null,
+    ]);
+    $cert->update([
+        'action' => $action,
+        'last_cert_id' => $remaining === null ? null : $oldCert->id,
+    ]);
+    $data = ['issued_at' => $issuedAt, 'expires_at' => $issuedAt + $certDays * 86400];
+    if ($upstreamDays !== null) {
+        $data['period_till'] = $issuedAt + $upstreamDays * 86400;
+    }
+    $api = Mockery::mock(Api::class);
+    $api->shouldReceive('get')->once()->with($order->id)->andReturn(['code' => 1, 'data' => $data]);
+    (new ReflectionProperty($this->service, 'api'))->setValue($this->service, $api);
+
+    $this->service->sync($order->id, true);
+
+    $subtractSecond = ! $initialized && $upstreamDays === null && ($action === 'renew' || $expectedDays > $certDays);
+    expect($order->fresh()->period_from->timestamp)->toBe($issuedAt)
+        ->and($order->fresh()->period_till->timestamp)->toBe($issuedAt + $expectedDays * 86400 - (int) $subtractSecond)
+        ->and($oldOrder->fresh()->period_till->timestamp)->toBe($issuedAt + ($remaining ?? 0) * 86400);
+})->with([
+    '续费承接余量且忽略赠送及单张证书期限' => ['renew', 12, 20, 1, null, 1000, 385, false],
+    'plus为零相同' => ['renew', 12, 20, 0, null, 1000, 385, false],
+    '余量不截断' => ['renew', 12, 60, 1, null, 1000, 425, false],
+    '旧订单已过期' => ['renew', 12, -10, 1, null, 1000, 365, false],
+    '旧订单恰好到期' => ['renew', 12, 0, 1, null, 1000, 365, false],
+    '缺少前驱关联' => ['renew', 12, null, 1, null, 1000, 365, false],
+    '短周期' => ['renew', 3, 20, 1, null, 1000, 110, false],
+    '多年周期' => ['renew', 24, 20, 1, null, 1000, 750, false],
+    '上游较短仍优先' => ['renew', 12, 20, 1, 300, 1000, 300, false],
+    '上游较长仍优先' => ['renew', 12, 20, 1, 450, 100, 450, false],
+    '新购上游权威期限' => ['new', 12, null, 1, 300, 1000, 300, false],
+    '新购保留赠送' => ['new', 12, null, 1, null, 365, 395, false],
+    '新购保留较长证书期限' => ['new', 12, null, 1, null, 400, 400, false],
+    '存量有效期不回算' => ['renew', 12, 20, 1, 450, 1000, 200, true],
+]);
+
 test('sync 终态守卫（force=false TOCTOU）：锁外慢 IO 期间被并发 cancel 置 cancelled，不被上游滞后 active 复活', function () {
     Queue::fake();
     // 初始 processing：通过 force=false 分支「只有待验证/待批准/已签发才能同步」前置校验
