@@ -2447,6 +2447,58 @@ test('新订单签发不会激活尚未检测生效的委托域', function () {
         ->and($validation[0]['delegation_valid'])->toBeFalse();
 });
 
+test('重签关闭赠送后按最终域名集合判断是否增购', function (
+    string $previousDomains, string $domains, int $previousStandardCount,
+    int $standardCount, int $wildcardCount, int $addSan, int $replaceSan,
+    string $expectedAmount, int $expectedStandardCount,
+) {
+    Queue::fake();
+    $this->user = $this->createTestUser(['balance' => '500.00']);
+    [$order, $previous, $product] = makeBLockSourceOrder([
+        'common_name' => explode(',', $previousDomains)[0],
+        'alternative_names' => $previousDomains,
+        'standard_count' => $previousStandardCount,
+        'wildcard_count' => $wildcardCount,
+        'amount' => '100.00',
+    ]);
+    $product->update([
+        'gift_root_domain' => 0, 'add_san' => $addSan, 'replace_san' => $replaceSan,
+        'common_name_types' => ['standard', 'wildcard'],
+        'alternative_name_types' => ['standard', 'wildcard'],
+        'standard_min' => 0,
+    ]);
+    $order->update(['purchased_standard_count' => $standardCount, 'purchased_wildcard_count' => $wildcardCount]);
+    Transaction::create([
+        'user_id' => $this->user->id, 'type' => 'order', 'transaction_id' => $order->id,
+        'amount' => '-100.00', 'standard_count' => $standardCount, 'wildcard_count' => $wildcardCount,
+    ]);
+    $params = bLockParams($order, $previous, 'reissue');
+    $params['domains'] = $domains;
+
+    expectOrderApiSuccess(fn () => $this->service->reissue($params));
+    $cert = $order->fresh()->latestCert;
+    expect($cert->amount)->toBe($expectedAmount)
+        ->and($cert->standard_count)->toBe($expectedStandardCount)
+        ->and($cert->wildcard_count)->toBe($wildcardCount);
+
+    expectOrderApiSuccess(fn () => $this->service->pay($order->id, false));
+    expect($this->user->fresh()->balance)->toBe(bcsub('400.00', $expectedAmount, 2))
+        ->and($order->fresh()->purchased_standard_count)->toBe(max($standardCount, $expectedStandardCount))
+        ->and($order->fresh()->purchased_wildcard_count)->toBe($wildcardCount)
+        ->and($cert->fresh()->status)->toBe('pending')
+        ->and(Transaction::where('type', 'order')->where('transaction_id', $order->id)->count())
+        ->toBe($expectedAmount === '0.00' ? 1 : 2);
+})->with([
+    '原样重签' => ['www.a.com,a.com,www.b.com,b.com', 'www.a.com,a.com,www.b.com,b.com', 2, 2, 0, 1, 1, '0.00', 2],
+    '顺序和大小写变化' => ['www.a.com,a.com,www.b.com,b.com', 'B.COM,WWW.B.COM,A.COM,WWW.A.COM', 2, 2, 0, 1, 1, '0.00', 2],
+    '关闭增加SAN仍可原样重签' => ['www.a.com,a.com,www.b.com,b.com', 'www.a.com,a.com,www.b.com,b.com', 2, 2, 0, 0, 1, '0.00', 2],
+    '合并旧域名后集合不变' => ['www.a.com,a.com,www.b.com,b.com', 'www.a.com,www.b.com', 2, 2, 0, 1, 0, '0.00', 2],
+    '同步已按新配置重算旧证书数量' => ['www.a.com,a.com,www.b.com,b.com', 'www.a.com,a.com,www.b.com,b.com', 4, 2, 0, 1, 1, '0.00', 2],
+    '通配符赠送根域名' => ['*.a.com,a.com', '*.a.com,a.com', 0, 0, 1, 1, 1, '0.00', 0],
+    '数量相同但替换域名不豁免计费' => ['www.a.com,a.com,www.b.com,b.com', 'www.a.com,a.com,www.b.com,c.com', 2, 2, 0, 1, 1, '20.00', 4],
+    '域名集合变化仍按现有规则增购' => ['www.a.com,a.com,www.b.com,b.com', 'www.a.com,a.com,www.b.com,b.com,c.com', 2, 2, 0, 1, 1, '30.00', 5],
+]);
+
 test('reissue 禁用产品在一分钱增购边界精确拒绝且不改变前驱', function () {
     Queue::fake();
     [$order, $previous, $product] = makeBLockSourceOrder();

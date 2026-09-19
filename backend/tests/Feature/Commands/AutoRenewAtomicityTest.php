@@ -96,15 +96,15 @@ function captureAutoRenewIntents(array &$intents): void
 }
 
 /** 一次性并发耗尽余额：在 O1 外层事务内首个 Cert 建立时把余额扣光（原生 UPDATE 不经 Transaction 钩子）。 */
-function depleteBalanceOnFirstCert(User $user): void
+function depleteBalanceOnFirstCert(User $user, string $balance = '0.00'): void
 {
     $depleted = false;
-    Cert::created(function (Cert $c) use ($user, &$depleted) {
+    Cert::created(function (Cert $c) use ($user, $balance, &$depleted) {
         if ($depleted) {
             return;
         }
         $depleted = true;
-        DB::table('users')->where('id', $user->id)->update(['balance' => '0.00']);
+        DB::table('users')->where('id', $user->id)->update(['balance' => $balance]);
     });
 }
 
@@ -177,9 +177,10 @@ test('O1 原子回滚：pay 段 charge 因并发耗尽余额失败 → 旧证书
 });
 
 test('O1 reissue 分支原子回滚：charge 失败 → 旧证书回滚保持 active、reissue cert 不残留', function () {
-    // 重签走 auto_reissue（订单剩余 >15 天 → reissue）；增域名单价>0 使 reissue 扣费>0，并发耗尽余额致 charge 失败。
+    // 原域名重签为零元；并发余额跌破信用下限，仍由真实 charge 守卫触发原子回滚。
     $user = $this->createTestUser([
         'balance' => '1000.00',
+        'credit_limit' => '0.00',
         'auto_settings' => ['auto_renew' => false, 'auto_reissue' => true],
     ]);
 
@@ -214,7 +215,7 @@ test('O1 reissue 分支原子回滚：charge 失败 → 旧证书回滚保持 ac
 
     $intents = [];
     captureAutoRenewIntents($intents);
-    depleteBalanceOnFirstCert($user);
+    depleteBalanceOnFirstCert($user, '-0.01');
 
     $this->artisan('schedule:auto-renew')->assertSuccessful();
 

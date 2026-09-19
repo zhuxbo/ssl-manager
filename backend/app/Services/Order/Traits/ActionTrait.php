@@ -390,6 +390,21 @@ trait ActionTrait
                     $cert['wildcard_count'] = $san_count['wildcard_count'];
                 }
 
+                if ($cert['action'] === 'reissue') {
+                    $previousDomains = array_filter(array_map('trim', explode(',', DomainUtil::lowercaseDomains(
+                        DomainUtil::convertToAsciiDomains($params['last_cert']['alternative_names'])
+                    ))));
+                    $currentDomains = array_filter(array_map('trim', explode(',', DomainUtil::lowercaseDomains(
+                        DomainUtil::convertToAsciiDomains($cert['alternative_names'])
+                    ))));
+
+                    // 域名集合不变时不增购，避免关闭赠送或同步重算数量后重复收费。
+                    if ($previousDomains && ! array_diff($previousDomains, $currentDomains) && ! array_diff($currentDomains, $previousDomains)) {
+                        $cert['standard_count'] = min($cert['standard_count'], $params['purchased_standard_count']);
+                        $cert['wildcard_count'] = min($cert['wildcard_count'], $params['purchased_wildcard_count']);
+                    }
+                }
+
                 // 不支持增加 SAN 时，必须在旧 SAN 合并完成后校验最终送签数量，避免 replace_san=0 绕过
                 if (! ($params['product']['add_san'] ?? 0)) {
                     if ($cert['action'] === 'renew') {

@@ -430,6 +430,7 @@ test('重签订单', function () {
 test('不可添加 SAN 产品重签按订单已购数量拒绝超额 SAN', function (
     array $orderCounts,
     array $certCounts,
+    string $previousDomains,
     string $domains,
     string $expectedMessage
 ) {
@@ -444,7 +445,7 @@ test('不可添加 SAN 产品重签按订单已购数量拒绝超额 SAN', funct
     ], $orderCounts));
     $cert = Cert::factory()->active()->create(array_merge([
         'order_id' => $order->id,
-        'alternative_names' => $domains,
+        'alternative_names' => $previousDomains,
     ], $certCounts));
     $order->update(['latest_cert_id' => $cert->id]);
 
@@ -470,12 +471,14 @@ test('不可添加 SAN 产品重签按订单已购数量拒绝超额 SAN', funct
         ['purchased_standard_count' => 1, 'purchased_wildcard_count' => 0],
         ['standard_count' => 2, 'wildcard_count' => 0],
         'one.example.com,two.example.com',
+        'one.example.com,three.example.com',
         '标准域名数量超过订单已购数量',
     ],
     '通配符 SAN' => [
         ['purchased_standard_count' => 1, 'purchased_wildcard_count' => 1],
         ['standard_count' => 1, 'wildcard_count' => 2],
         'example.com,*.one.example.com,*.two.example.com',
+        'example.com,*.one.example.com,*.three.example.com',
         '通配符域名数量超过订单已购数量',
     ],
 ]);
