@@ -1,0 +1,45 @@
+{
+    "test": "P\\Tests\\Feature\\Http\\Controllers\\Admin\\UserRemarkTest::__pest_evaluable_用户不能读取或修改管理员备注",
+    "version": "1.0.0",
+    "calls": [
+        {
+            "method": "GET",
+            "uri_pattern": "/api/admin/user/{id}",
+            "request_keys": null,
+            "response_status": "4xx",
+            "response_schema": {
+                "code": "integer",
+                "msg": "string"
+            }
+        },
+        {
+            "method": "GET",
+            "uri_pattern": "/api/me",
+            "request_keys": null,
+            "response_status": "2xx",
+            "response_schema": {
+                "code": "integer",
+                "data": {
+                    "username": "string",
+                    "email": "string",
+                    "mobile": "string",
+                    "balance": "string",
+                    "last_login_at": "null",
+                    "last_login_ip": "null"
+                }
+            }
+        },
+        {
+            "method": "PATCH",
+            "uri_pattern": "/api/admin/user/remark/{id}",
+            "request_keys": [
+                "admin_remark"
+            ],
+            "response_status": "4xx",
+            "response_schema": {
+                "code": "integer",
+                "msg": "string"
+            }
+        }
+    ]
+}

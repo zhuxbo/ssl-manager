@@ -705,8 +705,7 @@ test('A4：重签单缺价格行 → 不受守卫影响（守卫仅 renew），S
     $actionMock = Mockery::mock(Action::class);
     $actionMock->shouldReceive('reissue')->once()
         ->andThrow(new ApiResponseException('', null, ['order_id' => $order->id], 1));
-    $actionMock->shouldReceive('pay')->once()->with($order->id, false)
-        ->andThrow(new ApiResponseException('', null, null, 1));
+    $actionMock->shouldNotReceive('pay');
     $actionMock->shouldReceive('createTask')->once()
         ->with($order->id, 'commit', Mockery::type('int'));
     $this->app->bind(Action::class, fn () => $actionMock);
@@ -808,11 +807,11 @@ test('pull scheduler 自动重签成功且失败在案 → 服务端自写恢复
     ]);
     $this->autoRenewService->shouldReceive('checkDelegationValidity')->andReturn(true);
 
-    // reissue 成功信号：ApiResponseException code=1 携 data.order_id（同订单）→ pay → createTask 延时 commit
+    // reissue 成功信号：ApiResponseException code=1 携 data.order_id（同订单）→ createTask 延时 commit
     $actionMock = Mockery::mock(Action::class);
     $actionMock->shouldReceive('reissue')->once()
         ->andThrow(new ApiResponseException('', null, ['order_id' => $order->id], 1));
-    $actionMock->shouldReceive('pay')->once()->with($order->id, false);
+    $actionMock->shouldNotReceive('pay');
     $actionMock->shouldReceive('createTask')->once();
     $this->app->bind(Action::class, fn () => $actionMock);
 
@@ -848,7 +847,7 @@ test('pull scheduler 自动重签成功但无失败在案 → 不写恢复行（
     $actionMock = Mockery::mock(Action::class);
     $actionMock->shouldReceive('reissue')->once()
         ->andThrow(new ApiResponseException('', null, ['order_id' => $order->id], 1));
-    $actionMock->shouldReceive('pay')->once()->with($order->id, false);
+    $actionMock->shouldNotReceive('pay');
     $actionMock->shouldReceive('createTask')->once();
     $this->app->bind(Action::class, fn () => $actionMock);
 

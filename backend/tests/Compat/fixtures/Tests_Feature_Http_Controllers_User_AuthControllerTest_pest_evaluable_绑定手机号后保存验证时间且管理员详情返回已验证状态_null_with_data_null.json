@@ -38,6 +38,7 @@
                         "auto_reissue": "boolean"
                     },
                     "status": "integer",
+                    "admin_remark": "null",
                     "created_at": "string",
                     "updated_at": "string",
                     "level": {

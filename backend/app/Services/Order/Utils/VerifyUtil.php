@@ -89,7 +89,9 @@ class VerifyUtil
     {
         // 查询符合条件的订单
         $orders = Order::with(['latestCert', 'product'])
-            ->whereHas('latestCert', fn ($query) => $query->where('status', 'unpaid'))
+            ->whereHas('latestCert', fn ($query) => $query->where('status', 'unpaid')
+                ->orWhere(fn ($freeReissue) => $freeReissue->where('status', 'pending')
+                    ->where('action', 'reissue')->where('amount', 0)))
             ->whereIn('id', $order_ids)
             ->get();
 

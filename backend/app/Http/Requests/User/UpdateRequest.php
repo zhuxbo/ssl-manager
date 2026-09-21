@@ -32,6 +32,7 @@ class UpdateRequest extends BaseRequest
             'level_code' => 'required|string|exists:user_levels,code',
             'custom_level_code' => 'nullable|string|exists:user_levels,code',
             'credit_limit' => 'nullable|numeric',
+            'admin_remark' => 'nullable|string|max:500',
             'status' => 'required|integer|in:0,1',
         ];
     }

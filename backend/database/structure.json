@@ -1,7 +1,7 @@
 {
     "version": "1.0",
-    "mysql_version": "8.4.9",
-    "generated_at": "2026-09-01 23:09:37",
+    "mysql_version": "8.4.11",
+    "generated_at": "2026-09-20 15:40:10",
     "database": {
         "name": "manager",
         "charset": "utf8mb4",
@@ -5613,7 +5613,7 @@
             "engine": "InnoDB",
             "collation": "utf8mb4_0900_ai_ci",
             "comment": "",
-            "auto_increment": 2,
+            "auto_increment": 3,
             "columns": {
                 "id": {
                     "position": 1,
@@ -6224,8 +6224,16 @@
                     "extra": "",
                     "comment": "状态: 0=禁用, 1=启用"
                 },
-                "created_at": {
+                "admin_remark": {
                     "position": 22,
+                    "type": "varchar(500)",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "管理员备注"
+                },
+                "created_at": {
+                    "position": 23,
                     "type": "timestamp",
                     "nullable": true,
                     "default": null,
@@ -6233,7 +6241,7 @@
                     "comment": ""
                 },
                 "updated_at": {
-                    "position": 23,
+                    "position": 24,
                     "type": "timestamp",
                     "nullable": true,
                     "default": null,

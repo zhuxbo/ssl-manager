@@ -42,6 +42,14 @@ beforeEach(function () {
     Http::preventStrayRequests();
 });
 
+test('仅零元重签的 pending 状态继续执行显式签发预检', function (string $action, string $amount, bool $shouldVerify) {
+    $order = makeIssueVerifyOrder('example.com');
+    $order->latestCert->update(['status' => 'pending', 'action' => $action, 'amount' => $amount]);
+    Http::fake(['dnstool.test/*' => Http::response(['code' => 1, 'data' => null])]);
+    VerifyUtil::issueVerify([$order->id]);
+    $shouldVerify ? Http::assertSentCount(1) : Http::assertNothingSent();
+})->with([['reissue', '0.00', true], ['reissue', '10.00', false], ['new', '0.00', false]]);
+
 test('混合 SAN 的签发预检只发送 DNS 域名', function () {
     $order = makeIssueVerifyOrder('example.com,202.155.152.20,2602:f864:218:10::a');
     Http::fake([

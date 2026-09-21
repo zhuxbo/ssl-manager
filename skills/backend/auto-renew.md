@@ -10,10 +10,10 @@
 - `orders.auto_reissue`: 订单级自动重签开关（null 时回落到用户设置）
 - `users.auto_settings`: 用户级默认设置 `{"auto_renew": false, "auto_reissue": false}`
 - `AutoRenewCommand` 每天 00:00 执行：证书到期前 14 天触发，订单剩余 ≤15 天续费、>15 天重签；API channel 订单由下游控制，不处理
-- **延时提交**：Command 创建续费/重签 + 支付后不立即 commit，通过 Task 表创建延时 commit 任务（随机 0~8 小时），分散上游压力，8 点后人工可检查状态
+- **延时提交**：Command 创建续费并支付、或创建零元重签直接落 pending 后不立即 commit，通过 Task 表创建延时 commit 任务（随机 0~8 小时），分散上游压力，8 点后人工可检查状态
 - **产品条件**：续费要求 `product.status=1 && renew=1`；重签仅要求 `reissue=1`（产品禁用仍可重签）
 - **仅 ssl 产品（A3）**：选单 `getRenewOrders`/`getReissueOrders` 与判定 `willAuto{Renew,Reissue}Execute` 四处均加 ssl 白名单（`product_type IS NULL OR ='ssl'`，`Product::isSSL()` null→ssl）；smime/codesign/docsign 退出自动续费/重签选单，改由 `cert_expire` 到期提醒。**四处必须同步改**——`willAuto*` 是 `ExpireCommand::willBeHandledByAutoRenew` 与 `CertExpireNotificationBuilder` 的单一源，只改选单不改 `willAuto*` 会「选单排除但仍被判会处理」→ 两腿断静默过期
-- **参数继承**：从原订单提取 period/contact/organization/domains；CSR 按 `product.reuse_csr` 决定重用或生成
+- **参数继承**：从原订单提取 period/contact/organization/domains；CSR 通常按 `product.reuse_csr` 决定重用或生成，Certum 验证复用路径强制重新生成
 
 ## 算法继承（防静默降级）
 
@@ -23,6 +23,14 @@
 
 - 优先从源证书 validation 的 `delegation_id` 加载同一逻辑委托，先按“完整默认域优先、其余完整配置回落”做全局检测，再用检测结果生成续费/重签 validation 快照；旧数据缺少有效 ID 时才按 CA 派生 zone 回落查找或创建
 - 委托失效通知只在本命令真正准备发起续签/重签且前置检查失败时发送，复用 `auto_renew_failed` 及其 14/7/3/1 天节点 gate；`delegation:check` 周巡检不单独向用户发委托通知
+
+### 按 CA 验证复用重签（默认关闭）
+
+- 管理员在「系统设置 → 站点设置」手工添加统一设置 `firstAutoReissue`（同时控制 Certum、Sectigo、DigiCert），类型 `integer`、值 `5–14`，表示证书到期前多少天内允许走此路径。此项不由 Seeder 预置；缺失、类型错误或非法值视为关闭，删除即可停用。
+- 仅 `products.ca` 为 `certum`、`sectigo`、`digicert` 的 SSL 重签适用，品牌不参与判断。沿用原选单限制：订单／用户 `auto_reissue` 开关、非 API 通道、active 且未过期、产品支持重签、订单剩余 >15 天。ACME 仍由客户端续签。
+- 用 `orders.period_from` 估算此前验证时间，按**发起重签时**的 DCV 复用期限判断：Certum 在 2026-03-15 起为 200 天（此前 398 天），Sectigo 在 2026-03-12 起为 198 天（此前 398 天），DigiCert 在 2026-02-24 18:00 UTC 起为 199 天（此前 397 天）；三者在 2027-03-15 起按 100 天、2029-03-15 起按 10 天估算。到达复用截止时间即不适用，开始时间缺失或在未来、旧 DCV 方法缺失时也不适用。政策依据：[Certum](https://www.certum.eu/en/news/shortening-ssl-tls-certificate-validity/)、[Sectigo](https://www.sectigo.com/resource-library/shorter-validity-periods-for-tls-certificates-and-dcv)、[DigiCert](https://knowledge.digicert.com/alerts/domain-validation-reuse-changes-in-2026)。订单起始时间只是估算，最终能否免验证由上游决定。
+- 满足条件时免除本地委托前置检查，继承上次 `dcv.method`（`is_delegate` 还原为 `delegation`）。Certum 强制生成新 CSR／私钥并继承原算法；Sectigo／DigiCert 复制原证书的 CSR 和私钥，仍受产品支持重用 CSR 的校验约束。沿用原事务、随机 0–8 小时延时提交和失败通知；零元重签直接 pending、跳过支付且不创建零元流水。复用判断不延长 `period_from`，不把新一次重签当成重新验证。
+- 不满足上述条件时继续原有委托路径；此设置不推迟已有有效委托订单的自动重签，不影响其他 CA 或自动续费。
 
 ## 失败通知 + 到期去重
 
@@ -42,7 +50,7 @@
 
 ## 续费事务化与余额预检（O1/O2/O3，P0-1 包 O）
 
-- **O1 事务原子**：`processOrder` 把「创建续费/重签 + `pay(false)`」包进单个 `DB::transaction`，pay 段 charge 失败连同已翻转的旧证书（active→renewed）+ 新单一并回滚，杜绝「旧证书 renewed 终态 + 新单卡 unpaid」静默孤儿（P0-1 路径 1）；延时 commit 移**事务外**。**attempts=1 必需**（`checkDuplicate` SETNX 回滚不清键，事务级重试必自败）；`success()` 抛 `ApiResponseException` 是成功信号（取 order_id）、业务失败 rethrow 触发回滚。
+- **O1 事务原子**：`processOrder` 把「创建续费 + `pay(false)`」包进单个 `DB::transaction`，pay 段 charge 失败连同已翻转的旧证书（active→renewed）+ 新单一并回滚，杜绝「旧证书 renewed 终态 + 新单卡 unpaid」静默孤儿（P0-1 路径 1）；延时 commit 移**事务外**。**attempts=1 必需**（`checkDuplicate` SETNX 回滚不清键，事务级重试必自败）；`success()` 抛 `ApiResponseException` 是成功信号（取 order_id）、业务失败 rethrow 触发回滚。
 - **O2 余额预检实时化**：续费预检前 `$user->refresh()` 消 00:00 `with('user')` 预载的 stale balance（同用户多单共享内存实例、前序单 charge 改的是 DB 另取行）。
 - 事务边界 / O3 Deploy update 移植 / O4 sweep-orphan-orders 孤儿收尾 / PendingReconcileQuery 共享判据详见 `skills/backend/order-fund.md`「续费孤儿止血 + 卡单对账扩展」。
 
@@ -121,13 +129,14 @@
 
 3. `processOrder()` 处理单个订单：
    - **委托有效性检查**：`checkDelegationValidity()` 即时验证所有域名是否有有效委托
-   - 无有效委托 → 跳过订单，不发起续费/重签
+   - 无有效委托 → 跳过订单，不发起续费/重签；满足上述 CA 验证复用条件时免除此检查
    - 续费时检查用户余额（`balance + |credit_limit|`）
-   - 强制使用 `delegation` 验证方法
+   - 默认使用 `delegation` 验证方法；CA 验证复用路径沿用上次验证方式
    - 调用 `Action::renew()` 或 `Action::reissue()`
 
-4. 支付 + 延时提交（O1 事务化后）：
-   - 「创建续费/重签 + `Action::pay($orderId, false)`」包进单个 `DB::transaction`（原子，charge 失败连同旧证书翻转一并回滚）
+4. 状态流转 + 延时提交：
+   - 零元重签在创建事务内直接落 `pending`，跳过支付；原域名／配额内重签不依赖当前价格配置，不创建零元交易流水
+   - 「创建续费 + `Action::pay($orderId, false)`」包进单个 `DB::transaction`（原子，charge 失败连同旧证书翻转一并回滚）
    - 事务外 `createTask($orderId, 'commit', $delay)`（随机 0~8h 延时提交，分散上游压力）——不再同步 `pay(true)` 立即 commit
 
 ### 相关命令

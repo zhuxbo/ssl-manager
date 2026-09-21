@@ -1,0 +1,24 @@
+{
+    "test": "P\\Tests\\Feature\\Http\\Controllers\\Deploy\\UpdateAtomicityTest::__pest_evaluable_Deploy_零元重签跳过支付并在事务外提交，失败仍保留_pending",
+    "version": "1.0.0",
+    "calls": [
+        {
+            "method": "POST",
+            "uri_pattern": "/api/deploy",
+            "request_keys": [
+                "order_id"
+            ],
+            "response_status": "2xx",
+            "response_schema": {
+                "code": "integer",
+                "data": {
+                    "order_id": "integer",
+                    "domains": "string",
+                    "status": "string",
+                    "csr": "string",
+                    "renew_before_days": "integer"
+                }
+            }
+        }
+    ]
+}

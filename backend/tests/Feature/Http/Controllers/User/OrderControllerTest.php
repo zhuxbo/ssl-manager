@@ -424,7 +424,9 @@ test('重签订单', function () {
         ->and($newCert->action)
         ->toBe('reissue')
         ->and($newCert->status)
-        ->toBe('unpaid');
+        ->toBe('pending')
+        ->and($newCert->amount)
+        ->toBe('0.00');
 });
 
 test('不可添加 SAN 产品重签按订单已购数量拒绝超额 SAN', function (

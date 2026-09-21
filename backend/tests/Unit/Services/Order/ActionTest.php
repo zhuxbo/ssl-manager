@@ -2295,7 +2295,7 @@ test('reissue 成功精确迁移前驱、订单组织、新证书和验证节奏
             'order_id' => $order->id,
             'last_cert_id' => $previous->id,
             'action' => 'reissue',
-            'status' => 'unpaid',
+            'status' => 'pending',
         ])
         ->and((string) $current->amount)->toBe('0.00')
         ->and(DomainValidationRecord::where('order_id', $order->id)->exists())->toBeFalse();
@@ -2481,7 +2481,12 @@ test('重签关闭赠送后按最终域名集合判断是否增购', function (
         ->and($cert->standard_count)->toBe($expectedStandardCount)
         ->and($cert->wildcard_count)->toBe($wildcardCount);
 
-    expectOrderApiSuccess(fn () => $this->service->pay($order->id, false));
+    if ($expectedAmount === '0.00') {
+        expect($cert->status)->toBe('pending');
+    } else {
+        expect($cert->status)->toBe('unpaid');
+        expectOrderApiSuccess(fn () => $this->service->pay($order->id, false));
+    }
     expect($this->user->fresh()->balance)->toBe(bcsub('400.00', $expectedAmount, 2))
         ->and($order->fresh()->purchased_standard_count)->toBe(max($standardCount, $expectedStandardCount))
         ->and($order->fresh()->purchased_wildcard_count)->toBe($wildcardCount)

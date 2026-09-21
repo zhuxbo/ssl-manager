@@ -176,8 +176,8 @@ test('O1 原子回滚：pay 段 charge 因并发耗尽余额失败 → 旧证书
     Queue::assertNotPushed(TaskJob::class);
 });
 
-test('O1 reissue 分支原子回滚：charge 失败 → 旧证书回滚保持 active、reissue cert 不残留', function () {
-    // 原域名重签为零元；并发余额跌破信用下限，仍由真实 charge 守卫触发原子回滚。
+test('零元自动重签直接 pending，不创建扣费流水', function () {
+    // 原域名重签为零元，跳过支付且不产生零元流水。
     $user = $this->createTestUser([
         'balance' => '1000.00',
         'credit_limit' => '0.00',
@@ -215,14 +215,18 @@ test('O1 reissue 分支原子回滚：charge 失败 → 旧证书回滚保持 ac
 
     $intents = [];
     captureAutoRenewIntents($intents);
-    depleteBalanceOnFirstCert($user, '-0.01');
+    $transactionCount = Transaction::count();
+    Transaction::creating(function () {
+        throw new RuntimeException('零元重签不应创建交易');
+    });
 
     $this->artisan('schedule:auto-renew')->assertSuccessful();
 
-    // 旧证书回滚保持 active（未 reissued），reissue cert 未残留（latest_cert_id 仍指旧证书）
-    expect($cert->fresh()->status)->toBe('active')
-        ->and($order->fresh()->latest_cert_id)->toBe($cert->id)
-        ->and(Cert::where('order_id', $order->id)->count())->toBe(1)
+    expect($cert->fresh()->status)->toBe('reissued')
+        ->and($order->fresh()->latestCert->status)->toBe('pending')
+        ->and($order->fresh()->latestCert->amount)->toBe('0.00')
+        ->and(Transaction::count())->toBe($transactionCount)
+        ->and(Cert::where('order_id', $order->id)->count())->toBe(2)
         ->and($user->fresh()->balance)->toBe('1000.00');
 });
 

@@ -25,6 +25,7 @@
                             "created_at": "string",
                             "level_code": "string",
                             "custom_level_code": "null",
+                            "admin_remark": "null",
                             "level": {
                                 "code": "string",
                                 "name": "string"

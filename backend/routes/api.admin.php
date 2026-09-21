@@ -85,6 +85,7 @@ Route::prefix('admin')->middleware('api.admin')->group(function () {
     Route::prefix('user')->group(function () {
         Route::post('direct-login', [UserController::class, 'directLogin']);
         Route::post('create-user', [UserController::class, 'createUser']);
+        Route::patch('remark/{id}', [UserController::class, 'remark'])->whereNumber('id');
     });
     RouteHelper::registerResourceRoutes('user-level', UserLevelController::class);
     Route::prefix('user-level')->group(function () {

@@ -336,7 +336,12 @@ class Action
         $order->organization = $params['organization'] ?? $order->organization;
         $organization = $order->organization;
         $latestCert = $this->getCert($params);
-        $amount = OrderUtil::getLatestCertAmount($order->toArray(), $latestCert, $params['product']);
+        // 重签只对增购 SAN 计价；原配额内重签为零元，不依赖当前价格配置。
+        $hasAdditionalDomains = $latestCert['standard_count'] > $order->purchased_standard_count
+            || $latestCert['wildcard_count'] > $order->purchased_wildcard_count;
+        $amount = $hasAdditionalDomains
+            ? OrderUtil::getLatestCertAmount($order->toArray(), $latestCert, $params['product'])
+            : '0.00';
 
         if (bccomp($amount, '0', 2) === 1) {
             $product = FindUtil::Product((int) $order->product_id);
@@ -371,9 +376,15 @@ class Action
             $order->organization = $organization;
             $latestCert['order_id'] = $order->id;
             $latestCert['amount'] = $amount;
-            $latestCert['status'] = 'unpaid';
+            $isFree = bccomp($amount, '0', 2) === 0;
+            $latestCert['status'] = $isFree ? 'pending' : 'unpaid';
             $cert = Cert::create($latestCert);
             $order->latest_cert_id = $cert->id;
+            if ($isFree) {
+                // 免费增购也要更新配额，与原支付步骤一致，但不创建零元交易。
+                $order->purchased_standard_count = max($order->purchased_standard_count, $cert->standard_count, $params['product']['standard_min']);
+                $order->purchased_wildcard_count = max($order->purchased_wildcard_count, $cert->wildcard_count, $params['product']['wildcard_min']);
+            }
             $order->save();
             DomainValidationRecord::where('order_id', $order->id)->delete();
             $orderId = $order->id;

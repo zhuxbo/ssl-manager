@@ -65,6 +65,12 @@ export const useUserTable = () => {
       minWidth: 100
     },
     {
+      label: "备注",
+      prop: "admin_remark",
+      minWidth: 160,
+      showOverflowTooltip: true
+    },
+    {
       label: "最后登录",
       prop: "last_login_at",
       minWidth: 150,

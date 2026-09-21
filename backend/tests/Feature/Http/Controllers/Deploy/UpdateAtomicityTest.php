@@ -92,6 +92,26 @@ function deployAtomicUpdate(DeployToken $token, int $orderId): TestResponse
         ->postJson('/api/deploy/', ['order_id' => $orderId]);
 }
 
+test('Deploy 零元重签跳过支付并在事务外提交，失败仍保留 pending', function () {
+    [$user, $token] = deployAtomicAuth('0.00');
+    [$order, $cert, $product] = deployAtomicRenewable($user);
+    $order->update(['period_till' => now()->addMonths(6)]);
+    $cert->update(['expires_at' => now()->addDays(5)]);
+    ProductPrice::where('product_id', $product->id)->delete();
+    $api = Mockery::mock(Api::class);
+    $api->shouldReceive('reissue')->once()->andReturn(['code' => 0, 'msg' => '上游暂不可用']);
+    app()->instance(Api::class, $api);
+    $transactions = Transaction::count();
+
+    deployAtomicUpdate($token, $order->id)->assertOk()->assertJsonPath('code', 1)
+        ->assertJsonPath('data.status', 'pending');
+    expect($cert->fresh()->status)->toBe('reissued')
+        ->and($order->fresh()->latestCert->status)->toBe('pending')
+        ->and($order->fresh()->latestCert->amount)->toBe('0.00')
+        ->and($user->fresh()->balance)->toBe('0.00')
+        ->and(Transaction::count())->toBe($transactions);
+});
+
 test('O3-A 原子防孤儿：charge 并发失败 → 旧证书回滚保持 active、无新单、余额未变、HTTP 报错', function () {
     [$user, $token] = deployAtomicAuth('1000.00');
     [$order, $cert] = deployAtomicRenewable($user, '100.00');

@@ -23,6 +23,7 @@ if (! function_exists('fundAuditGuardedTestPaths')) {
             'Feature/Models/FundCasTest.php',
             'Feature/Models/FundTest.php',
             'Feature/Services/Order/SyncedCancelRefundTest.php',
+            'Feature/Services/Order/ZeroAmountReissueTest.php',
             'Unit/Jobs/TaskJobTest.php',
             'Unit/Services/Acme/ActionTest.php',
             'Unit/Services/Order/ActionTest.php',

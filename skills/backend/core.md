@@ -46,6 +46,10 @@ backend/
 - 统一响应格式：成功 `{"code": 1, "data": {...}}`，失败 `{"code": 0, "msg": "..."}`
 - 统一异常处理：`ApiResponseException`
 
+### 管理员用户备注
+
+用户备注存于 `users.admin_remark`（可空，最多 500 字），模型默认隐藏，仅管理员用户列表、详情与批量详情显式返回。管理员新增/编辑用户可传此字段；卡片快捷编辑使用 `PATCH /api/admin/user/remark/{id}`，必须传 `admin_remark`，空字符串或 null 清除，省略字段不执行清除。用户端不得返回或允许写入此字段。
+
 ### JWT 多端认证
 
 | 端        | 路由前缀               | 认证方式 |

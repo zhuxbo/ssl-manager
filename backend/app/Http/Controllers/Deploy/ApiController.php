@@ -389,8 +389,10 @@ class ApiController extends Controller
                             $this->getData($action, 'reissue', [$updateParams]);
                         }
 
-                        // O3-A：pay(false) 纯本地扣费落 pending，与 renew/reissue 同事务原子（charge 失败 → 整体回滚）
-                        $this->getData($action, 'pay', [$resolved, false]);
+                        // 零元重签已落 pending；其余订单支付与创建同事务原子（失败整体回滚）。
+                        if (Order::findOrFail($resolved)->latestCert->status === 'unpaid') {
+                            $this->getData($action, 'pay', [$resolved, false]);
+                        }
                     });
 
                     return $resolved;

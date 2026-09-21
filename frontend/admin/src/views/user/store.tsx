@@ -131,6 +131,17 @@ export const useUserStore = (onSearch: () => void) => {
       }
     },
     {
+      label: "备注",
+      prop: "admin_remark",
+      valueType: "textarea",
+      fieldProps: {
+        placeholder: "仅管理员可见，留空可清除",
+        maxlength: 500,
+        showWordLimit: true,
+        rows: 3
+      }
+    },
+    {
       label: "状态",
       prop: "status",
       valueType: "switch",
@@ -169,8 +180,7 @@ export const useUserStore = (onSearch: () => void) => {
   function openStoreForm(id = 0) {
     showStore.value = true;
     if (id > 0) {
-      // 打开不同的id才重新查询
-      storeId.value !== id && handleShow(id);
+      handleShow(id);
     } else {
       storeRef.value.formInstance?.resetFields();
       storeValues.value = Object.fromEntries(

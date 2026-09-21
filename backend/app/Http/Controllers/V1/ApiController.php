@@ -11,6 +11,7 @@ use App\Models\Product;
 use App\Services\Order\Action;
 use App\Services\Order\OrderCommitResilience;
 use App\Services\Order\Utils\OrderUtil;
+use App\Services\Order\Utils\VerifyUtil;
 use DB;
 use Exception;
 use Illuminate\Auth\TokenGuard;
@@ -227,7 +228,7 @@ class ApiController extends Controller
         $params['action'] = 'reissue';
         $params['channel'] = 'api';
 
-        // 外层事务只包 reissue + 所有权校验 + pay(commit=false)，commit 移到事务外（同 new，见 new 注释）。
+        // 外层事务只包 reissue + 所有权校验 + 非零金额 pay(commit=false)，commit 移到事务外（同 new，见 new 注释）。
         // 所有权校验保留在事务内：跨用户 order_id 触发 error 抛异常 → 整笔 rollback（reissue 建的证书一起撤销）。
         try {
             DB::beginTransaction();
@@ -242,7 +243,11 @@ class ApiController extends Controller
                 $this->error('Order not found');
             }
 
-            $this->getData('pay', [$order_id, false, boolval($params['issue_verify'] ?? 0)]);
+            if ($order->latestCert->status === 'unpaid') {
+                $this->getData('pay', [$order_id, false, boolval($params['issue_verify'] ?? 0)]);
+            } elseif ($params['issue_verify'] ?? false) {
+                VerifyUtil::issueVerify([$order_id]);
+            }
 
             DB::commit();
         } catch (Throwable $e) {

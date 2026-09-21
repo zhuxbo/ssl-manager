@@ -16,6 +16,13 @@
 - **真实订单计价边界**：初始化不读取或解释 `standard_min/max`、`wildcard_min/max`、SAN 数量，也不改 `OrderUtil` 公式。`OrderUtil::getLatestCertAmount()` 继续从真实 `ProductPrice` 读取三类售价，按 SSL/ACME 各自的已购 SAN 来源和基础配额计算超额，重签只计算增购 SAN；对端测试必须用初始化实际落库的价格验证这些路径。
 - **原域名重签不增购**：SSL 重签在赠送域名补全、不可替换 SAN 的旧域名合并后比较最终域名集合，忽略顺序、大小写及 IDN 编码差异。集合不变时计费数量不超过订单已购数量，避免关闭赠送或同步重算证书数量导致重复收费；集合变化和续费仍按现有计价规则处理。
 
+## 零元重签直接待提交
+
+- `Action::reissue` 在原事务与前驱 CAS 内创建证书：金额为 0 直接 `pending`，非零保留 `unpaid`。原配额内重签金额为 0、不依赖当前价格行；增购 SAN 仍按实际价格计算，不按 channel 强制免费。
+- 零元路径同步更新已购域名数量（含免费增购），不检查余额、不调用支付、不创建零元交易。手工入口返回待提交，由原提交入口推进；自动重签仍创建延时 commit 任务。
+- V1/V2 与 Deploy 连续申请流程只对 `unpaid` 调支付；V1/V2 零元路径仍执行显式请求的 `issue_verify`，提交上游仍在外层事务之后。
+- 取消零元待提交重签沿用 `cancelPending`，不要求零元付款流水，不生成退款流水，恢复前驱证书。
+
 ## order 级互斥锁（方案 C：根治 3+ 并发 1205）
 
 > **背景**：点 1（Sdk 锁内超时 28/10/10）把单次持锁压到 ≤48s 后，同一订单 **3+ 并发** commit/cancel 仍会在 DB 行锁上**排队累计** >`innodb_lock_wait_timeout`(已固化 session=50，见 `config/database.php` PDO `MYSQL_ATTR_INIT_COMMAND`) → 偶发 `1205 Lock wait timeout`。方案 C 在**进 DB 锁之前**加一把按订单 id 的 Cache 互斥锁，把"DB 锁等待 1205"转成"Cache 抢锁立即失败"。
@@ -138,7 +145,7 @@ pending 订单「到顶(maxed-out) / 产品缺失(product-missing)」判据是 r
 
 ### O1 AutoRenew 续费/重签事务化（`AutoRenewCommand::processOrder`）
 
-把「创建续费/重签 + `pay(commit=false)`」两步包进单个 `DB::transaction` 闭包保证原子：pay 段 charge 失败时，renew 已翻转的旧证书（active→renewed）+ 新订单/证书一并回滚，杜绝「旧证书 renewed 终态 + 新单卡 unpaid」的静默孤儿（P0-1 路径 1）。延时 commit 任务留**事务外** `createTask($id,'commit',$delay)`（= V2「commit 移出事务」等价）。
+把「创建续费 + `pay(commit=false)`」两步包进单个 `DB::transaction` 闭包保证原子：pay 段 charge 失败时，renew 已翻转的旧证书（active→renewed）+ 新订单/证书一并回滚，杜绝「旧证书 renewed 终态 + 新单卡 unpaid」的静默孤儿（P0-1 路径 1）。零元重签在同一外层事务内直接落 `pending`，跳过支付。延时 commit 任务留**事务外** `createTask($id,'commit',$delay)`（= V2「commit 移出事务」等价）。
 
 - **ApiResponseException 流控**：`renew()/reissue()` 的 `success()` 抛 `ApiResponseException`（带 `data.order_id`）是**成功信号**——吞掉取 id；业务失败（无 order_id）rethrow `\Exception` 逸出闭包触发回滚（**勿把成功路径当失败回滚**）。pay 段 `code!==1` rethrow 逸出。
 - **attempts=1 是必需约束、非从简**：`renew()/reissue()` 入口 `checkDuplicate` 是 `Cache::add`（SETNX，10s TTL）且回滚不清缓存；若事务级重试（attempts>1），重入命中自己首轮残留键 → error → 必自败。故用 `DB::transaction` 默认 attempts=1，勿改大；死锁 → 回滚 → `processOrders` catch 兜底通知 → 次日自愈。
