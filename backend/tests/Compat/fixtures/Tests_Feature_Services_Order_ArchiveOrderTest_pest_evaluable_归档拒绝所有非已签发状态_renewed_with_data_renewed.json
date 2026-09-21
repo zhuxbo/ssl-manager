@@ -1,10 +1,10 @@
 {
-    "test": "P\\Tests\\Feature\\Http\\Controllers\\User\\OrderControllerTest::__pest_evaluable_标记已续费_不能标记其他用户的订单（UserScope_越权拒绝）",
+    "test": "P\\Tests\\Feature\\Services\\Order\\ArchiveOrderTest::__pest_evaluable_归档拒绝所有非已签发状态@('renewed') with data ('renewed')",
     "version": "1.0.0",
     "calls": [
         {
             "method": "POST",
-            "uri_pattern": "/api/order/mark-renewed/{id}",
+            "uri_pattern": "/api/order/archive/{id}",
             "request_keys": null,
             "response_status": "2xx",
             "response_schema": {

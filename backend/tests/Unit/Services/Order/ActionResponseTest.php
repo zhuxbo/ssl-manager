@@ -282,7 +282,7 @@ test('importProductItem update 依赖完整请求验证链拒绝非法周期', f
 });
 
 test('sync 锁内重读会保护每一种终态及全部国密敏感字段', function () {
-    foreach (['cancelled', 'revoked', 'renewed', 'reissued', 'failed'] as $terminalStatus) {
+    foreach (['cancelled', 'revoked', 'renewed', 'reissued', 'archived'] as $terminalStatus) {
         [$order, $cert] = orderMutationFixture('processing', [], [
             'enc_cert' => 'local-cert',
             'enc_key' => 'local-key',
@@ -317,7 +317,7 @@ test('sync 锁内重读会保护每一种终态及全部国密敏感字段', fun
 });
 
 test('sync 强制模式会在锁内保护每一种既有终态', function () {
-    foreach (['cancelled', 'revoked', 'renewed', 'reissued', 'failed'] as $terminalStatus) {
+    foreach (['cancelled', 'revoked', 'renewed', 'reissued', 'archived'] as $terminalStatus) {
         [$order, $cert] = orderMutationFixture($terminalStatus);
         $api = Mockery::mock(Api::class);
         $api->shouldReceive('get')->once()->with($order->id)->andReturn([
@@ -821,26 +821,14 @@ test('pay 批量上限使用严格大于语义', function () {
     );
 });
 
-test('markRenewed 只允许精确的到期前三十天窗口', function (bool $insideWindow) {
+test('archive 不受旧手工已续的三十天窗口限制', function (int $days) {
     Carbon::setTestNow('2026-07-31 12:00:00');
     [$order, $cert] = orderMutationFixture('active', [
-        'period_till' => now()->addDays(30)->addSecond($insideWindow ? 0 : 1),
+        'period_till' => now()->addDays($days),
     ]);
-
-    if ($insideWindow) {
-        orderMutationSuccess(fn () => $this->orderMutationAction->markRenewed($order->id));
-        expect($cert->fresh()->status)->toBe('renewed');
-    } else {
-        orderMutationError(
-            fn () => $this->orderMutationAction->markRenewed($order->id),
-            '仅订单到期前 30 天内且未过期可标记为已续费',
-        );
-        expect($cert->fresh()->status)->toBe('active');
-    }
-})->with([
-    'exact boundary' => [true],
-    'one second outside' => [false],
-]);
+    orderMutationSuccess(fn () => $this->orderMutationAction->archive($order->id));
+    expect($cert->fresh()->status)->toBe('archived');
+})->with([30, 200]);
 
 test('cancel 退款期在精确边界内允许而早一秒拒绝', function (bool $insideWindow) {
     Carbon::setTestNow('2026-07-31 12:00:00');

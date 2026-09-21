@@ -522,7 +522,7 @@ test('cancel 撞已 failed 订单（failed 无任何退款路径）：不豁免�
     $user = $this->createTestUser();
     $product = $this->createTestProduct(['source' => 'default']);
     $order = $this->createTestOrder($user, $product);
-    $this->createTestCert($order, ['action' => 'new', 'status' => 'failed']); // 终态但非取消中
+    $this->createTestCert($order, ['action' => 'new', 'status' => 'archived']); // 终态但非取消中
 
     $task = Task::factory()->create([
         'order_id' => $order->id,
@@ -536,7 +536,7 @@ test('cancel 撞已 failed 订单（failed 无任何退款路径）：不豁免�
 
     $job->handle();
 
-    $job->assertFailed(); // failed 剔除豁免集 → 告警（修复前 assertNotFailed）
+    $job->assertFailed(); // archived 不属于退款豁免集 → 告警（修复前 assertNotFailed）
     $fresh = $task->fresh();
     expect($fresh->status)->toBe('failed');
     expect($fresh->result['msg'])->toContain('订单状态不是取消中');

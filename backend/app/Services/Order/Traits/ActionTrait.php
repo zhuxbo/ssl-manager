@@ -1314,7 +1314,7 @@ trait ActionTrait
     public function cancelPending(int $order_id): void
     {
         // task → order 锁顺序：先锁 commit task 再锁 order 行，与
-        // revokeCancel / commitCancel / TaskJob::handle 的锁顺序统一防死锁。
+        // archive / commitCancel / TaskJob::handle 的锁顺序统一防死锁。
         // runTaskMutationTransaction 提供 attempts=3 死锁重试：闭包纯本地 task+order/cert 变更、无上游 HTTP；
         // 退款 Transaction::create 随回滚消失且有唯一索引兜底，$this->error() 抛 ApiResponseException（非并发错误）
         // 不被 DB::transaction 重试、直接传播触发回滚，语义与原手写 begin/commit/rollback 等价。
@@ -1385,8 +1385,6 @@ trait ActionTrait
         $orderIds = is_array($orderIds) ? $orderIds : explode(',', (string) $orderIds);
         $orderIds = array_map('intval', $orderIds);
 
-        $later = $action == 'cancel' ? max(120, $later) : $later;
-
         $data['action'] = $action;
         $data['started_at'] = now()->addSeconds($later);
         $data['status'] = 'executing';
@@ -1406,7 +1404,7 @@ trait ActionTrait
             $data['order_id'] = $orderId;
             $task = Task::create($data);
             // afterCommit 防止 worker 在外层事务提交前消费 job 导致 task 查无记录静默丢失
-            // （默认 after_commit=false，配合 Redis 队列会让 revokeCancel/batchRevokeCancel 的 sync 任务丢失）
+            // （默认 after_commit=false，配合 Redis 队列会让 事务内创建的 任务丢失）
             try {
                 if ($later > 0) {
                     // 队列定时比可执行时间多3秒 避免任务在可执行时间之前执行

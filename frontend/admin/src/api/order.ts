@@ -105,14 +105,9 @@ export function commitCancel(id: number): Promise<BaseResponse> {
   return http.post<BaseResponse<null>, any>(`/order/commit-cancel/${id}`);
 }
 
-/** 撤销取消订单 */
-export function revokeCancel(id: number): Promise<BaseResponse> {
-  return http.post<BaseResponse<null>, any>(`/order/revoke-cancel/${id}`);
-}
-
-/** 标记订单为已续费 */
-export function markRenewed(id: number): Promise<BaseResponse> {
-  return http.post<BaseResponse<null>, any>(`/order/mark-renewed/${id}`);
+/** 归档已签发订单 */
+export function archive(id: number): Promise<BaseResponse> {
+  return http.post<BaseResponse<null>, any>(`/order/archive/${id}`);
 }
 
 /** 备注订单 */
@@ -237,18 +232,6 @@ export function batchCommitCancel(
   return http.post<BaseResponse<null>, { ids: string | number | number[] }>(
     "/order/batch-commit-cancel",
     { data: { ids } }
-  );
-}
-
-/** 批量撤销取消 */
-export function batchRevokeCancel(
-  ids: string | number | number[]
-): Promise<BaseResponse> {
-  return http.post<BaseResponse<null>, { ids: string | number | number[] }>(
-    `/order/batch-revoke-cancel`,
-    {
-      data: { ids }
-    }
   );
 }
 

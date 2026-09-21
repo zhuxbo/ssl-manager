@@ -9,7 +9,7 @@ final class CoreLogRetentionPolicy
     /** @var array<string, list<string>> */
     private const USER_AUDIT_ACTIONS = [
         'Auth' => ['login', 'register', 'resetPassword', 'updateUsername', 'updatePassword', 'bindEmail', 'bindMobile', 'logout'],
-        'Order' => ['new', 'batchNew', 'renew', 'reissue', 'pay', 'batchPay', 'commit', 'batchCommit', 'commitCancel', 'batchCommitCancel', 'revokeCancel', 'batchRevokeCancel', 'updateDCV', 'uploadDocument', 'updateDocument', 'deleteDocument', 'submitDocuments', 'markRenewed', 'updateAutoSettings'],
+        'Order' => ['new', 'batchNew', 'renew', 'reissue', 'pay', 'batchPay', 'commit', 'batchCommit', 'commitCancel', 'batchCommitCancel', 'updateDCV', 'uploadDocument', 'updateDocument', 'deleteDocument', 'submitDocuments', 'archive', 'updateAutoSettings'],
         'Acme' => ['new', 'pay', 'batchPay', 'commit', 'batchCommit', 'commitCancel', 'batchCommitCancel', 'revokeCancel', 'batchRevokeCancel'],
         'Setting' => ['updateApiToken', 'updateCallback', 'updateDeployToken', 'deleteDeployToken', 'updateAutoPreferences'],
         'TopUp' => ['alipay', 'wechat'],
@@ -31,7 +31,7 @@ final class CoreLogRetentionPolicy
         'batchUpdate', 'destroy', 'batchDestroy', 'new', 'batchNew', 'renew', 'reissue',
         'transfer', 'input', 'pay', 'batchPay', 'commit', 'batchCommit', 'updateDCV',
         'commitCancel', 'batchCommitCancel', 'revokeCancel', 'batchRevokeCancel',
-        'markRenewed', 'remark', 'sendActive', 'updateAutoSettings', 'updateAmount',
+        'archive', 'remark', 'sendActive', 'updateAutoSettings', 'updateAmount',
         'updateApplicant', 'uploadDocument', 'updateDocument', 'deleteDocument',
         'submitDocuments', 'batchStart', 'batchStop', 'batchExecute', 'reverse', 'refunds',
         'reset', 'uploadSiteImage', 'deleteSiteImage', 'set', 'initialization', 'import',

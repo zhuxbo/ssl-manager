@@ -1,0 +1,16 @@
+{
+    "test": "P\\Tests\\Feature\\Services\\Order\\ArchiveOrderTest::__pest_evaluable_归档拒绝所有非已签发状态@('unpaid') with data ('unpaid')",
+    "version": "1.0.0",
+    "calls": [
+        {
+            "method": "POST",
+            "uri_pattern": "/api/order/archive/{id}",
+            "request_keys": null,
+            "response_status": "2xx",
+            "response_schema": {
+                "code": "integer",
+                "msg": "string"
+            }
+        }
+    ]
+}

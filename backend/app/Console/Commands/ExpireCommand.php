@@ -219,7 +219,7 @@ class ExpireCommand extends Command
      */
     private function purgeTerminalCertMaterial(): void
     {
-        $terminalStatuses = ['expired', 'cancelled', 'revoked', 'renewed', 'reissued', 'failed'];
+        $terminalStatuses = ['expired', 'cancelled', 'revoked', 'renewed', 'reissued', 'archived'];
         $totalCleared = 0;
 
         do {

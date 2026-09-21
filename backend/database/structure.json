@@ -1,7 +1,7 @@
 {
     "version": "1.0",
     "mysql_version": "8.4.11",
-    "generated_at": "2026-09-20 15:40:10",
+    "generated_at": "2026-09-21 16:48:09",
     "database": {
         "name": "manager",
         "charset": "utf8mb4",
@@ -1996,7 +1996,7 @@
                 },
                 "status": {
                     "position": 38,
-                    "type": "enum('unpaid','pending','processing','approving','active','failed','cancelling','cancelled','revoked','renewed','reissued','expired')",
+                    "type": "enum('unpaid','pending','processing','approving','active','archived','cancelling','cancelled','revoked','renewed','reissued','expired')",
                     "nullable": false,
                     "default": "unpaid",
                     "extra": "",

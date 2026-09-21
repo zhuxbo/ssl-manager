@@ -129,7 +129,7 @@ class CertRenewStalledNotificationBuilder implements NotificationBuilderInterfac
      * 按后续证书停滞状态计算用户可行动文案（模板只渲染不做逻辑）。
      *
      * unpaid 中性化（未扣费、不硬承诺去支付，避免与 O4 自动清理冲突）；pending/processing/approving 已扣费
-     * （勿重复支付）；failed 指「重新购买」——failed/renewed/reissued 三态均进不了 renew/reissue gate，
+     * （勿重复支付）；归档及已终止的接替单不进入此提醒，
      * 「重新发起续期」入口落空，唯一真实动作是另开新单。
      */
     private function actionHint(string $successorStatus, string $productType): string
@@ -140,7 +140,6 @@ class CertRenewStalledNotificationBuilder implements NotificationBuilderInterfac
             'processing', 'approving' => $productType === Product::TYPE_SSL
                 ? '新证书正在进行域名验证/审核（费用已扣除）。请尽快完成域名验证或补齐审核材料，以免原证书到期造成服务中断；请勿重复下单或支付。'
                 : '新证书正在进行身份验证或签名材料审核（费用已扣除）。请尽快补齐所需材料，以免原证书到期造成业务中断；请勿重复下单或支付。',
-            'failed' => '续期订单未能完成签发。请重新购买证书，或联系客服核实订单与费用状态。',
             default => '续期流程未正常完成，请登录控制台检查订单状态，或联系客服。',
         };
     }

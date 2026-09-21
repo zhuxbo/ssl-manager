@@ -72,9 +72,6 @@ function expectOrderApiSuccess(Closure $callback): array
     return [];
 }
 
-/**
- * 创建订单 + 证书，证书状态可控，并将 latest_cert_id 挂上
- */
 function createOrderWithCertForRevoke(string $certStatus, array $orderOverrides = []): array
 {
     $order = Order::factory()->create(array_merge([
@@ -92,71 +89,6 @@ function createOrderWithCertForRevoke(string $certStatus, array $orderOverrides 
 
     return [$order, $cert];
 }
-
-// ==================== revokeCancel ====================
-
-test('revokeCancel cancelling 订单成功：cert.status=approving、cancel task 删除、sync task 创建', function () {
-    Queue::fake();
-    [$order, $cert] = createOrderWithCertForRevoke('cancelling');
-
-    // 模拟延时 cancel 任务存在（commitCancel 创建的）
-    $cancelTask = Task::create([
-        'order_id' => $order->id,
-        'action' => 'cancel',
-        'status' => 'executing',
-        'source' => 'admin',
-        'started_at' => now()->addSeconds(120),
-    ]);
-
-    $response = expectOrderApiSuccess(fn () => $this->service->revokeCancel($order->id));
-
-    expect($response['code'])->toBe(1);
-    expect($cert->fresh()->status)->toBe('approving');
-
-    // cancel 任务被删除
-    expect(Task::where('id', $cancelTask->id)->exists())->toBeFalse();
-
-    // sync 任务被创建
-    $syncTask = Task::where('order_id', $order->id)
-        ->where('action', 'sync')
-        ->where('status', 'executing')
-        ->first();
-    expect($syncTask)->not->toBeNull();
-});
-
-test('revokeCancel active 订单报错：订单不在取消中状态', function () {
-    [$order, $cert] = createOrderWithCertForRevoke('active');
-
-    expectOrderApiError(
-        fn () => $this->service->revokeCancel($order->id),
-        '订单不在取消中状态'
-    );
-
-    // 状态未变化，无任何 task 创建
-    expect($cert->fresh()->status)->toBe('active');
-    expect(Task::where('order_id', $order->id)->count())->toBe(0);
-});
-
-test('revokeCancel 不存在的订单报错：订单或相关数据不存在', function () {
-    expectOrderApiError(
-        fn () => $this->service->revokeCancel(999999),
-        '订单或相关数据不存在'
-    );
-});
-
-test('revokeCancel 成功后可再次 commitCancel（状态机闭环）', function () {
-    Queue::fake();
-    [$order, $cert] = createOrderWithCertForRevoke('cancelling');
-
-    // 第一步：撤回取消 → approving
-    expectOrderApiSuccess(fn () => $this->service->revokeCancel($order->id));
-    expect($cert->fresh()->status)->toBe('approving');
-
-    // 第二步：再次发起取消 → cancelling（refund_period 足够）
-    test()->product->update(['refund_period' => 30]);
-    expectOrderApiSuccess(fn () => $this->service->commitCancel($order->id));
-    expect($cert->fresh()->status)->toBe('cancelling');
-});
 
 // ==================== 通用辅助 ====================
 
@@ -540,92 +472,6 @@ test('commitCancel active 串行化回归：第二次 commitCancel 被锁内 sta
 
     // cancel task 只应存在一个
     expect(Task::where('order_id', $order->id)->where('action', 'cancel')->count())->toBe(1);
-});
-
-// ==================== batchRevokeCancel ====================
-
-test('batchRevokeCancel 3 个全 cancelling 订单：全部 cert.status=approving + 全部 sync task 创建', function () {
-    Queue::fake();
-    [$order1, $cert1] = createOrderWithCertForRevoke('cancelling');
-    [$order2, $cert2] = createOrderWithCertForRevoke('cancelling');
-    [$order3, $cert3] = createOrderWithCertForRevoke('cancelling');
-
-    // 模拟每个订单都有延时 cancel 任务
-    foreach ([$order1, $order2, $order3] as $o) {
-        Task::create([
-            'order_id' => $o->id,
-            'action' => 'cancel',
-            'status' => 'executing',
-            'source' => 'admin',
-            'started_at' => now()->addSeconds(120),
-        ]);
-    }
-
-    expectOrderApiSuccess(fn () => $this->service->batchRevokeCancel([$order1->id, $order2->id, $order3->id]));
-
-    expect($cert1->fresh()->status)->toBe('approving');
-    expect($cert2->fresh()->status)->toBe('approving');
-    expect($cert3->fresh()->status)->toBe('approving');
-
-    // 所有 cancel 任务被删除
-    expect(Task::where('action', 'cancel')->count())->toBe(0);
-
-    // 所有 sync 任务被创建
-    foreach ([$order1, $order2, $order3] as $o) {
-        expect(Task::where('order_id', $o->id)->where('action', 'sync')->where('status', 'executing')->count())->toBe(1);
-    }
-});
-
-test('batchRevokeCancel 混入 1 个 active 订单：前置过滤跳过非 cancelling，其余正常处理', function () {
-    Queue::fake();
-    [$order1, $cert1] = createOrderWithCertForRevoke('cancelling');
-    [$order2, $cert2] = createOrderWithCertForRevoke('active');
-    [$order3, $cert3] = createOrderWithCertForRevoke('cancelling');
-
-    expectOrderApiSuccess(fn () => $this->service->batchRevokeCancel([$order1->id, $order2->id, $order3->id]));
-
-    // cancelling 的两个被处理，active 的跳过
-    expect($cert1->fresh()->status)->toBe('approving');
-    expect($cert2->fresh()->status)->toBe('active');
-    expect($cert3->fresh()->status)->toBe('approving');
-
-    // 只有 cancelling 的两个创建了 sync task
-    expect(Task::where('order_id', $order1->id)->where('action', 'sync')->count())->toBe(1);
-    expect(Task::where('order_id', $order2->id)->where('action', 'sync')->count())->toBe(0);
-    expect(Task::where('order_id', $order3->id)->where('action', 'sync')->count())->toBe(1);
-});
-
-test('batchRevokeCancel 全部非 cancelling：报错"没有可以撤销的订单"', function () {
-    Queue::fake();
-    [$order1, $cert1] = createOrderWithCertForRevoke('active');
-    [$order2, $cert2] = createOrderWithCertForRevoke('pending');
-
-    expectOrderApiError(
-        fn () => $this->service->batchRevokeCancel([$order1->id, $order2->id]),
-        '没有可以撤销的订单'
-    );
-
-    // 状态未变
-    expect($cert1->fresh()->status)->toBe('active');
-    expect($cert2->fresh()->status)->toBe('pending');
-});
-
-test('batchRevokeCancel 空数组：报错"没有可以撤销的订单"', function () {
-    expectOrderApiError(
-        fn () => $this->service->batchRevokeCancel([]),
-        '没有可以撤销的订单'
-    );
-});
-
-test('batchRevokeCancel 支持逗号分隔字符串入参', function () {
-    Queue::fake();
-    [$order1, $cert1] = createOrderWithCertForRevoke('cancelling');
-    [$order2, $cert2] = createOrderWithCertForRevoke('cancelling');
-
-    expectOrderApiSuccess(fn () => $this->service->batchRevokeCancel("$order1->id,$order2->id"));
-
-    expect($cert1->fresh()->status)->toBe('approving');
-    expect($cert2->fresh()->status)->toBe('approving');
 });
 
 // ==================== batchCommitCancel ====================

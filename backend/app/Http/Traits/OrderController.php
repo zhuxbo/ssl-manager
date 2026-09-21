@@ -88,23 +88,13 @@ trait OrderController
     }
 
     /**
-     * 撤销取消订单
+     * 归档已签发订单
      *
      * @throws Throwable
      */
-    public function revokeCancel(int $id): void
+    public function archive(int $id): void
     {
-        $this->action->revokeCancel($id);
-    }
-
-    /**
-     * 标记订单为已续费（renewed 终态，到期前 30 天内可用）
-     *
-     * @throws Throwable
-     */
-    public function markRenewed(int $id): void
-    {
-        $this->action->markRenewed($id);
+        $this->action->archive($id);
     }
 
     /**
@@ -223,17 +213,6 @@ trait OrderController
     {
         $validated = $request->validated();
         $this->action->batchCommitCancel($validated['ids']);
-    }
-
-    /**
-     * 批量撤销取消
-     *
-     * @throws Throwable
-     */
-    public function batchRevokeCancel(GetIdsRequest $request): void
-    {
-        $validated = $request->validated();
-        $this->action->batchRevokeCancel($validated['ids']);
     }
 
     /**

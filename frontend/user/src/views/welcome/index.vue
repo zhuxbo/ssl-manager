@@ -118,14 +118,14 @@ const ordersPieData = computed(() => {
     processing: "待验证",
     approving: "待审核",
     active: "已签发",
-    cancelling: "待取消",
+    cancelling: "取消中",
     cancelled: "已取消",
     renewed: "已续期",
     replaced: "已替换",
     reissued: "已重签",
     expired: "已过期",
     revoked: "已吊销",
-    failed: "已失败"
+    archived: "已归档"
   };
 
   return Object.entries(ordersData.value.status_distribution)
@@ -142,8 +142,8 @@ const ordersPieData = computed(() => {
                 ? "#3B82F6"
                 : status === "approving"
                   ? "#8B5CF6"
-                  : status === "failed"
-                    ? "#EF4444"
+                  : status === "archived"
+                    ? "#9CA3AF"
                     : status === "cancelled"
                       ? "#9CA3AF"
                       : status === "unpaid"

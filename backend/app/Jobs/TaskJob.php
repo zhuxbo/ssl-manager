@@ -206,9 +206,9 @@ class TaskJob implements ShouldQueue
      *
      * order 侧判据（② 收窄，非无差别按状态豁免）：
      *  - revoked / renewed / reissued：终态且无「退款应发生却未发生」的合法性缺口 → 幂等豁免；
-     *  - failed **已剔除豁免集**：failed 全系统无任何退款路径，「failed 但退款已发生」不存在合法形态，
-     *    force sync 把上游 failed 写过 cancelling 后 cancel task 撞「订单状态不是取消中」读到 failed
-     *    是真·CA 失败，必须告警。**注意与 sync 终态守卫的差异**：那里 failed 属【防复活】集
+     *  - archived **不在豁免集**：archived 全系统无任何退款路径，「archived 但退款已发生」不存在合法形态，
+     *    旧上游 failed 映射成 archived 后 cancel task 撞「订单状态不是取消中」
+     *    是真·CA 失败，必须告警。**注意与 sync 终态守卫的差异**：那里 archived 属【防复活】集
      *    （不让上游旧 active 覆盖终态），语义不同于此处的【退款幂等】判定，两处集合不可混用；
      *  - cancelled：辅以 cancel 流水存在性判定（③ 揭示 sync 可直写 cancelled 而未退款）。
      * acme 侧不含 failed、无此洞，保持原样（② 仅收口 order 侧）。

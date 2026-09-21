@@ -1,10 +1,10 @@
 {
-    "test": "P\\Tests\\Feature\\Http\\Controllers\\Admin\\OrderControllerTest::__pest_evaluable_管理员标记已续费_active___到期前_25_天真实标记为_renewed",
+    "test": "P\\Tests\\Feature\\Http\\Controllers\\User\\OrderControllerTest::__pest_evaluable_取消订单_commit_cancel：active_订单转_cancelling___创建立即_cancel_任务",
     "version": "1.0.0",
     "calls": [
         {
             "method": "POST",
-            "uri_pattern": "/api/admin/order/mark-renewed/{id}",
+            "uri_pattern": "/api/order/commit-cancel/{id}",
             "request_keys": null,
             "response_status": "2xx",
             "response_schema": {

@@ -24,6 +24,7 @@ if (! function_exists('fundAuditGuardedTestPaths')) {
             'Feature/Models/FundTest.php',
             'Feature/Services/Order/SyncedCancelRefundTest.php',
             'Feature/Services/Order/ZeroAmountReissueTest.php',
+            'Feature/Services/Order/ArchiveOrderTest.php',
             'Unit/Jobs/TaskJobTest.php',
             'Unit/Services/Acme/ActionTest.php',
             'Unit/Services/Order/ActionTest.php',

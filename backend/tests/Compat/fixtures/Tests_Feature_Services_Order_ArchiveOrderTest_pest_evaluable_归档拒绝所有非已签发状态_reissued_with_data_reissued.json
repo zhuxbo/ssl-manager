@@ -1,10 +1,10 @@
 {
-    "test": "P\\Tests\\Feature\\Http\\Controllers\\Admin\\OrderControllerTest::__pest_evaluable_管理员标记已续费_证书将到期但订单未到期（period__till___30_天）被拒，状态不变",
+    "test": "P\\Tests\\Feature\\Services\\Order\\ArchiveOrderTest::__pest_evaluable_归档拒绝所有非已签发状态@('reissued') with data ('reissued')",
     "version": "1.0.0",
     "calls": [
         {
             "method": "POST",
-            "uri_pattern": "/api/admin/order/mark-renewed/{id}",
+            "uri_pattern": "/api/order/archive/{id}",
             "request_keys": null,
             "response_status": "2xx",
             "response_schema": {

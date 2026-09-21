@@ -568,8 +568,8 @@ class ApiController extends Controller
         if ($status === 'revoked') {
             $this->error('Order has been revoked');
         }
-        if ($status === 'failed') {
-            $this->error('Order has failed');
+        if ($status === 'archived') {
+            $this->error('Order has been archived');
         }
 
         if (in_array($status, ['processing', 'approving', 'active', 'cancelling'])) {

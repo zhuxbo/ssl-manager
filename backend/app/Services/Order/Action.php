@@ -591,6 +591,10 @@ class Action
         }
 
         $data = $result['data'] ?? [];
+        // 兼容旧上游返回的证书终态；本地不再存储 failed。
+        if (($data['status'] ?? null) === 'failed') {
+            $data['status'] = 'archived';
+        }
 
         // 合并 dcv（保留委托验证标记）
         $data['dcv'] = $this->mergeDcv($data['dcv'] ?? null, $cert->dcv);
@@ -668,7 +672,7 @@ class Action
         $this->guardIntermediateChain($order, $data);
 
         // 锁内重取 + 终态守卫 + 写回：慢 IO（上游 get）已在锁外完成，此事务只包状态判定副作用 + 写回。
-        // 锁序 task→order：与 commitCancel(active)/revokeCancel 统一。controller 直调 sync 时无前置 task 锁，
+        // 锁序 task→order：与 commitCancel(active)/archive 统一。controller 直调 sync 时无前置 task 锁，
         // 必须在锁 order 前先按 task→order 顺序锁住本订单的 commit/sync/revalidate 任务（与下面 deleteTask 删除范围一致），
         // 否则与 commitCancel(锁 sync,revalidate→order)/refundForSyncedCancel 反序，task 集合相交触发 InnoDB 死锁。
         // 经 TaskJob 调用时 TaskJob 已先持本 task 行锁（同事务 lockForUpdate 可重入），叠加后整体仍是 task→order，不反序。
@@ -693,7 +697,7 @@ class Action
                 : (Cert::where('id', $cert->id)->value('status') ?? $cert->status);
 
             // 终态守卫（泛化到所有路径）：本地已是终态时拒绝上游 status 覆盖，防滞后 active 复活已退款/已重签订单
-            if (in_array($lockedStatus, ['cancelled', 'revoked', 'renewed', 'reissued', 'failed'], true)) {
+            if (in_array($lockedStatus, ['cancelled', 'revoked', 'renewed', 'reissued', 'archived'], true)) {
                 unset($data['status']);
                 // 终态订单拒绝 enc 回写：上游滞后返回的 enc 不落已终结证书（防御纵深，避免死敏感数据）
                 foreach (Cert::ENC_FIELDS as $encField) {
@@ -1082,7 +1086,7 @@ class Action
      * 提交取消
      *
      * 并发安全：processing/approving/active 分支在事务内持 order 行级锁，
-     * 与 cancel TaskJob / revokeCancel / batchCommitCancel 串行化；锁内二次
+     * 与 cancel TaskJob / archive / batchCommitCancel 串行化；锁内二次
      * 校验 latestCert.status，避免"双重 cancelling"或"撤回竞争"产生的脏状态。
      * unpaid/pending 分支委派给 delete/cancelPending，其自身已持锁。
      *
@@ -1104,7 +1108,7 @@ class Action
         $status === 'reissued' && $this->error('订单已重签');
         $status === 'cancelling' && $this->error('订单取消中');
         $status === 'revoked' && $this->error('订单已吊销');
-        $status === 'failed' && $this->error('订单已失败');
+        $status === 'archived' && $this->error('订单已归档');
 
         if (in_array($status, ['processing', 'approving', 'active'])) {
             $this->runTaskMutationTransaction(function () use ($orderId, $product) {
@@ -1121,7 +1125,7 @@ class Action
                     $this->error('订单或相关数据不存在');
                 }
 
-                // 锁内二次校验状态，拦住并发 commitCancel / revokeCancel 竞争
+                // 锁内二次校验状态，拦住并发 commitCancel / archive 竞争
                 $lockedStatus = $order->latestCert->status;
                 in_array($lockedStatus, ['processing', 'approving', 'active'])
                 || $this->error('订单状态不是可取消状态');
@@ -1131,7 +1135,7 @@ class Action
                 $order->created_at->timestamp < now()->timestamp - 86400 * $refundPeriod
                 && $this->error("订单已超过 $refundPeriod 天不能取消");
 
-                // 2分钟后取消
+                // 事务提交后立即执行取消任务
                 $order->latestCert->update(['status' => 'cancelling']);
                 $this->deleteTask($orderId, 'sync,revalidate');
                 $this->createTask($orderId, 'cancel');
@@ -1141,89 +1145,19 @@ class Action
         $this->success();
     }
 
-    /**
-     * 手工标记订单为「已续费」（renewed 终态）
-     *
-     * 用于用户在别处已续费、不想再被本系统自动续费/到期提醒的场景。
-     * renewed 是终态：标记后该订单不再自动续费、不再到期提醒；sync 终态守卫（::577）
-     * 防止上游滞后状态把已 renewed 的订单复活为 active。
-     *
-     * 并发安全：与 commitCancel/cancel/sync 串行化（共用 order 行锁），防止
-     * 「标记 renewed 时订单正被 sync/cancel 改状态」的并发错乱。本路径不涉及资金流水
-     * （不建 Transaction、不改 balance），故无需锁 user 行，仅锁 order/cert。
-     *
-     * 校验全部放在【锁内二次校验】（锁外校验会被并发绕过）：
-     *   - 仅 active 证书可标记（须有一张签发成功的当前证书）；
-     *   - 仅【订单】到期前 30 天内且未过期可标记 —— 按 orders.period_till 判定，
-     *     与手工续费 gate（ActionTrait 的 period_till>now+30 报错）及前端 gate 对齐。
-     *     语义：用户另开新订单续了证书 → 标旧订单 renewed 止到期通知；"原订单内重签"
-     *     靠重签后 expires_at 推远自动止通知、无需本操作。不用 cert.expires_at：多年期/
-     *     中途重签订单证书将到期但订单未到期，会被自动重签接管（ExpireCommand 已排除其
-     *     到期通知），不应允许标记。
-     */
-    public function markRenewed(int $id): void
+    /** 归档只终止本地管理，不调用上游或变更资金。 */
+    public function archive(int $id): void
     {
-        DB::transaction(function () use ($id) {
-            // 锁 order（同 commitCancel 的项目约定：whereHas('latestCert')->lock()）。
-            // UserScope 全局作用域在此生效：User 端非本人订单会被滤掉 → find 返回 null。
-            $order = Order::with(['latestCert'])
-                ->whereHas('latestCert')
-                ->lock()
-                ->find($id);
+        $this->runTaskMutationTransaction(function () use ($id) {
+            // 与任务执行、同步、取消保持 task → order 锁顺序。
+            Task::lockForMutation($id, ['commit', 'sync', 'revalidate', 'cancel'])->get();
+            $order = Order::with('latestCert')->whereHas('latestCert')->lock()->find($id);
+            $order || $this->error('订单不存在或无权操作');
+            $order->latestCert->status === 'active' || $this->error('仅已签发订单可以归档');
 
-            if (! $order) {
-                $this->error('订单不存在或无权操作');
-            }
-
-            // 锁内二次校验，拦住并发改状态（sync/cancel）后的窗口竞争
-            $cert = $order->latestCert;
-            $cert->status !== 'active' && $this->error('仅签发成功的证书可标记为已续费');
-
-            // 按【订单】到期时间 period_till 判定（非单张证书 expires_at）：与手工续费窗口一致
-            $periodTill = $order->period_till;
-            if (! $periodTill || $periodTill->isPast() || $periodTill->gt(now()->addDays(30))) {
-                $this->error('仅订单到期前 30 天内且未过期可标记为已续费');
-            }
-
-            $cert->update(['status' => 'renewed']);
-        });
-
-        // success 必须在事务闭包之外：它抛 ApiResponseException 会触发回滚
-        $this->success();
-    }
-
-    /**
-     * 撤回取消
-     *
-     * 设计说明：状态统一恢复为 approving，同时创建 sync 任务，
-     * 同步一次即可从上游恢复正确状态（processing/approving/active）
-     *
-     * 并发安全：按 "task → order" 的统一锁顺序拿锁（与 TaskJob::handle 一致），避免死锁。
-     * 若 TaskJob 正在 cancel 内，此处 task lockForUpdate 会阻塞至 TaskJob 提交，
-     * 拿到 task 锁后再锁 order，此时 latestCert.status 已非 cancelling，校验报错退出。
-     * 避免"撤回成功 + 钱已退 + 上游已吊销"的资金/状态三重损害与 InnoDB 死锁回滚。
-     */
-    public function revokeCancel(int $orderId): void
-    {
-        $this->runTaskMutationTransaction(function () use ($orderId) {
-            // 锁顺序 1：先锁 task（与 TaskJob 一致，避免 task↔order 循环等待死锁）
-            Task::lockForMutation($orderId, ['cancel'])->get();
-
-            // 锁顺序 2：再锁 order
-            $order = Order::with(['latestCert'])
-                ->whereHas('latestCert')
-                ->lock()
-                ->find($orderId);
-
-            if (! $order) {
-                $this->error('订单或相关数据不存在');
-            }
-
-            $order->latestCert->status !== 'cancelling' && $this->error('订单不在取消中状态');
-
-            $this->deleteTask($orderId, 'cancel');
-            $order->latestCert->update(['status' => 'approving']);
-            $this->createTask($orderId, 'sync');
+            $order->latestCert->update(['status' => 'archived']);
+            $order->update(['auto_renew' => false, 'auto_reissue' => false]);
+            $this->deleteTask($id, ['commit', 'sync', 'revalidate', 'cancel']);
         });
 
         $this->success();
@@ -1265,7 +1199,7 @@ class Action
             $status === 'renewed' && $this->error('Order has been renewed');
             $status === 'reissued' && $this->error('Order has been reissued');
             $status === 'revoked' && $this->error('Order has been revoked');
-            $status === 'failed' && $this->error('Order has failed');
+            $status === 'archived' && $this->error('Order has been archived');
             in_array($status, ['processing', 'approving', 'active', 'cancelling'], true)
             || $this->error('Order cannot be cancelled');
 
@@ -1447,7 +1381,7 @@ class Action
      * 调用前提：sync 已校验触发四条件（status=cancelled + 过渡态 + new/renew/reissue + 开关开）。
      * 与 cancel() 的区别：不调用上游 api->cancel（上游已是 cancelled 态）；不检查 refund_period（以上游状态为权威）。
      *
-     * 锁序 task→order：与 commitCancel(active)/revokeCancel/sync 统一。本方法由 sync 调用，
+     * 锁序 task→order：与 commitCancel(active)/archive/sync 统一。本方法由 sync 调用，
      * 同样要删除 cancel/commit/sync/revalidate task，故在锁 order 前先按 task→order 顺序锁住这批 task
      * （与下面 deleteTask 删除范围一致），避免与 commitCancel 反序触发 InnoDB 死锁。
      *

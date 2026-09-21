@@ -144,7 +144,7 @@ test('获取产品详情-没有可重签活动订单时禁用产品不可见', f
     '已吊销' => ['revoked', false, 1],
     '已续费' => ['renewed', false, 1],
     '已重签' => ['reissued', false, 1],
-    '已失败' => ['failed', false, 1],
+    '已归档' => ['archived', false, 1],
     '活动证书但订单已到期' => ['active', true, 1],
     '产品不支持重签' => ['active', false, 0],
 ]);

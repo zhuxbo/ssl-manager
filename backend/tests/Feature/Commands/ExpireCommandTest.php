@@ -222,7 +222,7 @@ test('终态证书的 csr/private_key/cert 被清空', function () {
     $user = User::factory()->create();
     $product = Product::factory()->create();
 
-    $terminal = ['expired', 'cancelled', 'revoked', 'renewed', 'reissued', 'failed'];
+    $terminal = ['expired', 'cancelled', 'revoked', 'renewed', 'reissued', 'archived'];
     $terminalCerts = [];
     foreach ($terminal as $status) {
         $order = Order::factory()->create(['user_id' => $user->id, 'product_id' => $product->id]);

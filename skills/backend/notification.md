@@ -53,8 +53,8 @@
 
 - **三件套**：`config/notification.builders['cert_renew_stalled' => CertRenewStalledNotificationBuilder]` + seeder 模板（`variables: [email]`，仅保留测试发送可覆盖的收件邮箱；`username/certificates/site_url/site_name` 由 Builder 查询或注入）+ 专用 Builder。每个 `certificates[]` 从前驱 `order.product` 注入归一化后的 `product_type` / `product_type_label`；`ExpireCommand` 派发侧经 `StalledRenewalQuery::forDispatch()` 取 distinct `order.user_id` 逐 user `dispatch('cert_renew_stalled')`（additive 分支，既有 active 到期查询一字不改、零回归）。
 - **强制发（不入 `user_default_preferences`）**：涉及服务中断风险，穿透用户可能已关的常规到期偏好。机制是**隐式**——`User::allowsNotification($code)` 对 notification_settings 里**缺席**的 code 返回默认 `true`，故不把该 code 铺进用户偏好 UI = 永远不写入 settings = 恒发（同 `balance_forecast`/`auto_renew_failed` 范式）。
-- **双侧同源（防「派发了 user、Builder 重查为空 → 静默漏发」）**：派发侧 `forDispatch`（前驱 expires_at 离散节点窗口 14/7/3/1）与重查侧 `forUser`（连续 14 天超集窗口，防 NotificationJob 异步延迟跨窗漏发）共用 `StalledRenewalQuery` 单一形态；`SUCCESSOR_STALLED_STATUSES` 5 态常量 `public`，Builder 重查后对预载 `nextCert` 再判一次停滞态白名单（复用同一真相源、禁手写第二份清单，兜「主查询通过后 nextCert 预载前」毫秒级 race）。
-- **5 态可行动文案**（`actionHint`，模板只渲染不做逻辑）：`unpaid` 中性化（未扣费、不硬承诺去支付，避免与 O4 自动清理冲突）；`pending`/`processing`/`approving` 已扣费（勿重复支付）；`failed` 指「重新购买」（failed/renewed/reissued 三态均进不了 renew/reissue gate、唯一动作是另开新单）。携密不入库（仅域名/日期/停滞标签/文案）。
+- **双侧同源（防「派发了 user、Builder 重查为空 → 静默漏发」）**：派发侧 `forDispatch`（前驱 expires_at 离散节点窗口 14/7/3/1）与重查侧 `forUser`（连续 14 天超集窗口，防 NotificationJob 异步延迟跨窗漏发）共用 `StalledRenewalQuery` 单一形态；`SUCCESSOR_STALLED_STATUSES` 4 态常量 `public`，Builder 重查后对预载 `nextCert` 再判一次停滞态白名单（复用同一真相源、禁手写第二份清单，兜「主查询通过后 nextCert 预载前」毫秒级 race）。
+- **4 态可行动文案**（`actionHint`，模板只渲染不做逻辑）：`unpaid` 中性化（未扣费、不硬承诺去支付，避免与 O4 自动清理冲突）；`pending`/`processing`/`approving` 已扣费（勿重复支付）；`archived` 为主动结束管理，不进入停滞提醒。携密不入库（仅域名/日期/停滞标签/文案）。
 
 ## 续签订单取消一次性提醒（cert_renew_cancelled）
 

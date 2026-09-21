@@ -1,0 +1,46 @@
+{
+    "test": "P\\Tests\\Feature\\Services\\Order\\ArchiveOrderTest::__pest_evaluable_归档不允许访问他人订单，旧已续及撤回入口已关闭",
+    "version": "1.0.0",
+    "calls": [
+        {
+            "method": "POST",
+            "uri_pattern": "/api/order/archive/{id}",
+            "request_keys": null,
+            "response_status": "2xx",
+            "response_schema": {
+                "code": "integer",
+                "msg": "string"
+            }
+        },
+        {
+            "method": "POST",
+            "uri_pattern": "/api/order/batch-revoke-cancel",
+            "request_keys": null,
+            "response_status": "4xx",
+            "response_schema": {
+                "code": "integer",
+                "msg": "string"
+            }
+        },
+        {
+            "method": "POST",
+            "uri_pattern": "/api/order/mark-renewed/{id}",
+            "request_keys": null,
+            "response_status": "4xx",
+            "response_schema": {
+                "code": "integer",
+                "msg": "string"
+            }
+        },
+        {
+            "method": "POST",
+            "uri_pattern": "/api/order/revoke-cancel/{id}",
+            "request_keys": null,
+            "response_status": "4xx",
+            "response_schema": {
+                "code": "integer",
+                "msg": "string"
+            }
+        }
+    ]
+}
