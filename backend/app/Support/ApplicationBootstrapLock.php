@@ -40,7 +40,8 @@ final class ApplicationBootstrapLock
     public static function prepareLegacyHttpEntry(
         string $sourceIndex,
         string $targetIndex,
-        int $drainSeconds
+        int $drainSeconds,
+        ?callable $onProgress = null
     ): void {
         if ($drainSeconds < 0) {
             throw new RuntimeException('旧请求排空时间不能小于 0');
@@ -95,10 +96,17 @@ final class ApplicationBootstrapLock
             return;
         }
 
-        $remaining = max(0, (int) ($state['ready_at'] ?? time()) - time());
-        if ($remaining > 0) {
-            sleep($remaining);
-        }
+        $readyAt = (int) ($state['ready_at'] ?? time());
+        $total = max(0, $readyAt - (int) ($state['started_at'] ?? time()));
+        do {
+            $remaining = max(0, $readyAt - time());
+            if ($onProgress !== null) {
+                $onProgress($remaining, $total);
+            }
+            if ($remaining > 0) {
+                sleep($onProgress === null ? $remaining : 1);
+            }
+        } while ($remaining > 0);
     }
 
     /**

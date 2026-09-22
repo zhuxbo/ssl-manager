@@ -67,11 +67,22 @@ _acquire_bootstrap_lock() {
         log_error "无法打开应用启动切换锁：$lock_file"
         return 1
     fi
-    if ! flock -x 9; then
-        exec 9>&-
-        log_error "无法获取应用启动切换锁：$lock_file"
-        return 1
-    fi
+    local wait_started=$SECONDS lock_status
+    log_info "等待在途 HTTP 请求结束并获取应用启动切换锁..."
+    while true; do
+        if flock -x -w 5 -E 75 9; then
+            break
+        else
+            lock_status=$?
+        fi
+        if [ "$lock_status" -ne 75 ]; then
+            exec 9>&-
+            log_error "无法获取应用启动切换锁：$lock_file"
+            return 1
+        fi
+        log_info "仍在等待应用启动切换锁（已等待 $((SECONDS - wait_started)) 秒，在途请求尚未结束或其他发布流程持锁）"
+    done
+    log_success "已获取应用启动切换锁"
 
     BOOTSTRAP_LOCK_HELD=1
 }
@@ -120,11 +131,28 @@ _prepare_legacy_bootstrap_entry() {
 
     drain_seconds=$(_legacy_request_drain_timeout) || return 1
     if ! grep -qF 'SSL_MANAGER_BOOTSTRAP_LOCK_V1_BEGIN' "$target_index"; then
-        log_info "首次启用安全切换机制，正在排空旧请求（最长 ${drain_seconds} 秒）"
+        log_info "首次启用安全切换机制，等待旧请求安全窗口（固定 ${drain_seconds} 秒）"
     fi
     if ! "$PHP_CMD" -r '
 require $argv[1];
-\App\Support\ApplicationBootstrapLock::prepareLegacyHttpEntry($argv[2], $argv[3], (int) $argv[4]);
+$terminal = function_exists("stream_isatty") && stream_isatty(STDOUT);
+$lastPrinted = null;
+\App\Support\ApplicationBootstrapLock::prepareLegacyHttpEntry(
+    $argv[2], $argv[3], (int) $argv[4],
+    static function (int $remaining, int $total) use ($terminal, &$lastPrinted): void {
+        if (!$terminal && $lastPrinted !== null && $remaining > 0 && $lastPrinted - $remaining < 10) {
+            return;
+        }
+        $lastPrinted = $remaining;
+        $elapsed = max(0, $total - $remaining);
+        $percent = $total > 0 ? min(100, (int) floor($elapsed * 100 / $total)) : 100;
+        $filled = (int) floor($percent / 5);
+        printf("%s[WAIT] 旧请求安全等待 [%s%s] %3d%% 已过 %d/%d 秒，剩余 %d 秒%s",
+            $terminal ? "\r" : "", str_repeat("=", $filled), str_repeat("-", 20 - $filled),
+            $percent, $elapsed, $total, $remaining, $terminal && $remaining > 0 ? "   " : "\n");
+        fflush(STDOUT);
+    }
+);
 ' "$source_helper" "$source_index" "$target_index" "$drain_seconds"; then
         log_error "首次升级请求排空准备失败"
         return 1
@@ -1058,6 +1086,19 @@ get_release_url() {
     fi
 
     echo ""
+}
+
+# 仅迁移官方历史根地址，自建发布服务及已有路径保持原样。
+_normalize_release_url() {
+    case "$1" in
+        https://release-cn.cnssl.com | https://release-cn.cnssl.com/)
+            printf '%s\n' 'https://release-cn.cnssl.com/manager'
+            ;;
+        https://release.cnssl.com | https://release.cnssl.com/)
+            printf '%s\n' 'https://release.cnssl.com/manager'
+            ;;
+        *) printf '%s\n' "$1" ;;
+    esac
 }
 
 # 从 version.json 读取 channel
@@ -2014,6 +2055,12 @@ _publish_upgrade_version() {
     local target_file="$INSTALL_DIR/version.json"
     local old_file="$target_file"
     local staged_file
+    local old_release_url normalized_release_url migrated_release_url=""
+    old_release_url=$(get_release_url)
+    normalized_release_url=$(_normalize_release_url "$old_release_url")
+    if [ "$normalized_release_url" != "$old_release_url" ]; then
+        migrated_release_url="$normalized_release_url"
+    fi
     [ -f "$old_file" ] || old_file="$INSTALL_DIR/backend/version.json"
     staged_file=$(mktemp "$INSTALL_DIR/.version-next.XXXXXX") || return 1
 
@@ -2024,14 +2071,18 @@ $old = is_file($argv[2]) ? json_decode(file_get_contents($argv[2]), true) : [];
 foreach (["release_url", "network"] as $field) {
     if (isset($old[$field])) { $new[$field] = $old[$field]; }
 }
+if ($argv[4] !== "") { $new["release_url"] = $argv[4]; }
 $json = json_encode($new, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 if ($json === false || file_put_contents($argv[3], $json . "\n") === false) { exit(1); }
-' "$source_file" "$old_file" "$staged_file" ||
+' "$source_file" "$old_file" "$staged_file" "$migrated_release_url" ||
         ! chown www:www "$staged_file" || ! chmod 664 "$staged_file" ||
         ! mv -f "$staged_file" "$target_file"; then
         rm -f "$staged_file"
         log_error "版本配置发布失败，原版本号保持不变"
         return 1
+    fi
+    if [ -n "$migrated_release_url" ]; then
+        log_info "已修正历史 release_url: $migrated_release_url"
     fi
 }
 
@@ -2877,6 +2928,13 @@ main() {
     fi
 
     # 执行动作
+    local normalized_release_url
+    normalized_release_url=$(_normalize_release_url "$CUSTOM_RELEASE_URL")
+    if [ "$normalized_release_url" != "$CUSTOM_RELEASE_URL" ]; then
+        log_info "检测到历史 release URL，改用: $normalized_release_url"
+        CUSTOM_RELEASE_URL="$normalized_release_url"
+    fi
+
     case "$action" in
         check)
             log_info "检查更新功能请在管理后台使用"

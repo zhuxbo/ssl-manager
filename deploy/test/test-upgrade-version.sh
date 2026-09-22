@@ -20,6 +20,8 @@ extract_fn() {
     ' "$UPGRADE"
 }
 eval "$(extract_fn _publish_upgrade_version)"
+eval "$(extract_fn get_release_url)"
+eval "$(extract_fn _normalize_release_url)"
 # 从生产函数截取最后恢复服务至返回的代码，失败必须真正阻止版本发布。
 TAIL=$(extract_fn perform_upgrade | sed -n '/^    # unfreeze 必须严格先于 artisan up/,$p' | sed '$d')
 [ -n "$TAIL" ]
@@ -103,4 +105,36 @@ exit($d["version"] === "0.6.9-beta.19" && $d["network"] === "cn"
     fi
     [ -z "$(find "$INSTALL_DIR" -name '.version-next.*' -print)" ]
     echo "✓ 版本发布: $FAIL_AT"
+done
+
+FAIL_AT=success
+for original_url in \
+    https://release-cn.cnssl.com https://release-cn.cnssl.com/ \
+    https://release.cnssl.com https://release.cnssl.com/ \
+    https://release-cn.cnssl.com/manager https://custom.example \
+    https://release-cn.cnssl.com/custom; do
+    case "$original_url" in
+        https://release-cn.cnssl.com | https://release-cn.cnssl.com/)
+            expected_url=https://release-cn.cnssl.com/manager
+            ;;
+        https://release.cnssl.com | https://release.cnssl.com/)
+            expected_url=https://release.cnssl.com/manager
+            ;;
+        *) expected_url="$original_url" ;;
+    esac
+    [ "$(_normalize_release_url "$original_url")" = "$expected_url" ]
+    for location in root backend; do
+        INSTALL_DIR="$TEST_DIR/url-$location"
+        mkdir -p "$INSTALL_DIR/backend"
+        rm -f "$INSTALL_DIR/version.json" "$INSTALL_DIR/backend/version.json"
+        old_file="$INSTALL_DIR/version.json"
+        [ "$location" != backend ] || old_file="$INSTALL_DIR/backend/version.json"
+        printf '{"version":"0.6.8","release_url":"%s","network":"cn"}\n' "$original_url" >"$old_file"
+        _publish_upgrade_version "$src_dir/version.json"
+        "$TEST_PHP_BIN" -r '
+$d = json_decode(file_get_contents($argv[1]), true);
+exit($d["release_url"] === $argv[2] && $d["network"] === "cn" ? 0 : 1);
+' "$INSTALL_DIR/version.json" "$expected_url"
+    done
+    echo "✓ 发布地址迁移: $original_url"
 done

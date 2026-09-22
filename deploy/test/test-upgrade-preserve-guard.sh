@@ -119,6 +119,38 @@ eval "$(extract_fn "$BT_INSTALL" write_composer_lock_marker)"
 eval "$(extract_fn "$UPGRADE" _stage_bundled_vendor)"
 eval "$(extract_fn "$UPGRADE" _ensure_runtime_directories)"
 eval "$(extract_fn "$UPGRADE" _print_recovery_runbook)"
+eval "$(extract_fn "$UPGRADE" _acquire_bootstrap_lock)"
+
+test_bootstrap_lock_progress() (
+    local base calls=0
+    base=$(mktemp -d)
+    trap 'rm -rf "$base"' EXIT
+    INSTALL_DIR="$base"
+    BOOTSTRAP_LOCK_HELD=0
+    mkdir -p "$base/backend"
+    chown() { :; }
+    log_info() { echo "$1"; }
+    flock() {
+        calls=$((calls + 1))
+        [ "$calls" -gt 1 ] || return 75
+    }
+    _acquire_bootstrap_lock >"$base/output" || return 1
+    [ "$BOOTSTRAP_LOCK_HELD" -eq 1 ] && [ "$calls" -eq 2 ] || return 1
+    grep -q '仍在等待应用启动切换锁' "$base/output" || return 1
+    exec 9>&-
+    BOOTSTRAP_LOCK_HELD=0
+    flock() { return 1; }
+    if _acquire_bootstrap_lock; then
+        return 1
+    fi
+    [ "$BOOTSTRAP_LOCK_HELD" -eq 0 ]
+)
+
+if test_bootstrap_lock_progress; then
+    pass "启动锁等待持续提示，取得锁后继续，非超时错误立即失败"
+else
+    fail "启动锁等待提示或错误处理不符合预期"
+fi
 
 # 抽取健全性校验：任一函数未抽出即整体失败（防 upgrade.sh 改结构后静默失测）
 for fn in _fs_device _assert_storage_same_fs _check_stranded_preserve _restore_preserved_storage \
