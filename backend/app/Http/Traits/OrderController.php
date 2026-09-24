@@ -88,7 +88,7 @@ trait OrderController
     }
 
     /**
-     * 归档已签发订单
+     * 归档处理中或已签发订单
      *
      * @throws Throwable
      */

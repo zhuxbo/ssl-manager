@@ -1,0 +1,72 @@
+{
+    "test": "P\\Tests\\Feature\\Services\\Order\\ArchiveOrderTest::__pest_evaluable_归档两端真实入口：处理中和已签发可归档，不受续费窗口限制且清理任务不动资金@('admin') / ('active') with data ('admin', 'active')",
+    "version": "1.0.0",
+    "calls": [
+        {
+            "method": "GET",
+            "uri_pattern": "/api/admin/order",
+            "request_keys": [
+                "status",
+                "statusSet"
+            ],
+            "response_status": "2xx",
+            "response_schema": {
+                "code": "integer",
+                "data": {
+                    "items": {
+                        "__list_of__": {
+                            "id": "integer",
+                            "user_id": "integer",
+                            "product_id": "integer",
+                            "latest_cert_id": "integer",
+                            "period": "integer",
+                            "amount": "string",
+                            "period_from": "string",
+                            "period_till": "string",
+                            "created_at": "string",
+                            "user": {
+                                "id": "integer",
+                                "username": "string"
+                            },
+                            "product": {
+                                "id": "integer",
+                                "name": "string",
+                                "product_type": "string",
+                                "refund_period": "integer"
+                            },
+                            "latest_cert": {
+                                "id": "integer",
+                                "common_name": "string",
+                                "channel": "string",
+                                "action": "string",
+                                "dcv": {
+                                    "method": "string",
+                                    "dns": {
+                                        "host": "string"
+                                    }
+                                },
+                                "validation": "array<unknown>",
+                                "status": "string",
+                                "amount": "string",
+                                "issued_at": "null",
+                                "expires_at": "string"
+                            }
+                        }
+                    },
+                    "total": "integer",
+                    "pageSize": "integer",
+                    "currentPage": "integer"
+                }
+            }
+        },
+        {
+            "method": "POST",
+            "uri_pattern": "/api/admin/order/archive/{id}",
+            "request_keys": null,
+            "response_status": "2xx",
+            "response_schema": {
+                "code": "integer"
+            }
+        }
+    ]
+}

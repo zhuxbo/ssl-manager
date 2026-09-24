@@ -79,7 +79,7 @@ import { message } from "@shared/utils";
 import { useDetail } from "./detail";
 import dayjs from "dayjs";
 import {
-  confirmOrderAction,
+  confirmOrderCancellation,
   cancellationMessage
 } from "@shared/utils/orderConfirmation";
 
@@ -143,8 +143,10 @@ const handleCommit = (row: any) => {
 
 const handleCancel = async (row: any) => {
   if (
-    await confirmOrderAction("cancel", cancellationMessage(row), () =>
-      OrderApi.commitCancel(row.id)
+    await confirmOrderCancellation(
+      [row.latest_cert?.status],
+      cancellationMessage(row),
+      () => OrderApi.commitCancel(row.id)
     )
   ) {
     message(

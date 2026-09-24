@@ -1,5 +1,5 @@
 {
-    "test": "P\\Tests\\Feature\\Services\\Order\\ArchiveOrderTest::__pest_evaluable_归档拒绝所有非已签发状态@('pending') with data ('pending')",
+    "test": "P\\Tests\\Feature\\Services\\Order\\ArchiveOrderTest::__pest_evaluable_归档拒绝处理中和已签发以外的状态@('renewed') with data ('renewed')",
     "version": "1.0.0",
     "calls": [
         {

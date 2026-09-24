@@ -1,5 +1,5 @@
 {
-    "test": "P\\Tests\\Feature\\Services\\Order\\ArchiveOrderTest::__pest_evaluable_归档两端真实入口：仅签发状态可归档，不受续费窗口限制且清理任务不动资金@('user') with data ('user')",
+    "test": "P\\Tests\\Feature\\Services\\Order\\ArchiveOrderTest::__pest_evaluable_归档两端真实入口：处理中和已签发可归档，不受续费窗口限制且清理任务不动资金@('user') / ('processing') with data ('user', 'processing')",
     "version": "1.0.0",
     "calls": [
         {

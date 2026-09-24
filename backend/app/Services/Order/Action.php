@@ -1153,7 +1153,7 @@ class Action
             Task::lockForMutation($id, ['commit', 'sync', 'revalidate', 'cancel'])->get();
             $order = Order::with('latestCert')->whereHas('latestCert')->lock()->find($id);
             $order || $this->error('订单不存在或无权操作');
-            $order->latestCert->status === 'active' || $this->error('仅已签发订单可以归档');
+            in_array($order->latestCert->status, ['processing', 'active'], true) || $this->error('仅处理中或已签发订单可以归档');
 
             $order->latestCert->update(['status' => 'archived']);
             $order->update(['auto_renew' => false, 'auto_reissue' => false]);

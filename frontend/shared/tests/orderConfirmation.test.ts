@@ -61,6 +61,7 @@ function setup() {
   );
   return {
     confirm: exports.confirmOrderAction,
+    cancel: exports.confirmOrderCancellation,
     get box() {
       return box;
     }
@@ -113,5 +114,51 @@ for (const closeAction of ["cancel", "close"]) {
     await request;
     assert.equal(await result, true);
     assert.equal(box.closed, true);
+  });
+}
+
+for (const statuses of [["unpaid"], ["pending"], ["unpaid", "pending"]]) {
+  test(`取消 ${statuses.join(",")} 直接提交且不弹确认`, async () => {
+    const context = setup();
+    let calls = 0;
+    assert.equal(
+      await context.cancel(statuses, "取消", async () => {
+        calls++;
+      }),
+      true
+    );
+    assert.equal(calls, 1);
+    assert.equal(context.box, undefined);
+  });
+}
+
+test("直接取消失败不返回成功", async () => {
+  const context = setup();
+  assert.equal(
+    await context.cancel(["pending"], "取消", async () => {
+      throw new Error("请求失败");
+    }),
+    false
+  );
+  assert.equal(context.box, undefined);
+});
+
+for (const statuses of [
+  ["processing"],
+  ["active"],
+  ["approving"],
+  ["pending", "processing"]
+]) {
+  test(`取消 ${statuses.join(",")} 仍需确认`, async () => {
+    const context = setup();
+    let calls = 0;
+    const result = context.cancel(statuses, "取消", async () => {
+      calls++;
+    });
+    assert.equal(calls, 0);
+    context.box.state.inputValue = "确认取消";
+    await context.box.trigger("confirm");
+    assert.equal(await result, true);
+    assert.equal(calls, 1);
   });
 }

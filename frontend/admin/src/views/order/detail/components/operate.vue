@@ -20,7 +20,7 @@
       >续费</el-button
     >
     <el-button
-      v-if="status === 'active'"
+      v-if="['processing', 'active'].includes(status)"
       type="warning"
       plain
       size="small"
@@ -117,6 +117,7 @@ import dayjs from "dayjs";
 import {
   cancellationMessage,
   confirmOrderAction,
+  confirmOrderCancellation,
   archiveMessage
 } from "@shared/utils/orderConfirmation";
 
@@ -184,8 +185,8 @@ const commit = () => {
 };
 const commitCancel = async () => {
   const previousStatus = status.value;
-  const confirmed = await confirmOrderAction(
-    "cancel",
+  const confirmed = await confirmOrderCancellation(
+    [previousStatus],
     cancellationMessage(order),
     () => OrderApi.commitCancel(order.id)
   );

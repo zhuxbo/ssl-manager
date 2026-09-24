@@ -25,8 +25,9 @@ beforeEach(function () {
     $this->archiveFixture = [$user, $order, $cert];
 });
 
-test('归档两端真实入口：仅签发状态可归档，不受续费窗口限制且清理任务不动资金', function (string $role) {
+test('归档两端真实入口：处理中和已签发可归档，不受续费窗口限制且清理任务不动资金', function (string $role, string $status) {
     [$user, $order, $cert] = $this->archiveFixture;
+    $cert->update(['status' => $status]);
     $balance = $user->balance;
     $transactions = Transaction::count();
     foreach (['sync', 'revalidate', 'commit', 'cancel'] as $action) {
@@ -42,15 +43,15 @@ test('归档两端真实入口：仅签发状态可归档，不受续费窗口�
         ->and($user->fresh()->balance)->toBe($balance)
         ->and(Transaction::count())->toBe($transactions);
     $this->getJson("$prefix/order?status=archived&statusSet=archived")->assertOk()->assertJsonPath('code', 1);
-})->with(['admin', 'user']);
+})->with(['admin', 'user'])->with(['processing', 'active']);
 
-test('归档拒绝所有非已签发状态', function (string $status) {
+test('归档拒绝处理中和已签发以外的状态', function (string $status) {
     [$user, $order, $cert] = $this->archiveFixture;
     $cert->update(['status' => $status]);
     $this->actingAsUser($user)->postJson("/api/order/archive/$order->id")
         ->assertOk()->assertJsonPath('code', 0);
     expect($cert->fresh()->status)->toBe($status);
-})->with(['unpaid', 'pending', 'processing', 'approving', 'cancelling', 'cancelled', 'expired', 'renewed', 'reissued', 'revoked', 'archived']);
+})->with(['unpaid', 'pending', 'approving', 'cancelling', 'cancelled', 'expired', 'renewed', 'reissued', 'revoked', 'archived']);
 
 test('归档不允许访问他人订单，旧已续及撤回入口已关闭', function () {
     [$owner, $order, $cert] = $this->archiveFixture;
@@ -63,8 +64,9 @@ test('归档不允许访问他人订单，旧已续及撤回入口已关闭', fu
     }
 });
 
-test('同步在途期间归档不被上游 active 覆盖，归档不作为续期停滞', function () {
+test('同步在途期间归档不被上游 active 覆盖，归档不作为续期停滞', function (string $status) {
     [$user, $order, $cert] = $this->archiveFixture;
+    $cert->update(['status' => $status]);
     $api = Mockery::mock(Api::class);
     $api->shouldReceive('get')->once()->andReturnUsing(function () use ($order) {
         try {
@@ -79,7 +81,7 @@ test('同步在途期间归档不被上游 active 覆盖，归档不作为续期
     app(Action::class)->sync($order->id, true);
     expect($cert->fresh()->status)->toBe('archived')
         ->and(StalledRenewalQuery::SUCCESSOR_STALLED_STATUSES)->not->toContain('archived');
-});
+})->with(['processing', 'active']);
 
 test('取消提交即创建可立即执行的任务，保留取消中状态和失败证据', function () {
     Queue::fake();

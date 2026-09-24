@@ -129,7 +129,7 @@ export function commitCancel(id: number): Promise<BaseResponse> {
   return http.post<BaseResponse<null>, any>(`/order/commit-cancel/${id}`);
 }
 
-/** 归档已签发订单 */
+/** 归档处理中或已签发订单 */
 export function archive(id: number): Promise<BaseResponse> {
   return http.post<BaseResponse<null>, any>(`/order/archive/${id}`);
 }

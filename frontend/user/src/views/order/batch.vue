@@ -89,7 +89,7 @@ import { message } from "@shared/utils";
 import * as OrderApi from "@/api/order";
 import { useDetail } from "./detail";
 import dayjs from "dayjs";
-import { confirmOrderAction } from "@shared/utils/orderConfirmation";
+import { confirmOrderCancellation } from "@shared/utils/orderConfirmation";
 
 const { toDetail } = useDetail();
 
@@ -474,6 +474,7 @@ const sync = () => {
 
 const commitCancel = async () => {
   const filteredIds: number[] = [];
+  const statuses: string[] = [];
 
   props.tableRef.clearSelection();
 
@@ -485,6 +486,7 @@ const commitCancel = async () => {
           row.product.refund_period * 86400)
     ) {
       filteredIds.push(row.id);
+      statuses.push(row.latest_cert.status);
       props.tableRef.toggleRowSelection(row);
     }
   });
@@ -500,8 +502,8 @@ const commitCancel = async () => {
   }
 
   if (
-    await confirmOrderAction(
-      "cancel",
+    await confirmOrderCancellation(
+      statuses,
       "将取消选中的可取消订单：未支付申请删除，待提交申请按规则退款；已提交上游的订单立即提交取消处理，成功后按规则退款，证书可能失效。此次操作不再提供撤回。",
       () => OrderApi.batchCommitCancel(filteredIds.toString())
     )

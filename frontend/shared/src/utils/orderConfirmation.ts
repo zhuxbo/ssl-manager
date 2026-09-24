@@ -13,6 +13,27 @@ export function cancellationMessage(order: any): string {
   return "确认后将立即提交取消处理，不再提供撤回。取消成功后按订单规则退款；已签发证书可能失效，请确认不再使用。";
 }
 
+/** 待支付、待提交订单直接取消；混合批次包含其他状态时仍需确认。 */
+export async function confirmOrderCancellation(
+  statuses: string[],
+  description: string,
+  submit: () => Promise<unknown>
+): Promise<boolean> {
+  if (
+    statuses.length > 0 &&
+    statuses.every(status => ["unpaid", "pending"].includes(status))
+  ) {
+    try {
+      await submit();
+      return true;
+    } catch {
+      // HTTP 层显示业务错误，调用方不执行成功提示或刷新。
+      return false;
+    }
+  }
+  return confirmOrderAction("cancel", description, submit);
+}
+
 /** 请求完成前保持弹窗，失败时保留输入，避免重复提交。 */
 export async function confirmOrderAction(
   kind: "archive" | "cancel",
