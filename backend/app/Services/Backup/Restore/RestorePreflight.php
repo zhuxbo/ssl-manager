@@ -186,6 +186,14 @@ final class RestorePreflight
         try {
             $state = $this->stateInspector->inspect($context);
             $report['state'] = $state;
+            if (($state['missing_active_suffixes'] ?? []) !== []) {
+                $this->addBlocker(
+                    $report,
+                    'active_tables_missing',
+                    '当前数据库缺少恢复换表所需的表，无法执行原子恢复。',
+                    ['missing_tables' => $state['missing_active_suffixes']],
+                );
+            }
             if (($state['state'] ?? null) !== RestoreState::Clean->value) {
                 $this->addBlocker(
                     $report,

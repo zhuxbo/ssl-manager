@@ -48,6 +48,7 @@
         "backend/tests/Feature/Http/Controllers/V2/ApiControllerCommitResilienceTest.php",
         "backend/tests/Feature/Http/Controllers/V2/ApiControllerSyncTimeoutTest.php",
         "backend/tests/Feature/Services/Order/SyncedCancelRefundTest.php",
+        "backend/tests/Feature/Services/Order/ArchiveOrderTest.php",
         "backend/tests/Feature/Services/Order/ZeroAmountReissueTest.php",
         "backend/tests/Unit/Jobs/TaskJobTest.php",
         "backend/tests/Unit/Services/Acme/ActionResponseTest.php",

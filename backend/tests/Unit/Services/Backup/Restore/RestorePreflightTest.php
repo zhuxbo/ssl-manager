@@ -2,6 +2,7 @@
 
 use App\Services\Backup\BackupArtifactInspector;
 use App\Services\Backup\BackupService;
+use App\Services\Backup\DatabaseOperationMutex;
 use App\Services\Backup\MysqlToolchainChecker;
 use App\Services\Backup\Restore\AtomicRestoreService;
 use App\Services\Backup\Restore\RestoreContext;
@@ -352,6 +353,27 @@ test('权威 Schema 差异只是可确认项且只有 allowSchemaDifference 可�
 
     $preflight->assertRunnable($report, new RestoreRequest($request->backupId, true, $request->actor));
 });
+
+test('备份包含当前缺失表时即使确认差异也在恢复加锁冻结前阻断', function (bool $authoritative) {
+    [$preflight, $request] = taskSixPreflight($this, [
+        'schema' => $authoritative ? taskSixArtifactSchema(withOrders: true) : null,
+        'included' => ['users', 'orders'],
+        'allow_schema_difference' => true,
+    ]);
+    $report = $preflight->inspect($request);
+
+    expect($report['runnable'])->toBeFalse()
+        ->and(taskSixBlockerCodes($report))->toContain('active_tables_missing')
+        ->and($report['state']['missing_active_suffixes'])->toBe(['orders']);
+
+    app()->instance(RestorePreflight::class, $preflight);
+    app()->bind(DatabaseOperationMutex::class, static function (): never {
+        throw new LogicException('缺表时不得进入恢复加锁流程');
+    });
+
+    expect(fn () => app(AtomicRestoreService::class)->restore($request, static function (): void {}))
+        ->toThrow(RuntimeException::class, '当前数据库缺少恢复换表所需的表');
+})->with([true, false]);
 
 test('无 Schema 只把 SQL 实际遇到的业务表纳入低保证恢复上下文', function () {
     $current = taskSixCurrentSchema();
