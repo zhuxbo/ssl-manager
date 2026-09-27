@@ -1,4 +1,5 @@
 import App from "./App.vue";
+import { appendBodyCode } from "./utils/bodyCode";
 import router, { constantMenus } from "./router";
 import { setupStore } from "@/store";
 import { getPlatformConfig } from "./config";
@@ -121,6 +122,7 @@ const bootstrap = async () => {
   });
 
   app.mount("#app");
+  void appendBodyCode(config.BodyCode);
 };
 
 void bootstrap();

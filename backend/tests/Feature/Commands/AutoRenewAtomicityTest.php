@@ -31,6 +31,8 @@ afterEach(function () {
 });
 
 beforeEach(function () {
+    $this->configureTestDelegationProxyDomain();
+
     // 延时 commit task 不真正执行（否则同步驱动会触发上游 commit）；同时便于断言其入队
     Queue::fake();
 
@@ -94,15 +96,15 @@ function captureAutoRenewIntents(array &$intents): void
 }
 
 /** 一次性并发耗尽余额：在 O1 外层事务内首个 Cert 建立时把余额扣光（原生 UPDATE 不经 Transaction 钩子）。 */
-function depleteBalanceOnFirstCert(User $user): void
+function depleteBalanceOnFirstCert(User $user, string $balance = '0.00'): void
 {
     $depleted = false;
-    Cert::created(function (Cert $c) use ($user, &$depleted) {
+    Cert::created(function (Cert $c) use ($user, $balance, &$depleted) {
         if ($depleted) {
             return;
         }
         $depleted = true;
-        DB::table('users')->where('id', $user->id)->update(['balance' => '0.00']);
+        DB::table('users')->where('id', $user->id)->update(['balance' => $balance]);
     });
 }
 
@@ -174,10 +176,11 @@ test('O1 原子回滚：pay 段 charge 因并发耗尽余额失败 → 旧证书
     Queue::assertNotPushed(TaskJob::class);
 });
 
-test('O1 reissue 分支原子回滚：charge 失败 → 旧证书回滚保持 active、reissue cert 不残留', function () {
-    // 重签走 auto_reissue（订单剩余 >15 天 → reissue）；增域名单价>0 使 reissue 扣费>0，并发耗尽余额致 charge 失败。
+test('零元自动重签直接 pending，不创建扣费流水', function () {
+    // 原域名重签为零元，跳过支付且不产生零元流水。
     $user = $this->createTestUser([
         'balance' => '1000.00',
+        'credit_limit' => '0.00',
         'auto_settings' => ['auto_renew' => false, 'auto_reissue' => true],
     ]);
 
@@ -212,14 +215,18 @@ test('O1 reissue 分支原子回滚：charge 失败 → 旧证书回滚保持 ac
 
     $intents = [];
     captureAutoRenewIntents($intents);
-    depleteBalanceOnFirstCert($user);
+    $transactionCount = Transaction::count();
+    Transaction::creating(function () {
+        throw new RuntimeException('零元重签不应创建交易');
+    });
 
     $this->artisan('schedule:auto-renew')->assertSuccessful();
 
-    // 旧证书回滚保持 active（未 reissued），reissue cert 未残留（latest_cert_id 仍指旧证书）
-    expect($cert->fresh()->status)->toBe('active')
-        ->and($order->fresh()->latest_cert_id)->toBe($cert->id)
-        ->and(Cert::where('order_id', $order->id)->count())->toBe(1)
+    expect($cert->fresh()->status)->toBe('reissued')
+        ->and($order->fresh()->latestCert->status)->toBe('pending')
+        ->and($order->fresh()->latestCert->amount)->toBe('0.00')
+        ->and(Transaction::count())->toBe($transactionCount)
+        ->and(Cert::where('order_id', $order->id)->count())->toBe(2)
         ->and($user->fresh()->balance)->toBe('1000.00');
 });
 

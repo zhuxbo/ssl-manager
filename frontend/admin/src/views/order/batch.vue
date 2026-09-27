@@ -82,15 +82,6 @@
     >
       取消订单
     </el-button>
-    <el-button
-      v-if="canRevokeCancel()"
-      type="warning"
-      size="small"
-      class="ml-2"
-      @click="revokeCancel()"
-    >
-      撤销取消
-    </el-button>
   </div>
 </template>
 
@@ -100,6 +91,7 @@ import { message } from "@shared/utils";
 import * as OrderApi from "@/api/order";
 import { useDetail } from "./detail";
 import dayjs from "dayjs";
+import { confirmOrderCancellation } from "@shared/utils/orderConfirmation";
 
 const { toDetail } = useDetail();
 
@@ -181,12 +173,6 @@ const canCommitCancel = () => {
         row.product.refund_period * 86400
     );
   });
-};
-
-const canRevokeCancel = () => {
-  return getSelectedRows().some(
-    row => row.latest_cert?.status === "cancelling"
-  );
 };
 
 const download = () => {
@@ -488,20 +474,11 @@ const sync = () => {
   });
 };
 
-const confirmBatchCancel = () => {
-  ElMessageBox.prompt('请输入"批量取消"四字以确认此操作', "批量取消确认", {
-    confirmButtonText: "确定",
-    cancelButtonText: "取消",
-    inputValidator: (val: string) =>
-      val === "批量取消" || '请输入"批量取消"四字',
-    inputErrorMessage: '请输入"批量取消"四字'
-  })
-    .then(() => commitCancel())
-    .catch(() => {});
-};
+const confirmBatchCancel = () => commitCancel();
 
-const commitCancel = () => {
+const commitCancel = async () => {
   const filteredIds: number[] = [];
+  const statuses: string[] = [];
 
   props.tableRef.clearSelection();
 
@@ -513,6 +490,7 @@ const commitCancel = () => {
           row.product.refund_period * 86400)
     ) {
       filteredIds.push(row.id);
+      statuses.push(row.latest_cert.status);
       props.tableRef.toggleRowSelection(row);
     }
   });
@@ -527,39 +505,18 @@ const commitCancel = () => {
     return;
   }
 
-  OrderApi.batchCommitCancel(filteredIds.toString()).then(() => {
-    message("取消成功", {
+  if (
+    await confirmOrderCancellation(
+      statuses,
+      "将取消选中的可取消订单：未支付申请删除，待提交申请按规则退款；已提交上游的订单立即提交取消处理，成功后按规则退款，证书可能失效。此次操作不再提供撤回。",
+      () => OrderApi.batchCommitCancel(filteredIds.toString())
+    )
+  ) {
+    message("取消申请已提交", {
       type: "success"
     });
     emit("refresh");
-  });
-};
-
-const revokeCancel = () => {
-  const filteredIds: number[] = [];
-
-  props.tableRef.clearSelection();
-
-  getSelectedRows().forEach(row => {
-    if (["cancelling"].includes(row.latest_cert.status)) {
-      filteredIds.push(row.id);
-      props.tableRef.toggleRowSelection(row);
-    }
-  });
-
-  if (!filteredIds.length) {
-    message("只有取消中的证书可以撤销", {
-      type: "error"
-    });
-    return;
   }
-
-  OrderApi.batchRevokeCancel(filteredIds.toString()).then(() => {
-    message("撤销取消成功", {
-      type: "success"
-    });
-    emit("refresh");
-  });
 };
 </script>
 <style scoped lang="scss">

@@ -1,0 +1,13 @@
+# 用根目录 .env 的 COMPOSE_FILE=compose.yaml:compose.external-db.yaml 启用。
+services:
+  app:
+    environment:
+      DEV_DB_HOST: ${DEV_DB_HOST:?请在根目录 .env 设置 DEV_DB_HOST}
+      DEV_DB_PORT: ${DEV_DB_PORT:-3306}
+      DEV_DB_USERNAME: ${DEV_DB_USERNAME:?请在根目录 .env 设置 DEV_DB_USERNAME}
+      DEV_DB_PASSWORD: ${DEV_DB_PASSWORD:?请在根目录 .env 设置 DEV_DB_PASSWORD}
+    depends_on: !override
+      redis:
+        condition: service_healthy
+  mysql:
+    profiles: [local-mysql]

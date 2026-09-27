@@ -156,8 +156,8 @@ test('续费 unpaid 孤儿命中：派发 + stall_status=unpaid + 中性文案�
         ->and($cert['action_hint'])->toContain('可能被系统自动清理');
 });
 
-// ── 测试 3（路径 3）：processing/approving/failed 接替均命中 ─────────────────────
-test('[路径3] 已扣费在途/失败接替（processing/approving/failed）孤儿命中 + 文案', function (string $sucStatus) {
+// ── 测试 3（路径 3）：processing/approving 接替均命中 ─────────────────────
+test('[路径3] 已扣费在途接替（processing/approving）孤儿命中 + 文案', function (string $sucStatus) {
     $user = User::factory()->create(['email' => $sucStatus.'@example.com']);
     $product = Product::factory()->create();
 
@@ -176,14 +176,9 @@ test('[路径3] 已扣费在途/失败接替（processing/approving/failed）孤
     $cert = stalledPayloadFor($user)->data['certificates'][0];
     expect($cert['stall_status'])->toBe($sucStatus);
 
-    if ($sucStatus === 'failed') {
-        expect($cert['action_hint'])->toContain('重新购买证书')
-            ->and($cert['action_hint'])->toContain('联系客服');
-    } else {
-        expect($cert['action_hint'])->toContain('域名验证/审核')
-            ->and($cert['action_hint'])->toContain('费用已扣除');
-    }
-})->with(['processing', 'approving', 'failed']);
+    expect($cert['action_hint'])->toContain('域名验证/审核')
+        ->and($cert['action_hint'])->toContain('费用已扣除');
+})->with(['processing', 'approving']);
 
 // ── 测试 4：重签孤儿命中（同 order，前驱 reissued ← 接替 pending） ──────────────
 test('重签 pending 孤儿命中：同订单前驱 reissued ← 接替 pending → 派发 + 勿重复支付', function () {
@@ -440,7 +435,7 @@ test('[排除表] cancelled/expired/revoked/cancelling 接替（带链、age>48h
     $this->artisan('schedule:expire')->assertSuccessful();
 
     expect(dispatchedCodeForUser($captured, 'cert_renew_stalled', $user->id))->toBeFalse();
-})->with(['cancelled', 'expired', 'revoked', 'cancelling']);
+})->with(['cancelled', 'expired', 'revoked', 'cancelling', 'archived']);
 
 // ── 测试 14（I2 强制）：派发 ⇒ 可重查 + 双用户隔离 ──────────────────────────────
 test('[双侧同源] 派发 ⇒ Builder 可重查非空 + 双用户各自仅含本人条目（防跨用户串邮）', function () {
@@ -455,7 +450,7 @@ test('[双侧同源] 派发 ⇒ Builder 可重查非空 + 双用户各自仅含�
         'common_name' => 'a-domain.com',
     ]);
 
-    // 用户 B：processing（reissue）孤儿 + failed（renew）孤儿（多形态）
+    // 用户 B：processing（reissue）孤儿 + approving（renew）孤儿（多形态）
     $userB = User::factory()->create(['email' => 'b@example.com']);
     makeStalledOrphan($userB, $product, [
         'pred_status' => 'reissued',
@@ -466,9 +461,9 @@ test('[双侧同源] 派发 ⇒ Builder 可重查非空 + 双用户各自仅含�
     ]);
     makeStalledOrphan($userB, $product, [
         'pred_status' => 'renewed',
-        'successor_status' => 'failed',
+        'successor_status' => 'approving',
         'successor_age_hours' => 72,
-        'common_name' => 'b-failed.com',
+        'common_name' => 'b-approving.com',
     ]);
 
     $captured = captureExpireDispatch();
@@ -485,8 +480,8 @@ test('[双侧同源] 派发 ⇒ Builder 可重查非空 + 双用户各自仅含�
     expect($domainsA)->toBe(['a-domain.com']);
     expect($domainsB)->toHaveCount(2)
         ->and($domainsB)->toContain('b-processing.com')
-        ->and($domainsB)->toContain('b-failed.com')
+        ->and($domainsB)->toContain('b-approving.com')
         ->and($domainsB)->not->toContain('a-domain.com');
     expect($domainsA)->not->toContain('b-processing.com')
-        ->and($domainsA)->not->toContain('b-failed.com');
+        ->and($domainsA)->not->toContain('b-approving.com');
 });

@@ -1,8 +1,13 @@
 <?php
 
+use App\Console\Commands\DatabaseStructureCommand;
 use App\Services\Upgrade\DatabaseStructureService;
+use Illuminate\Console\OutputStyle;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\Schema;
+use Symfony\Component\Console\Input\ArrayInput;
+use Symfony\Component\Console\Output\BufferedOutput;
 use Tests\TestCase;
 
 uses(TestCase::class);
@@ -394,6 +399,26 @@ test('summary records modified_indexes as manual_actions', function () {
     expect($summary['manual_actions'])->toContain('修改索引 t.idx_code');
 });
 
+test('summary keeps extra tables informational and does not block additive repairs', function () {
+    $diff = [
+        'missing_tables' => [
+            'users' => ['columns' => [], 'indexes' => [], 'foreign_keys' => []],
+        ],
+        'extra_tables' => [
+            'plugin_logs' => ['columns' => [], 'indexes' => [], 'foreign_keys' => []],
+        ],
+        'table_differences' => [],
+    ];
+
+    $reflection = new ReflectionClass($this->service);
+    $method = $reflection->getMethod('generateSummary');
+    $summary = $method->invoke($this->service, $diff);
+
+    expect($summary['extra_tables'])->toBe(['plugin_logs'])
+        ->and($summary['can_auto_fix'])->toBeTrue()
+        ->and($summary['manual_actions'])->not->toContain('删除多余表 plugin_logs');
+});
+
 test('compare structures detects missing and extra tables', function () {
     $standard = [
         'tables' => [
@@ -600,3 +625,260 @@ test('check returns correct diff structure', function () {
         test()->markTestSkipped('数据库连接不可用');
     }
 });
+
+test('export current structure includes generation expression and table capacity metadata', function () {
+    $connection = (string) config('database.default');
+    if (! in_array(config("database.connections.$connection.driver"), ['mysql', 'mariadb'], true)) {
+        test()->markTestSkipped('当前连接不是 mysql/mariadb');
+    }
+
+    $structure = $this->service->exportCurrentStructure($connection);
+    $table = reset($structure['tables']);
+    $column = reset($table['columns']);
+
+    expect($table)->toHaveKeys(['auto_increment', 'data_length', 'index_length'])
+        ->and($column)->toHaveKey('generation_expression');
+});
+
+test('current structure export still excludes migrations from program structure checks', function () {
+    $connection = (string) config('database.default');
+    if (! in_array(config("database.connections.$connection.driver"), ['mysql', 'mariadb'], true)) {
+        test()->markTestSkipped('当前连接不是 mysql/mariadb');
+    }
+
+    expect(Schema::connection($connection)->hasTable('migrations'))->toBeTrue();
+    Config::set('upgrade.exclude_tables', ['migrations']);
+
+    expect($this->service->exportCurrentStructure($connection)['tables'])->not->toHaveKey('migrations');
+});
+
+test('backup structure export includes migrations when it is a physical table', function () {
+    $connection = (string) config('database.default');
+    if (! in_array(config("database.connections.$connection.driver"), ['mysql', 'mariadb'], true)) {
+        test()->markTestSkipped('当前连接不是 mysql/mariadb');
+    }
+
+    expect(Schema::connection($connection)->hasTable('migrations'))->toBeTrue();
+    Config::set('upgrade.exclude_tables', ['migrations']);
+
+    expect($this->service->exportBackupStructure($connection)['tables'])->toHaveKey('migrations');
+});
+
+test('upgrade comparison ignores restore-only column metadata', function () {
+    $base = [
+        'columns' => [
+            'code' => [
+                'position' => 1,
+                'type' => 'varchar(32)',
+                'nullable' => false,
+                'default' => null,
+                'extra' => '',
+                'comment' => '',
+                'character_set' => 'utf8mb4',
+                'generation_expression' => '',
+            ],
+        ],
+        'indexes' => [
+            'idx_code' => ['unique' => true, 'type' => 'BTREE', 'columns' => ['code'], 'sub_parts' => [null]],
+        ],
+        'foreign_keys' => [],
+    ];
+
+    $standard = ['tables' => ['samples' => $base + [
+        'auto_increment' => 5,
+        'data_length' => 1024,
+        'index_length' => 512,
+    ]]];
+    $current = ['tables' => ['samples' => $base + [
+        'auto_increment' => 999,
+        'data_length' => 2048,
+        'index_length' => 1024,
+    ]]];
+
+    $current['tables']['samples']['columns']['code']['generation_expression'] = 'upper(`code`)';
+    $current['tables']['samples']['columns']['code']['character_set'] = 'latin1';
+
+    expect($this->service->compareStructures($standard, $current)['table_differences'])->toBeEmpty();
+});
+
+test('backup schema comparison detects recorded generated expression and character set changes', function () {
+    $base = [
+        'columns' => [
+            'code' => [
+                'position' => 1,
+                'type' => 'varchar(32)',
+                'nullable' => false,
+                'default' => null,
+                'extra' => '',
+                'comment' => '',
+                'character_set' => 'utf8mb4',
+                'generation_expression' => '',
+            ],
+        ],
+        'indexes' => [],
+        'foreign_keys' => [],
+    ];
+    $standard = ['tables' => ['samples' => $base]];
+    $current = $standard;
+
+    $current['tables']['samples']['columns']['code']['generation_expression'] = 'upper(`code`)';
+    expect($this->service->compareBackupStructures($standard, $current)['table_differences']['samples']['modified_columns'])
+        ->toHaveKey('code');
+
+    $current['tables']['samples']['columns']['code']['generation_expression'] = '';
+    $current['tables']['samples']['columns']['code']['character_set'] = 'latin1';
+    expect($this->service->compareBackupStructures($standard, $current)['table_differences']['samples']['modified_columns'])
+        ->toHaveKey('code');
+});
+
+test('backup schema comparison accepts legacy columns without restore metadata', function () {
+    $standard = ['tables' => ['samples' => [
+        'columns' => [
+            'code' => [
+                'position' => 1,
+                'type' => 'varchar(32)',
+                'nullable' => false,
+                'default' => null,
+                'extra' => '',
+                'comment' => '',
+            ],
+        ],
+        'indexes' => [],
+        'foreign_keys' => [],
+    ]]];
+    $current = $standard;
+    $current['tables']['samples']['columns']['code']['character_set'] = 'utf8mb4';
+    $current['tables']['samples']['columns']['code']['generation_expression'] = 'upper(`code`)';
+
+    expect($this->service->compareBackupStructures($standard, $current)['table_differences'])->toBeEmpty();
+});
+
+test('semantic comparison ignores implicit foreign key index naming differences', function () {
+    $table = [
+        'columns' => [],
+        'foreign_keys' => [
+            'fk_order_user' => [
+                'columns' => ['user_id'],
+                'references' => ['table' => 'users', 'columns' => ['id']],
+                'on_delete' => 'CASCADE',
+                'on_update' => 'NO ACTION',
+            ],
+        ],
+    ];
+    $standard = ['tables' => ['orders' => $table + [
+        'indexes' => ['orders_user_id_foreign' => ['unique' => false, 'type' => 'BTREE', 'columns' => ['user_id'], 'sub_parts' => [null]]],
+    ]]];
+    $current = ['tables' => ['orders' => $table + [
+        'indexes' => ['fk_order_user_idx' => ['unique' => false, 'type' => 'BTREE', 'columns' => ['user_id'], 'sub_parts' => [null]]],
+    ]]];
+
+    expect($this->service->compareStructures($standard, $current)['table_differences'])->toBeEmpty();
+});
+
+test('semantic comparison detects every foreign key definition change', function (string $field, mixed $value) {
+    $foreignKey = [
+        'columns' => ['user_id'],
+        'references' => ['table' => 'users', 'columns' => ['id']],
+        'on_delete' => 'CASCADE',
+        'on_update' => 'NO ACTION',
+    ];
+    $standard = ['tables' => ['orders' => [
+        'columns' => [],
+        'indexes' => [],
+        'foreign_keys' => ['fk_order_user' => $foreignKey],
+    ]]];
+    $current = $standard;
+
+    match ($field) {
+        'columns' => $current['tables']['orders']['foreign_keys']['fk_order_user']['columns'] = $value,
+        'reference_table' => $current['tables']['orders']['foreign_keys']['fk_order_user']['references']['table'] = $value,
+        'reference_columns' => $current['tables']['orders']['foreign_keys']['fk_order_user']['references']['columns'] = $value,
+        'on_delete' => $current['tables']['orders']['foreign_keys']['fk_order_user']['on_delete'] = $value,
+        'on_update' => $current['tables']['orders']['foreign_keys']['fk_order_user']['on_update'] = $value,
+    };
+
+    $diff = $this->service->compareStructures($standard, $current);
+
+    expect($diff['table_differences']['orders']['modified_foreign_keys'])
+        ->toHaveKey('fk_order_user');
+})->with([
+    'columns' => ['columns', ['account_id']],
+    'referenced table' => ['reference_table', 'accounts'],
+    'referenced columns' => ['reference_columns', ['uuid']],
+    'on delete' => ['on_delete', 'RESTRICT'],
+    'on update' => ['on_update', 'CASCADE'],
+]);
+
+test('semantic comparison does not overwrite duplicate foreign key column indexes while pairing names', function () {
+    $foreignKeys = [
+        'fk_order_user' => [
+            'columns' => ['user_id'],
+            'references' => ['table' => 'users', 'columns' => ['id']],
+            'on_delete' => 'CASCADE',
+            'on_update' => 'NO ACTION',
+        ],
+    ];
+    $index = ['unique' => false, 'type' => 'BTREE', 'columns' => ['user_id'], 'sub_parts' => [null]];
+    $standard = ['tables' => ['orders' => [
+        'columns' => [],
+        'indexes' => ['implicit_old' => $index, 'explicit_user_id' => $index],
+        'foreign_keys' => $foreignKeys,
+    ]]];
+    $current = ['tables' => ['orders' => [
+        'columns' => [],
+        'indexes' => ['implicit_new' => $index, 'explicit_user_id' => $index, 'duplicate_user_id' => $index],
+        'foreign_keys' => $foreignKeys,
+    ]]];
+
+    $diff = $this->service->compareStructures($standard, $current);
+
+    expect($diff['table_differences']['orders']['missing_indexes'])
+        ->toHaveKey('implicit_old')
+        ->and($diff['table_differences']['orders']['extra_indexes'])
+        ->toHaveKeys(['implicit_new', 'duplicate_user_id']);
+});
+
+test('InnoDB 外键限制规则按等价语义比较且保留其他引擎差异', function (string $engine, string $field, string $currentAction, bool $hasDiff) {
+    $standard = ['tables' => ['users' => [
+        'engine' => $engine,
+        'columns' => [], 'indexes' => [],
+        'foreign_keys' => ['users_level_code_foreign' => [
+            'columns' => ['level_code'],
+            'references' => ['table' => 'user_levels', 'columns' => ['code']],
+            'on_delete' => 'RESTRICT', 'on_update' => 'RESTRICT',
+        ]],
+    ]]];
+    $current = $standard;
+    $current['tables']['users']['foreign_keys']['users_level_code_foreign'][$field] = $currentAction;
+    expect(! empty($this->service->compareStructures($standard, $current)['table_differences']))->toBe($hasDiff);
+    expect(! empty($this->service->compareStructures($current, $standard)['table_differences']))->toBe($hasDiff);
+})->with([
+    ['InnoDB', 'on_delete', 'NO ACTION', false],
+    ['InnoDB', 'on_update', 'NO ACTION', false],
+    ['InnoDB', 'on_delete', 'CASCADE', true],
+    ['InnoDB', 'on_update', 'SET NULL', true],
+    ['NDB', 'on_delete', 'NO ACTION', true],
+]);
+
+test('命令行检测和修复报告均展示真实外键修改', function (string $method) {
+    $standard = [
+        'columns' => ['level_code'],
+        'references' => ['table' => 'user_levels', 'columns' => ['code']],
+        'on_delete' => 'RESTRICT', 'on_update' => 'NO ACTION',
+    ];
+    $current = $standard;
+    $current['on_delete'] = 'CASCADE';
+    $diff = ['missing_tables' => [], 'extra_tables' => [], 'table_differences' => [
+        'users' => ['modified_foreign_keys' => [
+            'users_level_code_foreign' => ['standard' => $standard, 'current' => $current],
+        ]],
+    ]];
+    $command = new DatabaseStructureCommand($this->service);
+    $output = new BufferedOutput;
+    $command->setOutput(new OutputStyle(
+        new ArrayInput([]), $output,
+    ));
+    (new ReflectionMethod($command, $method))->invoke($command, $diff);
+    expect($output->fetch())->toContain('users.users_level_code_foreign')
+        ->toContain('ON DELETE CASCADE')->toContain('ON DELETE RESTRICT');
+})->with(['displayDiffReport', 'displayManualActions']);

@@ -39,10 +39,12 @@ class User extends BaseModel implements AuthenticatableContract, JWTSubject
         'status',
         'notification_settings',
         'auto_settings',
+        'admin_remark',
     ];
 
     protected $hidden = [
         'password',
+        'admin_remark',
     ];
 
     protected $casts = [

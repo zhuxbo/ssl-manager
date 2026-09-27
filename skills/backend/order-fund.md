@@ -11,7 +11,17 @@
 - **预览令牌与状态指纹**：预览绝不写库；无告警时签发 10 分钟令牌，绑定管理员、规范化参数及产品原始成本、周期、适用 SAN 类型、选中级别和选中级别现有价格的稳定指纹。正式执行必须在锁和事务内重读并复算，令牌无效、过期或指纹变化时零写入返回 `stale_preview`。
 - **写入范围**：默认模式只筛出缺失的“产品 + 级别 + 周期”唯一键并分批普通 `insert`，既有价格整行保留，禁止 `INSERT IGNORE`；强制模式只删除并重建本次选中级别。删除、插入和可选的级别倍率同步必须处于同一事务，并核对 `created + preserved = target` 或 `rebuilt = target`。
 - **全局变更锁**：初始化、产品价格新增/修改/删除/批量删除/单产品设置，以及会员级别危险变更，共用数据库命名锁 `ssl-manager:product-price:mutation`。`GET_LOCK(..., 0)` 和 `RELEASE_LOCK(...)` 必须在同一连接严格返回 1；回调成功、业务拒绝或异常都由 `finally` 释放，释放异常须 critical 记录、断开连接并 fail-closed。
+- **用户级别删除语义**：删除前在同一命名锁和事务内检查不可解除引用；`users.level_code` 基础绑定或 `site.sourceLevel` 注册映射存在时整个单项/批量删除拒绝且零写入。通过检查后，同事务将目标级别的 `users.custom_level_code` 置空、删除 `product_prices` 关联价格，再删除级别；批量语义始终是全有或全无。数据库外键同时固化最终边界：基础绑定 `RESTRICT`、定制绑定 `SET NULL`、级别价格 `CASCADE`，防止校验与删除并发时产生悬空引用。
+- **零元订单开关**：可选高级设置 `site.allowZeroAmountOrder` 不进入 Seeder，缺失时默认 `false`；如需开启，管理员手工新增 `boolean=true`。后端只有在值严格等于 `true` 时允许新购/续费和 ACME 的 0 元订单，并在创建、支付、提交及后台改价入口重复守卫；重签 `amount=0` 表示本次未增购 SAN，不属于零元新订单，仍允许。
 - **真实订单计价边界**：初始化不读取或解释 `standard_min/max`、`wildcard_min/max`、SAN 数量，也不改 `OrderUtil` 公式。`OrderUtil::getLatestCertAmount()` 继续从真实 `ProductPrice` 读取三类售价，按 SSL/ACME 各自的已购 SAN 来源和基础配额计算超额，重签只计算增购 SAN；对端测试必须用初始化实际落库的价格验证这些路径。
+- **原域名重签不增购**：SSL 重签在赠送域名补全、不可替换 SAN 的旧域名合并后比较最终域名集合，忽略顺序、大小写及 IDN 编码差异。集合不变时计费数量不超过订单已购数量，避免关闭赠送或同步重算证书数量导致重复收费；集合变化和续费仍按现有计价规则处理。
+
+## 零元重签直接待提交
+
+- `Action::reissue` 在原事务与前驱 CAS 内创建证书：金额为 0 直接 `pending`，非零保留 `unpaid`。原配额内重签金额为 0、不依赖当前价格行；增购 SAN 仍按实际价格计算，不按 channel 强制免费。
+- 零元路径同步更新已购域名数量（含免费增购），不检查余额、不调用支付、不创建零元交易。手工入口返回待提交，由原提交入口推进；自动重签仍创建延时 commit 任务。
+- V1/V2 与 Deploy 连续申请流程只对 `unpaid` 调支付；V1/V2 零元路径仍执行显式请求的 `issue_verify`，提交上游仍在外层事务之后。
+- 取消零元待提交重签沿用 `cancelPending`，不要求零元付款流水，不生成退款流水，恢复前驱证书。
 
 ## order 级互斥锁（方案 C：根治 3+ 并发 1205）
 
@@ -59,7 +69,7 @@ withMutex(string $key, Closure $cb, int $ttl = 60): mixed
 
 ### 与点 1 超时的关系（不可删）
 
-互斥锁 = 消掉"3+ 并发抢同一行"**高频主因**（应用层、依赖 Cache）；点 1 超时 = 兜住**残余 + 降级**（DB 层、确定性）。三条互斥盖不到、必须靠点 1：① 互斥只盖 commit×cancel，盖不住 commitCancel/sync 写回/markRenewed 撞 commit 持锁行；② Cache 故障 fail-open 退回 DB 锁串行，靠点 1 保证每个 ≤48s 不 1205；③ 应用层互斥替代不了存储层持锁硬上界。**删点 1 会破坏方案 C 降级安全**。
+互斥锁 = 消掉"3+ 并发抢同一行"**高频主因**（应用层、依赖 Cache）；点 1 超时 = 兜住**残余 + 降级**（DB 层、确定性）。三条互斥盖不到、必须靠点 1：① 互斥只盖 commit×cancel，盖不住 commitCancel/sync 写回/archive 撞 commit 持锁行；② Cache 故障 fail-open 退回 DB 锁串行，靠点 1 保证每个 ≤48s 不 1205；③ 应用层互斥替代不了存储层持锁硬上界。**删点 1 会破坏方案 C 降级安全**。
 
 ### 孤儿单（C vs 曾否决的 B）
 
@@ -78,7 +88,7 @@ withMutex(string $key, Closure $cb, int $ttl = 60): mixed
 **死锁防护分两组**：运行时防护层负责实际降频和自愈（schema 删除孪生索引、`Task::lockForMutation` 强制复合索引、`runTaskMutationTransaction` 重试）；finish-check 守卫层负责防回归（代码入口收口、schema 最终态、scope 接线）。
 
 1. **schema 删除孪生单列索引 `tasks_order_id_index`（根治退回目标）**：该单列索引与复合索引 `tasks(order_id, action, status)` 同首列、体积更小，是 MySQL 优化器退回、把 next-key lock 扩大到"整个 order_id 区间" → 1213 的现实目标；复合索引左前缀完全覆盖它，删除后全部按 order_id 的查询（Order/Acme Action、ReconcilePendingCommand、PurgeCommand、UserDataPurger 等）走复合索引。这是**唯一能覆盖 `deleteTask` 的 DELETE 路径**的手段——MySQL 单表 DELETE 不支持 `FORCE INDEX`，只能靠 schema 消灭退回目标。迁移 `2026_07_08_000001_drop_tasks_order_id_index`（幂等 `SHOW INDEX` 守卫、复合索引就位后才删，兼容 5.7/8.x/MariaDB）+ `create_tasks_table` 去掉 order_id 列的单列 `->index()`（保留复合索引）。**陷阱：删索引必须同步重导 `backend/database/structure.json`**——升级流程 migrate 后跑结构自修复（`DatabaseStructureService`）**只对 missing_indexes 生成 ADD、不删 extra**，structure.json 不同步会在升级时把孪生索引原样加回、白删。
-2. **`Task::lockForMutation` scope 强制复合索引（确定性兜底）+ `runTaskMutationTransaction` 统一重试**：锁查询下沉为 Task 模型 scope `scopeLockForMutation`（`forceIndex('tasks_order_action_status_index')` + where order_id + whereIn action + whereIn status(executing,stopped) + `select('id')` + `lockForUpdate`，常量 `Task::TASK_LOCK_INDEX`），Order/ACME 共用，调用形如 `Task::lockForMutation($orderId, ['commit','sync'])->get()`；即便某库残留孪生索引，`forceIndex` 仍确定性收窄间隙锁。重试助手抽为共享 trait `App\Traits\RunsTaskMutationTransaction`（`DB::transaction(..., 3)`，常量 `TASK_MUTATION_TRANSACTION_ATTEMPTS=3`），`Order\Action` 与 `Acme\Action` 都 use。**覆盖面（不含上游副作用的纯本地 task→order/acme 变更，全部走 attempts=3 重试）**：Order `sync` / `commitCancel(active)` / `batchCommitCancel(active)` / `revokeCancel` / `refundForSyncedCancel` / `cancelPending` / `prepareImmediateCancel` + ACME `revokeCancel` / `sync` / `commitCancel` / `batchCommitCancel`。controller 直调时本事务为最外层，重试只重跑锁+本地写回，安全。**`commit` 绝不加重试**——其上游下单 `$this->api->$action()` 在事务内（`Action.php`），重试 = 重复下单/重复扣费；且 commit 只锁 order 行、不执行 `tasks FOR UPDATE`，本就不是死锁受害者。**ACME `commitCancel`/`batchCommitCancel` 已纳入覆盖面**：commitCancel 纯本地（延时任务才调上游 cancel），改为先锁 cancel_acme task 再锁 acme 行，与 sync T7 取消退款分支（先锁 cancel_acme task 间隙锁、再锁 acme 行）统一为 task→acme 锁序；其自身虽不执行 `tasks FOR UPDATE`，但 `Task::create(cancel_acme)` 的插入意向锁会撞 sync 持有的间隙锁而卷入 1213 死锁环，故必须对齐（batchCommitCancel 逐条调 commitCancel 自动继承）。
+2. **`Task::lockForMutation` scope 强制复合索引（确定性兜底）+ `runTaskMutationTransaction` 统一重试**：锁查询下沉为 Task 模型 scope `scopeLockForMutation`（`forceIndex('tasks_order_action_status_index')` + where order_id + whereIn action + whereIn status(executing,stopped) + `select('id')` + `lockForUpdate`，常量 `Task::TASK_LOCK_INDEX`），Order/ACME 共用，调用形如 `Task::lockForMutation($orderId, ['commit','sync'])->get()`；即便某库残留孪生索引，`forceIndex` 仍确定性收窄间隙锁。重试助手抽为共享 trait `App\Traits\RunsTaskMutationTransaction`（`DB::transaction(..., 3)`，常量 `TASK_MUTATION_TRANSACTION_ATTEMPTS=3`），`Order\Action` 与 `Acme\Action` 都 use。**覆盖面（不含上游副作用的纯本地 task→order/acme 变更，全部走 attempts=3 重试）**：Order `sync` / `commitCancel(active)` / `batchCommitCancel(active)` / `archive` / `refundForSyncedCancel` / `cancelPending` / `prepareImmediateCancel` + ACME `revokeCancel` / `sync` / `commitCancel` / `batchCommitCancel`。controller 直调时本事务为最外层，重试只重跑锁+本地写回，安全。**`commit` 绝不加重试**——其上游下单 `$this->api->$action()` 在事务内（`Action.php`），重试 = 重复下单/重复扣费；且 commit 只锁 order 行、不执行 `tasks FOR UPDATE`，本就不是死锁受害者。**ACME `commitCancel`/`batchCommitCancel` 已纳入覆盖面**：commitCancel 纯本地（延时任务才调上游 cancel），改为先锁 cancel_acme task 再锁 acme 行，与 sync T7 取消退款分支（先锁 cancel_acme task 间隙锁、再锁 acme 行）统一为 task→acme 锁序；其自身虽不执行 `tasks FOR UPDATE`，但 `Task::create(cancel_acme)` 的插入意向锁会撞 sync 持有的间隙锁而卷入 1213 死锁环，故必须对齐（batchCommitCancel 逐条调 commitCancel 自动继承）。
 3. **CI 硬零守卫（`finish-check-greps.sh` Z12/Z13/Z14 + DB 最终态测试）**：Z12 要求 `backend/app` 内对 Task 模型的 `lockForUpdate` 只允许出现在 `app/Models/Task.php` 的 scope 定义与 `app/Jobs/TaskJob.php` 的主键锁两处，其余一律走 `Task::lockForMutation` scope；检查以 `Task::` 起头的语句聚合到分号，链中出现 `lockForUpdate` 即 FAIL（其他模型 Order/User/Acme 的 lockForUpdate 不以 `Task::` 起头 → 零误报；`Task::lockForMutation(...)` 调用点不含 `lockForUpdate` 字面量 → 不误命中）。Z13 用 `structure.json` 断言 tasks 表只允许 `tasks_order_action_status_index(order_id, action, status)` 这一条 `order_id` 首列索引，真实 DB 测试用 `SHOW INDEX FROM tasks` 覆盖迁移后最终态；Z14 校验 `scopeLockForMutation` 的 `TASK_LOCK_INDEX`、`forceIndex`、where/action/status、`select('id')`、`lockForUpdate` 接线完整。脚本已在 `ci.yml` 强制执行（fail-closed）。
 
 ### V1/V2 立即取消防重复与锁序
@@ -135,11 +145,11 @@ pending 订单「到顶(maxed-out) / 产品缺失(product-missing)」判据是 r
 
 ### O1 AutoRenew 续费/重签事务化（`AutoRenewCommand::processOrder`）
 
-把「创建续费/重签 + `pay(commit=false)`」两步包进单个 `DB::transaction` 闭包保证原子：pay 段 charge 失败时，renew 已翻转的旧证书（active→renewed）+ 新订单/证书一并回滚，杜绝「旧证书 renewed 终态 + 新单卡 unpaid」的静默孤儿（P0-1 路径 1）。延时 commit 任务留**事务外** `createTask($id,'commit',$delay)`（= V2「commit 移出事务」等价）。
+把「创建续费 + `pay(commit=false)`」两步包进单个 `DB::transaction` 闭包保证原子：pay 段 charge 失败时，renew 已翻转的旧证书（active→renewed）+ 新订单/证书一并回滚，杜绝「旧证书 renewed 终态 + 新单卡 unpaid」的静默孤儿（P0-1 路径 1）。零元重签在同一外层事务内直接落 `pending`，跳过支付。延时 commit 任务留**事务外** `createTask($id,'commit',$delay)`（= V2「commit 移出事务」等价）。
 
 - **ApiResponseException 流控**：`renew()/reissue()` 的 `success()` 抛 `ApiResponseException`（带 `data.order_id`）是**成功信号**——吞掉取 id；业务失败（无 order_id）rethrow `\Exception` 逸出闭包触发回滚（**勿把成功路径当失败回滚**）。pay 段 `code!==1` rethrow 逸出。
 - **attempts=1 是必需约束、非从简**：`renew()/reissue()` 入口 `checkDuplicate` 是 `Cache::add`（SETNX，10s TTL）且回滚不清缓存；若事务级重试（attempts>1），重入命中自己首轮残留键 → error → 必自败。故用 `DB::transaction` 默认 attempts=1，勿改大；死锁 → 回滚 → `processOrders` catch 兜底通知 → 次日自愈。
-- **锁内无上游 HTTP（非「零上游 HTTP」）**：new/reissue 的 SQL 与 charge 纯本地扣费在源订单行锁内；`initParams` 的 CSR keygen（openssl fork）与**委托 TXT 上游写（`ProxyDNS`，确属上游 HTTP）**都落在**首个源订单行锁之前**（故不违反「锁内不做上游 HTTP」红线，而非闭包内没有上游 HTTP）；含上游的 commit 走事务外（V1/V2 延时任务、Deploy 同步于 `DB::commit()` 后，见 O3-B）。
+- **锁内无上游 HTTP（非「零上游 HTTP」）**：new/reissue 的 SQL 与 charge 纯本地扣费在源订单行锁内；`initParams` 的 CSR keygen（openssl fork）与**委托 TXT 上游 DNS 提供商写入（确属上游 HTTP）**都落在**首个源订单行锁之前**（故不违反「锁内不做上游 HTTP」红线，而非闭包内没有上游 HTTP）；含上游的 commit 走事务外（V1/V2 延时任务、Deploy 同步于 `DB::commit()` 后，见 O3-B）。
 
 ### 续费/重签锁下沉（防并发双开）
 
@@ -162,7 +172,7 @@ AutoRenew 续费预检前 `$user->refresh()`（O2）：`getRenewOrders` 一次�
 active 续费分支**完整移植** V2 范式（非「只包事务」）：
 
 - **O3-A**：`pay(false)` 进 `withMutex(order_mutate_$id)` 事务，与 renew/reissue 同事务原子（charge 纯本地扣费、无上游、无嵌套 mutex → 安全嵌套），charge 失败整体回滚，杜绝「旧证书终态 + 新单卡 unpaid」孤儿（P0-1 路径 2）。
-- **O3-A′（锁纪律收口）**：`withMutex` 事务内**不再对订单行显式预锁**（原 `Order::...->whereHas('user')->lock()->find()` + active 守卫已移除）。renew/reissue 的 `initParams`（CSR keygen + 委托 TXT 上游 DNS 写 `ProxyDNS`，逐 token 15s）在其**内部源订单行锁之前**执行；防并发双开的串行主体是 renew(`persistOrder`)/reissue 内部「源订单行锁 + 前驱翻转 affected-rows CAS」（**CAS 是锁定写 current read，不受 initParams 前置一致读建立的 RR view 影响**，与 V1/V2「不套 mutex 靠内部 CAS」同源，无需外层再叠预锁）。旧预锁把 keygen + 委托 DNS HTTP 全罩进订单行锁内——DNSPod 劣化时 ≥4 token 即超 `innodb_lock_wait_timeout=50` → 同订单 sync/renew 抢锁 1205，违反「锁内不做上游 HTTP」红线。移除后 Deploy 与 V2「CSR/委托生成先于行锁」范式一致（并发前驱翻 renewed 由内部 CAS 挡下、报「订单已续费」`code=0`，不双开）。
+- **O3-A′（锁纪律收口）**：`withMutex` 事务内**不再对订单行显式预锁**（原 `Order::...->whereHas('user')->lock()->find()` + active 守卫已移除）。renew/reissue 的 `initParams`（CSR keygen + 委托 TXT 上游 DNS 提供商写入，逐 token 15s）在其**内部源订单行锁之前**执行；防并发双开的串行主体是 renew(`persistOrder`)/reissue 内部「源订单行锁 + 前驱翻转 affected-rows CAS」（**CAS 是锁定写 current read，不受 initParams 前置一致读建立的 RR view 影响**，与 V1/V2「不套 mutex 靠内部 CAS」同源，无需外层再叠预锁）。旧预锁把 keygen + 委托 DNS HTTP 全罩进订单行锁内——DNSPod 劣化时 ≥4 token 即超 `innodb_lock_wait_timeout=50` → 同订单 sync/renew 抢锁 1205，违反「锁内不做上游 HTTP」红线。移除后 Deploy 与 V2「CSR/委托生成先于行锁」范式一致（并发前驱翻 renewed 由内部 CAS 挡下、报「订单已续费」`code=0`，不双开）。
 - **O3-B**：`commit` 移到互斥锁**外**（commit 自取同键 mutex，锁内二次抢必自死锁；且 commit 含上游 HTTP，锁内不做上游调用红线）。
 - **O3-C**：`getData('commit')` 段 SDK `code=0` 超时/失败**不冒泡**（`return []`）——订单停 pending、已扣费保留，返 200+pending 展示态（下游轮询容忍，见 deploy.yaml），权威自愈 = ReconcilePendingCommand 主扫描（无 channel 过滤）+ 下游 pull `get` 条件式加速。
 - **M-2 知情不对称**：unpaid resume 分支走 `pay(autoCommit=true)`，其 `MutationBusyException` 经 `method='pay'≠'commit'` 仍上抛 503——与 active 分支 commit 段吞不对称；既有行为、有意不改（O3 范围仅 active 分支 + getData commit 段），下游重试即收敛。

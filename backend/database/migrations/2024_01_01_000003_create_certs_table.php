@@ -53,7 +53,7 @@ return new class extends Migration
                     'processing',
                     'approving',
                     'active',
-                    'failed',
+                    'archived',
                     'cancelling',
                     'cancelled',
                     'revoked',

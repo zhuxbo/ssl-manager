@@ -1,0 +1,22 @@
+{
+    "test": "P\\Tests\\Feature\\Http\\Controllers\\DcvControllerTest::__pest_evaluable_公开回落拒绝批量工作放大",
+    "version": "1.0.0",
+    "calls": [
+        {
+            "method": "POST",
+            "uri_pattern": "/api/dcv/verify",
+            "request_keys": [
+                "0",
+                "1"
+            ],
+            "response_status": "2xx",
+            "response_schema": {
+                "code": "integer",
+                "msg": "string",
+                "errors": {
+                    "items": "array<string>"
+                }
+            }
+        }
+    ]
+}

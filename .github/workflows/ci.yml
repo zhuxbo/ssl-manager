@@ -7,7 +7,7 @@ on:
     branches: [main, dev]
 
 # 仅支持 mysql；CI 矩阵简化为单 driver。
-# 测试容器：mysql:5.7（与本地 paratest 容器对齐，行为一致）
+# 本机仅跑默认数据库；MySQL 5.7 / 8.0 兼容性由此 CI 矩阵验证。
 
 jobs:
   backend-core-test:
@@ -17,10 +17,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 生产存在 5.7 与 8.x：5.7 跑全 PHP 版本，再补一组 PHP 8.4 × mysql 8.4（避免笛卡尔积爆炸）
+        # 保留 PHP 版本覆盖，MySQL 8.0 以 PHP 8.4 单点验证，避免笛卡尔积。
         include:
           - { php: '8.3', mysql: '5.7', collation: 'utf8mb4_unicode_520_ci' }
           - { php: '8.4', mysql: '5.7', collation: 'utf8mb4_unicode_520_ci' }
+          - { php: '8.4', mysql: '8.0', collation: 'utf8mb4_0900_ai_ci' }
           - { php: '8.4', mysql: '8.4', collation: 'utf8mb4_0900_ai_ci' }
           - { php: '8.5', mysql: '8.4', collation: 'utf8mb4_0900_ai_ci' }
 
@@ -104,6 +105,7 @@ jobs:
       matrix:
         include:
           - { mysql: '5.7', collation: 'utf8mb4_unicode_520_ci' }
+          - { mysql: '8.0', collation: 'utf8mb4_0900_ai_ci' }
           - { mysql: '8.4', collation: 'utf8mb4_0900_ai_ci' }
 
     services:
@@ -186,6 +188,7 @@ jobs:
       matrix:
         include:
           - { mysql: '5.7', collation: 'utf8mb4_unicode_520_ci' }
+          - { mysql: '8.0', collation: 'utf8mb4_0900_ai_ci' }
           - { mysql: '8.4', collation: 'utf8mb4_0900_ai_ci' }
 
     services:
@@ -268,6 +271,7 @@ jobs:
       matrix:
         include:
           - { mysql: '5.7', collation: 'utf8mb4_unicode_520_ci' }
+          - { mysql: '8.0', collation: 'utf8mb4_0900_ai_ci' }
           - { mysql: '8.4', collation: 'utf8mb4_0900_ai_ci' }
 
     services:
@@ -355,6 +359,7 @@ jobs:
       matrix:
         include:
           - { mysql: '5.7', collation: 'utf8mb4_unicode_520_ci' }
+          - { mysql: '8.0', collation: 'utf8mb4_0900_ai_ci' }
           - { mysql: '8.4', collation: 'utf8mb4_0900_ai_ci' }
 
     services:
@@ -460,7 +465,7 @@ jobs:
   # - push to main / release tag 时触发（PR 不阻断，避免功能开发卡住）
   # - 跑前已有 fixture 进 git，直接 compare；如缺 fixture 由维护者手工 capture 并 commit
   compat-snapshot:
-    name: API Snapshot Compat (mysql / PHP 8.3)
+    name: API Snapshot Compat (mysql ${{ matrix.mysql }} / PHP 8.3)
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
 
@@ -468,6 +473,7 @@ jobs:
       matrix:
         include:
           - { mysql: '5.7', collation: 'utf8mb4_unicode_520_ci' }
+          - { mysql: '8.0', collation: 'utf8mb4_0900_ai_ci' }
 
     services:
       mysql:
@@ -538,13 +544,13 @@ jobs:
 
       - name: Run snapshot compare
         working-directory: backend
-        run: composer test:snapshot
+        run: composer run-script --timeout=0 test:snapshot
 
       - name: Upload diff report on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: snapshot-diff-report
+          name: snapshot-diff-report-mysql${{ matrix.mysql }}
           path: backend/tests/Compat/diff-report.md
           if-no-files-found: ignore
 
@@ -712,3 +718,6 @@ jobs:
 
       - name: upgrade 入口残留升级状态处置演练
         run: bash deploy/test/test-upgrade-stale-status.sh
+
+      - name: 升级版本号延后发布回归
+        run: bash deploy/test/test-upgrade-version.sh

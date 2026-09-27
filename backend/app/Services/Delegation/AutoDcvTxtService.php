@@ -4,9 +4,12 @@ declare(strict_types=1);
 
 namespace App\Services\Delegation;
 
+use App\Models\Cert;
+use App\Models\CnameDelegation;
 use App\Models\Order;
 use App\Services\Order\Utils\DomainUtil;
 use Illuminate\Support\Facades\Log;
+use Throwable;
 
 /**
  * 自动 DCV TXT 写入服务
@@ -14,6 +17,13 @@ use Illuminate\Support\Facades\Log;
  */
 class AutoDcvTxtService
 {
+    private ?string $lastError = null;
+
+    public function lastError(): ?string
+    {
+        return $this->lastError;
+    }
+
     protected CnameDelegationService $delegationService;
 
     protected DelegationDnsService $dnsService;
@@ -24,6 +34,78 @@ class AutoDcvTxtService
         $this->dnsService = new DelegationDnsService;
     }
 
+    /** 同步离开 processing 后，按原证书目标和 TXT 值清理；失败留给每日任务补漏。 */
+    public function cleanupCertificate(Cert $cert): void
+    {
+        try {
+            $validation = $cert->validation ?? [];
+            if (! collect($validation)->contains(fn ($item) => ! empty($item['delegation_id']))) {
+                return;
+            }
+
+            $processing = Cert::where('status', 'processing')->where('validation', 'like', '%delegation_id%')
+                ->pluck('validation')->flatten(1);
+            $delegations = CnameDelegation::whereIn('id', collect($validation)->merge($processing)
+                ->pluck('delegation_id')->filter()->unique())->get()->keyBy('id');
+            $targetFor = function (array $item) use ($delegations): ?string {
+                $delegation = $delegations->get($item['delegation_id'] ?? null);
+                if (! $delegation) {
+                    return null;
+                }
+                $target = $item['delegation_target'] ?? null;
+                $domain = $target === null || $target === ''
+                    ? $delegation->proxy_domain
+                    : $this->delegationService->proxyDomainFromTarget($delegation, $target);
+
+                return $domain ? $delegation->label.'.'.$domain : null;
+            };
+            $recordsByDomain = [];
+            $cleaned = [];
+            foreach ($validation as $item) {
+                $target = $targetFor($item);
+                $value = $item['value'] ?? null;
+                if ($target === null || ! is_string($value) || $value === '') {
+                    continue;
+                }
+                if ($processing->contains(fn ($other) => ($other['value'] ?? null) === $value
+                    && $targetFor($other) === $target)) {
+                    continue;
+                }
+
+                [$label, $domain] = explode('.', $target, 2);
+                try {
+                    $recordsByDomain[$domain] ??= $this->dnsService->getAllTxtRecords($domain);
+                    $ids = collect($recordsByDomain[$domain])->filter(fn ($record) => $record['name'] === $label && $record['value'] === $value)->pluck('id')->all();
+                    $this->dnsService->deleteRecords($domain, $ids);
+                    $cleaned[$target][$value] = true;
+                } catch (Throwable $e) {
+                    Log::error('同步后委托 TXT 清理失败', [
+                        'cert_id' => $cert->id,
+                        'proxy_domain' => $domain,
+                        'exception' => $e::class,
+                    ]);
+                }
+            }
+
+            $current = Cert::select('id', 'validation')->find($cert->id);
+            if ($current && $cleaned !== []) {
+                $items = $current->validation ?? [];
+                foreach ($items as &$item) {
+                    if (isset($cleaned[$targetFor($item) ?? ''][$item['value'] ?? ''])) {
+                        unset($item['auto_txt_written'], $item['auto_txt_written_at']);
+                    }
+                }
+                unset($item);
+                $current->update(['validation' => $items]);
+            }
+        } catch (Throwable $e) {
+            Log::error('同步后委托 TXT 清理失败', [
+                'cert_id' => $cert->id,
+                'exception' => $e::class,
+            ]);
+        }
+    }
+
     /**
      * 处理订单的自动 TXT 写入（处理 validation 数组）
      *
@@ -32,9 +114,12 @@ class AutoDcvTxtService
      */
     public function handleOrder(Order $order): bool
     {
+        $this->lastError = null;
         $cert = $order->latestCert;
 
         if ($cert->dcv['method'] !== 'txt' || ! ($cert->dcv['is_delegate'] ?? false)) {
+            $this->lastError = '订单未使用 TXT 委托验证';
+
             return false;
         }
 
@@ -42,6 +127,7 @@ class AutoDcvTxtService
         $validation = $cert->validation;
 
         if (empty($validation)) {
+            $this->lastError = '订单验证记录为空';
             Log::info("订单 #$order->id validation为空或不是数组", [
                 'order_id' => $order->id,
                 'cert_id' => $cert->id,
@@ -65,12 +151,13 @@ class AutoDcvTxtService
                 $tokens = $data['tokens'];
 
                 $isSuccess = $this->dnsService->setTxtByLabel(
-                    $delegation->proxy_zone,
+                    $data['proxy_domain'],
                     $delegation->label,
                     $tokens
                 );
 
                 if (! $isSuccess) {
+                    $this->lastError = $this->dnsService->lastError() ?? '委托 TXT 写入失败';
                     Log::error("订单 #$order->id 批量写入TXT失败", [
                         'order_id' => $order->id,
                         'delegation_id' => $delegation->id,
@@ -88,6 +175,8 @@ class AutoDcvTxtService
 
             return true;
         }
+
+        $this->lastError ??= '未找到可写入的委托 TXT 记录';
 
         return false;
     }
@@ -117,7 +206,7 @@ class AutoDcvTxtService
         $cert = $order->latestCert;
         $validation = $cert->validation;
 
-        // 按delegation分组的TXT记录集合，key为delegation_id，value包含delegation对象、tokens数组和validationIndexes数组
+        // 同一逻辑委托可能存在历史目标快照，必须按委托与目标域共同分组。
         $txtRecordsByDelegation = [];
         // 更新后的validation数组，包含已标记auto_txt_written的记录
         $updatedValidation = [];
@@ -125,8 +214,7 @@ class AutoDcvTxtService
         $hasChanges = false;
 
         foreach ($validation as $index => $item) {
-            // 跳过已处理的
-            if (isset($item['auto_txt_written']) && $item['auto_txt_written'] === true) {
+            if (($item['auto_txt_written'] ?? false) === true) {
                 $updatedValidation[$index] = $item;
 
                 continue;
@@ -137,6 +225,7 @@ class AutoDcvTxtService
             $host = $item['host'] ?? '';
 
             if (empty($domain) || empty($value)) {
+                $this->lastError = '验证记录缺少域名或 TXT 值';
                 Log::warning("订单 #$order->id validation[$index] 配置不完整", [
                     'order_id' => $order->id,
                     'index' => $index,
@@ -154,6 +243,7 @@ class AutoDcvTxtService
             if (empty($host)) {
                 $dcvHost = $cert->dcv['dns']['host'] ?? '';
                 if (empty($dcvHost)) {
+                    $this->lastError = '验证记录缺少主机记录';
                     Log::warning("订单 #$order->id validation[$index] 缺少 host 且 dcv.dns.host 为空", [
                         'order_id' => $order->id,
                         'index' => $index,
@@ -178,6 +268,7 @@ class AutoDcvTxtService
             [$prefix, $zone] = $this->splitPrefixAndZone($host);
 
             if (! $prefix || ! $zone) {
+                $this->lastError = '验证主机记录格式或前缀无效';
                 Log::warning("订单 #$order->id validation[$index] 无法解析host", [
                     'order_id' => $order->id,
                     'index' => $index,
@@ -196,13 +287,23 @@ class AutoDcvTxtService
             // 派生的 prefix 建）：若订单创建后 product.ca 改指别家 CA，用实时 product->ca 会以新
             // prefix 查不到旧委托 → 静默 miss、TXT 不写。回落 product->ca 兜 legacy 订单缺 dcv['ca']。
             $ca = strtolower($cert->dcv['ca'] ?? $order->product->ca ?? '');
-            $delegation = $this->delegationService->findDelegation(
-                $order->user_id,
-                $zone,
-                $ca
-            );
+            $delegationId = $item['delegation_id'] ?? null;
+            $delegation = is_numeric($delegationId) && (int) $delegationId > 0
+                ? CnameDelegation::where('user_id', $order->user_id)->find((int) $delegationId)
+                : null;
+
+            // 正常委托订单始终带创建期写入的 delegation_id；仅旧数据缺失或引用失效时，
+            // 才按既有 CA 解析规则回落查找逻辑委托。
+            if (! $delegation) {
+                $delegation = $this->delegationService->findDelegation(
+                    $order->user_id,
+                    $zone,
+                    $ca
+                );
+            }
 
             if (! $delegation) {
+                $this->lastError = '未匹配到委托配置';
                 // 未命中委托配置（源分歧或真实配置缺口两种成因）：记 warning surface 静默 miss
                 Log::warning("订单 #$order->id validation[$index] 未命中委托配置，TXT 不写", [
                     'order_id' => $order->id,
@@ -216,11 +317,27 @@ class AutoDcvTxtService
                 continue;
             }
 
-            // 按delegation分组收集token
-            $delegationKey = $delegation->id;
+            $target = $item['delegation_target'] ?? null;
+            $writeProxyDomain = is_string($target) && $target !== ''
+                ? $this->delegationService->proxyDomainFromTarget($delegation, $target)
+                : $delegation->proxy_domain;
+            if ($writeProxyDomain === null) {
+                $this->lastError = '委托目标无效';
+                Log::warning("订单 #$order->id validation[$index] 委托目标无效，TXT 不写", [
+                    'order_id' => $order->id,
+                    'delegation_id' => $delegation->id,
+                ]);
+                $updatedValidation[$index] = $item;
+
+                continue;
+            }
+
+            // 按委托分组并使用 validation 冻结的目标域写入。
+            $delegationKey = $delegation->id.'|'.$writeProxyDomain;
             if (! isset($txtRecordsByDelegation[$delegationKey])) {
                 $txtRecordsByDelegation[$delegationKey] = [
                     'delegation' => $delegation,
+                    'proxy_domain' => $writeProxyDomain,
                     'tokens' => [],
                     'validationIndexes' => [],
                 ];
@@ -229,12 +346,12 @@ class AutoDcvTxtService
             $txtRecordsByDelegation[$delegationKey]['tokens'][] = $token;
             $txtRecordsByDelegation[$delegationKey]['validationIndexes'][] = $index;
 
-            // 标记已处理
             $item['auto_txt_written'] = true;
             $item['auto_txt_written_at'] = now()->toDateTimeString();
+            $hasChanges = true;
+
             $item['delegation_id'] = $delegation->id;
             $updatedValidation[$index] = $item;
-            $hasChanges = true;
         }
 
         return [$txtRecordsByDelegation, $updatedValidation, $hasChanges];
@@ -249,7 +366,8 @@ class AutoDcvTxtService
     public function allTxtRecordsProcessed(array $validation): bool
     {
         foreach ($validation as $item) {
-            if (! isset($item['auto_txt_written']) || $item['auto_txt_written'] !== true) {
+            if (! isset($item['auto_txt_written'])
+                || $item['auto_txt_written'] !== true) {
                 return false;
             }
         }

@@ -66,6 +66,22 @@ function createAcmeProductPrice(int $productId, $user, string $price = '100.00')
     ]);
 }
 
+function configureAcmeZeroAmountOrderPolicy(?bool $enabled): void
+{
+    $group = SettingGroup::firstOrCreate(['name' => 'site'], ['title' => '站点设置', 'weight' => 1]);
+    Setting::where('group_id', $group->id)->where('key', 'allowZeroAmountOrder')->delete();
+    if ($enabled !== null) {
+        Setting::create([
+            'group_id' => $group->id,
+            'key' => 'allowZeroAmountOrder',
+            'type' => 'boolean',
+            'value' => $enabled,
+            'weight' => 0,
+        ]);
+    }
+    Setting::clearGroupCache($group->id);
+}
+
 /**
  * 断言 ApiResponseException 包含指定消息
  */
@@ -166,6 +182,62 @@ test('new creates unpaid order', function () {
             'remark' => 'test remark',
         ]);
 });
+
+test('ACME 零元订单默认拒绝且显式开启后允许创建支付', function (bool $enabled) {
+    Queue::fake();
+    configureAcmeZeroAmountOrderPolicy($enabled ? true : null);
+    $user = $this->createTestUser(['balance' => '0.00']);
+    $product = $this->createTestProduct(['product_type' => Product::TYPE_ACME]);
+    createAcmeProductPrice($product->id, $user, '0.00');
+    ProductPrice::where('product_id', $product->id)->update([
+        'alternative_standard_price' => '0.00',
+        'alternative_wildcard_price' => '0.00',
+    ]);
+
+    if ($enabled) {
+        $acme = createAcmeOrder($user, $product);
+        expectApiSuccess(fn () => $this->service->pay($acme->id, false));
+        expect($acme->fresh()->status)->toBe(Acme::STATUS_PENDING);
+    } else {
+        expectApiError(
+            fn () => $this->service->new([
+                'user_id' => $user->id,
+                'product_id' => $product->id,
+                'period' => 12,
+                'contact_email' => $user->email,
+            ]),
+            '系统未启用零元订单',
+        );
+        expect(Acme::where('product_id', $product->id)->exists())->toBeFalse();
+    }
+})->with([
+    '默认关闭' => [false],
+    '显式开启' => [true],
+]);
+
+test('既有 ACME 零元订单在支付和提交入口仍被默认策略拦截', function (string $status, string $method) {
+    configureAcmeZeroAmountOrderPolicy(null);
+    $user = $this->createTestUser(['balance' => '0.00']);
+    $product = $this->createTestProduct(['product_type' => Product::TYPE_ACME]);
+    $acme = Acme::factory()->create([
+        'user_id' => $user->id,
+        'product_id' => $product->id,
+        'status' => $status,
+        'amount' => '0.00',
+        'contact_email' => $user->email,
+    ]);
+
+    expectApiError(
+        fn () => $method === 'pay'
+            ? $this->service->pay($acme->id, false)
+            : $this->service->commit($acme->id),
+        '系统未启用零元订单',
+    );
+    expect($acme->fresh()->status)->toBe($status);
+})->with([
+    '支付入口' => [Acme::STATUS_UNPAID, 'pay'],
+    '提交入口' => [Acme::STATUS_PENDING, 'commit'],
+]);
 
 test('new generates unique refer_id', function () {
     $user = $this->createTestUser(['balance' => '500.00']);
@@ -1092,7 +1164,7 @@ test('sync 10秒内缓存不重复请求', function () {
     ]);
 
     // 设置缓存模拟已请求
-    Cache::set("acme_sync_$acme->id", time(), 10);
+    Cache::store('runtime')->set("acme_sync_$acme->id", time(), 10);
 
     // force=true 时静默返回
     $this->service->sync($acme->id, true);
@@ -1162,7 +1234,7 @@ test('sync 终态守卫：本地 cancelled 不被上游滞后 active 复活', fu
     expect($cancelTx)->not->toBeNull();
 
     // 上游滞后返回 active，绕过 10s 缓存（cancel 已写过），sync 应拒绝把 cancelled 改回 active
-    Cache::forget("acme_sync_$acme->id");
+    Cache::store('runtime')->forget("acme_sync_$acme->id");
     Http::fake([
         'fake-gateway.test/*' => Http::response(['code' => 1, 'data' => ['status' => 'active']]),
     ]);
@@ -1175,7 +1247,7 @@ test('sync 终态守卫：本地 cancelled 不被上游滞后 active 复活', fu
 });
 
 test('sync 上游失败回滚防抖占位，重试能再次调用上游', function () {
-    // #19：占位 Cache::add 在上游调用之前；上游失败时占位若不回滚，10s 内重试会命中占位
+    // #19：占位 Cache::store('runtime')->add 在上游调用之前；上游失败时占位若不回滚，10s 内重试会命中占位
     // 直接返回 success（把失败伪装成成功）。修复后失败应回滚占位，下次重试真正重调上游。
     $user = $this->createTestUser(['balance' => '500.00']);
     $product = $this->createTestProduct(['product_type' => Product::TYPE_ACME, 'source' => 'default']);
@@ -1199,7 +1271,7 @@ test('sync 上游失败回滚防抖占位，重试能再次调用上游', functi
     expectApiError(fn () => $this->service->sync($acme->id), '上游同步失败');
 
     // 占位已被回滚：缓存键不应存在
-    expect(Cache::has("acme_sync_$acme->id"))->toBeFalse();
+    expect(Cache::store('runtime')->has("acme_sync_$acme->id"))->toBeFalse();
 
     // 第二次：占位已清，上游恢复后重试应真正重调上游并写回状态
     expectApiSuccess(fn () => $this->service->sync($acme->id));
@@ -2215,7 +2287,7 @@ test('T7：已退款的 cancelling 单再 sync → 预检跳过退款、只补�
     $acme->update(['status' => Acme::STATUS_CANCELLING]);
 
     // 再 sync cancelled：预检 alreadyRefunded=true → 跳过退款，只补终态删任务
-    Cache::forget("acme_sync_$acme->id");
+    Cache::store('runtime')->forget("acme_sync_$acme->id");
     Http::fake(['fake-gateway.test/*' => Http::response(['code' => 1, 'data' => ['status' => 'cancelled']])]);
     $this->service->sync($acme->id, true);
 
@@ -2268,7 +2340,7 @@ test('T7 K6：并发 cancel 已退款置 cancelled → sync 上游终态不双�
     expect(Transaction::where('transaction_id', $acme->id)->where('type', Transaction::TYPE_ACME_CANCEL)->count())->toBe(1);
 
     // sync 上游 cancelled：本地已 cancelled（localTerminal）→ T7 判据 status===cancelling 不命中 → 不双退不复活
-    Cache::forget("acme_sync_$acme->id");
+    Cache::store('runtime')->forget("acme_sync_$acme->id");
     Http::fake(['fake-gateway.test/*' => Http::response(['code' => 1, 'data' => ['status' => 'cancelled']])]);
     $this->service->sync($acme->id, true);
 

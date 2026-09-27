@@ -623,7 +623,8 @@ import {
 import { get as getRootDomain } from "psl";
 import * as OrderApi from "@/api/order";
 import ValidationMethods from "./validationMethods.vue";
-import axios, { AxiosResponse } from "axios";
+import axios from "axios";
+import { queryDnsWithFallback, verifyDcvWithFallback } from "@shared/utils/dcv";
 import { debounce } from "lodash-es";
 import { useRoute } from "vue-router";
 import { message } from "@shared/utils";
@@ -838,98 +839,55 @@ async function verifyCname(
   host: string,
   expectedTarget: string
 ) {
-  const dnsToolsHosts = getConfig()?.DnsTools || [];
-
-  let lastMsg = "";
-  for (const baseUrl of dnsToolsHosts) {
-    try {
-      const response = await axios.post(
-        `${baseUrl}/api/dcv/verify`,
-        [{ domain, method: "cname", host, value: expectedTarget }],
-        { timeout: 10000 }
-      );
-
-      // code=1 时数据在 data.results，code=0 时在 errors 数组
-      let result = response.data?.data?.results?.[domain];
-      if (!result && response.data?.errors?.length) {
-        result = response.data.errors.find((e: any) => e.domain === domain);
-      }
-      if (result) {
-        return {
-          detected_value: result.value || "",
-          checked: result.matched === "true",
-          error: result.matched === "false" ? "验证未通过" : ""
-        };
-      }
-      if (response.data?.msg)
-        lastMsg = response.data.msg.replace(
-          "批量验证失败：部分或全部验证未通过",
-          "验证未通过"
-        );
-    } catch (error) {
-      console.debug(`Failed to connect to ${baseUrl}, trying next...`);
-      continue;
-    }
-  }
+  const results = await verifyDcvWithFallback(
+    getConfig()?.DnsTools || [],
+    [{ domain, method: "cname", host, value: expectedTarget }],
+    async (url, data, timeout) =>
+      (await axios.post(url, data, { timeout })).data
+  );
+  const result = results[domain];
   return {
-    checked: false,
-    detected_value: "",
-    error: lastMsg || "检测服务不可用"
+    detected_value: result.value || "",
+    checked:
+      result.matched === "unknown" ? undefined : result.matched === "true",
+    error: result.error || (result.matched === "false" ? "验证未通过" : "")
   };
 }
 
 // 委托验证 TXT 记录检测函数（使用 /api/dns/query 原始查询）
 async function verifyDelegationTxt(targetFqdn: string, expectedValue: string) {
-  const dnsToolsHosts = getConfig()?.DnsTools || [];
-
-  const expectedLower = expectedValue.toLowerCase().trim();
-  for (const baseUrl of dnsToolsHosts) {
-    try {
-      const response = await axios.post(
-        `${baseUrl}/api/dns/query`,
-        { domain: targetFqdn, type: "TXT" },
-        { timeout: 10000 }
-      );
-
-      if (response.data?.code !== 1) {
-        return {
-          detected_value: "",
-          checked: false,
-          error: "未检测到 TXT 记录"
-        };
-      }
-
-      const records = response.data.data?.records || [];
-      const txtValues = records
-        .filter((r: any) => r.type === "TXT" && r.value)
-        .map((r: any) => r.value.replace(/^"|"$/g, "").trim());
-
-      if (txtValues.length === 0) {
-        return {
-          detected_value: "",
-          checked: false,
-          error: "未检测到 TXT 记录"
-        };
-      }
-
-      const matched = txtValues.some(
-        (v: string) => v.toLowerCase() === expectedLower
-      );
+  try {
+    const data = await queryDnsWithFallback(
+      getConfig()?.DnsTools || [],
+      { domain: targetFqdn, type: "TXT" },
+      async (url, body, timeout) =>
+        (await axios.post(url, body, { timeout })).data
+    );
+    if (data?.code !== 1 || !Array.isArray(data.data?.records)) {
       return {
-        detected_value: txtValues.join(", "),
-        checked: matched,
-        error: matched ? "" : "TXT 记录不匹配"
+        checked: undefined,
+        detected_value: "",
+        error: data?.msg || "未获取到 DNS 查询结果"
       };
-    } catch (error) {
-      console.debug(`Failed to connect to ${baseUrl}, trying next...`);
-      continue;
     }
+    const txtValues = data.data.records
+      .filter((r: any) => r?.type === "TXT" && typeof r.value === "string")
+      .map((r: any) => r.value.replace(/^"|"$/g, "").trim());
+    if (!txtValues.length) {
+      return { checked: false, detected_value: "", error: "未检测到 TXT 记录" };
+    }
+    const expectedLower = expectedValue.toLowerCase().trim();
+    const matched = txtValues.some(
+      (value: string) => value.toLowerCase() === expectedLower
+    );
+    return {
+      checked: matched,
+      detected_value: txtValues.join(", "),
+      error: matched ? "" : "TXT 记录不匹配"
+    };
+  } catch {
+    return { checked: undefined, detected_value: "", error: "检测服务不可用" };
   }
-  return {
-    checked: false,
-    detected_value: "",
-    error: "检测服务不可用"
-  };
 }
 
 // 批量检测函数
@@ -970,34 +928,28 @@ async function batchVerifyValidation(validation: any[], ca?: string) {
       const cnameHost = `${delegationPrefix.value}.${zone}`;
       let txtConflict = "";
       try {
-        const dnsToolsHosts = getConfig()?.DnsTools || [];
-        for (const baseUrl of dnsToolsHosts) {
-          try {
-            const res = await axios.post(
-              `${baseUrl}/api/dns/query`,
-              { domain: cnameHost, type: "TXT" },
-              { timeout: 10000 }
-            );
-            if (res.data?.code === 1) {
-              const normalizedHost = cnameHost.toLowerCase().replace(/\.$/, "");
-              // 通过 name 字段精确匹配：仅检测直接属于该主机名的 TXT 记录，排除 CNAME 链解析到的记录
-              const directTxtRecords = (res.data.data?.records || []).filter(
-                (r: any) =>
-                  r.type === "TXT" &&
-                  r.value &&
-                  r.name?.toLowerCase().replace(/\.$/, "") === normalizedHost
-              );
-              if (directTxtRecords.length > 0) {
-                txtConflict = `检测到 ${cnameHost} 存在 TXT 记录，TXT 和 CNAME 同名共存会导致委托不生效，请删除 TXT 记录`;
-              }
-            }
-            break;
-          } catch {
-            continue;
+        const data = await queryDnsWithFallback(
+          getConfig()?.DnsTools || [],
+          { domain: cnameHost, type: "TXT" },
+          async (url, body, timeout) =>
+            (await axios.post(url, body, { timeout })).data
+        );
+        if (data?.code === 1 && Array.isArray(data.data?.records)) {
+          const normalizedHost = cnameHost.toLowerCase().replace(/\.$/, "");
+          // 只检查原主机名的 TXT，排除 CNAME 链目标上的记录。
+          const directTxtRecords = data.data.records.filter(
+            (r: any) =>
+              r?.type === "TXT" &&
+              r.value &&
+              typeof r.name === "string" &&
+              r.name.toLowerCase().replace(/\.$/, "") === normalizedHost
+          );
+          if (directTxtRecords.length > 0) {
+            txtConflict = `检测到 ${cnameHost} 存在 TXT 记录，TXT 和 CNAME 同名共存会导致委托不生效，请删除 TXT 记录`;
           }
         }
       } catch {
-        // 非关键检测，忽略错误
+        // 非关键检测，忽略错误。
       }
 
       delegationResults.set(delegationId, {
@@ -1037,50 +989,12 @@ async function batchVerifyValidation(validation: any[], ca?: string) {
     return baseData;
   });
 
-  // 从配置文件获取 DNS Tools 基础地址，并拼接 API 路径
-  const dnsToolsHosts = getConfig()?.DnsTools || [];
-  const endpoints = dnsToolsHosts.map(host => `${host}/api/dcv/verify`);
-
-  let response: AxiosResponse<any, any>;
-  let lastError: any;
-
-  if (normalItems.length > 0) {
-    for (const endpoint of endpoints) {
-      try {
-        response = await axios.post(endpoint, requestData, {
-          timeout: 10000
-        });
-
-        // code=1 表示 API 处理成功（含验证结果），code=0 表示 API 错误需尝试下一端点
-        if (response.data?.code === 1) {
-          break;
-        }
-      } catch (error) {
-        lastError = error;
-        console.debug(`Failed to connect to ${endpoint}, trying next...`);
-        continue;
-      }
-    }
-  }
-
-  // 处理普通验证的返回数据
-  const normalResults: { [key: string]: any } = {};
-  if (response?.data && normalItems.length > 0) {
-    // code=1 时数据在 data.results 中，code=0 时可能在 errors 中
-    const results = response.data.data?.results || {};
-    const errors = response.data.errors || [];
-
-    // 如果有 errors 数组，将其转换为 results 格式
-    if (errors.length > 0) {
-      errors.forEach((err: any) => {
-        if (err.domain) {
-          results[err.domain] = err;
-        }
-      });
-    }
-
-    Object.assign(normalResults, results);
-  }
+  const normalResults = await verifyDcvWithFallback(
+    getConfig()?.DnsTools || [],
+    requestData,
+    async (url, data, timeout) =>
+      (await axios.post(url, data, { timeout })).data
+  );
 
   // 合并所有结果
   return validation.map((item: any) => {
@@ -1106,8 +1020,13 @@ async function batchVerifyValidation(validation: any[], ca?: string) {
     if (checkResult) {
       const updateData: any = {
         ...item,
-        checked: checkResult.matched === "true",
-        error: checkResult.matched === "false" ? `验证失败` : ""
+        checked:
+          checkResult.matched === "unknown"
+            ? undefined
+            : checkResult.matched === "true",
+        error:
+          checkResult.error ||
+          (checkResult.matched === "false" ? "验证失败" : "")
       };
 
       // 根据验证方法设置检测值和额外信息

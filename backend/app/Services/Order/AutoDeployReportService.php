@@ -26,7 +26,7 @@ class AutoDeployReportService
      * 与 Order/Acme\Action::sync 终态守卫集一致，另含 expired（ExpireCommand 到期翻转）。
      */
     public const ORDER_TERMINAL_CERT_STATUSES = [
-        'cancelled', 'revoked', 'renewed', 'reissued', 'expired', 'failed',
+        'cancelled', 'revoked', 'renewed', 'reissued', 'expired', 'archived',
     ];
 
     /**

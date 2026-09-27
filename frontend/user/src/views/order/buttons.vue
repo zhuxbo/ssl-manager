@@ -61,33 +61,15 @@
     >
       同步
     </el-button>
-    <el-popconfirm
-      v-if="allowCancel(row)"
-      title="确定要取消吗？"
-      width="160px"
-      @confirm="handleCancel(row)"
-    >
-      <template #reference>
-        <el-button
-          class="reset-margin !outline-none"
-          type="danger"
-          link
-          :size="size"
-        >
-          取消
-        </el-button>
-      </template>
-    </el-popconfirm>
     <el-button
-      v-if="['cancelling'].includes(row.latest_cert?.status)"
+      v-if="allowCancel(row)"
       class="reset-margin !outline-none"
-      type="warning"
+      type="danger"
       link
       :size="size"
-      @click="handleRevokeCancel(row)"
+      @click="handleCancel(row)"
+      >取消</el-button
     >
-      撤销取消
-    </el-button>
   </div>
 </template>
 
@@ -96,6 +78,10 @@ import * as OrderApi from "@/api/order";
 import { message } from "@shared/utils";
 import { useDetail } from "./detail";
 import dayjs from "dayjs";
+import {
+  confirmOrderCancellation,
+  cancellationMessage
+} from "@shared/utils/orderConfirmation";
 
 const { toDetail } = useDetail();
 
@@ -123,10 +109,7 @@ const hasDcvInfo = (row: any) => {
 };
 
 const allowCancel = (row: any) => {
-  if (
-    !row.created_at ||
-    ["unpaid", "pending"].includes(row.latest_cert?.status)
-  ) {
+  if (["unpaid", "pending"].includes(row.latest_cert?.status)) {
     return true;
   }
   return (
@@ -172,18 +155,22 @@ const handleCommit = (row: any) => {
   });
 };
 
-const handleCancel = (row: any) => {
-  OrderApi.commitCancel(row.id).then(() => {
-    message("取消成功", { type: "success" });
+const handleCancel = async (row: any) => {
+  if (
+    await confirmOrderCancellation(
+      [row.latest_cert?.status],
+      cancellationMessage(row),
+      () => OrderApi.commitCancel(row.id)
+    )
+  ) {
+    message(
+      ["unpaid", "pending"].includes(row.latest_cert?.status)
+        ? "取消成功"
+        : "取消申请已提交",
+      { type: "success" }
+    );
     emit("refresh");
-  });
-};
-
-const handleRevokeCancel = (row: any) => {
-  OrderApi.revokeCancel(row.id).then(() => {
-    message("撤销取消成功", { type: "success" });
-    emit("refresh");
-  });
+  }
 };
 </script>
 

@@ -1,6 +1,8 @@
 <?php
 
+use AlibabaCloud\Oss\V2\Exception\ServiceException;
 use AlibabaCloud\Tea\Exception\TeaError;
+use Darabonba\OpenApi\Exceptions\ClientException;
 use Plugins\CloudDeploy\Deployers\Aliyun\AliyunErrorSanitizer;
 use Plugins\CloudDeploy\Deployers\Contracts\CredentialScrubber;
 use Plugins\CloudDeploy\Deployers\Tencent\TencentErrorSanitizer;
@@ -8,6 +10,32 @@ use TencentCloud\Common\Exception\TencentCloudSDKException;
 use Tests\TestCase;
 
 uses(TestCase::class);
+
+test('阿里错误码提取仅接受各 SDK 的结构化服务端错误', function (Closure $make, ?string $expected) {
+    expect(AliyunErrorSanitizer::errorCode($make()))->toBe($expected);
+})->with([
+    'openapi-core' => [fn () => new ClientException([
+        'statusCode' => 400,
+        'code' => 'InvalidArgument',
+        'message' => 'code: 400, invalid argument',
+        'description' => '',
+        'data' => ['Code' => 'InvalidArgument', 'Message' => 'invalid argument'],
+        'accessDeniedDetail' => [],
+        'requestId' => 'req-openapi',
+    ]), 'InvalidArgument'],
+    'Tea 结构化错误' => [fn () => new TeaError([
+        'code' => 'InvalidArgument',
+        'message' => 'invalid argument',
+        'data' => ['Code' => 'InvalidArgument', 'Message' => 'invalid argument'],
+    ]), 'InvalidArgument'],
+    'OSS 服务端错误' => [fn () => new ServiceException([
+        'status_code' => 403,
+        'code' => 'AccessDenied',
+        'message' => 'permission denied',
+        'request_id' => 'req-oss',
+    ]), 'AccessDenied'],
+    '未知异常' => [fn () => new RuntimeException('private key has to be in PEM format'), null],
+]);
 
 /**
  * 加固 1 — sanitizer 凭证子串兜底扫描（纵深防御）验证：
@@ -78,6 +106,58 @@ test('scrub 不误伤普通错误文案（无凭证 pattern 原样返回）', fu
     $msg = '[InvalidDomain.NotFound] 域名不存在 request id: req-123';
     expect(CredentialScrubber::scrub($msg))->toBe($msg);
 });
+
+test('scrub 移除完整及截断 PEM 正文，包括转义和 URL 编码', function (string $material) {
+    $out = CredentialScrubber::scrub('invalid certificate: '.$material);
+    expect($out)->toContain('invalid certificate:')->toContain('[redacted]')
+        ->not->toContain('SYNTHETIC-PRIVATE-BODY')->not->toContain('BEGIN')->not->toContain('END');
+})->with([
+    "-----BEGIN PRIVATE KEY-----\nSYNTHETIC-PRIVATE-BODY\n-----END PRIVATE KEY-----",
+    '-----BEGIN RSA PRIVATE KEY-----\\nSYNTHETIC-PRIVATE-BODY\\n-----END RSA PRIVATE KEY-----',
+    "-----BEGIN CERTIFICATE-----\nSYNTHETIC-PRIVATE-BODY",
+    rawurlencode("-----BEGIN PRIVATE KEY-----\nSYNTHETIC-PRIVATE-BODY\n-----END PRIVATE KEY-----"),
+    urlencode("-----BEGIN EC PRIVATE KEY-----\nSYNTHETIC-PRIVATE-BODY\n-----END EC PRIVATE KEY-----"),
+]);
+
+test('scrub 分别移除相邻 PEM 材料并保留后续业务说明', function (string $separator) {
+    $message = "bad -----BEGIN CERTIFICATE-----\nCERT-BODY\n-----END CERTIFICATE-----"
+        .$separator."-----BEGIN PRIVATE KEY-----\nPRIVATE-BODY\n-----END PRIVATE KEY----- reason";
+    expect(CredentialScrubber::scrub($message))->toBe('bad [redacted]'.$separator.'[redacted] reason');
+})->with([' ', "\n", '']);
+
+test('scrub 移除常见凭证字段及认证头的完整值', function (string $message) {
+    expect(CredentialScrubber::scrub($message))->toContain('[redacted]')
+        ->not->toContain('SYNTHETIC-SECRET')->not->toContain('SECOND-SECRET');
+})->with([
+    '{"api_token":"SYNTHETIC-SECRET SECOND-SECRET","reason":"denied"}',
+    '{"api_token":"SYNTHETIC-SECRET\\" SECOND-SECRET","reason":"denied"}',
+    "{'AccessKeySecret': 'SYNTHETIC-SECRET SECOND-SECRET'}",
+    'api_key=SYNTHETIC-SECRET&token=SECOND-SECRET',
+    'api_token=SYNTHETIC-SECRET%26SECOND-SECRET',
+    '{"api_token":"SYNTHETIC-SECRET%22SECOND-SECRET"}',
+    'client_secret: SYNTHETIC-SECRET',
+    '{"secret_access_key":"SYNTHETIC-SECRET"}',
+    'X-Amz-Credential=SYNTHETIC-SECRET&X-Amz-Signature=SECOND-SECRET',
+    'X-Auth-Key: SYNTHETIC-SECRET',
+    'Authorization: Bearer SYNTHETIC-SECRET',
+    'Authorization: AWS4-HMAC-SHA256 Credential=SYNTHETIC-SECRET, Signature=SECOND-SECRET',
+    'Bearer SYNTHETIC-SECRET',
+    rawurlencode('{"private_key":"SYNTHETIC-SECRET","password":"SECOND-SECRET"}'),
+]);
+
+test('scrub 丢弃签名请求回显及其后续正文', function (string $label) {
+    $out = CredentialScrubber::scrub("signature mismatch. $label is [POST /\nSYNTHETIC-SECRET]");
+    expect($out)->toBe('signature mismatch. [redacted]');
+})->with(['StringToSign', 'CanonicalRequest', 'String to sign', 'Canonical Request']);
+
+test('scrub 保留正常业务文案和无凭证编码内容', function (string $message) {
+    expect(CredentialScrubber::scrub($message))->toBe($message);
+})->with([
+    'private key has to be in PEM format',
+    'API token is invalid; please check credentials',
+    '[AccessDenied] permission denied request id: req-123',
+    'invalid domain: foo%20bar.example',
+]);
 
 test('加固生效证明：腾讯 sanitizer 正常透传分支含凭证时被兜底 redact', function () {
     // 腾讯 sanitizer 设计为「透传 SDK 自身 message」（威胁模型假设凭证在 TC3 头、不入 message）。

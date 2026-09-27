@@ -10,8 +10,8 @@ window.Config = (function () {
     helpURL: "/help",
     dnsTools: [
       "https://dns-tools-us.cnssl.com",
-      "https://dns-tools-cn.cnssl.com",
-    ],
+      "https://dns-tools-cn.cnssl.com"
+    ]
   };
 
   // 解析应用基路径（根据当前脚本路径推导 /easy/ 前缀）
@@ -62,15 +62,20 @@ window.Config = (function () {
     return value;
   }
 
+  // 外部节点优先，本站仅作本地回落。
+  function getDnsToolsHosts() {
+    return [...(config.dnsTools || []), ""];
+  }
+
   // 获取 DCV 验证端点
   function getDCVEndpoints() {
-    const dnsTools = config.dnsTools || [];
-    return dnsTools.map((host) => `${host}/api/dcv/verify`);
+    return getDnsToolsHosts().map(host => `${host}/api/dcv/verify`);
   }
 
   return {
     loadConfig,
     getConfig,
     getDCVEndpoints,
+    getDnsToolsHosts
   };
 })();

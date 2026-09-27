@@ -31,6 +31,7 @@ return new class extends Migration
                 $table->string('notification_settings', 255)->nullable()->comment('通知设置');
                 $table->string('auto_settings', 255)->nullable()->comment('自动续费和重签设置');
                 $table->unsignedTinyInteger('status')->default(1)->index()->comment('状态: 0=禁用, 1=启用');
+                $table->string('admin_remark', 500)->nullable()->comment('管理员备注');
                 $table->timestamps();
                 $table->index('created_at');
             });

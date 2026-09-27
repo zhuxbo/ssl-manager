@@ -67,11 +67,22 @@ _acquire_bootstrap_lock() {
         log_error "无法打开应用启动切换锁：$lock_file"
         return 1
     fi
-    if ! flock -x 9; then
-        exec 9>&-
-        log_error "无法获取应用启动切换锁：$lock_file"
-        return 1
-    fi
+    local wait_started=$SECONDS lock_status
+    log_info "等待在途 HTTP 请求结束并获取应用启动切换锁..."
+    while true; do
+        if flock -x -w 5 -E 75 9; then
+            break
+        else
+            lock_status=$?
+        fi
+        if [ "$lock_status" -ne 75 ]; then
+            exec 9>&-
+            log_error "无法获取应用启动切换锁：$lock_file"
+            return 1
+        fi
+        log_info "仍在等待应用启动切换锁（已等待 $((SECONDS - wait_started)) 秒，在途请求尚未结束或其他发布流程持锁）"
+    done
+    log_success "已获取应用启动切换锁"
 
     BOOTSTRAP_LOCK_HELD=1
 }
@@ -120,11 +131,28 @@ _prepare_legacy_bootstrap_entry() {
 
     drain_seconds=$(_legacy_request_drain_timeout) || return 1
     if ! grep -qF 'SSL_MANAGER_BOOTSTRAP_LOCK_V1_BEGIN' "$target_index"; then
-        log_info "首次启用安全切换机制，正在排空旧请求（最长 ${drain_seconds} 秒）"
+        log_info "首次启用安全切换机制，等待旧请求安全窗口（固定 ${drain_seconds} 秒）"
     fi
     if ! "$PHP_CMD" -r '
 require $argv[1];
-\App\Support\ApplicationBootstrapLock::prepareLegacyHttpEntry($argv[2], $argv[3], (int) $argv[4]);
+$terminal = function_exists("stream_isatty") && stream_isatty(STDOUT);
+$lastPrinted = null;
+\App\Support\ApplicationBootstrapLock::prepareLegacyHttpEntry(
+    $argv[2], $argv[3], (int) $argv[4],
+    static function (int $remaining, int $total) use ($terminal, &$lastPrinted): void {
+        if (!$terminal && $lastPrinted !== null && $remaining > 0 && $lastPrinted - $remaining < 10) {
+            return;
+        }
+        $lastPrinted = $remaining;
+        $elapsed = max(0, $total - $remaining);
+        $percent = $total > 0 ? min(100, (int) floor($elapsed * 100 / $total)) : 100;
+        $filled = (int) floor($percent / 5);
+        printf("%s[WAIT] 旧请求安全等待 [%s%s] %3d%% 已过 %d/%d 秒，剩余 %d 秒%s",
+            $terminal ? "\r" : "", str_repeat("=", $filled), str_repeat("-", 20 - $filled),
+            $percent, $elapsed, $total, $remaining, $terminal && $remaining > 0 ? "   " : "\n");
+        fflush(STDOUT);
+    }
+);
 ' "$source_helper" "$source_index" "$target_index" "$drain_seconds"; then
         log_error "首次升级请求排空准备失败"
         return 1
@@ -142,6 +170,7 @@ _ensure_runtime_directories() {
         "backend/storage/logs"
         "backend/storage/framework"
         "backend/storage/framework/cache/data"
+        "backend/storage/framework/runtime-cache/data"
         "backend/storage/framework/sessions"
         "backend/storage/framework/views"
         "backend/storage/app/public"
@@ -627,6 +656,69 @@ exit(1);
 ' 2>/dev/null
 }
 
+# 用旧应用引导源配置，以 .env 为目标迁移；调用时已持有启动锁并进入维护模式。
+_preserve_redis_databases() {
+    local source_backend="$1/backend"
+    local helper="$source_backend/app/Services/Upgrade/RedisDatabaseConfig.php"
+    [ -f "$helper" ] || return 0 # 兼容尚未引入双库配置的历史目标包
+
+    # 中断恢复时旧 vendor 可能缺失，此时使用已经校验过的预拷贝 vendor 引导旧配置。
+    local fallback_vendor="${BUNDLED_VENDOR_STAGE:-$source_backend/vendor}"
+    "$PHP_CMD" -r '
+    $autoload = $argv[1]."/vendor/autoload.php";
+    require is_file($autoload) ? $autoload : $argv[3]."/autoload.php";
+    $app = require $argv[1]."/bootstrap/app.php";
+    $app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
+    require_once $argv[2];
+    $bootstrapHelper = dirname($argv[2], 3)."/Support/ApplicationBootstrapLock.php";
+    if (!class_exists(App\Support\ApplicationBootstrapLock::class) && is_file($bootstrapHelper)) require_once $bootstrapHelper;
+    $migrationHelper = dirname($argv[2])."/RedisDatabaseMigration.php";
+    if (is_file($migrationHelper)) require_once $migrationHelper;
+    $enabled = config("cache.default") === "redis" || config("queue.default") === "redis";
+    $before = config("database.redis");
+    App\Services\Upgrade\RedisDatabaseConfig::preserve(true, $argv[4]);
+    if (!$enabled) {
+        echo "\033[0;34m[INFO]\033[0m 缓存和队列未启用 Redis，跳过数据库编号保留\n";
+    } else {
+        foreach (["REDIS_DB" => "default", "REDIS_CACHE_DB" => "cache"] as $key => $connection) {
+            $value = (string) (int) config("database.redis.$connection.database");
+            if ((int) $before[$connection]["database"] !== (int) $value) {
+                $previous = (int) $before[$connection]["database"];
+                echo "\033[0;34m[INFO]\033[0m $key 已从 {$previous} 迁移到 {$value}（以 .env 为准，同库时自动调整缓存库）\n";
+            }
+            echo "\033[0;34m[INFO]\033[0m 升级使用 $key={$value}\n";
+        }
+    }
+' "$INSTALL_DIR/backend" "$helper" "$fallback_vendor" "${MANAGER_SITES_ROOT:-/www/wwwroot}"
+}
+
+# 输出最终编号；保留对尚未提前处理 Redis 编号的历史目标包的兼容入口。
+_separate_redis_cache_database() {
+    local helper="$INSTALL_DIR/backend/app/Services/Upgrade/RedisDatabaseConfig.php"
+    [ -f "$helper" ] || return 0
+    "$PHP_CMD" -r '
+    require $argv[1]."/vendor/autoload.php";
+    $app = require $argv[1]."/bootstrap/app.php";
+    $app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
+    if (method_exists(App\Services\Upgrade\RedisDatabaseConfig::class, "separateCacheDatabase")) {
+        $enabled = config("cache.default") === "redis" || config("queue.default") === "redis";
+        $before = (int) config("database.redis.cache.database");
+        App\Services\Upgrade\RedisDatabaseConfig::separateCacheDatabase($argv[2]);
+        if (!$enabled) {
+            echo "\033[0;34m[INFO]\033[0m 缓存和队列未启用 Redis，跳过自动分库\n";
+        } else {
+            $runtime = (int) config("database.redis.default.database");
+            $cache = (int) config("database.redis.cache.database");
+            echo $before === $cache
+                ? "\033[0;34m[INFO]\033[0m Redis 最终编号（已分离，保持原样）：REDIS_DB={$runtime}，REDIS_CACHE_DB=$cache\n"
+                : "\033[0;34m[INFO]\033[0m Redis 最终编号：REDIS_DB={$runtime}，REDIS_CACHE_DB={$cache}（缓存库由 $before 自动调整为 {$cache}）\n";
+        }
+    } else {
+        echo "\033[0;33m[WARN] 目标版本不支持 Redis 自动分库，已跳过\033[0m\n";
+    }
+' "$INSTALL_DIR/backend" "${MANAGER_SITES_ROOT:-/www/wwwroot}"
+}
+
 # 把 latest/dev 占位符解析成具体版本号（与 install.sh _resolve_version 对齐）
 # 用法：_resolve_version <releases.json file> <input_version: latest|dev|X.Y.Z[-beta]>
 # 返回：解析后的具体版本号（如 0.4.23-beta）
@@ -994,6 +1086,19 @@ get_release_url() {
     fi
 
     echo ""
+}
+
+# 仅迁移官方历史根地址，自建发布服务及已有路径保持原样。
+_normalize_release_url() {
+    case "$1" in
+        https://release-cn.cnssl.com | https://release-cn.cnssl.com/)
+            printf '%s\n' 'https://release-cn.cnssl.com/manager'
+            ;;
+        https://release.cnssl.com | https://release.cnssl.com/)
+            printf '%s\n' 'https://release.cnssl.com/manager'
+            ;;
+        *) printf '%s\n' "$1" ;;
+    esac
 }
 
 # 从 version.json 读取 channel
@@ -1944,6 +2049,43 @@ _finalize_install_permissions() {
     return 0
 }
 
+# 成功收尾时才发布版本配置；写入或权限设置失败不破坏现有版本文件。
+_publish_upgrade_version() {
+    local source_file="$1"
+    local target_file="$INSTALL_DIR/version.json"
+    local old_file="$target_file"
+    local staged_file
+    local old_release_url normalized_release_url migrated_release_url=""
+    old_release_url=$(get_release_url)
+    normalized_release_url=$(_normalize_release_url "$old_release_url")
+    if [ "$normalized_release_url" != "$old_release_url" ]; then
+        migrated_release_url="$normalized_release_url"
+    fi
+    [ -f "$old_file" ] || old_file="$INSTALL_DIR/backend/version.json"
+    staged_file=$(mktemp "$INSTALL_DIR/.version-next.XXXXXX") || return 1
+
+    if ! "$PHP_CMD" -r '
+$new = json_decode(file_get_contents($argv[1]), true);
+if (! is_array($new) || empty($new["version"])) { exit(1); }
+$old = is_file($argv[2]) ? json_decode(file_get_contents($argv[2]), true) : [];
+foreach (["release_url", "network"] as $field) {
+    if (isset($old[$field])) { $new[$field] = $old[$field]; }
+}
+if ($argv[4] !== "") { $new["release_url"] = $argv[4]; }
+$json = json_encode($new, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+if ($json === false || file_put_contents($argv[3], $json . "\n") === false) { exit(1); }
+' "$source_file" "$old_file" "$staged_file" "$migrated_release_url" ||
+        ! chown www:www "$staged_file" || ! chmod 664 "$staged_file" ||
+        ! mv -f "$staged_file" "$target_file"; then
+        rm -f "$staged_file"
+        log_error "版本配置发布失败，原版本号保持不变"
+        return 1
+    fi
+    if [ -n "$migrated_release_url" ]; then
+        log_info "已修正历史 release_url: $migrated_release_url"
+    fi
+}
+
 # 执行升级
 perform_upgrade() {
     local target_version="$1"
@@ -2049,6 +2191,12 @@ perform_upgrade() {
     # freeze 已点火：失败/中断路径据此打印恢复 runbook（unfreeze→up→queue:restart）
     FREEZE_FIRED=1
 
+    log_step "核对 Redis 编号并迁移数据..."
+    if ! _preserve_redis_databases "$src_dir"; then
+        log_error "Redis 数据库无法安全迁移，已在覆盖代码前中止升级"
+        exit 1
+    fi
+
     # 6. 提取需要保留的文件到临时目录
     log_step "保留关键文件..."
     # 保留目录放安装目录同文件系统内（非 TEMP_DIR//tmp）：
@@ -2057,7 +2205,7 @@ perform_upgrade() {
     PRESERVE_DIR="$INSTALL_DIR/.upgrade-preserve-$$"
     mkdir -p "$PRESERVE_DIR"
 
-    # 保留 .env（不保留 version.json，升级需要更新版本号）
+    # 保留 .env；根目录 version.json 原地保留到成功收尾。
     [ -f "$INSTALL_DIR/backend/.env" ] && cp "$INSTALL_DIR/backend/.env" "$PRESERVE_DIR/"
     # 保留 storage（使用 mv 避免大目录复制失败导致数据丢失）
     # freeze 锁文件（storage/framework/upgrade.lock）随此 mv 一并移走；该窗口由
@@ -2176,40 +2324,9 @@ perform_upgrade() {
         log_info "已更新 nginx 配置"
     fi
 
-    # 复制根目录版本配置（保留用户的 release_url）
-    if [ -f "$src_dir/version.json" ]; then
-        local old_release_url=""
-        local old_version_json="$INSTALL_DIR/version.json"
-
-        # 用 PHP 读取旧的 release_url（正确处理 JSON 转义）
-        if [ -f "$old_version_json" ] && [ -x "$PHP_CMD" ]; then
-            old_release_url=$(OLD_VJ="$old_version_json" "$PHP_CMD" -r '
-$d = @json_decode(@file_get_contents(getenv("OLD_VJ")), true);
-echo is_array($d) && isset($d["release_url"]) ? $d["release_url"] : "";
-' 2>/dev/null)
-        fi
-
-        # 复制新的 version.json
-        cp "$src_dir/version.json" "$INSTALL_DIR/"
-
-        # 如果存在旧的 release_url，合并到新的 version.json
-        if [ -n "$old_release_url" ]; then
-            # 用 PHP 处理 JSON 合并（管理员手工运行，变量来自可信的本地文件）
-            NEW_VJ="$INSTALL_DIR/version.json" RELEASE_URL="$old_release_url" "$PHP_CMD" -r '
-$path = getenv("NEW_VJ");
-$d = @json_decode(@file_get_contents($path), true);
-if (! is_array($d)) { exit(1); }
-$d["release_url"] = getenv("RELEASE_URL");
-file_put_contents($path, json_encode($d, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n");
-' 2>/dev/null
-            log_info "保留 release_url 配置: $old_release_url"
-        fi
-    fi
-
     # 9. 恢复保留的文件
     log_step "恢复保留文件..."
     [ -f "$PRESERVE_DIR/.env" ] && cp "$PRESERVE_DIR/.env" "$INSTALL_DIR/backend/"
-    # 注意：不恢复 version.json，使用升级包中的新版本
 
     # 恢复 storage（已使用 mv 保留，直接移回）
     # freeze 锁文件随 storage 移回 → isFrozen() 重新生效，HTTP-503 有效覆盖自此刻起至 unfreeze，
@@ -2497,6 +2614,14 @@ file_put_contents($path, json_encode($d, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLAS
     # 必须落在 up 与 queue:restart 之间。
     UPGRADE_DONE=1
 
+    # 会话切库只执行一次；冻结期间跳过，服务恢复后搬迁旧黑名单并保留有效登录。
+    local session_cutover_migration="database/migrations/2026_09_04_000001_invalidate_sessions_for_runtime_cache_cutover.php"
+    if [ -f "$session_cutover_migration" ]; then
+        "$PHP_CMD" artisan migrate --path="$session_cutover_migration" --force
+    fi
+
+    _separate_redis_cache_database
+
     # 14b. 重启队列 worker（让常驻 worker 跑完当前 job 后退出，supervisor 自动拉起新进程加载新代码）
     log_step "重启队列 worker..."
     if "$PHP_CMD" artisan queue:restart >/dev/null 2>&1; then
@@ -2525,6 +2650,18 @@ file_put_contents($path, json_encode($d, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLAS
         /etc/init.d/nginx reload 2>/dev/null && log_info "Nginx 已重载" || log_warning "Nginx 重载失败"
     else
         log_warning "未找到 Nginx，请手动重载 Nginx 配置"
+    fi
+
+    # 清掉包含旧版本号的配置缓存；失败时仍保留旧版本，避免新文件配旧缓存。
+    "$PHP_CMD" artisan config:clear
+    # 所有可能中止升级的步骤已完成，最后原子发布版本配置。
+    _publish_upgrade_version "$src_dir/version.json"
+    # 缓存重建失败可按文件加载新配置，不将已完成的升级改判为失败。
+    "$PHP_CMD" artisan config:cache || log_warning "配置缓存重建失败，将直接加载配置文件"
+
+    # 前置 reload 后 FPM 可能已缓存旧 config.php；最终配置生成后再刷新，兼容关闭时间戳检查。
+    if [ -n "$php_ver_compact" ] && declare -f bt_reload_php_fpm >/dev/null 2>&1; then
+        bt_reload_php_fpm "$php_ver_compact" "$site_domain" || log_warning "最终配置 PHP-FPM reload 失败，请手工重载 PHP-FPM"
     fi
 
     log_success "升级完成！版本: $target_version"
@@ -2791,6 +2928,13 @@ main() {
     fi
 
     # 执行动作
+    local normalized_release_url
+    normalized_release_url=$(_normalize_release_url "$CUSTOM_RELEASE_URL")
+    if [ "$normalized_release_url" != "$CUSTOM_RELEASE_URL" ]; then
+        log_info "检测到历史 release URL，改用: $normalized_release_url"
+        CUSTOM_RELEASE_URL="$normalized_release_url"
+    fi
+
     case "$action" in
         check)
             log_info "检查更新功能请在管理后台使用"

@@ -13,6 +13,7 @@ use App\Models\User;
 use App\Services\Notification\NotificationCenter;
 use App\Services\Order\Api\Api;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Queue;
 use Tests\Traits\ActsAsUser;
 use Tests\Traits\CreatesTestData;
 use Tests\Traits\MocksExternalApis;
@@ -117,7 +118,7 @@ test('获取订单列表-按证书到期区间过滤默认活动中状态集并�
         [3, 'cancelled'],
         [6, 'active'],
         [2, 'active'],
-        [10, 'failed'],
+        [10, 'archived'],
     ];
     $orders = collect($certs)->map(function (array $certData) use ($user, $product) {
         [$days, $status] = $certData;
@@ -424,12 +425,15 @@ test('重签订单', function () {
         ->and($newCert->action)
         ->toBe('reissue')
         ->and($newCert->status)
-        ->toBe('unpaid');
+        ->toBe('pending')
+        ->and($newCert->amount)
+        ->toBe('0.00');
 });
 
 test('不可添加 SAN 产品重签按订单已购数量拒绝超额 SAN', function (
     array $orderCounts,
     array $certCounts,
+    string $previousDomains,
     string $domains,
     string $expectedMessage
 ) {
@@ -444,7 +448,7 @@ test('不可添加 SAN 产品重签按订单已购数量拒绝超额 SAN', funct
     ], $orderCounts));
     $cert = Cert::factory()->active()->create(array_merge([
         'order_id' => $order->id,
-        'alternative_names' => $domains,
+        'alternative_names' => $previousDomains,
     ], $certCounts));
     $order->update(['latest_cert_id' => $cert->id]);
 
@@ -470,12 +474,14 @@ test('不可添加 SAN 产品重签按订单已购数量拒绝超额 SAN', funct
         ['purchased_standard_count' => 1, 'purchased_wildcard_count' => 0],
         ['standard_count' => 2, 'wildcard_count' => 0],
         'one.example.com,two.example.com',
+        'one.example.com,three.example.com',
         '标准域名数量超过订单已购数量',
     ],
     '通配符 SAN' => [
         ['purchased_standard_count' => 1, 'purchased_wildcard_count' => 1],
         ['standard_count' => 1, 'wildcard_count' => 2],
         'example.com,*.one.example.com,*.two.example.com',
+        'example.com,*.one.example.com,*.three.example.com',
         '通配符域名数量超过订单已购数量',
     ],
 ]);
@@ -859,6 +865,7 @@ test('提交订单-commit 端到端：pending 订单真实提交上游转 proces
         'order_id' => $order->id,
         'status' => 'pending',
         'action' => 'new',
+        'amount' => '1.00',
     ]);
     $order->update(['latest_cert_id' => $cert->id]);
 
@@ -934,7 +941,8 @@ test('取消订单-commit-cancel：unpaid 订单委派 delete（订单+证书被
         ->and(Transaction::where('transaction_id', $order->id)->count())->toBe(0);
 });
 
-test('取消订单-commit-cancel：active 订单转 cancelling + 创建延时 cancel 任务', function () {
+test('取消订单-commit-cancel：active 订单转 cancelling + 创建立即 cancel 任务', function () {
+    Queue::fake();
     $user = $this->createTestUser();
     $product = Product::factory()->create(['refund_period' => 30]);
     $order = Order::factory()->create([
@@ -951,13 +959,14 @@ test('取消订单-commit-cancel：active 订单转 cancelling + 创建延时 ca
         ->assertOk()
         ->assertJson(['code' => 1]);
 
-    // active 走延时取消：cert 转 cancelling + 落一条 executing 的 cancel 任务（真实退费在 TaskJob 执行）
+    // 验证受理边界：任务立即可执行，退款由独立任务测试覆盖。
     expect($cert->fresh()->status)->toBe('cancelling');
     $cancelTask = Task::where('order_id', $order->id)
         ->where('action', 'cancel')
         ->where('status', 'executing')
         ->first();
-    expect($cancelTask)->not->toBeNull();
+    expect($cancelTask)->not->toBeNull()
+        ->and($cancelTask->started_at->lte(now()))->toBeTrue();
 });
 
 test('取消订单-不能取消其他用户的订单（UserScope 越权拒绝）', function () {
@@ -983,20 +992,6 @@ test('取消订单-不能取消其他用户的订单（UserScope 越权拒绝）
         ->and(Task::where('order_id', $otherOrder->id)->where('action', 'cancel')->count())->toBe(0);
 });
 
-// ==================== 标记已续费（mark-renewed）====================
-//
-// renewed 是终态：手工标记后订单不再自动续费/到期提醒，sync 终态守卫防上游复活。
-// 语义：用户另开新订单续了证书 → 把旧订单标 renewed 止住到期通知（非"原订单内重签"，
-// 那个靠重签后 expires_at 推远自动止通知）。
-// 这些用例真实执行 Action::markRenewed（不 mock），验证锁内二次校验：
-//   - 仅 active 证书可标记；
-//   - 仅【订单】到期前 30 天内且未过期可标记（按 orders.period_till，非 cert.expires_at）；
-//   - UserScope 越权边界。
-
-/**
- * 造一个 user 名下 active 证书订单，可指定订单到期时间 period_till（标记窗口校验依赖此字段）。
- * cert.expires_at 给固定合理值、刻意与 period_till 解耦 —— gate 只看订单到期、不看单证书到期。
- */
 function createUserActiveOrder(User $user, Product $product, ?Carbon $periodTill = null): array
 {
     $order = Order::factory()->create([
@@ -1014,108 +1009,6 @@ function createUserActiveOrder(User $user, Product $product, ?Carbon $periodTill
 
     return [$order, $cert];
 }
-
-test('标记已续费-active + 订单到期前 25 天成功标记为 renewed', function () {
-    $user = $this->createTestUser();
-    $product = Product::factory()->create();
-    [$order, $cert] = createUserActiveOrder($user, $product, now()->addDays(25));
-
-    $this->actingAsUser($user)
-        ->postJson("/api/order/mark-renewed/$order->id")
-        ->assertOk()
-        ->assertJson(['code' => 1]);
-
-    // 状态确为 renewed（终态）
-    expect($cert->fresh()->status)->toBe('renewed');
-});
-
-test('标记已续费-active + 订单到期 40 天后被拒（超 30 天），状态不变', function () {
-    $user = $this->createTestUser();
-    $product = Product::factory()->create();
-    [$order, $cert] = createUserActiveOrder($user, $product, now()->addDays(40));
-
-    $this->actingAsUser($user)
-        ->postJson("/api/order/mark-renewed/$order->id")
-        ->assertOk()
-        ->assertJson(['code' => 0]);
-
-    expect($cert->fresh()->status)->toBe('active');
-});
-
-test('标记已续费-订单已过期被拒，状态不变', function () {
-    $user = $this->createTestUser();
-    $product = Product::factory()->create();
-    // active 证书但订单 period_till 已是过去（手工造越窗数据）
-    [$order, $cert] = createUserActiveOrder($user, $product, now()->subDay());
-
-    $this->actingAsUser($user)
-        ->postJson("/api/order/mark-renewed/$order->id")
-        ->assertOk()
-        ->assertJson(['code' => 0]);
-
-    expect($cert->fresh()->status)->toBe('active');
-});
-
-test('标记已续费-非 active（pending）证书被拒，状态不变', function () {
-    $user = $this->createTestUser();
-    $product = Product::factory()->create();
-    $order = Order::factory()->create([
-        'user_id' => $user->id,
-        'product_id' => $product->id,
-    ]);
-    $cert = Cert::factory()->create([
-        'order_id' => $order->id,
-        'status' => 'pending',
-        'expires_at' => now()->addDays(25),
-    ]);
-    $order->update(['latest_cert_id' => $cert->id]);
-
-    $this->actingAsUser($user)
-        ->postJson("/api/order/mark-renewed/$order->id")
-        ->assertOk()
-        ->assertJson(['code' => 0]);
-
-    expect($cert->fresh()->status)->toBe('pending');
-});
-
-test('标记已续费-证书将到期但订单未到期（period_till > 30 天）被拒，状态不变', function () {
-    $user = $this->createTestUser();
-    $product = Product::factory()->create();
-    // 多年期/中途重签场景：当前证书 10 天后到期、但订单还有 200 天 —— 会被自动重签接管，
-    // 不应允许标记。锁住「gate 看 orders.period_till 而非 cert.expires_at」的语义。
-    $order = Order::factory()->create([
-        'user_id' => $user->id,
-        'product_id' => $product->id,
-        'period_till' => now()->addDays(200),
-    ]);
-    $cert = Cert::factory()->active()->create([
-        'order_id' => $order->id,
-        'expires_at' => now()->addDays(10),
-    ]);
-    $order->update(['latest_cert_id' => $cert->id]);
-
-    $this->actingAsUser($user)
-        ->postJson("/api/order/mark-renewed/$order->id")
-        ->assertOk()
-        ->assertJson(['code' => 0]);
-
-    expect($cert->fresh()->status)->toBe('active');
-});
-
-test('标记已续费-不能标记其他用户的订单（UserScope 越权拒绝）', function () {
-    $user = $this->createTestUser();
-    $otherUser = $this->createTestUser();
-    $product = Product::factory()->create();
-    [$otherOrder, $otherCert] = createUserActiveOrder($otherUser, $product, now()->addDays(25));
-
-    $this->actingAsUser($user)
-        ->postJson("/api/order/mark-renewed/$otherOrder->id")
-        ->assertOk()
-        ->assertJson(['code' => 0]);
-
-    // 越权未生效：他人订单仍 active
-    expect($otherCert->fresh()->status)->toBe('active');
-});
 
 // sendActive() 测试：路由由 GET 收紧为 POST，email 随之从 query 移到 body
 test('用户发送激活邮件-email 从请求体读取', function () {

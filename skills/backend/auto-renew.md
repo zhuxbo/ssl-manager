@@ -10,10 +10,10 @@
 - `orders.auto_reissue`: 订单级自动重签开关（null 时回落到用户设置）
 - `users.auto_settings`: 用户级默认设置 `{"auto_renew": false, "auto_reissue": false}`
 - `AutoRenewCommand` 每天 00:00 执行：证书到期前 14 天触发，订单剩余 ≤15 天续费、>15 天重签；API channel 订单由下游控制，不处理
-- **延时提交**：Command 创建续费/重签 + 支付后不立即 commit，通过 Task 表创建延时 commit 任务（随机 0~8 小时），分散上游压力，8 点后人工可检查状态
+- **延时提交**：Command 创建续费并支付、或创建零元重签直接落 pending 后不立即 commit，通过 Task 表创建延时 commit 任务（随机 0~8 小时），分散上游压力，8 点后人工可检查状态
 - **产品条件**：续费要求 `product.status=1 && renew=1`；重签仅要求 `reissue=1`（产品禁用仍可重签）
 - **仅 ssl 产品（A3）**：选单 `getRenewOrders`/`getReissueOrders` 与判定 `willAuto{Renew,Reissue}Execute` 四处均加 ssl 白名单（`product_type IS NULL OR ='ssl'`，`Product::isSSL()` null→ssl）；smime/codesign/docsign 退出自动续费/重签选单，改由 `cert_expire` 到期提醒。**四处必须同步改**——`willAuto*` 是 `ExpireCommand::willBeHandledByAutoRenew` 与 `CertExpireNotificationBuilder` 的单一源，只改选单不改 `willAuto*` 会「选单排除但仍被判会处理」→ 两腿断静默过期
-- **参数继承**：从原订单提取 period/contact/organization/domains；CSR 按 `product.reuse_csr` 决定重用或生成
+- **参数继承**：从原订单提取 period/contact/organization/domains；CSR 通常按 `product.reuse_csr` 决定重用或生成，Certum 验证复用路径强制重新生成
 
 ## 算法继承（防静默降级）
 
@@ -21,8 +21,16 @@
 
 ## 委托前置条件
 
-- 缺失委托记录时自动创建（zone 由 ca 派生：`exact` 精确域名 / 非 exact 根域，见 `delegation.md` 委托验证章节）；DNS 验证采用宽松策略（所有 dnsTools + 本地全部尝试，任一匹配即有效），目的是尽可能发起续签
+- 优先从源证书 validation 的 `delegation_id` 加载同一逻辑委托，先按“完整默认域优先、其余完整配置回落”做全局检测，再用检测结果生成续费/重签 validation 快照；旧数据缺少有效 ID 时才按 CA 派生 zone 回落查找或创建
 - 委托失效通知只在本命令真正准备发起续签/重签且前置检查失败时发送，复用 `auto_renew_failed` 及其 14/7/3/1 天节点 gate；`delegation:check` 周巡检不单独向用户发委托通知
+
+### 按 CA 验证复用重签（默认关闭）
+
+- 管理员在「系统设置 → 站点设置」手工添加统一设置 `firstAutoReissue`（同时控制 Certum、Sectigo、DigiCert），类型 `integer`、值 `5–14`，表示证书到期前多少天内允许走此路径。此项不由 Seeder 预置；缺失、类型错误或非法值视为关闭，删除即可停用。
+- 仅 `products.ca` 为 `certum`、`sectigo`、`digicert` 的 SSL 重签适用，品牌不参与判断。沿用原选单限制：订单／用户 `auto_reissue` 开关、非 API 通道、active 且未过期、产品支持重签、订单剩余 >15 天。ACME 仍由客户端续签。
+- 用 `orders.period_from` 估算此前验证时间，按**发起重签时**的 DCV 复用期限判断：Certum 在 2026-03-15 起为 200 天（此前 398 天），Sectigo 在 2026-03-12 起为 198 天（此前 398 天），DigiCert 在 2026-02-24 18:00 UTC 起为 199 天（此前 397 天）；三者在 2027-03-15 起按 100 天、2029-03-15 起按 10 天估算。到达复用截止时间即不适用，开始时间缺失或在未来、旧 DCV 方法缺失时也不适用。政策依据：[Certum](https://www.certum.eu/en/news/shortening-ssl-tls-certificate-validity/)、[Sectigo](https://www.sectigo.com/resource-library/shorter-validity-periods-for-tls-certificates-and-dcv)、[DigiCert](https://knowledge.digicert.com/alerts/domain-validation-reuse-changes-in-2026)。订单起始时间只是估算，最终能否免验证由上游决定。
+- 满足条件时免除本地委托前置检查，继承上次 `dcv.method`（`is_delegate` 还原为 `delegation`）。Certum 强制生成新 CSR／私钥并继承原算法；Sectigo／DigiCert 复制原证书的 CSR 和私钥，仍受产品支持重用 CSR 的校验约束。沿用原事务、随机 0–8 小时延时提交和失败通知；零元重签直接 pending、跳过支付且不创建零元流水。复用判断不延长 `period_from`，不把新一次重签当成重新验证。
+- 不满足上述条件时继续原有委托路径；此设置不推迟已有有效委托订单的自动重签，不影响其他 CA 或自动续费。
 
 ## 失败通知 + 到期去重
 
@@ -42,7 +50,7 @@
 
 ## 续费事务化与余额预检（O1/O2/O3，P0-1 包 O）
 
-- **O1 事务原子**：`processOrder` 把「创建续费/重签 + `pay(false)`」包进单个 `DB::transaction`，pay 段 charge 失败连同已翻转的旧证书（active→renewed）+ 新单一并回滚，杜绝「旧证书 renewed 终态 + 新单卡 unpaid」静默孤儿（P0-1 路径 1）；延时 commit 移**事务外**。**attempts=1 必需**（`checkDuplicate` SETNX 回滚不清键，事务级重试必自败）；`success()` 抛 `ApiResponseException` 是成功信号（取 order_id）、业务失败 rethrow 触发回滚。
+- **O1 事务原子**：`processOrder` 把「创建续费 + `pay(false)`」包进单个 `DB::transaction`，pay 段 charge 失败连同已翻转的旧证书（active→renewed）+ 新单一并回滚，杜绝「旧证书 renewed 终态 + 新单卡 unpaid」静默孤儿（P0-1 路径 1）；延时 commit 移**事务外**。**attempts=1 必需**（`checkDuplicate` SETNX 回滚不清键，事务级重试必自败）；`success()` 抛 `ApiResponseException` 是成功信号（取 order_id）、业务失败 rethrow 触发回滚。
 - **O2 余额预检实时化**：续费预检前 `$user->refresh()` 消 00:00 `with('user')` 预载的 stale balance（同用户多单共享内存实例、前序单 charge 改的是 DB 另取行）。
 - 事务边界 / O3 Deploy update 移植 / O4 sweep-orphan-orders 孤儿收尾 / PendingReconcileQuery 共享判据详见 `skills/backend/order-fund.md`「续费孤儿止血 + 卡单对账扩展」。
 
@@ -50,22 +58,22 @@
 
 续费/重签把前驱证书**终态化**（renewed/reissued）后，接替证书长期卡在非 active 停滞态、前驱即将到期——`cert_expire` 对 renewed/reissued 前驱抑制、AutoRenew 因 active 前置不再处理 → 这是审计四条 critical 触发路径的**唯一止血**（尤其路径 3：DCV 长期不过的 processing 形态）。
 
-- **证书为轴、前驱侧扫描**（`Services/Order/StalledRenewalQuery`，非审计字面反查）：前驱状态集 `{renewed,reissued}` + `whereHas('nextCert', 停滞 5 态 + 48h 门槛)`。`Cert::nextCert`（HasOne，`last_cert_id` nullable UNIQUE → 至多一条接替）单点表达「存在接替」，避免多处裸 `whereExists` 拼写漂移。
-- **接替 5 态**（`SUCCESSOR_STALLED_STATUSES`，「非 active」的显式工程化非字面 `!= 'active'`）：`unpaid`（pay 前中断未扣费）/ `pending`（commit 卡单已扣费）/ `processing`/`approving`（DCV/审核长期不过已扣费）/ `failed`（CA 拒签终态）。排除 cancelled/revoked（已终止非停滞、误报不可静音）、renewed/reissued（链延长、接替曾签发）、expired（接替曾 active 走完生命周期）、cancelling（过渡态）。
+- **证书为轴、前驱侧扫描**（`Services/Order/StalledRenewalQuery`，非审计字面反查）：前驱状态集 `{renewed,reissued}` + `whereHas('nextCert', 停滞 4 态 + 48h 门槛)`。`Cert::nextCert`（HasOne，`last_cert_id` nullable UNIQUE → 至多一条接替）单点表达「存在接替」，避免多处裸 `whereExists` 拼写漂移。
+- **接替 4 态**（`SUCCESSOR_STALLED_STATUSES`，「非 active」的显式工程化非字面 `!= 'active'`）：`unpaid`（pay 前中断未扣费）/ `pending`（commit 卡单已扣费）/ `processing`/`approving`（DCV/审核长期不过已扣费）。排除 archived/cancelled/revoked（已终止非停滞、误报不可静音）、renewed/reissued（链延长、接替曾签发）、expired（接替曾 active 走完生命周期）、cancelling（过渡态）。
 - **48h 在途年龄门槛**（`IN_FLIGHT_AGE_HOURS`）：接替 `created_at` 早于此才算停滞。挡两类误报——① 健康在途（续费当天创建当天 processing 正常、手工单跨日完成 DCV）② `auto_renew_failed` 当日重叠。对主人群（到期前 14 天建单的自动续费孤儿）首封恒落 node-7（age≫48h），零节点代价。
-- **markRenewed 结构性免疫**：手工标记单**无接替链**（nextCert EXISTS 恒 falsy）→ 结构性排除，绝不对存量已续签客户群发（比审计字面反查更强的双向互斥）。已完成续签接替=active（不在 5 态集）同理排除。
-- **节点窗口复发**：派发侧 `forDispatch` 施加离散节点窗口（14/7/3/1，防每日重复），停滞持续则随前驱逼近到期在各节点复发提醒。收件人经前驱 `order->user` 解析（certs 表无 user_id：续费前驱在旧订单、重签前驱在同订单，均正确指向本人）。三件套 / 双侧同源 / 5 态文案见 `skills/backend/notification.md`。
-- **与 O4 时序三 regime**：pending 卡单同时被 X（到期止血提醒）与 O4（arm 后自动取消退款）覆盖——**关闭期** X node-7/3/1 + T5 user 中性通知接住；**开启期** O4 到顶自动 `cancelPending` 后接替转 cancelled/删除（脱离 5 态）、X 自然停发；**armed 窄窗** X 与 O4 无冲突（X 只提醒不改状态）。
+- **历史手工已续单结构性免疫**：手工标记单**无接替链**（nextCert EXISTS 恒 falsy）→ 结构性排除，绝不对存量已续签客户群发（比审计字面反查更强的双向互斥）。已完成续签接替=active（不在停滞态集）同理排除。
+- **节点窗口复发**：派发侧 `forDispatch` 施加离散节点窗口（14/7/3/1，防每日重复），停滞持续则随前驱逼近到期在各节点复发提醒。收件人经前驱 `order->user` 解析（certs 表无 user_id：续费前驱在旧订单、重签前驱在同订单，均正确指向本人）。三件套 / 双侧同源 / 4 态文案见 `skills/backend/notification.md`。
+- **与 O4 时序三 regime**：pending 卡单同时被 X（到期止血提醒）与 O4（arm 后自动取消退款）覆盖——**关闭期** X node-7/3/1 + T5 user 中性通知接住；**开启期** O4 到顶自动 `cancelPending` 后接替转 cancelled/删除（脱离 4 态）、X 自然停发；**armed 窄窗** X 与 O4 无冲突（X 只提醒不改状态）。
 
 ## 接替单取消止血（cert_renew_cancelled）
 
-接替单（续费/重签）在**已提交上游**（processing/approving，含已签发 active）状态被取消后一律置 cancelled、前驱不恢复（收窄语义见 `skills/backend/order-fund.md`）——前驱证书（renewed/reissued 终态）同样脱离三重监控：`cert_expire` 对其抑制、AutoRenew 因前驱非 active 前置不处理、`cert_renew_stalled` 因接替已置 cancelled 脱离停滞 5 态集（`SUCCESSOR_STALLED_STATUSES` 明确排除 cancelled）不再覆盖。故取消现场发一次性 `cert_renew_cancelled` 止血：`Action::cancelLocked` 对有前驱的 renew/reissue 对称派发，启用 `autoRefundOnSync` 后 `refundForSyncedCancel` 对有前驱的 renew 同样派发，均经 `NotificationCenter` afterCommit 投递。
+接替单（续费/重签）在**已提交上游**（processing/approving，含已签发 active）状态被取消后一律置 cancelled、前驱不恢复（收窄语义见 `skills/backend/order-fund.md`）——前驱证书（renewed/reissued 终态）同样脱离三重监控：`cert_expire` 对其抑制、AutoRenew 因前驱非 active 前置不处理、`cert_renew_stalled` 因接替已置 cancelled 脱离停滞 4 态集（`SUCCESSOR_STALLED_STATUSES` 明确排除 cancelled）不再覆盖。故取消现场发一次性 `cert_renew_cancelled` 止血：`Action::cancelLocked` 对有前驱的 renew/reissue 对称派发，启用 `autoRefundOnSync` 后 `refundForSyncedCancel` 对有前驱的 renew 同样派发，均经 `NotificationCenter` afterCommit 投递。
 
-- **与 cert_renew_stalled 的分工**：stalled 针对接替**卡停滞态**（在途 5 态），周期强制发、随前驱逼近到期在 14/7/3/1 节点复发；cert_renew_cancelled 针对接替被**取消终结**，事件驱动一次性发。二者互补堵住前驱脱监控的两条路径（接替停滞 / 接替取消），通知三件套侧见 `skills/backend/notification.md`。
+- **与 cert_renew_stalled 的分工**：stalled 针对接替**卡停滞态**（在途 4 态），周期强制发、随前驱逼近到期在 14/7/3/1 节点复发；cert_renew_cancelled 针对接替被**取消终结**，事件驱动一次性发。二者互补堵住前驱脱监控的两条路径（接替停滞 / 接替取消），通知三件套侧见 `skills/backend/notification.md`。
 
-## 手工标记已续费
+## 手工归档
 
-- （`Order\Action::markRenewed`，admin/user 双端）：**订单到期前 30 天内**（按 `orders.period_till` 判定、非单张 `cert.expires_at`，与手工续费 gate 的 `period_till>now+30` 一致）、仅 active 证书可手工标记 `renewed` 终态。场景：用户**另开新订单**续了证书 → 标旧订单 `renewed` 止住到期通知+自动续费；"原订单内重签"靠重签后 expires_at 推远自动止通知、无需本操作。不用 cert.expires_at：多年期/中途重签订单证书将到期但订单未到期，会被自动重签接管（ExpireCommand 的 willBeHandledByAutoRenew 已排除其到期通知），不应允许标记。事务+行锁+锁内二次校验，User 端 UserScope 限本人
+- 普通订单仅 `active` 可通过 `Order\Action::archive` 归档为 `archived`，替代手工标记已续入口；真实续费继续使用 `renewed`。归档不受续费窗口限制，不退款、不吊销，停止自动续费/重签和到期提醒，无恢复入口。锁序 task→order，锁内重查状态并清理 commit/sync/revalidate/cancel 未完成任务；sync 终态保护拒绝复活。归档接替单不进入续期停滞提醒。
 
 ---
 
@@ -121,13 +129,14 @@
 
 3. `processOrder()` 处理单个订单：
    - **委托有效性检查**：`checkDelegationValidity()` 即时验证所有域名是否有有效委托
-   - 无有效委托 → 跳过订单，不发起续费/重签
+   - 无有效委托 → 跳过订单，不发起续费/重签；满足上述 CA 验证复用条件时免除此检查
    - 续费时检查用户余额（`balance + |credit_limit|`）
-   - 强制使用 `delegation` 验证方法
+   - 默认使用 `delegation` 验证方法；CA 验证复用路径沿用上次验证方式
    - 调用 `Action::renew()` 或 `Action::reissue()`
 
-4. 支付 + 延时提交（O1 事务化后）：
-   - 「创建续费/重签 + `Action::pay($orderId, false)`」包进单个 `DB::transaction`（原子，charge 失败连同旧证书翻转一并回滚）
+4. 状态流转 + 延时提交：
+   - 零元重签在创建事务内直接落 `pending`，跳过支付；原域名／配额内重签不依赖当前价格配置，不创建零元交易流水
+   - 「创建续费 + `Action::pay($orderId, false)`」包进单个 `DB::transaction`（原子，charge 失败连同旧证书翻转一并回滚）
    - 事务外 `createTask($orderId, 'commit', $delay)`（随机 0~8h 延时提交，分散上游压力）——不再同步 `pay(true)` 立即 commit
 
 ### 相关命令

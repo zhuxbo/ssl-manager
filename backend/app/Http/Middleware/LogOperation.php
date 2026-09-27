@@ -22,9 +22,6 @@ class LogOperation
      * 不需要记录日志的路由
      */
     protected array $excludedPaths = [
-        '*/index*',
-        '*/list/*',
-        '*/get/*',
         'api/admin/logs/*',
         // 公开运维健康检查（精确匹配，避免误伤未来 /api/health/... 子路径）
         'api/health',
@@ -34,7 +31,6 @@ class LogOperation
         'api/meta',
         'acme/*',
         '.well-known/*',
-        '*document-preview*',
         '_debugger/*',
         '_ignition/*',
     ];
@@ -45,6 +41,7 @@ class LogOperation
     protected array $excludeResponsePaths = [
         '*download*',
         '*export*',
+        '*document-preview*',
     ];
 
     /**
@@ -110,6 +107,8 @@ class LogOperation
 
             // 基础日志数据
             $logData = [
+                'module' => $this->getModule($request),
+                'action' => $this->getAction($request),
                 'method' => $request->method(),
                 'url' => LogScrubber::scrubUrl($request->fullUrl()),
                 'params' => LogScrubber::scrub($request->all()),
@@ -132,7 +131,7 @@ class LogOperation
                 $this->logAdminRequest($request, $logData);
             } elseif ($this->handlePluginLog($request, $logData)) {
                 // 插件日志处理器已处理
-            } elseif ($request->is('callback/*')) {
+            } elseif ($request->is(['callback', 'callback/*'])) {
                 $this->logCallbackRequest($logData);
             } else {
                 $this->logUserRequest($request, $logData);
@@ -157,6 +156,12 @@ class LogOperation
      */
     protected function shouldSkipLogging(Request $request): bool
     {
+        // bearer token 即此只读状态端点的完整授权凭据；精确路径和固定长度 token
+        // 对所有 method 都跳过，避免 HEAD/POST 等拒绝响应也把凭据写入日志。
+        if (preg_match('#^api/admin/database/jobs/[A-Za-z0-9_-]{32}$#D', $request->path()) === 1) {
+            return true;
+        }
+
         if (UpgradeFreezeLock::isFrozen() && ! app(MaintenanceMode::class)->isWhitelisted($request)) {
             return true;
         }
@@ -202,8 +207,6 @@ class LogOperation
     {
         LogBuffer::add(AdminLog::class, array_merge($logData, [
             'admin_id' => Auth::guard('admin')->id(),
-            'module' => $this->getModule($request),
-            'action' => $this->getAction($request),
         ]));
     }
 
@@ -214,8 +217,6 @@ class LogOperation
     {
         LogBuffer::add(UserLog::class, array_merge($logData, [
             'user_id' => Auth::guard('user')->id(),
-            'module' => $this->getModule($request),
-            'action' => $this->getAction($request),
         ]));
     }
 

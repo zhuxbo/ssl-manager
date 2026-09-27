@@ -61,7 +61,7 @@ class OrderController extends BaseController
         }
         // 已存档的状态（排除证书到期但订单未到期）
         if ($statusSet === 'archived') {
-            $archivedCertIds = Cert::whereIn('status', ['cancelled', 'renewed', 'reissued', 'expired', 'revoked', 'failed'])->select('id');
+            $archivedCertIds = Cert::whereIn('status', ['cancelled', 'renewed', 'reissued', 'expired', 'revoked', 'archived'])->select('id');
             $expiredCertIds = Cert::where('status', 'expired')->select('id');
             $query->whereIn('latest_cert_id', $archivedCertIds)
                 ->whereNot(function ($q) use ($expiredCertIds) {
@@ -174,7 +174,7 @@ class OrderController extends BaseController
     {
         $order = Order::with([
             'product' => function ($query) {
-                $query->select(['id', 'name', 'product_type', 'ca', 'refund_period', 'validation_methods', 'validation_type', 'common_name_types', 'alternative_name_types']);
+                $query->select(['id', 'name', 'product_type', 'ca', 'refund_period', 'renew', 'reissue', 'status', 'validation_methods', 'validation_type', 'common_name_types', 'alternative_name_types']);
             }, 'latestCert',
         ])->find($id);
 
@@ -208,7 +208,7 @@ class OrderController extends BaseController
         $orders = Order::whereIn('id', $ids)
             ->with([
                 'product' => function ($query) {
-                    $query->select(['id', 'name', 'product_type', 'ca', 'refund_period', 'validation_methods', 'validation_type', 'common_name_types', 'alternative_name_types']);
+                    $query->select(['id', 'name', 'product_type', 'ca', 'refund_period', 'renew', 'reissue', 'status', 'validation_methods', 'validation_type', 'common_name_types', 'alternative_name_types']);
                 }, 'latestCert',
             ])
             ->get();

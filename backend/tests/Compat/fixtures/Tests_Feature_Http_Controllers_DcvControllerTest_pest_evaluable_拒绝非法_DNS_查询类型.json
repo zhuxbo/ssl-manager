@@ -1,0 +1,22 @@
+{
+    "test": "P\\Tests\\Feature\\Http\\Controllers\\DcvControllerTest::__pest_evaluable_拒绝非法_DNS_查询类型",
+    "version": "1.0.0",
+    "calls": [
+        {
+            "method": "POST",
+            "uri_pattern": "/api/dns/query",
+            "request_keys": [
+                "domain",
+                "type"
+            ],
+            "response_status": "2xx",
+            "response_schema": {
+                "code": "integer",
+                "msg": "string",
+                "errors": {
+                    "type": "array<string>"
+                }
+            }
+        }
+    ]
+}

@@ -80,9 +80,13 @@ exec, shell_exec, pcntl_signal, pcntl_alarm, pcntl_async_signals
 
 ### 脚本自动处理
 
-- **运行目录与权限**：安装器在 Composer 前主动创建 `bootstrap/cache`、`storage/{logs,framework/cache/data,framework/sessions,framework/views,app/public,app/private}`、`backups/upgrades`，再执行 `chown -R www:www $INSTALL_DIR`（宝塔 Web 用户为 `www`，非 `www-data`）及相应 `775`，并以 `www` 身份逐项验写。`upgrade.sh` 在备份/down/freeze 前和代码替换后各自愈一次；后台升级同步 bootstrap 后同样补齐。任一核心目录不可写都必须中止，不能继续进入 Composer/Artisan。
+- **运行目录与权限**：安装器在 Composer 前主动创建 `bootstrap/cache`、`storage/{logs,framework/cache/data,framework/runtime-cache/data,framework/sessions,framework/views,app/public,app/private}`、`backups/upgrades`，再执行 `chown -R www:www $INSTALL_DIR`（宝塔 Web 用户为 `www`，非 `www-data`）及相应 `775`，并以 `www` 身份逐项验写。`upgrade.sh` 在备份/down/freeze 前和代码替换后各自愈一次；后台升级同步 bootstrap 后同样补齐。任一核心目录不可写都必须中止，不能继续进入 Composer/Artisan。
 - **Nginx 占位符**：替换 `$INSTALL_DIR/nginx/*.conf` 和 `frontend/web/*.conf` 中的 `__PROJECT_ROOT__`
 - **version.json**：注入 `release_url` 和 `network` 字段
+- **Redis DB 分配**：安装器保持 `APP_NAME` 不变，按 phpdotenv 覆盖语义扫描同机 Manager 的 `.env`，对归一化后 `REDIS_HOST + REDIS_PORT` 相同的 Redis 实例从 DB 1 起分配独占的 `REDIS_DB`（关键运行状态/队列）与 `REDIS_CACHE_DB`（应用缓存）二元组；同实例配置无法静态确定时失败关闭，不同实例互不占用编号；默认 16 DB 最多自动分配 7 套，耗尽时需改用独立 Redis 实例。系统不接入会用 path/query 覆盖编号的 `REDIS_URL`；扫描到旧站点或目标站点的非空 `REDIS_URL` 时拒绝自动分配，须先转换为显式连接配置及实际 DB 编号
+- **同机安装与升级边界**：暂不支持并行执行。Redis 自动分库保留已有站点编号和目标库占用检查，不依赖全站锁文件；旧 `.ssl-manager-redis-db.lock` 文件不再使用，无需由后台修改权限或删除。
+- **首次运行态分库**：沿用 `2026_09_04_000001_invalidate_sessions_for_runtime_cache_cutover` 迁移名，成功收尾后复用 HTTP 启动独占锁复制旧 JWT 黑名单及其过期时间，保留有效会话。搬迁完成前双读旧库并阻止缓存清理；失败保留旧数据供重试。已执行旧版吊销迁移的实例不重跑，也不恢复此前失效的会话。
+- **管理端安全刷新**：右上角按钮只定向失效 Setting/PayConfigCache 已登记的键与支付证书副本，不执行 `cache:clear`；队列 pause/restart、scheduler mutex、`runtime`、其它默认缓存、编译视图、会话文件、OPcache 和 Composer 缓存均保留
 
 ### 手工配置步骤（仅自动化失败时）
 
@@ -124,14 +128,12 @@ exec, shell_exec, pcntl_signal, pcntl_alarm, pcntl_async_signals
 `GET /api/health`（无鉴权、命名空间无关、不受维护模式拦截）返回 `status` 与 `checks`：
 
 - `db`：连接探活失败 → `error`（503）。
-- `cache`：后端探活（只读 `Cache::get`）失败 → `error`（503，redis 宕机）。排在 db 之后、其余维度之前——disk/queue/heartbeat 阈值经 `Cache::remember` 读取，cache 故障时先 return 规避二次抛异常，避免整个 `/api/health` 变非结构化 500。
+- `cache`：同时只读探测默认缓存与 `runtime`，任一失败 → `error`（503，redis 宕机）。排在 db 之后、其余维度之前，避免整个 `/api/health` 变非结构化 500。
 - `disk_free_gb`：低于 `health.disk_free_threshold_gb`（默认 1.0）→ `error`（503）。
 - `queue_lag_seconds`：redis 驱动=各队列就绪深度 + **已到期**延时之和（阈 `health.queue_depth_threshold`，默认 500 条）；database 驱动=积压秒数（阈 `health.queue_lag_threshold`，默认 600 秒）。超阈 → `error`（503）。
-- `heartbeat_age_seconds`：`schedule:heartbeat` 每分钟写 `Cache::forever`；**过旧**（> `health.heartbeat_stale_seconds`，默认 300）→ `error`（503，死 scheduler）；**缺失**（null）→ `degraded`（**200**，新装机未跑调度 / `cache:clear` 清键，不误报）。
+- `heartbeat_age_seconds`：`schedule:heartbeat` 每分钟写入 `runtime`；**过旧**（> `health.heartbeat_stale_seconds`，默认 300）→ `error`（503，死 scheduler）；**缺失**（null）→ `degraded`（**200**，新装机未跑调度）。普通 `cache:clear` 不删除心跳。
 - `check_statuses`：逐项返回 `ok/degraded/error` 供后台用绿/黄/红着色；`queue_lag_unit` 明确队列值单位（database=`seconds`、redis=`jobs`）。后台只消费服务端判定，不自行复制健康阈值。
 - **freeze 期**（升级冻结）：`queue_lag` 与心跳 stale 均不参与 503 判定（worker/scheduler 已按升级流程停止），避免升级窗误报。
-
-**已知边界**：「scheduler 已死 + 之后 `cache:clear`」会使心跳键缺失，健康接口返回 `degraded` 200；管理后台显示黄色“需要关注”，不会主动发信。这是低频后台系统采用访问时检测的明确取舍。
 
 ### 外部站点监控（可选）
 
@@ -351,11 +353,22 @@ bt-install 不落盘保存 admin 密码，seed 后直接调用 `admin:reset-pass
 
 理由：备份文件与 `.env`、数据库本身住在同一台机器，应用层加密对"获取文件读取权限"的攻击者无效；密钥保管反而是新的失败模式。防护交给文件系统层（`storage/` chmod、`.env` 600）。异地保存（S3 / 邮件 / U 盘）请在**传输前**自行 `gpg --encrypt` 或 `age` 加密。
 
-恢复方式：
+备份和恢复由部署程序所在机器上的客户端执行，并通过现有数据库连接访问目标 MySQL；目标数据库可以在内网其它机器上，部署机不需要安装 MySQL 服务端，但必须安装客户端。只支持 Oracle MySQL 5.7、8.0、8.4，且 `mysql` / `mysqldump` 必须与目标服务端同系列。不要安装可能实际提供 MariaDB 的 `default-mysql-client`；宝塔部署优先使用 `/www/server/mysql/bin` 中目标 MySQL 自带的客户端。
+
+恢复前会校验备份完整性、当前服务端和本机客户端版本、备份 `schema.json` 与当前 Schema 差异及空间事实。当前数据库缺少原子换表所需的表时，预检直接阻断，确认 Schema 差异也不能继续；其他 Schema 差异展示事实并要求恢复人员显式确认，不推荐或自动切换程序版本，确认后允许跨程序版本恢复。成功恢复后正常退出维护和冻结状态，由恢复人员自行处理程序版本。
+
+后台恢复走同步命令：
 
 ```bash
-gunzip -c backup_20260101_120000.sql.gz | mysql -u<user> -p <db>
+cd backend
+php artisan database:restore backup_20260101_120000
+# Schema 有差异且确认继续时：
+php artisan database:restore backup_20260101_120000 --allow-schema-difference
 ```
+
+恢复在目标库内流式导入影子表，再用一条 `RENAME TABLE` 同批切换全部业务表和需清空的运行时表，不创建第二数据库连接、临时数据库或永久状态表，也不落完整解压 SQL。`*_logs`（包括插件日志）保留目标库现状；队列、缓存、会话、刷新令牌和域名验证运行时表切换为空表。换表前失败保持原 active；换表后校验失败执行完整反向切换；新 active 已验证但 cleanup 失败时保持冻结并保留 old 表，修复原因后重跑同一命令续接。不要用 `gunzip | mysql` 绕过预检、生成列改写、日志保留和原子切换。
+
+已接受的暂存风险（2026-09-07）：数据库恢复目前不排空已经进入的 HTTP 请求；旧请求可能跨越换表继续写入恢复后的库。本轮暂不修改该机制，执行恢复前需停止业务流量并等待在途请求结束。
 
 ## 升级注意事项
 

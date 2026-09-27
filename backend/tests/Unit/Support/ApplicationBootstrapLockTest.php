@@ -73,10 +73,34 @@ test('入口原生带锁且没有首次准备状态时不增加固定等待', fu
     copy($source, $target);
 
     $started = microtime(true);
-    ApplicationBootstrapLock::prepareLegacyHttpEntry($source, $target, 2);
+    $progress = [];
+    ApplicationBootstrapLock::prepareLegacyHttpEntry($source, $target, 2, function ($remaining, $total) use (&$progress) {
+        $progress[] = [$remaining, $total];
+    });
 
     expect(microtime(true) - $started)->toBeLessThan(0.5)
-        ->and(file_exists($this->root.'/target/backend/.upgrade-bootstrap-prepared.json'))->toBeFalse();
+        ->and(file_exists($this->root.'/target/backend/.upgrade-bootstrap-prepared.json'))->toBeFalse()
+        ->and($progress)->toBe([]);
+});
+
+test('排空进度沿用中断前的时间窗口并报告完成', function () {
+    $source = $this->root.'/source/public/index.php';
+    $target = $this->root.'/target/backend/public/index.php';
+    ApplicationBootstrapLock::prepareLegacyHttpEntry($source, $target, 0);
+    file_put_contents($this->root.'/target/backend/.upgrade-bootstrap-prepared.json', json_encode([
+        'status' => 'draining',
+        'started_at' => time() - 8,
+        'ready_at' => time() + 2,
+    ]));
+
+    $progress = [];
+    ApplicationBootstrapLock::prepareLegacyHttpEntry($source, $target, 300, function ($remaining, $total) use (&$progress) {
+        $progress[] = [$remaining, $total];
+    });
+
+    expect($progress[0])->toBe([2, 10])
+        ->and($progress[1])->toBe([1, 10])
+        ->and($progress[2])->toBe([0, 10]);
 });
 
 test('旧入口缺少稳定锚点时在改动文件前失败关闭', function () {

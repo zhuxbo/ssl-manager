@@ -11,11 +11,11 @@
 
 DC := docker compose
 ARGS ?=
-PROCESSES ?= 4 # 并行测试 worker 数（amd64 Rosetta 下不宜过高，防 OOM；机器内存大可调高）
+PROCESSES ?= 8 # 内网数据库下并发分摊 I/O 等待；内存受限或 Rosetta 可用 PROCESSES=4
 
 .DEFAULT_GOAL := help
 
-.PHONY: help up down stop restart build rebuild ps logs shell test test-mysql57 test-compat migrate fresh seed \
+.PHONY: help up down stop restart build rebuild ps logs shell test test-snapshot test-compat migrate fresh seed \
         tinker composer artisan php exec pint db db-structure redis-cli front install check-agent-config
 
 help: ## 显示本帮助
@@ -52,11 +52,11 @@ logs: ## 跟踪后端与调度器日志
 shell: ## 进后端容器 bash
 	$(DC) exec app bash
 
-test: ## 并行跑后端测试（隔离测试库 ssl_manager_test），可加 ARGS= / PROCESSES=
+test: ## 默认数据库连接并行测试（隔离库 ssl_manager_test），兼容矩阵由 CI 执行
 	$(DC) exec -e DB_DATABASE=ssl_manager_test app php artisan test --parallel --processes=$(PROCESSES) $(ARGS)
 
-test-mysql57: ## 在隔离 MySQL 5.7 容器中跑主迁移和全量后端测试
-	PROCESSES="$(strip $(PROCESSES))" bash skills/scripts/test-mysql57.sh
+test-snapshot: ## 默认数据库连接并行对比 API 快照，可加 ARGS= / PROCESSES=
+	$(DC) exec -T -e DB_DATABASE=ssl_manager_test app composer run-script --timeout=0 test:snapshot -- --parallel --processes=$(PROCESSES) $(ARGS)
 
 test-compat: ## 依次用 PHP 8.3 / 8.4 跑测试（验证版本兼容）
 	PHP_VERSION=8.3 $(DC) build app && PHP_VERSION=8.3 $(DC) run --rm -e DB_DATABASE=ssl_manager_test app php artisan test --parallel --processes=$(PROCESSES)
@@ -72,9 +72,10 @@ seed: ## 填充种子数据
 	$(DC) exec app php artisan db:seed
 
 db-structure: ## 导出 structure.json（compose 临时干净库，仅主迁移，不碰开发库）
+	$(DC) up -d --wait mysql
 	$(DC) exec -T -e MYSQL_PWD=password mysql mysql -uroot -e "DROP DATABASE IF EXISTS structure_export; CREATE DATABASE structure_export CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci" && \
-	$(DC) exec -T -e DB_DATABASE=structure_export app php artisan migrate:fresh --force --path=database/migrations && \
-	$(DC) exec -T -e DB_DATABASE=structure_export app php artisan db:structure --export --use-local; \
+	$(DC) exec -T -e DB_HOST=mysql -e DB_PORT=3306 -e DB_USERNAME=root -e DB_PASSWORD=password -e DB_DATABASE=structure_export app php artisan migrate:fresh --force --path=database/migrations && \
+	$(DC) exec -T -e DB_HOST=mysql -e DB_PORT=3306 -e DB_USERNAME=root -e DB_PASSWORD=password -e DB_DATABASE=structure_export app php artisan db:structure --export --use-local; \
 	$(DC) exec -T -e MYSQL_PWD=password mysql mysql -uroot -e "DROP DATABASE IF EXISTS structure_export"
 
 tinker: ## 进 tinker
@@ -96,7 +97,7 @@ pint: ## 跑 Laravel Pint 格式化
 	$(DC) exec app ./vendor/bin/pint
 
 db: ## 进 MySQL 客户端
-	$(DC) exec mysql mysql -uroot -ppassword ssl_manager
+	$(DC) exec app php artisan db
 
 redis-cli: ## 进 redis-cli
 	$(DC) exec redis redis-cli

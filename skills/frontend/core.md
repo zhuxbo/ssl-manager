@@ -106,6 +106,8 @@ src/
 
 ## 开发命令
 
+完成验证按 `skills/finish-check.md` 选择改动文件、测试和受影响端；下面的全量命令不表示每次必须全跑。
+
 ```bash
 # 在 monorepo 根目录运行
 pnpm install          # 安装依赖
@@ -118,12 +120,12 @@ pnpm build            # 构建所有前端
 pnpm build:admin      # 仅构建管理端
 pnpm build:user       # 仅用户端
 
-# 代码检查
-pnpm lint:eslint      # ESLint
-pnpm lint:prettier    # Prettier
-pnpm lint:stylelint   # Stylelint
-pnpm lint             # 全部检查
-pnpm typecheck        # 类型检查
+# 全量只读检查（完整前端检查时）
+pnpm lint:check
+# 单端类型检查，user 端改用 --filter user
+pnpm --filter admin build:typecheck
+# 自动修复，会修改源码，仅在需要时串行执行
+pnpm lint
 ```
 
 ### Markdown 格式化
@@ -132,14 +134,10 @@ Prettier 原生支持 markdown（无需额外插件，解析器列表里有 `mar
 项目根 `.prettierrc.js` 对所有 md 生效，prettier 装在 `frontend/admin/`。
 
 ```bash
-# 仅本次 PR 改过的 md（推荐，避免修历史格式问题污染 PR）
-git diff --name-only | grep "\.md$" | xargs npx --prefix frontend/admin prettier --write
-
-# 单个 md 文件
-npx --prefix frontend/admin prettier --write README.md
-
-# 检查（不修改，只列报错文件）
-npx --prefix frontend/admin prettier --check "**/*.md" --ignore-path .gitignore
+# 检查本次改动的 Markdown（包含暂存与未跟踪文件）
+python3 skills/scripts/finish-check-files.py check --kind markdown
+# 只修复确认需要格式化的文件
+frontend/admin/node_modules/.bin/prettier --write README.md
 ```
 
 Prettier 对 markdown 的处理：
@@ -147,7 +145,7 @@ Prettier 对 markdown 的处理：
 - 表格列宽对齐（管道符纵向对齐）
 - JSON 代码块多行展开（每属性一行）
 - 编号列表项之间不留空行
-- **不修改代码块内部**（fenced ` ``` ` / 缩进式 code block 保持原样；shell 脚本用 `shfmt` 单独处理）
+- 能识别语言的 fenced code block 也可能被格式化；写回后检查 diff。Shell 脚本用 `shfmt` 单独处理。
 
 ---
 
@@ -157,7 +155,7 @@ Prettier 对 markdown 的处理：
 
 `public/platform-config.json` 只保存部署与界面配置。`Title`、`AllBrands`、`Brands`、`DnsTools`、`Beian`、`CopyStart`、`Favicon`、`Logo`、`LogoExpanded`、`Qrcode`、`LoginImage` 由后台系统设置提供，admin/user 在完整刷新时分别通过 `/api/meta?channel=admin|user` 加载一次，不轮询。
 
-后台配置归属：`site.name` 为两端共用标题；`site.dnsTools` 是可选的两端共用 DNS 工具普通数组，Seeder 不创建该设置，如需使用由管理员手工添加，配置后后端按数组顺序轮询，均未通过再使用本地实时检测。`site.beian/copyStart/favicon/logo/logoExpanded/qrcode` 为共用站点信息，其中 `copyStart` 不由 Seeder 创建，缺失或无效时版权起始年份回落 `2017`；`favicon` 仅接受 ICO，未配置时以空 data URL 阻止浏览器请求不存在的 `/favicon.ico`，不提供系统默认图标；`logo`、`logoExpanded`、`qrcode`、`loginImage` 使用 `image` 类型，普通 `logo` 与二维码锁定 1:1，`logoExpanded` 保持自由比例，留空时展开侧栏保持 `logo + site.name`；二维码留空时使用用户端公开目录的 `qrcode.png`，后台上传地址加载失败时不替换。`loginImage` 为用户端登录/注册/找回密码页左侧配图（原图免裁剪直传保留构图，超出 2048×2048 前端等比缩小，≤2MB，后端上限 2560×2560），已上传时整图 cover 展示且不叠加文字；留空回落 `public/login.svg`（升级保留，可被运营商替换）+ 标语，`login.svg` 缺失再降级主题色纯色面板 + 标语（见 user 端 `LoginAside.vue`）；admin 登录页为极简纯色底居中卡片，无配图。`brand.all` 是品牌值到显示名称的唯一词典，供产品维护和品牌展示；`brand.admin`、`brand.user` 是两端独立的活动品牌值普通数组，产品筛选严格保持对应数组顺序。
+后台配置归属：`site.name` 为两端共用标题；`site.dnsTools` 是两端共用 DNS 工具普通数组，Seeder 为缺失设置预置国内、海外节点，保留已有配置（包括空数组）。前端按数组顺序直连外部节点，收到正常 HTTP 响应即停止，包括业务错误、unknown、空记录或缺少记录结构；只有请求超时、连接失败或 HTTP 错误才切换节点，所有节点请求均失败或配置为空时，才回落本站 `POST /api/dcv/verify`、`POST /api/dns/query`。回落接口只做本地实时检测，不再次请求外部节点；DNS 查询保留记录所属名称，文件检测仅允许 DCV 路径并复用公网访问限制。`site.beian/copyStart/favicon/logo/logoExpanded/qrcode` 为共用站点信息，其中 `copyStart` 不由 Seeder 创建，缺失或无效时版权起始年份回落 `2017`；`favicon` 仅接受 ICO，未配置时以空 data URL 阻止浏览器请求不存在的 `/favicon.ico`，不提供系统默认图标；`logo`、`logoExpanded`、`qrcode`、`loginImage` 使用 `image` 类型，普通 `logo` 与二维码锁定 1:1，`logoExpanded` 保持自由比例，留空时展开侧栏保持 `logo + site.name`；二维码留空时使用用户端公开目录的 `qrcode.png`，后台上传地址加载失败时不替换。`loginImage` 为用户端登录/注册/找回密码页左侧配图（原图免裁剪直传保留构图，超出 2048×2048 前端等比缩小，≤2MB，后端上限 2560×2560），已上传时整图 cover 展示且不叠加文字；留空回落 `public/login.svg`（升级保留，可被运营商替换）+ 标语，`login.svg` 缺失再降级主题色纯色面板 + 标语（见 user 端 `LoginAside.vue`）；admin 登录页为极简纯色底居中卡片，无配图。`brand.all` 是品牌值到显示名称的唯一词典，供产品维护和品牌展示；`brand.admin`、`brand.user` 是两端独立的活动品牌值普通数组，产品筛选严格保持对应数组顺序。
 
 `public/platform-config.json` 核心配置：
 

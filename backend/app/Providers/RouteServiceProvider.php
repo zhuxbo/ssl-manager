@@ -52,6 +52,7 @@ class RouteServiceProvider extends ServiceProvider
             'api.acme.php' => ['api', 10],
             'api.admin.php' => ['admin', 20],
             'api.deploy.php' => ['deploy', 30],
+            'api.dcv.php' => [null, 35],
             // 永远启用：health / meta（与 channel 解耦，channel 全关也注册）
             'api.health.php' => [null, 40],
             'api.meta.php' => [null, 50],

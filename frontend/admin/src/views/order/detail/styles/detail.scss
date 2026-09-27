@@ -62,3 +62,38 @@
 .scroll-wrapper {
   white-space: nowrap; /* 防止内容换行 */
 }
+
+h2.title,
+.order-status-header {
+  margin-top: 0;
+  font-size: 1.5em;
+  line-height: 1.5;
+}
+
+.order-detail-title {
+  transform: translateY(-2px);
+}
+
+.order-status-header {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.order-status-summary {
+  display: flex;
+  flex-shrink: 0;
+  gap: 12px;
+  align-items: center;
+
+  h2 {
+    margin: 0;
+    font-size: inherit;
+  }
+}
+
+.order-status-text {
+  font-size: 14px;
+  font-weight: normal;
+}

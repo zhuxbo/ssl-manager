@@ -103,6 +103,18 @@
           </div>
         </div>
 
+        <div class="mb-5">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-sm font-semibold text-gray-600">管理员备注</span>
+            <el-button type="primary" link @click="editRemark">
+              {{ userInfo.admin_remark ? "编辑" : "添加备注" }}
+            </el-button>
+          </div>
+          <div class="whitespace-pre-wrap break-all text-gray-800">
+            {{ userInfo.admin_remark || "暂无备注" }}
+          </div>
+        </div>
+
         <!-- 验证状态区域 -->
         <div class="mb-5">
           <div
@@ -368,6 +380,38 @@
       </el-result>
     </div>
   </el-dialog>
+  <el-dialog
+    v-model="remarkVisible"
+    title="编辑管理员备注"
+    width="90%"
+    class="max-w-[500px]"
+    append-to-body
+    :close-on-click-modal="false"
+    :close-on-press-escape="!remarkSaving"
+    :show-close="!remarkSaving"
+  >
+    <el-input
+      v-model="remarkInput"
+      type="textarea"
+      :rows="4"
+      maxlength="500"
+      show-word-limit
+      :disabled="remarkSaving"
+      placeholder="仅管理员可见，留空可清除"
+      aria-label="管理员备注"
+    />
+    <template #footer>
+      <el-button :disabled="remarkSaving" @click="remarkInput = ''"
+        >清空</el-button
+      >
+      <el-button :disabled="remarkSaving" @click="remarkVisible = false"
+        >取消</el-button
+      >
+      <el-button type="primary" :loading="remarkSaving" @click="saveRemark"
+        >保存</el-button
+      >
+    </template>
+  </el-dialog>
 </template>
 
 <script setup lang="ts">
@@ -400,6 +444,33 @@ const router = useRouter();
 
 const userInfo = ref<any>(null);
 const loading = ref(false);
+const remarkVisible = ref(false);
+const remarkSaving = ref(false);
+const remarkInput = ref("");
+const remarkUserId = ref<number | null>(null);
+
+const editRemark = () => {
+  remarkUserId.value = userInfo.value.id;
+  remarkInput.value = userInfo.value.admin_remark || "";
+  remarkVisible.value = true;
+};
+
+const saveRemark = async () => {
+  const id = remarkUserId.value;
+  if (!id || remarkSaving.value) return;
+  const value = remarkInput.value.trim();
+  remarkSaving.value = true;
+  try {
+    await userApi.remark(id, value);
+    if (userInfo.value?.id === id) {
+      userInfo.value.admin_remark = value;
+    }
+    remarkVisible.value = false;
+    ElMessage.success(value ? "备注已保存" : "备注已清除");
+  } finally {
+    remarkSaving.value = false;
+  }
+};
 const error = ref<string>("");
 
 const visible = computed({

@@ -80,8 +80,7 @@ Route::middleware('api.user')->group(function () {
         Route::post('update-dcv/{id}', [OrderController::class, 'updateDCV'])->where('id', '[0-9]+');
         Route::post('sync/{id}', [OrderController::class, 'sync'])->where('id', '[0-9]+');
         Route::post('commit-cancel/{id}', [OrderController::class, 'commitCancel'])->where('id', '[0-9]+');
-        Route::post('revoke-cancel/{id}', [OrderController::class, 'revokeCancel'])->where('id', '[0-9]+');
-        Route::post('mark-renewed/{id}', [OrderController::class, 'markRenewed'])->where('id', '[0-9]+');
+        Route::post('archive/{id}', [OrderController::class, 'archive'])->where('id', '[0-9]+');
         Route::post('remark/{id}', [OrderController::class, 'remark'])->where('id', '[0-9]+');
         Route::get('download', [OrderController::class, 'download']);
         Route::get('download-validate-file/{id}', [OrderController::class, 'downloadValidateFile'])->where('id', '[0-9]+');
@@ -91,7 +90,6 @@ Route::middleware('api.user')->group(function () {
         Route::post('batch-revalidate', [OrderController::class, 'batchRevalidate']);
         Route::post('batch-sync', [OrderController::class, 'batchSync']);
         Route::post('batch-commit-cancel', [OrderController::class, 'batchCommitCancel']);
-        Route::post('batch-revoke-cancel', [OrderController::class, 'batchRevokeCancel']);
         Route::patch('auto-settings/{id}', [OrderController::class, 'updateAutoSettings'])->where('id', '[0-9]+');
         Route::get('{id}/certs', [OrderController::class, 'certs'])->where('id', '[0-9]+');
         Route::get('deploy-commands', [OrderController::class, 'deployCommands']);

@@ -45,7 +45,7 @@ trait ActionTrait
         // 原子占位：Cache::add 仅在 key 不存在时写入（SETNX 语义），并发下只有一个请求抢占成功，
         // 避免 get 判断 + set 写入之间的 check-then-act 窗口被并发击穿
         try {
-            if (Cache::add($cacheKey, time(), $expire)) {
+            if (Cache::store('runtime')->add($cacheKey, time(), $expire)) {
                 return 0; // 抢占成功 → 放行
             }
         } catch (Throwable $e) {
@@ -58,7 +58,7 @@ trait ActionTrait
         // 此处 Cache::get 故意不 try-catch：add 已证明有占位，get 若失败应让异常抛出走 fail-closed（拒绝），
         // 绝不可 catch 后 return 0 放行——那会放行已知重复。与上方 add 抛异常的 fail-open 方向相反
         // （add 挂 = 是否重复未知 → 放行不阻塞业务，资金安全由 DB 唯一索引/CAS/锁兜底）。
-        $lastTime = Cache::get($cacheKey);
+        $lastTime = Cache::store('runtime')->get($cacheKey);
 
         return $lastTime ? max(0, min($lastTime + $expire - time(), $expire)) : 0;
     }
@@ -390,6 +390,21 @@ trait ActionTrait
                     $cert['wildcard_count'] = $san_count['wildcard_count'];
                 }
 
+                if ($cert['action'] === 'reissue') {
+                    $previousDomains = array_filter(array_map('trim', explode(',', DomainUtil::lowercaseDomains(
+                        DomainUtil::convertToAsciiDomains($params['last_cert']['alternative_names'])
+                    ))));
+                    $currentDomains = array_filter(array_map('trim', explode(',', DomainUtil::lowercaseDomains(
+                        DomainUtil::convertToAsciiDomains($cert['alternative_names'])
+                    ))));
+
+                    // 域名集合不变时不增购，避免关闭赠送或同步重算数量后重复收费。
+                    if ($previousDomains && ! array_diff($previousDomains, $currentDomains) && ! array_diff($currentDomains, $previousDomains)) {
+                        $cert['standard_count'] = min($cert['standard_count'], $params['purchased_standard_count']);
+                        $cert['wildcard_count'] = min($cert['wildcard_count'], $params['purchased_wildcard_count']);
+                    }
+                }
+
                 // 不支持增加 SAN 时，必须在旧 SAN 合并完成后校验最终送签数量，避免 replace_san=0 绕过
                 if (! ($params['product']['add_san'] ?? 0)) {
                     if ($cert['action'] === 'renew') {
@@ -429,10 +444,16 @@ trait ActionTrait
                 $cert['unique_value'] ?? ''
             );
 
+            $automaticDelegation = in_array($cert['channel'], ['auto', 'deploy'], true);
+            $sourceValidation = $automaticDelegation && in_array($cert['action'], ['renew', 'reissue'], true)
+                ? ($params['last_cert']['validation'] ?? [])
+                : [];
             $cert['validation'] = $this->generateValidation(
                 $cert['dcv'],
                 $cert['alternative_names'],
-                $params['user_id'] ?? null
+                $params['user_id'] ?? null,
+                ! $automaticDelegation,
+                is_array($sourceValidation) ? $sourceValidation : [],
             );
 
             // 如果是委托验证，尝试写入 TXT 记录
@@ -611,12 +632,31 @@ trait ActionTrait
      * @param  array  $dcv  DCV 信息
      * @param  string  $domains  域名列表（逗号分隔）
      * @param  int|null  $userId  用户ID（委托验证时需要）
+     * @param  bool  $useDefaultTarget  手工操作是否为订单暂存当前默认委托目标
+     * @param  array  $sourceValidation  自动续费/重签的源证书委托绑定
      */
-    protected function generateValidation(array $dcv, string $domains, ?int $userId = null): ?array
-    {
+    protected function generateValidation(
+        array $dcv,
+        string $domains,
+        ?int $userId = null,
+        bool $useDefaultTarget = false,
+        array $sourceValidation = [],
+    ): ?array {
         $method = strtolower($dcv['method']);
         $isDelegate = $dcv['is_delegate'] ?? false;
         $domains = explode(',', trim($domains, ','));
+
+        $sourceDelegationIds = [];
+        foreach ($sourceValidation as $item) {
+            if (! is_array($item) || ! is_numeric($item['delegation_id'] ?? null)) {
+                continue;
+            }
+
+            $sourceDomain = strtolower((string) ($item['domain'] ?? ''));
+            if ($sourceDomain !== '') {
+                $sourceDelegationIds[$sourceDomain] = (int) $item['delegation_id'];
+            }
+        }
 
         // 委托验证时需要查找委托记录
         $delegationService = $isDelegate && $userId ? app(CnameDelegationService::class) : null;
@@ -639,19 +679,38 @@ trait ActionTrait
                     // 根据 CA 确定委托前缀（不同 CA 使用不同的验证前缀）
                     $prefix = CnameDelegationService::getDelegationPrefixForCa($ca);
 
-                    // 查找委托记录（行为由 ca 决定：exact 精确匹配 / 非 exact 子域优先+回落根域）
-                    $delegation = $delegationService->findDelegation($userId, $domain, $ca);
+                    // 自动续费/重签优先沿用源证书已冻结的逻辑委托 ID；缺失时兼容旧数据，
+                    // 再按 CA 规则查找现有委托。手工操作只在订单 validation 暂存当前默认目标，
+                    // 不立即修改共享委托，避免未支付订单取消后破坏旧订单。
+                    $sourceDelegationId = $sourceDelegationIds[strtolower($domain)] ?? null;
+                    $delegation = $sourceDelegationId
+                        ? CnameDelegation::where('user_id', $userId)->find($sourceDelegationId)
+                        : null;
+                    $delegation ??= $delegationService->findDelegation($userId, $domain, $ca);
 
                     // 找不到则自动创建（zone 由 ca 派生：exact 精确域名 / 非 exact 根域）
                     if (! $delegation) {
                         $zone = $delegationService->resolveZone($domain, $ca);
-                        $delegation = $delegationService->createOrGet($userId, $zone, $prefix);
+                        $delegation = $delegationService->createOrGet(
+                            $userId,
+                            $zone,
+                            $prefix,
+                        );
                     }
 
                     // 始终保存委托信息（即使 valid=false）
                     $validation[$k]['delegation_id'] = $delegation->id;
-                    $validation[$k]['delegation_target'] = $delegation->target_fqdn;
-                    $validation[$k]['delegation_valid'] = $delegation->valid;
+                    $target = $delegation->target_fqdn;
+                    $valid = $delegation->valid;
+                    if ($useDefaultTarget) {
+                        $defaultProxyDomain = $delegationService->defaultProxyDomain();
+                        if ($delegation->proxy_domain !== $defaultProxyDomain) {
+                            $target = $delegationService->targetForProxyDomain($delegation, $defaultProxyDomain);
+                            $valid = false;
+                        }
+                    }
+                    $validation[$k]['delegation_target'] = $target;
+                    $validation[$k]['delegation_valid'] = $valid;
                     $validation[$k]['delegation_zone'] = $delegation->zone;
                 }
             }
@@ -727,55 +786,71 @@ trait ActionTrait
     protected function writeDelegationTxtRecords(array $validation): array
     {
         $dnsService = app(DelegationDnsService::class);
+        $delegationService = app(CnameDelegationService::class);
 
-        // 按 delegation_id 分组收集 tokens
+        // 按逻辑委托与冻结目标共同分组，避免同一委托的新旧目标互相串写。
         $tokensByDelegation = [];
-        foreach ($validation as $item) {
+        foreach ($validation as $index => $item) {
             $delegationId = $item['delegation_id'] ?? null;
-            $delegationValid = $item['delegation_valid'] ?? false;
-
-            // 跳过无效委托或已写入的
-            if (! $delegationId || ! $delegationValid || ($item['auto_txt_written'] ?? false)) {
+            if (! $delegationId || ($item['auto_txt_written'] ?? false)) {
                 continue;
             }
 
-            if (! isset($tokensByDelegation[$delegationId])) {
-                $tokensByDelegation[$delegationId] = [
+            $delegation = CnameDelegation::find($delegationId);
+            if (! $delegation) {
+                continue;
+            }
+
+            $target = $item['delegation_target'] ?? null;
+            $proxyDomain = is_string($target) && $target !== ''
+                ? $delegationService->proxyDomainFromTarget($delegation, $target)
+                : $delegation->proxy_domain;
+            if ($proxyDomain === null) {
+                continue;
+            }
+
+            $delegationKey = $delegationId.'|'.$proxyDomain;
+            if (! isset($tokensByDelegation[$delegationKey])) {
+                $tokensByDelegation[$delegationKey] = [
                     'tokens' => [],
-                    'delegation' => CnameDelegation::find($delegationId),
+                    'indexes' => [],
+                    'delegation' => $delegation,
+                    'proxy_domain' => $proxyDomain,
                 ];
             }
 
             if (! empty($item['value'])) {
-                $tokensByDelegation[$delegationId]['tokens'][] = $item['value'];
+                $tokensByDelegation[$delegationKey]['tokens'][] = $item['value'];
+                $tokensByDelegation[$delegationKey]['indexes'][] = $index;
             }
         }
 
         // 批量写入 TXT 记录
-        $writtenDelegations = [];
-        foreach ($tokensByDelegation as $delegationId => $data) {
+        $writtenIndexes = [];
+        foreach ($tokensByDelegation as $data) {
             $delegation = $data['delegation'];
             $tokens = array_unique($data['tokens']);
 
-            if (! $delegation || empty($tokens)) {
+            if (empty($tokens)) {
                 continue;
             }
 
             $isSuccess = $dnsService->setTxtByLabel(
-                $delegation->proxy_zone,
+                $data['proxy_domain'],
                 $delegation->label,
                 $tokens
             );
 
             if ($isSuccess) {
-                $writtenDelegations[$delegationId] = true;
+                foreach ($data['indexes'] as $index) {
+                    $writtenIndexes[$index] = true;
+                }
             }
         }
 
         // 更新 validation 中的写入标记
-        foreach ($validation as &$item) {
-            $delegationId = $item['delegation_id'] ?? null;
-            if ($delegationId && isset($writtenDelegations[$delegationId])) {
+        foreach ($validation as $index => &$item) {
+            if (isset($writtenIndexes[$index])) {
                 $item['auto_txt_written'] = true;
                 $item['auto_txt_written_at'] = now()->toDateTimeString();
             }
@@ -789,6 +864,14 @@ trait ActionTrait
      */
     protected function mergeValidation(array $apiValidation, array $certValidation): array
     {
+        $localOnlyKeys = [
+            'delegation_id',
+            'delegation_target',
+            'delegation_zone',
+            'delegation_valid',
+            'auto_txt_written',
+            'auto_txt_written_at',
+        ];
         $indexed = [];
         foreach ($certValidation as $item) {
             $domain = $item['domain'] ?? '';
@@ -796,6 +879,11 @@ trait ActionTrait
         }
 
         foreach ($apiValidation as &$item) {
+            // 委托与自动写入状态只由本地管理，不接受上游注入或覆盖。
+            foreach ($localOnlyKeys as $key) {
+                unset($item[$key]);
+            }
+
             $domain = $item['domain'] ?? '';
             if (isset($indexed[$domain])) {
                 $indexedDomain = $indexed[$domain];
@@ -945,6 +1033,10 @@ trait ActionTrait
             }
 
             $order->latestCert->status != 'unpaid' && $this->error('订单不是未支付状态');
+            OrderUtil::guardZeroAmountOrder(
+                $order->latestCert->amount,
+                $order->latestCert->action,
+            );
 
             // 获取交易信息 订单金额为负数
             $transaction = OrderUtil::getOrderTransaction($order->toArray());
@@ -1222,7 +1314,7 @@ trait ActionTrait
     public function cancelPending(int $order_id): void
     {
         // task → order 锁顺序：先锁 commit task 再锁 order 行，与
-        // revokeCancel / commitCancel / TaskJob::handle 的锁顺序统一防死锁。
+        // archive / commitCancel / TaskJob::handle 的锁顺序统一防死锁。
         // runTaskMutationTransaction 提供 attempts=3 死锁重试：闭包纯本地 task+order/cert 变更、无上游 HTTP；
         // 退款 Transaction::create 随回滚消失且有唯一索引兜底，$this->error() 抛 ApiResponseException（非并发错误）
         // 不被 DB::transaction 重试、直接传播触发回滚，语义与原手写 begin/commit/rollback 等价。
@@ -1293,8 +1385,6 @@ trait ActionTrait
         $orderIds = is_array($orderIds) ? $orderIds : explode(',', (string) $orderIds);
         $orderIds = array_map('intval', $orderIds);
 
-        $later = $action == 'cancel' ? max(120, $later) : $later;
-
         $data['action'] = $action;
         $data['started_at'] = now()->addSeconds($later);
         $data['status'] = 'executing';
@@ -1314,7 +1404,7 @@ trait ActionTrait
             $data['order_id'] = $orderId;
             $task = Task::create($data);
             // afterCommit 防止 worker 在外层事务提交前消费 job 导致 task 查无记录静默丢失
-            // （默认 after_commit=false，配合 Redis 队列会让 revokeCancel/batchRevokeCancel 的 sync 任务丢失）
+            // （默认 after_commit=false，配合 Redis 队列会让 事务内创建的 任务丢失）
             try {
                 if ($later > 0) {
                     // 队列定时比可执行时间多3秒 避免任务在可执行时间之前执行

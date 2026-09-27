@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
- * 通用运维/健康 admin 告警共享件（包0 前置，E1~E6 监控命令与后续 F/G/H 复用）。
+ * 通用运维/健康 admin 告警共享件（包0 前置，E1/E3~E5 监控命令与后续 F/G/H 复用）。
  *
  * 职责：把「运维告警」标准化为一次经 NotificationCenter 的 system_alert 通知投递，附带
  * Cache 状态指纹去重，避免持续异常态刷屏。本服务只做传输层，不背聚合/阈值判定（归调用方）。
@@ -66,7 +66,7 @@ class SystemAlert
             $fingerprintValue = $fingerprint
                 ?? sha1((string) json_encode([$category, $title, $message, $details]));
 
-            if (Cache::get(self::CACHE_PREFIX.$dedupeKey) === $fingerprintValue) {
+            if (Cache::store('runtime')->get(self::CACHE_PREFIX.$dedupeKey) === $fingerprintValue) {
                 return false;
             }
         }
@@ -115,7 +115,7 @@ class SystemAlert
         if ($useDedupe) {
             $key = self::CACHE_PREFIX.$dedupeKey;
             DB::afterCommit(
-                fn () => Cache::put($key, $fingerprintValue, now()->addHours($dedupeTtlHours))
+                fn () => Cache::store('runtime')->put($key, $fingerprintValue, now()->addHours($dedupeTtlHours))
             );
         }
 
@@ -131,6 +131,6 @@ class SystemAlert
             return;
         }
 
-        Cache::forget(self::CACHE_PREFIX.$dedupeKey);
+        Cache::store('runtime')->forget(self::CACHE_PREFIX.$dedupeKey);
     }
 }

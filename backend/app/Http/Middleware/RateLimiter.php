@@ -22,8 +22,8 @@ class RateLimiter
     public function handle(Request $request, Closure $next, string $limiter = 'v2')
     {
         // 1. 优先检查 token 级别的限流
-        // acme 没有有效的 token，deploy 使用 DeployToken
-        if ($limiter === 'acme') {
+        // acme 和恢复状态端点没有有效的 API token，deploy 使用 DeployToken
+        if (in_array($limiter, ['acme', 'database-job-status'], true)) {
             $this->checkIpRateLimit($request, $limiter);
         } elseif ($limiter === 'deploy') {
             $hasValidToken = $this->checkDeployTokenRateLimit($request);
@@ -50,7 +50,7 @@ class RateLimiter
 
         // IP 限流相对宽松，主要防止暴力攻击
         $limit = match ($limiter) {
-            'v1', 'v2', 'deploy', 'acme' => 120,
+            'v1', 'v2', 'deploy', 'acme', 'database-job-status' => 120,
             'enterprise-lookup' => 30,
             'zipcode-lookup' => 60,
             default => 60,
@@ -144,9 +144,9 @@ class RateLimiter
         $prevKey = "$key:".($currentWindow - 1);
 
         // 当前窗口计数器，TTL 设为 2 个窗口确保上一窗口数据可用
-        Cache::add($currentKey, 0, $window * 2);
-        $currentCount = Cache::increment($currentKey);
-        $prevCount = (int) Cache::get($prevKey, 0);
+        Cache::store('runtime')->add($currentKey, 0, $window * 2);
+        $currentCount = Cache::store('runtime')->increment($currentKey);
+        $prevCount = (int) Cache::store('runtime')->get($prevKey, 0);
 
         $estimated = $prevCount * $prevWeight + $currentCount;
 

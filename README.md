@@ -207,6 +207,14 @@ cloud-deploy 插件用于把订单证书推送到云平台资源。云凭证在�
 
 租户可配置的面板地址和 Webhook 地址默认执行出站目标校验：回环、链路本地、元数据及保留地址始终拒绝，私网地址仅允许运维通过 `CLOUD_DEPLOY_PRIVATE_TARGETS` 按逗号分隔配置精确白名单（格式为 `provider@host:port`，IPv6 主机使用方括号）。迁移历史私网凭证时，可先执行 `php artisan cloud-deploy:audit-destinations`（或加 `--json`）只读盘点存量目标，据其输出填写白名单后再启用对应凭证。`allow_insecure` 仍只控制目标服务器的 TLS 证书校验，不会绕过出站地址策略。
 
+## 本地开发数据库
+
+默认 `make up` 启动本机 MySQL。使用外部 MySQL 时，复制根目录 `.env.docker.example` 为 `.env`，填写 `DEV_DB_HOST`、`DEV_DB_PORT`、`DEV_DB_USERNAME`、`DEV_DB_PASSWORD`，执行 `make build && make up`。`COMPOSE_FILE=compose.yaml:compose.external-db.yaml` 启用外部模式，此模式不会启动本机 MySQL。真实凭据仅放在被忽略的 `.env` 中。
+
+启动脚本自动同步 `backend/.env` 和 `backend/.env.testing` 的连接配置，开发库为 `ssl_manager`，测试库为 `ssl_manager_test`；外部服务器需提前建立开发库并准备专用账号，授权开发库、测试库及并行派生库 `ssl_manager_test_test_*`。不要向应用容器全局注入 `DB_DATABASE`，以免覆盖测试库选择。已有数据需先备份迁移；切换选项本身不迁移数据。已有启动配置缓存会在连接切换时清除。
+
+恢复本机模式：从根目录 `.env` 移除 `COMPOSE_FILE` 和 `DEV_DB_*`，然后 `make up`。清理旧 MySQL 容器可执行 `docker compose rm -sf mysql`，保留数据卷；不使用 `down -v`。`make db` 跟随应用当前数据库连接，`make test` 与本机 finish-check 仅使用默认配置的测试连接（通常 MySQL 8.4），保持测试库隔离，不额外启动其他 MySQL 版本；MySQL 5.7 / 8.0 兼容性由 CI 矩阵验证。`make test` 与 `make test-snapshot` 默认 8 个 worker，内网数据库下可并发分摊等待；内存受限时使用 `PROCESSES=4`，例如 `make test-snapshot PROCESSES=4`。快照入口只读比较既有 fixture，不执行 capture。`make db-structure` 仍显式启动本机 MySQL，在本机临时库导出结构；mutation 测试继续使用隔离实例。
+
 ## 文档
 
 | 文档                               | 说明                                                                |

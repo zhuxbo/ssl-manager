@@ -39,6 +39,7 @@ export interface PlatformConfigs {
   Beian?: string;
   CopyStart?: string | number;
   Favicon?: string;
+  BodyCode?: string;
   Logo?: string;
   LogoExpanded?: string;
   Qrcode?: string;

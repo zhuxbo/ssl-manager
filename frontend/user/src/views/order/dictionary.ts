@@ -40,7 +40,7 @@ export const ActivatingStatusOptions: { label: string; value: string }[] = [
     value: "active"
   },
   {
-    label: "待取消",
+    label: "取消中",
     value: "cancelling"
   }
 ];
@@ -55,14 +55,6 @@ export const ArchivedStatusOptions: { label: string; value: string }[] = [
     value: "renewed"
   },
   {
-    label: "已替换",
-    value: "replaced"
-  },
-  {
-    label: "已重签",
-    value: "reissued"
-  },
-  {
     label: "已过期",
     value: "expired"
   },
@@ -71,8 +63,8 @@ export const ArchivedStatusOptions: { label: string; value: string }[] = [
     value: "revoked"
   },
   {
-    label: "已失败",
-    value: "failed"
+    label: "已归档",
+    value: "archived"
   }
 ];
 export const statusType: {
@@ -87,7 +79,7 @@ export const statusType: {
   processing: "primary",
   approving: "primary",
   active: "success",
-  failed: "danger",
+  archived: "info",
   cancelling: "danger",
   cancelled: "danger",
   renewed: "info",
@@ -103,14 +95,14 @@ export const status: { [key: string]: string } = {
   processing: "待验证",
   approving: "待审核",
   active: "已签发",
-  cancelling: "待取消",
+  cancelling: "取消中",
   cancelled: "已取消",
   renewed: "已续期",
   replaced: "已替换",
   reissued: "已重签",
   expired: "已过期",
   revoked: "已吊销",
-  failed: "已失败"
+  archived: "已归档"
 };
 
 export const statusOptions: { label: string; value: string }[] = [
@@ -135,7 +127,7 @@ export const statusOptions: { label: string; value: string }[] = [
     value: "active"
   },
   {
-    label: "待取消",
+    label: "取消中",
     value: "cancelling"
   },
   {
@@ -147,14 +139,6 @@ export const statusOptions: { label: string; value: string }[] = [
     value: "renewed"
   },
   {
-    label: "已替换",
-    value: "replaced"
-  },
-  {
-    label: "已重签",
-    value: "reissued"
-  },
-  {
     label: "已过期",
     value: "expired"
   },
@@ -163,8 +147,8 @@ export const statusOptions: { label: string; value: string }[] = [
     value: "revoked"
   },
   {
-    label: "已失败",
-    value: "failed"
+    label: "已归档",
+    value: "archived"
   }
 ];
 

@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Setting;
 use Database\Seeders\SettingSeeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
@@ -138,4 +139,20 @@ test('平台设置迁移不创建或整理设置数据', function () {
     expect(DB::table('settings')->where('group_id', $siteId)->where('key', 'beian')->exists())->toBeFalse()
         ->and(DB::table('settings')->where('group_id', $siteId)->where('key', 'logoExpanded')->exists())->toBeFalse()
         ->and(DB::table('settings')->where('group_id', $siteId)->where('key', 'name')->value('value'))->toBeNull();
+});
+
+test('隐藏自定义代码不由 Seeder 创建且保留手动配置', function () {
+    $siteId = platformSettingsSiteGroupId();
+    DB::table('settings')->where('group_id', $siteId)->where('key', 'bodyCode')->delete();
+    rerunPlatformSettingSeeder();
+
+    expect(Setting::where('group_id', $siteId)->where('key', 'bodyCode')->exists())->toBeFalse();
+
+    $code = '<script>window.support = true;</script>';
+    $setting = Setting::create([
+        'group_id' => $siteId, 'key' => 'bodyCode', 'type' => 'base64',
+        'value' => $code, 'weight' => 20,
+    ]);
+    rerunPlatformSettingSeeder();
+    expect($setting->fresh()->value)->toBe($code);
 });

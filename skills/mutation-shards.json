@@ -17,6 +17,7 @@
         "backend/tests/Feature/Commands/UserDataCommandTest.php",
         "backend/tests/Feature/Http/Controllers/Admin/DashboardControllerTest.php",
         "backend/tests/Feature/Http/Controllers/Admin/FundControllerTest.php",
+        "backend/tests/Feature/Http/Controllers/User/DashboardControllerTest.php",
         "backend/tests/Feature/Http/Controllers/User/FundControllerTest.php",
         "backend/tests/Feature/Http/Controllers/User/TopUpControllerTest.php"
       ]
@@ -47,6 +48,8 @@
         "backend/tests/Feature/Http/Controllers/V2/ApiControllerCommitResilienceTest.php",
         "backend/tests/Feature/Http/Controllers/V2/ApiControllerSyncTimeoutTest.php",
         "backend/tests/Feature/Services/Order/SyncedCancelRefundTest.php",
+        "backend/tests/Feature/Services/Order/ArchiveOrderTest.php",
+        "backend/tests/Feature/Services/Order/ZeroAmountReissueTest.php",
         "backend/tests/Unit/Jobs/TaskJobTest.php",
         "backend/tests/Unit/Services/Acme/ActionResponseTest.php",
         "backend/tests/Unit/Services/Acme/ActionTest.php",
@@ -77,11 +80,15 @@
         "backend/tests/**/*Order*Test.php",
         "backend/tests/Feature/Services/Order/**/*.php",
         "backend/tests/Unit/Services/Order/**/*.php",
+        "backend/tests/Unit/Services/Delegation/AutoDcvTxtServiceTest.php",
         "backend/tests/Feature/Documents/DocumentSubmitTest.php",
         "backend/tests/Feature/Http/Controllers/Callback/CallbackControllerTest.php",
         "backend/tests/Feature/Http/Controllers/V1/ApiController*Test.php",
         "backend/tests/Feature/Http/Controllers/V2/ApiController*Test.php",
         "backend/tests/Feature/Commands/AutoRenewCommandTest.php",
+        "backend/tests/Feature/Commands/AutoRenewAtomicityTest.php",
+        "backend/tests/Feature/Commands/CertumAutoReissueTest.php",
+        "backend/tests/Feature/Http/Controllers/Deploy/UpdateAtomicityTest.php",
         "backend/tests/Feature/Commands/PurgeCommandTest.php",
         "backend/tests/Feature/Http/Controllers/Admin/ProductControllerTest.php",
         "backend/tests/Feature/Http/Controllers/User/DashboardControllerTest.php",
@@ -97,6 +104,7 @@
       "dependencies": [],
       "test_patterns": [
         "backend/tests/**/*AutoRenew*Test.php",
+        "backend/tests/Feature/Commands/CertumAutoReissueTest.php",
         "backend/tests/Unit/Services/Notification/Builders/CertExpireNotificationBuilderTest.php"
       ]
     },

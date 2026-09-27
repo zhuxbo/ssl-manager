@@ -89,7 +89,9 @@ class VerifyUtil
     {
         // 查询符合条件的订单
         $orders = Order::with(['latestCert', 'product'])
-            ->whereHas('latestCert', fn ($query) => $query->where('status', 'unpaid'))
+            ->whereHas('latestCert', fn ($query) => $query->where('status', 'unpaid')
+                ->orWhere(fn ($freeReissue) => $freeReissue->where('status', 'pending')
+                    ->where('action', 'reissue')->where('amount', 0)))
             ->whereIn('id', $order_ids)
             ->get();
 
@@ -341,7 +343,7 @@ class VerifyUtil
      * file 是历史的协议无关方法，生成 link 时为 //domain/path，按 HTTP、HTTPS 顺序尝试；
      * 显式 http/https 方法只请求对应协议。任何失败均返回 false（不可判定），不制造 false-negative。
      */
-    private static function verifyFileValidationLocal(array $item, string $method): bool
+    public static function verifyFileValidationLocal(array $item, string $method): bool
     {
         $link = trim((string) ($item['link'] ?? ''));
         $expected = (string) ($item['content'] ?? '');

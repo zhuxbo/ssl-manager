@@ -1,10 +1,20 @@
 <?php
 
 use App\Models\Admin;
+use App\Models\Cert;
+use App\Models\CnameDelegation;
+use App\Models\ErrorLog;
 use App\Models\Setting;
 use App\Models\SettingGroup;
+use App\Services\Delegation\DelegationConfigService;
+use App\Services\LogBuffer;
+use Database\Seeders\SettingSeeder;
+use Illuminate\Console\Scheduling\CacheEventMutex;
+use Illuminate\Console\Scheduling\Event;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Storage;
 use Tests\Traits\ActsAsAdmin;
 
@@ -14,6 +24,52 @@ uses(RefreshDatabase::class);
 beforeEach(function () {
     $this->admin = Admin::factory()->create();
 });
+
+function settingControllerCreateDelegationDomain(string $domain): Setting
+{
+    $group = SettingGroup::firstOrCreate(
+        ['name' => 'delegation'],
+        ['title' => '委托设置', 'weight' => 1],
+    );
+    $config = app(DelegationConfigService::class);
+
+    return Setting::create([
+        'group_id' => $group->id,
+        'key' => $config->keyForDomain($domain),
+        'type' => 'array',
+        'value' => [
+            'domain' => $domain,
+            'provider' => 'cloudflare',
+            'zoneId' => 'test-zone',
+            'apiToken' => 'test-token',
+        ],
+        'weight' => 1,
+    ]);
+}
+
+function settingControllerCreateDefaultDomain(string $domain): Setting
+{
+    $group = SettingGroup::firstOrCreate(
+        ['name' => 'delegation'],
+        ['title' => '委托设置', 'weight' => 1],
+    );
+
+    return Setting::create([
+        'group_id' => $group->id,
+        'key' => 'delegationDomain',
+        'type' => 'string',
+        'value' => $domain,
+        'weight' => 2,
+    ]);
+}
+
+function settingControllerCreateDelegation(string $domain, string $label): CnameDelegation
+{
+    return CnameDelegation::factory()->create([
+        'proxy_domain' => $domain,
+        'label' => $label,
+    ]);
+}
 
 test('管理员可以获取所有设置', function () {
     $group = SettingGroup::factory()->create();
@@ -141,6 +197,166 @@ test('管理员可以批量更新设置', function () {
     }
 });
 
+test('管理员批量更新不能原地改写委托域身份', function () {
+    expectsBreakingChange('delegation-settings-2026-09: 委托设置拒绝操作改为 HTTP 200、code=0 业务提示，不再返回 HTTP 400');
+    $setting = settingControllerCreateDelegationDomain('proxy.example.com');
+    $delegation = settingControllerCreateDelegation('proxy.example.com', str_repeat('f', 32));
+    Cert::factory()->create([
+        'status' => 'active',
+        'validation' => [['delegation_id' => $delegation->id]],
+    ]);
+
+    $response = $this->actingAsAdmin($this->admin)->patchJson('/api/admin/setting/batch-update', [
+        'settings' => [[
+            'id' => $setting->id,
+            'value' => [
+                'domain' => 'proxy-example.com',
+                'provider' => 'cloudflare',
+                'zoneId' => 'new-zone',
+                'apiToken' => 'new-token',
+            ],
+        ]],
+    ]);
+
+    $response->assertOk()->assertJson(['code' => 0]);
+    expect($setting->fresh()->value['domain'])->toBe('proxy.example.com')
+        ->and($delegation->fresh())->not->toBeNull();
+});
+
+test('管理员单条更新不能原地改写委托域身份但可以切换 provider', function () {
+    expectsBreakingChange('delegation-settings-2026-09: 委托设置拒绝操作改为 HTTP 200、code=0 业务提示，不再返回 HTTP 400');
+    $setting = settingControllerCreateDelegationDomain('proxy.example.com');
+
+    $this->actingAsAdmin($this->admin)
+        ->putJson("/api/admin/setting/$setting->id", [
+            'group_id' => $setting->group_id,
+            'key' => $setting->key,
+            'type' => $setting->type,
+            'value' => [
+                'domain' => 'proxy-example.com',
+                'provider' => 'cloudflare',
+                'zoneId' => 'renamed-zone',
+                'apiToken' => 'renamed-token',
+            ],
+        ])
+        ->assertOk()
+        ->assertJson(['code' => 0]);
+
+    expect($setting->fresh()->value['domain'])->toBe('proxy.example.com');
+
+    $this->actingAsAdmin($this->admin)
+        ->putJson("/api/admin/setting/$setting->id", [
+            'group_id' => $setting->group_id,
+            'key' => $setting->key,
+            'type' => $setting->type,
+            'value' => [
+                'domain' => 'proxy.example.com',
+                'provider' => 'tencent',
+                'secretId' => 'new-secret-id',
+                'secretKey' => 'new-secret-key',
+            ],
+        ])
+        ->assertOk()
+        ->assertJson(['code' => 1]);
+
+    expect($setting->fresh()->value)->toMatchArray([
+        'domain' => 'proxy.example.com',
+        'provider' => 'tencent',
+        'secretId' => 'new-secret-id',
+        'secretKey' => 'new-secret-key',
+    ]);
+});
+
+test('管理员可编辑 provider 示例并改成域名派生 key 后启用', function () {
+    $group = SettingGroup::create([
+        'name' => 'delegation',
+        'title' => '域名委托',
+        'weight' => 3,
+    ]);
+    $setting = Setting::create([
+        'group_id' => $group->id,
+        'key' => 'aliyun',
+        'type' => 'array',
+        'value' => [
+            'domain' => '',
+            'provider' => 'aliyun',
+            'accessKeyId' => '',
+            'accessKeySecret' => '',
+        ],
+    ]);
+
+    $this->actingAsAdmin($this->admin)
+        ->putJson("/api/admin/setting/$setting->id", [
+            'group_id' => $group->id,
+            'key' => 'proxyExampleCom',
+            'type' => 'array',
+            'value' => [
+                'domain' => 'proxy.example.com',
+                'provider' => 'aliyun',
+                'accessKeyId' => 'access-key-id',
+                'accessKeySecret' => 'access-key-secret',
+            ],
+        ])
+        ->assertOk()
+        ->assertJson(['code' => 1]);
+
+    $setting->refresh();
+    expect($setting->key)->toBe('proxyExampleCom')
+        ->and(app(DelegationConfigService::class)->get('proxy.example.com'))
+        ->toMatchArray([
+            'provider' => 'aliyun',
+            'accessKeyId' => 'access-key-id',
+            'accessKeySecret' => 'access-key-secret',
+        ]);
+});
+
+test('管理员保留示例键名即可启用委托域并继续维护凭据', function () {
+    $this->seed(SettingSeeder::class);
+    $group = SettingGroup::where('name', 'delegation')->firstOrFail();
+    $setting = Setting::where('group_id', $group->id)->where('key', 'cloudflare')->firstOrFail();
+    $config = [
+        'domain' => 'proxy.example.com',
+        'provider' => 'cloudflare',
+        'zoneId' => 'zone-id',
+        'apiToken' => 'initial-token',
+    ];
+    $service = app(DelegationConfigService::class);
+    expect($service->get('proxy.example.com'))->toBe([]);
+
+    $this->actingAsAdmin($this->admin)
+        ->patchJson('/api/admin/setting/batch-update', [
+            'settings' => [
+                ['id' => $setting->id, 'value' => $config],
+                ['id' => Setting::where('group_id', $group->id)->where('key', 'delegationDomain')->firstOrFail()->id, 'value' => 'proxy.example.com'],
+            ],
+        ])
+        ->assertOk()->assertJson(['code' => 1]);
+
+    expect($setting->fresh()->key)->toBe('cloudflare')
+        ->and($service->get($service->defaultDomain()))->toMatchArray($config);
+
+    $config['apiToken'] = 'updated-token';
+    $this->actingAsAdmin($this->admin)
+        ->putJson("/api/admin/setting/$setting->id", [
+            'group_id' => $group->id,
+            'key' => 'cloudflare',
+            'type' => 'array',
+            'value' => $config,
+        ])
+        ->assertOk()->assertJson(['code' => 1]);
+    expect($service->get('proxy.example.com')['apiToken'])->toBe('updated-token');
+
+    $config['domain'] = 'other.example.com';
+    $this->actingAsAdmin($this->admin)
+        ->patchJson('/api/admin/setting/batch-update', [
+            'settings' => [['id' => $setting->id, 'value' => $config]],
+        ])
+        ->assertOk()->assertJson(['code' => 0]);
+    $this->actingAsAdmin($this->admin)
+        ->deleteJson("/api/admin/setting/$setting->id")
+        ->assertOk()->assertJson(['code' => 0, 'msg' => '当前默认委托域不能删除']);
+});
+
 test('管理员可以删除设置', function () {
     $setting = Setting::factory()->create();
 
@@ -150,10 +366,176 @@ test('管理员可以删除设置', function () {
     expect(Setting::find($setting->id))->toBeNull();
 });
 
+test('管理员不能删除 defaultDomain 设置本身', function () {
+    expectsBreakingChange('delegation-settings-2026-09: 委托设置拒绝操作改为 HTTP 200、code=0 业务提示，不再返回 HTTP 400');
+    $default = settingControllerCreateDefaultDomain('proxy.example.com');
+
+    $response = $this->actingAsAdmin($this->admin)
+        ->deleteJson("/api/admin/setting/$default->id");
+
+    $response->assertOk()
+        ->assertJson(['code' => 0, 'msg' => '默认委托域设置不能删除']);
+    expect($default->fresh())->not->toBeNull();
+});
+
+test('管理员删除委托域时只按 proxy_domain 计数保护', function () {
+    expectsBreakingChange('delegation-settings-2026-09: 委托设置拒绝操作改为 HTTP 200、code=0 业务提示，不再返回 HTTP 400');
+    $setting = settingControllerCreateDelegationDomain('proxy.example.com');
+    $delegations = collect([
+        settingControllerCreateDelegation('proxy.example.com', str_repeat('a', 32)),
+        settingControllerCreateDelegation('proxy.example.com', str_repeat('b', 32)),
+    ]);
+
+    $response = $this->actingAsAdmin($this->admin)
+        ->deleteJson("/api/admin/setting/$setting->id");
+
+    $response->assertOk()
+        ->assertJson(['code' => 0, 'msg' => '仍有 2 条委托记录使用该委托域']);
+    expect($setting->fresh())->not->toBeNull()
+        ->and($delegations->every(fn (CnameDelegation $delegation) => $delegation->fresh() !== null))->toBeTrue();
+});
+
+test('批删先预检所有委托域且任一计数检查失败时一个都不删除', function () {
+    expectsBreakingChange('delegation-settings-2026-09: 委托设置拒绝操作改为 HTTP 200、code=0 业务提示，不再返回 HTTP 400');
+    $eligible = settingControllerCreateDelegationDomain('eligible.example.com');
+    $blocked = settingControllerCreateDelegationDomain('blocked.example.com');
+    $blockedDelegation = settingControllerCreateDelegation('blocked.example.com', str_repeat('c', 32));
+    $ordinary = Setting::factory()->create();
+
+    $response = $this->actingAsAdmin($this->admin)
+        ->deleteJson('/api/admin/setting/batch', [
+            'ids' => [$eligible->id, $blocked->id, $ordinary->id],
+        ]);
+
+    $response->assertOk()
+        ->assertJson(['code' => 0, 'msg' => '仍有 1 条委托记录使用该委托域']);
+    expect($eligible->fresh())->not->toBeNull()
+        ->and($blocked->fresh())->not->toBeNull()
+        ->and($blockedDelegation->fresh())->not->toBeNull()
+        ->and($ordinary->fresh())->not->toBeNull();
+});
+
+test('批删通过全量预检后删除委托设置并保留普通设置删除行为', function () {
+    $first = settingControllerCreateDelegationDomain('first.example.com');
+    $second = settingControllerCreateDelegationDomain('second.example.com');
+    $ordinary = Setting::factory()->create();
+    $unrelated = settingControllerCreateDelegation('other.example.com', str_repeat('e', 32));
+
+    $response = $this->actingAsAdmin($this->admin)
+        ->deleteJson('/api/admin/setting/batch', [
+            'ids' => [$first->id, $second->id, $ordinary->id],
+        ]);
+
+    $response->assertOk()->assertJson(['code' => 1]);
+    expect($first->fresh())->toBeNull()
+        ->and($second->fresh())->toBeNull()
+        ->and($ordinary->fresh())->toBeNull()
+        ->and($unrelated->fresh())->not->toBeNull();
+});
+
+test('delegation 组畸形域配置批删失败关闭且普通组设置保留待单独处理', function () {
+    expectsBreakingChange('delegation-settings-2026-09: 委托设置拒绝操作改为 HTTP 200、code=0 业务提示，不再返回 HTTP 400');
+    $delegationGroup = SettingGroup::firstOrCreate(
+        ['name' => 'delegation'],
+        ['title' => '委托设置', 'weight' => 1],
+    );
+    $otherGroup = SettingGroup::factory()->create(['name' => 'other-settings']);
+    $wrongType = Setting::create([
+        'group_id' => $delegationGroup->id,
+        'key' => 'wrongTypeExampleCom',
+        'type' => 'string',
+        'value' => 'wrong-type.example.com',
+    ]);
+    $wrongKey = Setting::create([
+        'group_id' => $delegationGroup->id,
+        'key' => 'doesNotMatch',
+        'type' => 'array',
+        'value' => ['domain' => 'wrong-key.example.com'],
+    ]);
+    $wrongGroup = Setting::create([
+        'group_id' => $otherGroup->id,
+        'key' => 'wrongGroupExampleCom',
+        'type' => 'array',
+        'value' => ['domain' => 'wrong-group.example.com'],
+    ]);
+    $response = $this->actingAsAdmin($this->admin)
+        ->deleteJson('/api/admin/setting/batch', [
+            'ids' => [$wrongType->id, $wrongKey->id, $wrongGroup->id],
+        ]);
+
+    $response->assertOk()->assertJson(['code' => 0]);
+    expect($wrongType->fresh())->not->toBeNull()
+        ->and($wrongKey->fresh())->not->toBeNull()
+        ->and($wrongGroup->fresh())->not->toBeNull();
+});
+
 test('管理员可以清除设置缓存', function () {
     $response = $this->actingAsAdmin($this->admin)->postJson('/api/admin/setting/clear-cache');
 
     $response->assertOk()->assertJson(['code' => 1]);
+});
+
+test('管理后台安全刷新设置缓存并保留框架运行状态', function () {
+    $viewFile = storage_path('framework/views/pest-safe-clear.view.php');
+    $sessionFile = storage_path('framework/sessions/pest-safe-clear.session');
+    File::ensureDirectoryExists(dirname($viewFile));
+    File::ensureDirectoryExists(dirname($sessionFile));
+    File::put($viewFile, 'view');
+    File::put($sessionFile, 'session');
+
+    $group = SettingGroup::factory()->create(['name' => 'safe-clear']);
+    Cache::put("setting:group:{$group->id}", ['stale' => true], 600);
+    Cache::put('admin-safe-clear-unregistered', 'preserved', 600);
+    Cache::store('runtime')->put('admin-safe-clear-runtime', 'critical', 600);
+    Cache::forever('illuminate:queue:restart', 1234567890);
+
+    $queue = app('queue');
+    $queue->pause('database', 'safe-clear');
+
+    $mutex = app(CacheEventMutex::class);
+    $event = (new Event($mutex, 'php artisan inspire'))
+        ->name('pest-safe-clear-scheduler')
+        ->withoutOverlapping();
+    expect($mutex->create($event))->toBeTrue();
+
+    try {
+        $this->actingAsAdmin($this->admin)
+            ->postJson('/api/admin/setting/clear-all-cache')
+            ->assertOk()
+            ->assertJson(['code' => 1]);
+
+        expect(Cache::get("setting:group:{$group->id}"))->toBeNull()
+            ->and(Cache::get('admin-safe-clear-unregistered'))->toBe('preserved')
+            ->and(Cache::store('runtime')->get('admin-safe-clear-runtime'))->toBe('critical')
+            ->and(Cache::get('illuminate:queue:restart'))->toBe(1234567890)
+            ->and($queue->isPaused('database', 'safe-clear'))->toBeTrue()
+            ->and($mutex->exists($event))->toBeTrue()
+            ->and(File::exists($viewFile))->toBeTrue()
+            ->and(File::exists($sessionFile))->toBeTrue();
+    } finally {
+        $queue->resume('database', 'safe-clear');
+        Cache::forget('illuminate:queue:restart');
+        Cache::forget('admin-safe-clear-unregistered');
+        Cache::store('runtime')->forget('admin-safe-clear-runtime');
+        $mutex->forget($event);
+        File::delete([$viewFile, $sessionFile]);
+    }
+});
+
+test('管理后台安全刷新在默认缓存指向 runtime 时也不删除其它键', function () {
+    config(['cache.default' => 'runtime']);
+    Cache::store('runtime')->put('safe-clear-overlap-critical', 'preserved', 600);
+
+    try {
+        $this->actingAsAdmin($this->admin)
+            ->postJson('/api/admin/setting/clear-all-cache')
+            ->assertOk()
+            ->assertJson(['code' => 1]);
+
+        expect(Cache::store('runtime')->get('safe-clear-overlap-critical'))->toBe('preserved');
+    } finally {
+        Cache::store('runtime')->forget('safe-clear-overlap-critical');
+    }
 });
 
 test('未认证用户无法访问设置管理', function () {
@@ -574,3 +956,57 @@ test('站点图片上传要求设置项为图片类型', function () {
 
     $response->assertOk()->assertJson(['code' => 0, 'msg' => '站点图片设置不存在']);
 });
+
+test('管理员可以修改已启用委托配置键名且域名身份不变', function () {
+    $setting = settingControllerCreateDelegationDomain('proxy.example.com');
+    $value = $setting->value;
+
+    $this->actingAsAdmin($this->admin)->putJson("/api/admin/setting/$setting->id", [
+        'group_id' => $setting->group_id,
+        'key' => 'cloudflare',
+        'type' => 'array',
+        'value' => $value,
+    ])->assertOk()->assertJson(['code' => 1]);
+
+    expect($setting->fresh()->key)->toBe('cloudflare')
+        ->and($setting->fresh()->value)->toBe($value)
+        ->and(app(DelegationConfigService::class)->get('proxy.example.com'))->toBe($value);
+});
+
+test('委托配置改名不能占用默认域保留键或顺带改变域名', function (string $key, string $domain) {
+    $setting = settingControllerCreateDelegationDomain('proxy.example.com');
+    $value = $setting->value;
+    $this->actingAsAdmin($this->admin)->putJson("/api/admin/setting/$setting->id", [
+        'group_id' => $setting->group_id,
+        'key' => $key,
+        'type' => 'array',
+        'value' => array_replace($value, ['domain' => $domain]),
+    ])->assertOk()->assertJson(['code' => 0]);
+    expect($setting->fresh()->key)->toBe($setting->key)
+        ->and($setting->fresh()->value)->toBe($value);
+})->with([
+    ['delegationDomain', 'proxy.example.com'],
+    ['cloudflare', 'other.example.com'],
+]);
+
+test('修改默认委托保留键返回业务提示且不记录异常', function (bool $debug) {
+    config(['app.debug' => $debug]);
+    $setting = settingControllerCreateDefaultDomain('proxy.example.com');
+    LogBuffer::clear();
+    $errorCount = ErrorLog::count();
+
+    $this->actingAsAdmin($this->admin)->putJson("/api/admin/setting/$setting->id", [
+        'group_id' => $setting->group_id,
+        'key' => 'renamedDomain',
+        'type' => 'string',
+        'value' => $setting->value,
+    ])->assertOk()->assertExactJson([
+        'code' => 0,
+        'msg' => '默认委托域设置键名不能修改',
+    ]);
+
+    LogBuffer::flush();
+    expect(ErrorLog::count())->toBe($errorCount)
+        ->and($setting->fresh()->key)->toBe('delegationDomain')
+        ->and($setting->fresh()->value)->toBe('proxy.example.com');
+})->with([true, false]);

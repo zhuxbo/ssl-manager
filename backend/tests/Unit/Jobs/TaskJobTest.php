@@ -4,6 +4,9 @@ use App\Exceptions\ApiResponseException;
 use App\Jobs\TaskJob;
 use App\Models\Acme;
 use App\Models\Admin;
+use App\Models\Callback;
+use App\Models\Cert;
+use App\Models\Order;
 use App\Models\Product;
 use App\Models\Setting;
 use App\Models\SettingGroup;
@@ -18,6 +21,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Sleep;
 use Tests\TestCase;
 use Tests\Traits\CreatesTestData;
 
@@ -53,6 +57,27 @@ function taskJobSetupGateway(): void
             ['type' => 'string', 'value' => $v, 'weight' => 0]
         );
     }
+}
+
+function taskJobCreateCallbackTask(): Task
+{
+    $order = Order::factory()->create();
+    $cert = Cert::factory()->active()->create(['order_id' => $order->id]);
+    $order->update(['latest_cert_id' => $cert->id]);
+
+    Callback::create([
+        'user_id' => $order->user_id,
+        'url' => 'https://8.8.8.8/callback',
+        'token' => 'callback-token',
+        'status' => 1,
+    ]);
+
+    return Task::factory()->create([
+        'order_id' => $order->id,
+        'action' => 'callback',
+        'status' => 'executing',
+        'started_at' => now(),
+    ]);
 }
 
 // ==================== 锁内守卫：静默跳过 ====================
@@ -161,6 +186,121 @@ test('非 acme action 路由到 Order\\Action（commit → Order\\Action::commit
     expect($fresh->result['code'])->toBe(0);
     // Order\Action::commit 的订单不存在文案
     expect($fresh->result['msg'])->toContain('订单或相关数据不存在');
+});
+
+test('callback 对 HTTP 200 仅将数字 0 或布尔 false 判为明确失败', function (mixed $body, string $expectedStatus) {
+    Http::fake(['*' => Http::response($body, 200)]);
+    $task = taskJobCreateCallbackTask();
+
+    (new TaskJob(['id' => $task->id]))->handle();
+
+    $fresh = $task->fresh();
+    expect($fresh->status)->toBe($expectedStatus)
+        ->and($fresh->result['code'])->toBe($expectedStatus === 'successful' ? 1 : 0);
+
+    $metadata = $fresh->result[$expectedStatus === 'successful' ? 'data' : 'errors'];
+    expect($metadata['http_status'])->toBe(200)
+        ->and($metadata['request_attempts'])->toBe(1)
+        ->and($metadata['response_length'])->toBeGreaterThan(0)
+        ->and($metadata['response_sha256'])->toHaveLength(64);
+})->with([
+    '数字 0 明确失败' => [['code' => 0, 'msg' => 'Order not found'], 'failed'],
+    '浮点 0 明确失败' => [['code' => 0.0, 'msg' => 'Rejected'], 'failed'],
+    '布尔 false 明确失败' => [['code' => false, 'msg' => 'Rejected'], 'failed'],
+    '没有 code 按成功' => [['message' => 'accepted'], 'successful'],
+    '其他数字 code 按成功' => [['code' => 2], 'successful'],
+    '字符串 0 按成功' => [['code' => '0'], 'successful'],
+    '非 JSON 的 HTTP 200 按成功' => ['OK', 'successful'],
+]);
+
+test('callback 对 HTTP 200 的 code msg 结构仅记录两个业务字段', function () {
+    Http::fake(['*' => Http::response([
+        'code' => 2,
+        'msg' => 'accepted',
+        'extra' => ['ignored' => true],
+    ], 200)]);
+    $task = taskJobCreateCallbackTask();
+
+    (new TaskJob(['id' => $task->id]))->handle();
+
+    $metadata = $task->fresh()->result['data'];
+    expect($metadata['remote_code'])->toBe(2)
+        ->and($metadata['remote_msg'])->toBe('accepted')
+        ->and($metadata)->not->toHaveKey('remote_response')
+        ->and($metadata)->not->toHaveKey('extra');
+});
+
+test('callback 对 HTTP 200 的非 code msg 结构原样记录响应', function () {
+    $body = '{"message":"accepted","nested":{"value":1}}';
+    Http::fake(['*' => Http::response($body, 200, ['Content-Type' => 'application/json'])]);
+    $task = taskJobCreateCallbackTask();
+
+    (new TaskJob(['id' => $task->id]))->handle();
+
+    $metadata = $task->fresh()->result['data'];
+    expect($metadata['remote_response'])->toBe($body)
+        ->and($metadata)->not->toHaveKey('remote_code')
+        ->and($metadata)->not->toHaveKey('remote_msg');
+});
+
+test('callback 对瞬态 HTTP 状态仅补发一次并记录最终响应', function (int $status) {
+    Sleep::fake();
+
+    try {
+        Http::fakeSequence()
+            ->push(['code' => 0], $status)
+            ->push(['code' => 1, 'msg' => 'accepted'], 200);
+        $task = taskJobCreateCallbackTask();
+
+        (new TaskJob(['id' => $task->id]))->handle();
+
+        $fresh = $task->fresh();
+        expect($fresh->status)->toBe('successful')
+            ->and($fresh->result['data']['http_status'])->toBe(200)
+            ->and($fresh->result['data']['request_attempts'])->toBe(2);
+        Http::assertSentCount(2);
+    } finally {
+        Sleep::fake(false);
+    }
+})->with([429, 502, 503, 504]);
+
+test('callback 对永久 HTTP 错误不重试', function (int $status) {
+    Http::fakeSequence()
+        ->push(['code' => 0, 'msg' => 'rejected'], $status)
+        ->push(['code' => 1], 200);
+    $task = taskJobCreateCallbackTask();
+
+    (new TaskJob(['id' => $task->id]))->handle();
+
+    $fresh = $task->fresh();
+    expect($fresh->status)->toBe('failed')
+        ->and($fresh->result['msg'])->toBe("Http Status $status")
+        ->and($fresh->result['errors']['http_status'])->toBe($status)
+        ->and($fresh->result['errors']['request_attempts'])->toBe(1)
+        ->and($fresh->result['errors'])->not->toHaveKey('remote_code')
+        ->and($fresh->result['errors'])->not->toHaveKey('remote_msg')
+        ->and($fresh->result['errors'])->not->toHaveKey('remote_response');
+    Http::assertSentCount(1);
+})->with([400, 401, 404, 500]);
+
+test('callback 连接失败后仅补发一次', function () {
+    Sleep::fake();
+
+    try {
+        Http::fakeSequence()
+            ->pushFailedConnection('connection reset')
+            ->push(['code' => 1], 200);
+        $task = taskJobCreateCallbackTask();
+
+        (new TaskJob(['id' => $task->id]))->handle();
+
+        $fresh = $task->fresh();
+        expect($fresh->status)->toBe('successful')
+            ->and($fresh->result['data']['request_attempts'])->toBe(2);
+        Http::assertSentCount(2);
+    } finally {
+        Sleep::fake(false);
+    }
 });
 
 // ==================== ApiResponseException 分流 ====================
@@ -382,7 +522,7 @@ test('cancel 撞已 failed 订单（failed 无任何退款路径）：不豁免�
     $user = $this->createTestUser();
     $product = $this->createTestProduct(['source' => 'default']);
     $order = $this->createTestOrder($user, $product);
-    $this->createTestCert($order, ['action' => 'new', 'status' => 'failed']); // 终态但非取消中
+    $this->createTestCert($order, ['action' => 'new', 'status' => 'archived']); // 终态但非取消中
 
     $task = Task::factory()->create([
         'order_id' => $order->id,
@@ -396,7 +536,7 @@ test('cancel 撞已 failed 订单（failed 无任何退款路径）：不豁免�
 
     $job->handle();
 
-    $job->assertFailed(); // failed 剔除豁免集 → 告警（修复前 assertNotFailed）
+    $job->assertFailed(); // archived 不属于退款豁免集 → 告警（修复前 assertNotFailed）
     $fresh = $task->fresh();
     expect($fresh->status)->toBe('failed');
     expect($fresh->result['msg'])->toContain('订单状态不是取消中');
@@ -671,7 +811,11 @@ test('commit 嵌套事务内并发错误：未达上限 release + 连接计数�
     $user = $this->createTestUser();
     $product = $this->createTestProduct(['source' => 'default']);
     $order = $this->createTestOrder($user, $product);
-    $this->createTestCert($order, ['action' => 'new', 'status' => 'pending']);
+    $this->createTestCert($order, [
+        'action' => 'new',
+        'status' => 'pending',
+        'amount' => '1.00',
+    ]);
 
     // commit 事务内的上游下单抛底层并发错误（QueryException 含 Deadlock），模拟事务内 FOR UPDATE 死锁
     $stub = new class extends Api
@@ -721,7 +865,11 @@ test('handle 整体在事务内执行：action 运行时 transactionLevel > 0（
     $user = $this->createTestUser();
     $product = $this->createTestProduct(['source' => 'default']);
     $order = $this->createTestOrder($user, $product);
-    $this->createTestCert($order, ['action' => 'new', 'status' => 'pending']);
+    $this->createTestCert($order, [
+        'action' => 'new',
+        'status' => 'pending',
+        'amount' => '1.00',
+    ]);
 
     // new Action 内部 app(Api::class)（App\Services\Order\Api\Api）→ 容器 stub 生效
     $stub = new class extends Api
@@ -831,6 +979,26 @@ test('failed() 构造 task_failed NotificationIntent 派发到 NotificationCente
     expect($captured->context['task_id'])->toBe($task->id);
     expect($captured->context['error_message'])->toBe('boom upstream timeout');
     expect($captured->context['admin_email'])->toBe('ops-alias@example.com');
+});
+
+test('failed() 对 callback 只落失败状态不派发 task_failed 通知', function () {
+    Admin::factory()->create(['email' => 'ops@example.com']);
+    $task = Task::factory()->create([
+        'action' => 'callback',
+        'status' => 'executing',
+        'attempts' => 0,
+    ]);
+
+    $mock = Mockery::mock(NotificationCenter::class);
+    $mock->shouldNotReceive('dispatch');
+    app()->instance(NotificationCenter::class, $mock);
+
+    (new TaskJob(['id' => $task->id]))->failed(new RuntimeException('transport failed'));
+
+    $fresh = $task->fresh();
+    expect($fresh->status)->toBe('failed')
+        ->and($fresh->attempts)->toBe(1)
+        ->and($fresh->last_execute_at)->not->toBeNull();
 });
 
 test('failed() 在 task 不存在时直接返回，不派发通知', function () {

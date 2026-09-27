@@ -3,12 +3,14 @@
 use App\Models\ApiLog;
 use App\Models\AutoDeployReport;
 use App\Models\Cert;
+use App\Models\CnameDelegation;
 use App\Models\DeployToken;
 use App\Models\ErrorLog;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\ProductPrice;
 use App\Models\User;
+use App\Services\Delegation\DnsResolver;
 use App\Services\Order\Api\Api;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -17,8 +19,24 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Testing\TestResponse;
+use Tests\Traits\CreatesTestData;
 
-uses(RefreshDatabase::class);
+uses(RefreshDatabase::class, CreatesTestData::class);
+
+beforeEach(function () {
+    $this->configureTestDelegationProxyDomain();
+    Cache::put('setting:group_name:site', [], 3600);
+
+    $resolver = Mockery::mock(DnsResolver::class);
+    $resolver->shouldReceive('cnameRecords')->andReturnUsing(function (string $host): array {
+        $delegation = CnameDelegation::all()->first(
+            fn (CnameDelegation $item) => strtolower("$item->prefix.$item->zone") === strtolower($host),
+        );
+
+        return $delegation ? [$delegation->target_fqdn] : [];
+    });
+    app()->instance(DnsResolver::class, $resolver);
+});
 
 // ===== 辅助函数 =====
 
@@ -847,6 +865,39 @@ test('update active 产品不支持委托验证', function () {
         ->assertJsonPath('errors.error_code', 'validation_method_unsupported');
 });
 
+test('update deploy 委托检测使用源 validation 的逻辑委托', function () {
+    [$user, $token] = createDeployAuth();
+    $sourceDelegation = $this->createTestDelegation($user, [
+        'zone' => 'example.com',
+        'prefix' => '_pki-validation',
+    ]);
+    $currentDelegation = $this->createTestDelegation($user, [
+        'zone' => 'sub.example.com',
+        'prefix' => '_pki-validation',
+    ]);
+    [$order] = createDeployOrder($user, 'active', [
+        'common_name' => 'sub.example.com',
+        'alternative_names' => 'sub.example.com',
+        'validation' => [[
+            'domain' => 'sub.example.com',
+            'method' => 'txt',
+            'delegation_id' => $sourceDelegation->id,
+            'delegation_target' => $sourceDelegation->target_fqdn,
+        ]],
+    ], [], [
+        'ca' => 'sectigo',
+        'validation_methods' => ['delegation', 'txt'],
+    ]);
+
+    deployPost($token, '/api/deploy/', [
+        'order_id' => $order->id,
+        'validation_method' => 'delegation',
+    ])->assertOk();
+
+    expect($sourceDelegation->fresh()->last_checked_at)->not->toBeNull()
+        ->and($currentDelegation->fresh()->last_checked_at)->toBeNull();
+});
+
 test('update 本地 CSR 前置校验失败不写签发失败记录', function () {
     [$user, $token] = createDeployAuth();
     // private_key 非空 = 当前证书由服务端签发（客户端首次 local 接管），不触发 local 重签冷却
@@ -1080,7 +1131,7 @@ test('update 冷却在互斥锁内权威复判：抢锁窗口内当前证书被�
     // 可能已被并发的 Deploy / V1V2 / scheduler 换成刚签发、仍在冷却期内的新证书。用 DB::listen 在
     // 控制器读完订单后、进互斥锁前换证，确定性复现该形态（非真并发、预设态），锁死锁内复判存在。
     config(['cache.default' => 'array']);
-    Cache::store('array')->flush();
+    Cache::store('runtime')->flush();
     Carbon::setTestNow(Carbon::parse('2026-07-01 10:00:00'));
 
     [$user, $token] = createDeployAuth();
@@ -1405,7 +1456,7 @@ test('update active 续费占锁时立即 503（抢锁早于建新单，Order �
     // 预占该锁后 POST 续费 → withMutex 抢不到 → MutationBusyException → 503，
     // 且在进 DB / 建新单之前抛出（Order 计数不变）。array driver 进程内互斥。
     config(['cache.default' => 'array']);
-    Cache::store('array')->flush();
+    Cache::store('runtime')->flush();
 
     [$user, $token] = createDeployAuth(
         User::factory()->create([
@@ -1425,7 +1476,7 @@ test('update active 续费占锁时立即 503（抢锁早于建新单，Order �
     ]);
 
     // 预占互斥锁（模拟同订单 commit/cancel 正在执行 / 另一续费请求持锁）
-    expect(Cache::lock("order_mutate_{$order->id}", 60)->get())->toBeTrue();
+    expect(Cache::store('runtime')->lock("order_mutate_{$order->id}", 60)->get())->toBeTrue();
 
     $before = Order::count();
 
@@ -1442,7 +1493,7 @@ test('update active 续费并发前驱翻 renewed：内部 O1 CAS 挡下 {code:0
     // 用 DB::listen 在锁内首条 orders FOR UPDATE 执行后把前驱证书翻 renewed，确定性复现
     // 「CAS 读到 status!='active' → affected=0 → 三态守卫 '订单已续费' code=0 回滚」（非真并发、预设态）。
     config(['cache.default' => 'array']);
-    Cache::store('array')->flush();
+    Cache::store('runtime')->flush();
 
     [$user, $token] = createDeployAuth(
         User::factory()->create([
@@ -1485,7 +1536,7 @@ test('update active 重签不自死锁（pay 在锁外，commit 自锁与外层�
     // reissue 复用同一 orderId：若把 pay 放互斥锁内，pay→commit 二次抢同键必 MutationBusyException 自伤。
     // pay 移出锁后是顺序获取（外层锁 finally 已释放），不应出现「正在处理中」自死锁文案。
     config(['cache.default' => 'array']);
-    Cache::store('array')->flush();
+    Cache::store('runtime')->flush();
 
     [$user, $token] = createDeployAuth();
     [$order, $cert] = createDeployOrder($user, 'active', [
@@ -1642,7 +1693,7 @@ test('限流返回 rate_limited 与 retry_after', function () {
 
     // 直接把 deploy token 的当前窗口计数器顶到限额之上
     $key = 'rate_limit_deploy:deploy_token_'.$token->id.':'.((int) floor(now()->timestamp / 60));
-    Cache::put($key, $token->getEffectiveRateLimit(60) + 1, 120);
+    Cache::store('runtime')->put($key, $token->getEffectiveRateLimit(60) + 1, 120);
 
     deployGet($token)
         ->assertOk()
@@ -1660,7 +1711,7 @@ test('限流 retry_after 睡满后确实放行，睡到下一窗口起点则仍�
 
     Carbon::setTestNow(Carbon::createFromTimestamp(1800000020));
     $key = 'rate_limit_deploy:deploy_token_'.$token->id.':'.((int) floor(now()->timestamp / 60));
-    Cache::put($key, $token->getEffectiveRateLimit(60) + 1, 120);
+    Cache::store('runtime')->put($key, $token->getEffectiveRateLimit(60) + 1, 120);
 
     // 刻意不在这里断言 retry_after 的具体值（上一个用例已锁 100）：常量断言放这儿会抢在
     // 两步实证之前红，让下面真正的语义守卫永远拿不到执行机会（等于白写）

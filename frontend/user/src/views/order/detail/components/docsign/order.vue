@@ -1,6 +1,6 @@
 <template>
   <el-card shadow="never" :style="{ border: 'none' }">
-    <h2 class="title">
+    <h2 class="title order-detail-title">
       <span>订单详情</span>
     </h2>
     <table class="descriptions">

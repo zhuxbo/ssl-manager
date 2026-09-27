@@ -92,14 +92,14 @@ test('邮箱为空时抛出异常', function () {
     $builder->build($intent, stalledMockUser(email: null));
 })->throws(RuntimeException::class, '邮箱为空');
 
-// ── 测试 15：5 态 → stall_status/action_hint 映射逐一断言 ───────────────────────
-test('5 态 → stall_status/action_hint 映射：unpaid 中性、已扣费勿重付、failed 指重新购买且不断言退款', function () {
+// ── 测试 15：4 态 → stall_status/action_hint 映射逐一断言 ───────────────────────
+test('4 态 → stall_status/action_hint 映射：unpaid 中性、已扣费勿重付、归档不再提醒', function () {
     $predecessors = new Collection([
         stalledMockPredecessor('unpaid', 'u.com'),
         stalledMockPredecessor('pending', 'p.com'),
         stalledMockPredecessor('processing', 'pr.com'),
         stalledMockPredecessor('approving', 'ap.com'),
-        stalledMockPredecessor('failed', 'f.com'),
+        stalledMockPredecessor('archived', 'f.com'),
     ]);
     $builder = buildStalledPartialBuilder($predecessors);
     $intent = new NotificationIntent('cert_renew_stalled', 'user', 1, ['email' => 'user@example.com']);
@@ -124,11 +124,7 @@ test('5 态 → stall_status/action_hint 映射：unpaid 中性、已扣费勿�
     expect($byDomain['ap.com']['stall_status'])->toBe('approving')
         ->and($byDomain['ap.com']['action_hint'])->toContain('域名验证/审核');
 
-    // failed：指「重新购买」+「联系客服」，不断言退款状态（notify R-1）
-    expect($byDomain['f.com']['stall_status'])->toBe('failed')
-        ->and($byDomain['f.com']['action_hint'])->toContain('重新购买证书')
-        ->and($byDomain['f.com']['action_hint'])->toContain('联系客服')
-        ->and($byDomain['f.com']['action_hint'])->not->toContain('已退款');
+    expect($byDomain->has('f.com'))->toBeFalse();
 });
 
 // ── 测试 16：空结果 → build 返回 null ──────────────────────────────────────────

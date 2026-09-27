@@ -275,6 +275,15 @@ class ApiController extends Controller
                 $updateParams['validation_method'] = $resolved;
             }
 
+            if ($validationMethod === 'delegation' && ! app(AutoRenewService::class)->checkDelegationValidity(
+                $order->user_id,
+                $updateParams['domains'],
+                strtolower((string) ($order->product->ca ?? '')),
+                is_array($cert->validation) ? $cert->validation : [],
+            )) {
+                $this->error('部分域名 CNAME 委托未配置或验证未通过');
+            }
+
             // 如果订单到期时间小于 15 天则续费，否则重签
             // 产品校验 / auto_renew 校验放互斥锁之前（行为不变，早失败不进临界区）
             $isRenew = $order->period_till?->lt(now()->addDays(15));
@@ -338,7 +347,7 @@ class ApiController extends Controller
                 //  3) commit 移到互斥锁「外」——reissue 复用同一 orderId，commit 自带同键互斥锁，
                 //     若在锁内则二次抢锁必失败自死锁；且 commit 含上游 HTTP，锁内不做上游调用（红线）。
                 //  4) 【锁纪律】不在此处对订单行做「先于 renew/reissue 的显式 FOR UPDATE 预锁」：
-                //     renew/reissue 的 initParams（CSR keygen + 委托 TXT 逐 token 上游 DNS 写，ProxyDNS 单 token 15s）
+                //     renew/reissue 的 initParams（CSR keygen + 委托 TXT 逐 token 上游 DNS 提供商写入，单 token 15s）
                 //     在其内部【源订单行锁之前】执行；并发双开的串行主体是 renew(persistOrder)/reissue 内的
                 //     「源订单行锁 + 前驱翻转 affected-rows CAS」（CAS 是锁定写 current read，不受 initParams 前置
                 //     一致读建立的 RR view 影响，无需外层再叠一把预锁）。此前的预锁会把 keygen + 委托 DNS HTTP 全
@@ -380,8 +389,10 @@ class ApiController extends Controller
                             $this->getData($action, 'reissue', [$updateParams]);
                         }
 
-                        // O3-A：pay(false) 纯本地扣费落 pending，与 renew/reissue 同事务原子（charge 失败 → 整体回滚）
-                        $this->getData($action, 'pay', [$resolved, false]);
+                        // 零元重签已落 pending；其余订单支付与创建同事务原子（失败整体回滚）。
+                        if (Order::findOrFail($resolved)->latestCert->status === 'unpaid') {
+                            $this->getData($action, 'pay', [$resolved, false]);
+                        }
                     });
 
                     return $resolved;
@@ -705,8 +716,8 @@ class ApiController extends Controller
             // certimate 等单证书自动部署不支持国密，已在 query field 拉取处拒绝。
             if (strtolower((string) $cert->encryption_alg) === 'sm2') {
                 $data['encryption_alg'] = 'sm2';
-                // 加密证书 + 加密私钥成对才下发（与下载包 addSm2CertToZip 成对守卫同口径）：
-                // 缺任一（gateway 未就绪）则不附 enc，避免下游拿到"有证书无私钥"的残缺数据
+                // 保持 Deploy API 透传契约：enc_cert 与 enc_key（GMT-0016）成对下发，enc_key2 可选。
+                // 下载包使用 GMT-0009 解密，拥有独立的就绪条件。
                 if ($cert->enc_cert && $cert->enc_key) {
                     $data['enc_certificate'] = $cert->enc_cert;
                     $data['enc_private_key'] = $cert->enc_key;

@@ -240,40 +240,7 @@ class AuthController extends BaseController
      */
     public function updateUsername(): void
     {
-        $request = request();
-        $username = $request->input('username', '');
-
-        /** @var User $user */
-        $user = $this->guard->user();
-
-        $validator = Validator::make([
-            'username' => $username,
-        ], [
-            'username' => [
-                'required',
-                'string',
-                'min:3',
-                'max:20',
-                'unique:users,username,'.$user->id,
-                function ($attribute, $value, $fail) {
-                    if (! preg_match('/^[a-zA-Z0-9\x{4e00}-\x{9fa5}_-]+$/u', $value)) {
-                        $fail('用户名只能包含字母、数字、中文、下划线和短横线');
-                    }
-                    if (preg_match('/^1[3-9]\d{9}$/', $value)) {
-                        $fail('用户名不能是手机号');
-                    }
-                },
-            ],
-        ]);
-
-        if ($validator->fails()) {
-            $this->error('验证失败', $validator->errors()->toArray());
-        }
-
-        $user->username = $username;
-        $user->save();
-
-        $this->success();
+        $this->error('用户名不允许修改');
     }
 
     /**

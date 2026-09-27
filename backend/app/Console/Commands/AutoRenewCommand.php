@@ -6,6 +6,7 @@ use App\Console\Commands\Concerns\ExpireNotifyWindow;
 use App\Console\Commands\Concerns\QueriesUserJsonSettings;
 use App\Exceptions\ApiResponseException;
 use App\Models\Order;
+use App\Models\Setting;
 use App\Services\Notification\DTOs\NotificationIntent;
 use App\Services\Notification\NotificationCenter;
 use App\Services\Notification\SystemAlert;
@@ -113,7 +114,7 @@ class AutoRenewCommand extends Command
      * 条件：
      * - auto_reissue = true（订单级或用户级）
      * - 订单剩余 >15 天（走重签）
-     * - latestCert.expires_at < now()+14天（证书即将到期）
+     * - latestCert.expires_at <= now()+14天（证书即将到期）
      * - latestCert.status = 'active'
      * - product.reissue = 1（产品禁用仍可重签）
      */
@@ -128,7 +129,7 @@ class AutoRenewCommand extends Command
             })
             ->whereHas('latestCert', function ($query) {
                 $query->where('status', 'active')
-                    ->where('expires_at', '<', now()->addDays(14))
+                    ->where('expires_at', '<=', now()->addDays(14))
                     // 过期防御（与客户端过期静默对齐、堵 00:00 auto-renew 早于 09:00 ExpireCommand 翻转的时序缝）：
                     // 证书已过期（expires_at < now）不再自动续费/重签，交 ExpireCommand 翻 expired 后由人工处理
                     ->where('expires_at', '>=', now())
@@ -192,7 +193,7 @@ class AutoRenewCommand extends Command
 
     /**
      * 处理单个订单
-     * 创建续费/重签 → 支付 → 派发延时 commit 任务（分散提交压力）
+     * 创建续费并支付／零元重签直接待提交 → 派发延时 commit 任务（分散提交压力）
      */
     private function processOrder(Order $order, string $action): void
     {
@@ -215,9 +216,15 @@ class AutoRenewCommand extends Command
             }
         }
 
-        // 检查委托有效性，无有效委托则跳过（同样发失败通知，纳入节点 gate）
+        // 支持的 CA 在估算的 DCV 复用期内沿用原验证方式，否则仍要求有效委托。
+        $reusedValidationMethod = $action === 'reissue' ? $this->reissueValidationMethod($order) : null;
         $ca = strtolower($product->ca ?? '');
-        if (! $this->checkDelegationValidity($user->id, $cert->alternative_names, $ca)) {
+        if ($reusedValidationMethod === null && ! $this->checkDelegationValidity(
+            $user->id,
+            $cert->alternative_names,
+            $ca,
+            is_array($cert->validation) ? $cert->validation : [],
+        )) {
             $this->warn("订单 #{$order->id} 跳过：无有效委托记录");
             $this->sendFailureNotification($order, $action, '部分域名 CNAME 委托未配置或验证未通过，已跳过');
 
@@ -281,7 +288,7 @@ class AutoRenewCommand extends Command
             }
 
             // 余额充足：清除欠费去重键，恢复后再欠费立即告警（不等 TTL），闭合「充值→又欠费」序列
-            Cache::forget("auto_renew_balance_notified:{$user->id}");
+            Cache::store('runtime')->forget("auto_renew_balance_notified:{$user->id}");
         }
 
         // 从原订单提取参数
@@ -290,13 +297,16 @@ class AutoRenewCommand extends Command
             'action' => $action,
             'channel' => 'auto',
             'domains' => $cert->alternative_names,
-            'validation_method' => 'delegation',
+            'validation_method' => $reusedValidationMethod ?? 'delegation',
             'period' => $order->period,
             'contact' => $order->contact,
         ];
 
-        // CSR：产品支持重用则重用（含私钥），否则自动生成
-        if ($product->reuse_csr ?? false) {
+        // 免委托重签：Certum 生成新 CSR，Sectigo/DigiCert 复制原 CSR 和私钥。
+        $reuseCsr = $reusedValidationMethod !== null
+            ? in_array($ca, ['sectigo', 'digicert'], true)
+            : ($product->reuse_csr ?? false);
+        if ($reuseCsr) {
             $params['csr'] = $cert->csr;
             if ($cert->private_key) {
                 $params['private_key'] = $cert->private_key;
@@ -312,7 +322,7 @@ class AutoRenewCommand extends Command
 
         $actionService = app(Action::class);
 
-        // O1：把「创建续费/重签 + 支付(不提交)」两步包进单个外层事务，保证原子性——pay 段 charge 失败时，
+        // O1：把「创建续费 + 支付(不提交)」两步包进单个外层事务，保证原子性——pay 段 charge 失败时，
         // renew 已翻转的旧证书（active→renewed）+ 新订单/证书一并回滚，杜绝「旧证书 renewed 终态 + 新单卡
         // unpaid」的静默孤儿（P0-1 路径 1）。延时 commit 任务留事务外（= V2「commit 移出事务」等价）。
         //
@@ -343,13 +353,15 @@ class AutoRenewCommand extends Command
                 $newOrderId = $result['data']['order_id'];
             }
 
-            // 段2：支付（不自动提交，转 pending）。code!==1 rethrow 逸出闭包 → 外层回滚（renew + 扣费一起撤销）。
-            try {
-                $actionService->pay($newOrderId, false);
-            } catch (ApiResponseException $e) {
-                $result = $e->getApiResponse();
-                if (($result['code'] ?? 0) !== 1) {
-                    throw new \Exception('支付失败: '.($result['msg'] ?? '未知错误'));
+            // 自动重签直接落 pending；只有续费需要支付，失败仍整体回滚。
+            if ($action === 'renew') {
+                try {
+                    $actionService->pay($newOrderId, false);
+                } catch (ApiResponseException $e) {
+                    $result = $e->getApiResponse();
+                    if (($result['code'] ?? 0) !== 1) {
+                        throw new \Exception('支付失败: '.($result['msg'] ?? '未知错误'));
+                    }
                 }
             }
 
@@ -365,7 +377,52 @@ class AutoRenewCommand extends Command
         $actionService->createTask($targetOrderId, 'commit', $delay);
 
         $scheduledAt = now()->addSeconds($delay)->format('m-d H:i');
-        $this->info("订单 #{$targetOrderId} 已支付，计划于 $scheduledAt 提交");
+        $this->info("订单 #{$targetOrderId} 待提交，计划于 $scheduledAt 提交");
+    }
+
+    /**
+     * 以订单首次签发时间估算 DCV 复用期；最终是否免验证仍由 CA 决定。
+     * 仅在现有选单（开关、通道、产品、订单余量）通过后调用，不扩大处理范围。
+     */
+    private function reissueValidationMethod(Order $order): ?string
+    {
+        $ca = strtolower($order->product->ca ?? '');
+        if (! in_array($ca, ['certum', 'sectigo', 'digicert'], true)) {
+            return null;
+        }
+
+        // 不预置此设置；读取原值，避免 integer cast 将小数或混合字符串误当成合法天数。
+        $setting = Setting::whereHas('group', fn ($query) => $query->where('name', 'site'))
+            ->where('key', 'firstAutoReissue')->where('type', 'integer')->first();
+        $value = $setting?->getRawOriginal('value');
+        if (! is_string($value) || ! preg_match('/^(?:[5-9]|1[0-4])$/D', $value)) {
+            return null;
+        }
+
+        $now = now();
+        $cert = $order->latestCert;
+        if (! $order->period_from || $order->period_from->gt($now)
+            || ! $cert->expires_at || $cert->expires_at->lt($now)
+            || $cert->expires_at->gt($now->copy()->addDays((int) $value))) {
+            return null;
+        }
+
+        // 按重签时适用的政策判定，不能用订单创建时的旧期限跨越政策节点。
+        $reuseDays = match (true) {
+            $now->gte('2029-03-15') => 10,
+            $now->gte('2027-03-15') => 100,
+            $ca === 'digicert' && $now->gte('2026-02-24 18:00:00 UTC') => 199,
+            $ca === 'sectigo' && $now->gte('2026-03-12') => 198,
+            $now->gte('2026-03-15') => 200,
+            default => $ca === 'digicert' ? 397 : 398,
+        };
+        if ($order->period_from->copy()->addDays($reuseDays)->lte($now)) {
+            return null;
+        }
+
+        $method = ($cert->dcv['is_delegate'] ?? false) ? 'delegation' : ($cert->dcv['method'] ?? null);
+
+        return is_string($method) && $method !== '' ? $method : null;
     }
 
     /**
@@ -413,14 +470,14 @@ class AutoRenewCommand extends Command
 
         // 到期前最后窗口豁免去重必发（node-1 语义 [now, now+1]），刷键防同轮其他单叠发
         if ($this->isFinalExpireNotifyNode($order->latestCert->expires_at)) {
-            Cache::put($key, true, $ttl);
+            Cache::store('runtime')->put($key, true, $ttl);
             $this->dispatchAutoRenewFailed($order, $action, $reason);
 
             return;
         }
 
         // 常规节奏：per-user 每 N 天一封（Cache::add 原子占位，抢不到即近期已发过）
-        if (! Cache::add($key, true, $ttl)) {
+        if (! Cache::store('runtime')->add($key, true, $ttl)) {
             return;
         }
 
@@ -459,8 +516,17 @@ class AutoRenewCommand extends Command
     /**
      * 检查所有域名是否都有有效委托记录（即时验证）
      */
-    private function checkDelegationValidity(int $userId, string $domains, string $ca): bool
-    {
-        return app(AutoRenewService::class)->checkDelegationValidity($userId, $domains, $ca);
+    private function checkDelegationValidity(
+        int $userId,
+        string $domains,
+        string $ca,
+        array $sourceValidation,
+    ): bool {
+        return app(AutoRenewService::class)->checkDelegationValidity(
+            $userId,
+            $domains,
+            $ca,
+            $sourceValidation,
+        );
     }
 }

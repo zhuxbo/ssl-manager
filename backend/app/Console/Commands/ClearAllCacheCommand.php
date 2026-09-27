@@ -2,7 +2,9 @@
 
 namespace App\Console\Commands;
 
+use App\Services\Upgrade\RuntimeSessionCutover;
 use App\Support\Opcache;
+use App\Support\RuntimeCache;
 use Exception;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Artisan;
@@ -29,18 +31,30 @@ class ClearAllCacheCommand extends Command
      *
      * @var string
      */
-    protected $description = '彻底清除所有类型的缓存文件，包括Laravel缓存、Bootstrap缓存、存储缓存等，可选重启队列服务';
+    protected $description = '运维级全量清理；保留独立 runtime 中的业务状态，但会删除默认缓存中的队列/调度状态及会话';
 
     /**
      * Execute the console command.
      */
     public function handle(): int
     {
+        if (RuntimeSessionCutover::isPending()) {
+            $this->error('会话切库尚未完成，拒绝全量清理旧 JWT 黑名单');
+
+            return CommandAlias::FAILURE;
+        }
+
         $quick = $this->option('quick');
         $clearLogs = $this->option('logs');
         $restartQueue = $this->option('restart-queue');
         $skipComposer = $this->option('without-composer');
         $skipOpcache = $this->option('without-opcache');
+        if (! RuntimeCache::isIsolatedFromApplicationCache()) {
+            $this->error('拒绝清理：默认缓存与 runtime 关键运行状态未隔离');
+
+            return CommandAlias::FAILURE;
+        }
+
         if (! $quick) {
             $this->info('开始清除SSL证书管理系统所有缓存...');
             $this->newLine();
@@ -256,18 +270,19 @@ class ClearAllCacheCommand extends Command
             try {
                 $files = File::glob($logsPath.'/*.log');
                 $deletedCount = 0;
-                $sevenDaysAgo = now()->subDays(7);
+                $retentionDays = (int) config('logging.channels.daily.days', 14);
+                $cutoff = now()->subDays($retentionDays);
 
                 foreach ($files as $file) {
                     $fileTime = File::lastModified($file);
-                    if ($fileTime < $sevenDaysAgo->timestamp) {
+                    if ($fileTime < $cutoff->timestamp) {
                         File::delete($file);
                         $deletedCount++;
                     }
                 }
 
                 if (! $quick) {
-                    $this->line("✓ 7天前的日志文件已清除 (删除 $deletedCount 个文件)");
+                    $this->line("✓ {$retentionDays}天前的日志文件已清除 (删除 $deletedCount 个文件)");
 
                     $remainingCount = count(File::glob($logsPath.'/*.log'));
                     $this->line("当前剩余日志文件: $remainingCount 个");
@@ -320,9 +335,8 @@ class ClearAllCacheCommand extends Command
     /**
      * 清除 OPcache 字节码缓存
      *
-     * 只有跑在 PHP-FPM 里（后台「清除缓存」按钮走 Artisan::call，与 worker 同进程）
-     * 才真能清掉线上生效的字节码；命令行进程清的是自己的 OPcache，够不到 FPM。
-     * 后一种情况必须明说，不能报「清除成功」——那是假成功信号。
+     * 命令行进程清的是自己的 OPcache，够不到 PHP-FPM 常驻进程。
+     * 必须明说这个边界，线上字节码更换仍需重载 PHP-FPM。
      */
     private function clearOpcache(bool $quick): void
     {

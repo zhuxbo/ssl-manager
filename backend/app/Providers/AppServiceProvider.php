@@ -3,10 +3,14 @@
 namespace App\Providers;
 
 use App\Models\Cert;
+use App\Models\User;
 use App\Observers\CertObserver;
+use App\Observers\UserObserver;
 use App\Services\Binary\BinaryLocator;
 use App\Services\LogBuffer;
 use App\Services\Notification\ChannelManager;
+use App\Services\Upgrade\CutoverCacheClearCommand;
+use Illuminate\Cache\Console\ClearCommand;
 use Illuminate\Queue\Events\JobExceptionOccurred;
 use Illuminate\Queue\Events\JobFailed;
 use Illuminate\Queue\Events\JobProcessed;
@@ -43,6 +47,8 @@ class AppServiceProvider extends ServiceProvider
         // app(ChannelManager::class)->register(...) 注册的通道随实例丢弃，
         // NotificationCenter/NotificationJob 解析到的新实例只含 mail，插件通道端到端失效。
         $this->app->singleton(ChannelManager::class);
+
+        $this->app->extend(ClearCommand::class, fn ($command, $app) => new CutoverCacheClearCommand($app['cache'], $app['files']));
     }
 
     /**
@@ -51,6 +57,7 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Cert::observe(CertObserver::class);
+        User::observe(UserObserver::class);
 
         // 队列任务执行完毕后刷新日志缓冲区
         Queue::after(function (JobProcessed $event) {

@@ -1,16 +1,22 @@
 <?php
 
 use App\Exceptions\ApiResponseException;
+use App\Jobs\CleanupDelegationTxtJob;
 use App\Models\Admin;
 use App\Models\Callback;
 use App\Models\Cert;
+use App\Models\CnameDelegation;
 use App\Models\DomainValidationRecord;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\ProductPrice;
+use App\Models\Setting;
+use App\Models\SettingGroup;
 use App\Models\Task;
 use App\Models\Transaction;
 use App\Models\User;
+use App\Services\Delegation\AutoDcvTxtService;
+use App\Services\Delegation\DelegationDnsService;
 use App\Services\Notification\NotificationCenter;
 use App\Services\Order\Action;
 use App\Services\Order\Api\Api;
@@ -66,9 +72,6 @@ function expectOrderApiSuccess(Closure $callback): array
     return [];
 }
 
-/**
- * 创建订单 + 证书，证书状态可控，并将 latest_cert_id 挂上
- */
 function createOrderWithCertForRevoke(string $certStatus, array $orderOverrides = []): array
 {
     $order = Order::factory()->create(array_merge([
@@ -86,71 +89,6 @@ function createOrderWithCertForRevoke(string $certStatus, array $orderOverrides 
 
     return [$order, $cert];
 }
-
-// ==================== revokeCancel ====================
-
-test('revokeCancel cancelling 订单成功：cert.status=approving、cancel task 删除、sync task 创建', function () {
-    Queue::fake();
-    [$order, $cert] = createOrderWithCertForRevoke('cancelling');
-
-    // 模拟延时 cancel 任务存在（commitCancel 创建的）
-    $cancelTask = Task::create([
-        'order_id' => $order->id,
-        'action' => 'cancel',
-        'status' => 'executing',
-        'source' => 'admin',
-        'started_at' => now()->addSeconds(120),
-    ]);
-
-    $response = expectOrderApiSuccess(fn () => $this->service->revokeCancel($order->id));
-
-    expect($response['code'])->toBe(1);
-    expect($cert->fresh()->status)->toBe('approving');
-
-    // cancel 任务被删除
-    expect(Task::where('id', $cancelTask->id)->exists())->toBeFalse();
-
-    // sync 任务被创建
-    $syncTask = Task::where('order_id', $order->id)
-        ->where('action', 'sync')
-        ->where('status', 'executing')
-        ->first();
-    expect($syncTask)->not->toBeNull();
-});
-
-test('revokeCancel active 订单报错：订单不在取消中状态', function () {
-    [$order, $cert] = createOrderWithCertForRevoke('active');
-
-    expectOrderApiError(
-        fn () => $this->service->revokeCancel($order->id),
-        '订单不在取消中状态'
-    );
-
-    // 状态未变化，无任何 task 创建
-    expect($cert->fresh()->status)->toBe('active');
-    expect(Task::where('order_id', $order->id)->count())->toBe(0);
-});
-
-test('revokeCancel 不存在的订单报错：订单或相关数据不存在', function () {
-    expectOrderApiError(
-        fn () => $this->service->revokeCancel(999999),
-        '订单或相关数据不存在'
-    );
-});
-
-test('revokeCancel 成功后可再次 commitCancel（状态机闭环）', function () {
-    Queue::fake();
-    [$order, $cert] = createOrderWithCertForRevoke('cancelling');
-
-    // 第一步：撤回取消 → approving
-    expectOrderApiSuccess(fn () => $this->service->revokeCancel($order->id));
-    expect($cert->fresh()->status)->toBe('approving');
-
-    // 第二步：再次发起取消 → cancelling（refund_period 足够）
-    test()->product->update(['refund_period' => 30]);
-    expectOrderApiSuccess(fn () => $this->service->commitCancel($order->id));
-    expect($cert->fresh()->status)->toBe('cancelling');
-});
 
 // ==================== 通用辅助 ====================
 
@@ -534,92 +472,6 @@ test('commitCancel active 串行化回归：第二次 commitCancel 被锁内 sta
 
     // cancel task 只应存在一个
     expect(Task::where('order_id', $order->id)->where('action', 'cancel')->count())->toBe(1);
-});
-
-// ==================== batchRevokeCancel ====================
-
-test('batchRevokeCancel 3 个全 cancelling 订单：全部 cert.status=approving + 全部 sync task 创建', function () {
-    Queue::fake();
-    [$order1, $cert1] = createOrderWithCertForRevoke('cancelling');
-    [$order2, $cert2] = createOrderWithCertForRevoke('cancelling');
-    [$order3, $cert3] = createOrderWithCertForRevoke('cancelling');
-
-    // 模拟每个订单都有延时 cancel 任务
-    foreach ([$order1, $order2, $order3] as $o) {
-        Task::create([
-            'order_id' => $o->id,
-            'action' => 'cancel',
-            'status' => 'executing',
-            'source' => 'admin',
-            'started_at' => now()->addSeconds(120),
-        ]);
-    }
-
-    expectOrderApiSuccess(fn () => $this->service->batchRevokeCancel([$order1->id, $order2->id, $order3->id]));
-
-    expect($cert1->fresh()->status)->toBe('approving');
-    expect($cert2->fresh()->status)->toBe('approving');
-    expect($cert3->fresh()->status)->toBe('approving');
-
-    // 所有 cancel 任务被删除
-    expect(Task::where('action', 'cancel')->count())->toBe(0);
-
-    // 所有 sync 任务被创建
-    foreach ([$order1, $order2, $order3] as $o) {
-        expect(Task::where('order_id', $o->id)->where('action', 'sync')->where('status', 'executing')->count())->toBe(1);
-    }
-});
-
-test('batchRevokeCancel 混入 1 个 active 订单：前置过滤跳过非 cancelling，其余正常处理', function () {
-    Queue::fake();
-    [$order1, $cert1] = createOrderWithCertForRevoke('cancelling');
-    [$order2, $cert2] = createOrderWithCertForRevoke('active');
-    [$order3, $cert3] = createOrderWithCertForRevoke('cancelling');
-
-    expectOrderApiSuccess(fn () => $this->service->batchRevokeCancel([$order1->id, $order2->id, $order3->id]));
-
-    // cancelling 的两个被处理，active 的跳过
-    expect($cert1->fresh()->status)->toBe('approving');
-    expect($cert2->fresh()->status)->toBe('active');
-    expect($cert3->fresh()->status)->toBe('approving');
-
-    // 只有 cancelling 的两个创建了 sync task
-    expect(Task::where('order_id', $order1->id)->where('action', 'sync')->count())->toBe(1);
-    expect(Task::where('order_id', $order2->id)->where('action', 'sync')->count())->toBe(0);
-    expect(Task::where('order_id', $order3->id)->where('action', 'sync')->count())->toBe(1);
-});
-
-test('batchRevokeCancel 全部非 cancelling：报错"没有可以撤销的订单"', function () {
-    Queue::fake();
-    [$order1, $cert1] = createOrderWithCertForRevoke('active');
-    [$order2, $cert2] = createOrderWithCertForRevoke('pending');
-
-    expectOrderApiError(
-        fn () => $this->service->batchRevokeCancel([$order1->id, $order2->id]),
-        '没有可以撤销的订单'
-    );
-
-    // 状态未变
-    expect($cert1->fresh()->status)->toBe('active');
-    expect($cert2->fresh()->status)->toBe('pending');
-});
-
-test('batchRevokeCancel 空数组：报错"没有可以撤销的订单"', function () {
-    expectOrderApiError(
-        fn () => $this->service->batchRevokeCancel([]),
-        '没有可以撤销的订单'
-    );
-});
-
-test('batchRevokeCancel 支持逗号分隔字符串入参', function () {
-    Queue::fake();
-    [$order1, $cert1] = createOrderWithCertForRevoke('cancelling');
-    [$order2, $cert2] = createOrderWithCertForRevoke('cancelling');
-
-    expectOrderApiSuccess(fn () => $this->service->batchRevokeCancel("$order1->id,$order2->id"));
-
-    expect($cert1->fresh()->status)->toBe('approving');
-    expect($cert2->fresh()->status)->toBe('approving');
 });
 
 // ==================== batchCommitCancel ====================
@@ -1277,6 +1129,55 @@ test('代理前提固化：processing reissue cert issued_at=null，commitCancel
 
 // ==================== sync 终态守卫 ====================
 
+test('sync 订单有效期对齐上游及续费剩余时间', function (
+    string $action, int $months, ?int $remaining, int $plus, ?int $upstreamDays, int $certDays, int $expectedDays, bool $initialized
+) {
+    Queue::fake();
+    $issuedAt = 1750000000;
+    [$oldOrder, $oldCert] = createOrderWithCertForRevoke('renewed', [
+        'period_till' => $issuedAt + ($remaining ?? 0) * 86400,
+    ]);
+    $oldCert->update(['expires_at' => $issuedAt + 5 * 86400]);
+    [$order, $cert] = createOrderWithCertForRevoke('processing', [
+        'period' => $months, 'plus' => $plus,
+        'period_from' => $initialized ? $issuedAt : null,
+        'period_till' => $initialized ? $issuedAt + 200 * 86400 : null,
+    ]);
+    $cert->update([
+        'action' => $action,
+        'last_cert_id' => $remaining === null ? null : $oldCert->id,
+    ]);
+    $data = ['issued_at' => $issuedAt, 'expires_at' => $issuedAt + $certDays * 86400];
+    if ($upstreamDays !== null) {
+        $data['period_till'] = $issuedAt + $upstreamDays * 86400;
+    }
+    $api = Mockery::mock(Api::class);
+    $api->shouldReceive('get')->once()->with($order->id)->andReturn(['code' => 1, 'data' => $data]);
+    (new ReflectionProperty($this->service, 'api'))->setValue($this->service, $api);
+
+    $this->service->sync($order->id, true);
+
+    $subtractSecond = ! $initialized && $upstreamDays === null && ($action === 'renew' || $expectedDays > $certDays);
+    expect($order->fresh()->period_from->timestamp)->toBe($issuedAt)
+        ->and($order->fresh()->period_till->timestamp)->toBe($issuedAt + $expectedDays * 86400 - (int) $subtractSecond)
+        ->and($oldOrder->fresh()->period_till->timestamp)->toBe($issuedAt + ($remaining ?? 0) * 86400);
+})->with([
+    '续费承接余量且忽略赠送及单张证书期限' => ['renew', 12, 20, 1, null, 1000, 385, false],
+    'plus为零相同' => ['renew', 12, 20, 0, null, 1000, 385, false],
+    '余量不截断' => ['renew', 12, 60, 1, null, 1000, 425, false],
+    '旧订单已过期' => ['renew', 12, -10, 1, null, 1000, 365, false],
+    '旧订单恰好到期' => ['renew', 12, 0, 1, null, 1000, 365, false],
+    '缺少前驱关联' => ['renew', 12, null, 1, null, 1000, 365, false],
+    '短周期' => ['renew', 3, 20, 1, null, 1000, 110, false],
+    '多年周期' => ['renew', 24, 20, 1, null, 1000, 750, false],
+    '上游较短仍优先' => ['renew', 12, 20, 1, 300, 1000, 300, false],
+    '上游较长仍优先' => ['renew', 12, 20, 1, 450, 100, 450, false],
+    '新购上游权威期限' => ['new', 12, null, 1, 300, 1000, 300, false],
+    '新购保留赠送' => ['new', 12, null, 1, null, 365, 395, false],
+    '新购保留较长证书期限' => ['new', 12, null, 1, null, 400, 400, false],
+    '存量有效期不回算' => ['renew', 12, 20, 1, 450, 1000, 200, true],
+]);
+
 test('sync 终态守卫（force=false TOCTOU）：锁外慢 IO 期间被并发 cancel 置 cancelled，不被上游滞后 active 复活', function () {
     Queue::fake();
     // 初始 processing：通过 force=false 分支「只有待验证/待批准/已签发才能同步」前置校验
@@ -1573,7 +1474,11 @@ test('charge 同用户串行支付恰好用满 credit_limit：两笔都在额度
 
 test('commit 上游 code=1：写入 api_id/dcv/validation、cert 转 processing', function () {
     Queue::fake();
-    [$order, $cert] = createOrderWithCertForAction('pending', [], ['action' => 'new', 'api_id' => null]);
+    [$order, $cert] = createOrderWithCertForAction('pending', [], [
+        'action' => 'new',
+        'api_id' => null,
+        'amount' => '1.00',
+    ]);
 
     $mockApi = Mockery::mock(Api::class);
     $mockApi->shouldReceive('new')
@@ -1610,7 +1515,11 @@ test('commit 上游 code=1：写入 api_id/dcv/validation、cert 转 processing'
 
 test('commit 上游 code=0：回滚，cert 仍 pending、api_id 未写入', function () {
     Queue::fake();
-    [$order, $cert] = createOrderWithCertForAction('pending', [], ['action' => 'new', 'api_id' => null]);
+    [$order, $cert] = createOrderWithCertForAction('pending', [], [
+        'action' => 'new',
+        'api_id' => null,
+        'amount' => '1.00',
+    ]);
 
     $mockApi = Mockery::mock(Api::class);
     $mockApi->shouldReceive('new')
@@ -1639,7 +1548,11 @@ test('commit 上游 code=0：回滚，cert 仍 pending、api_id 未写入', func
 
 test('commit 上游 code=1 但 api_id 为空：回滚，cert 仍 pending、api_id 未写入', function () {
     Queue::fake();
-    [$order, $cert] = createOrderWithCertForAction('pending', [], ['action' => 'new', 'api_id' => null]);
+    [$order, $cert] = createOrderWithCertForAction('pending', [], [
+        'action' => 'new',
+        'api_id' => null,
+        'amount' => '1.00',
+    ]);
 
     $mockApi = Mockery::mock(Api::class);
     $mockApi->shouldReceive('new')
@@ -1737,7 +1650,7 @@ test('checkDuplicate 原子占位：首次放行 0，同参数重复返回剩余
 
     // 首次抢占成功 → 放行（0）
     expect($method->invoke($this->service, 'atomicDupTest', ['p1'], 10))->toBe(0);
-    // 同参数重复 → Cache::add 失败 → 返回剩余秒数（>0 拒绝重复）
+    // 同参数重复 → Cache::store('runtime')->add 失败 → 返回剩余秒数（>0 拒绝重复）
     expect($method->invoke($this->service, 'atomicDupTest', ['p1'], 10))->toBeGreaterThan(0);
     // 不同参数 → 独立 cacheKey 放行（0）
     expect($method->invoke($this->service, 'atomicDupTest', ['p2'], 10))->toBe(0);
@@ -1925,6 +1838,204 @@ function bLockParams(Order $order, Cert $cert, string $action): array
     ];
 }
 
+function configureTraditionalZeroAmountOrderPolicy(?bool $enabled): void
+{
+    $group = SettingGroup::firstOrCreate(
+        ['name' => 'site'],
+        ['title' => 'Site', 'weight' => 1],
+    );
+    Setting::where('group_id', $group->id)->where('key', 'allowZeroAmountOrder')->delete();
+    if ($enabled !== null) {
+        Setting::create([
+            'group_id' => $group->id,
+            'key' => 'allowZeroAmountOrder',
+            'type' => 'boolean',
+            'value' => $enabled,
+            'weight' => 0,
+        ]);
+    }
+    Setting::clearGroupCache($group->id);
+}
+
+function zeroAmountNewOrderParams(Order $sourceOrder, Cert $sourceCert, Product $product): array
+{
+    return [
+        'product_id' => $product->id,
+        'product_code' => $product->code,
+        'period' => 12,
+        'domains' => $sourceCert->alternative_names,
+        'validation_method' => 'txt',
+        'csr_generate' => 1,
+        'user_id' => $sourceOrder->user_id,
+        'action' => 'new',
+        'channel' => 'web',
+    ];
+}
+
+test('零元新订单默认拒绝且显式开启后允许创建', function (bool $enabled) {
+    Queue::fake();
+    configureTraditionalZeroAmountOrderPolicy($enabled ? true : null);
+    [$sourceOrder, $sourceCert, $product] = makeBLockSourceOrder();
+    ProductPrice::where('product_id', $product->id)->update([
+        'price' => '0.00',
+        'alternative_standard_price' => '0.00',
+        'alternative_wildcard_price' => '0.00',
+    ]);
+    $params = zeroAmountNewOrderParams($sourceOrder, $sourceCert, $product);
+
+    if ($enabled) {
+        $response = expectOrderApiSuccess(fn () => $this->service->new($params));
+        expect(Cert::where('order_id', $response['data']['order_id'])->value('amount'))->toBe('0.00');
+    } else {
+        $before = Order::count();
+        expectOrderApiError(fn () => $this->service->new($params), '系统未启用零元订单');
+        expect(Order::count())->toBe($before);
+    }
+})->with([
+    '默认关闭' => [false],
+    '显式开启' => [true],
+]);
+
+test('批量零元订单默认整批拒绝且不落单', function () {
+    Queue::fake();
+    configureTraditionalZeroAmountOrderPolicy(null);
+    [$sourceOrder, $sourceCert, $product] = makeBLockSourceOrder();
+    ProductPrice::where('product_id', $product->id)->update([
+        'price' => '0.00',
+        'alternative_standard_price' => '0.00',
+        'alternative_wildcard_price' => '0.00',
+    ]);
+    $params = zeroAmountNewOrderParams($sourceOrder, $sourceCert, $product);
+    $params['domains'] = 'zero-a.example.com,zero-b.example.com';
+    $before = Order::count();
+
+    expectOrderApiError(fn () => $this->service->batchNew($params), '系统未启用零元订单');
+    expect(Order::count())->toBe($before);
+});
+
+test('既有零元新订单在支付和提交入口仍被默认策略拦截', function (string $status, string $method) {
+    Queue::fake();
+    configureTraditionalZeroAmountOrderPolicy(null);
+    [$order, $cert] = createOrderWithCertForAction(
+        $status,
+        ['amount' => '0.00'],
+        ['action' => 'new', 'amount' => '0.00'],
+    );
+
+    expectOrderApiError(
+        fn () => $method === 'pay'
+            ? $this->service->pay($order->id, false)
+            : $this->service->commit($order->id),
+        '系统未启用零元订单',
+    );
+    expect($cert->fresh()->status)->toBe($status);
+    expect(Transaction::where('type', 'order')->where('transaction_id', $order->id)->exists())->toBeFalse();
+})->with([
+    '支付入口' => ['unpaid', 'pay'],
+    '提交入口' => ['pending', 'commit'],
+]);
+
+test('零增量重签不受零元订单开关限制', function () {
+    Queue::fake();
+    configureTraditionalZeroAmountOrderPolicy(null);
+    ProductPrice::factory()->create([
+        'product_id' => $this->product->id,
+        'level_code' => $this->user->level_code,
+        'period' => 12,
+    ]);
+    [$order, $cert] = createOrderWithCertForAction(
+        'unpaid',
+        ['amount' => '100.00'],
+        ['action' => 'reissue', 'amount' => '0.00'],
+    );
+
+    expectOrderApiSuccess(fn () => $this->service->pay($order->id, false));
+    expect($cert->fresh()->status)->toBe('pending');
+});
+
+function prepareSwitchedDelegationForAction(Order $sourceOrder, Cert $sourceCert): CnameDelegation
+{
+    $group = SettingGroup::firstOrCreate(
+        ['name' => 'delegation'],
+        ['title' => 'CNAME委托', 'weight' => 11],
+    );
+    Setting::create([
+        'group_id' => $group->id,
+        'key' => 'delegationDomain',
+        'type' => 'string',
+        'value' => 'proxy.example.com',
+    ]);
+    Setting::create([
+        'group_id' => $group->id,
+        'key' => 'proxyExampleCom',
+        'type' => 'array',
+        'value' => [
+            'domain' => 'proxy.example.com',
+            'provider' => 'cloudflare',
+            'zoneId' => 'zone-id',
+            'apiToken' => 'api-token',
+        ],
+    ]);
+    $delegation = CnameDelegation::factory()->create([
+        'user_id' => $sourceOrder->user_id,
+        'zone' => 'example.com',
+        'prefix' => '_dnsauth',
+        'proxy_domain' => 'proxy.example.com',
+    ]);
+    $sourceCert->update([
+        'validation' => [[
+            'domain' => $sourceCert->common_name,
+            'delegation_id' => $delegation->id,
+        ]],
+    ]);
+    Setting::create([
+        'group_id' => $group->id,
+        'key' => 'newExampleNet',
+        'type' => 'array',
+        'value' => [
+            'domain' => 'new.example.net',
+            'provider' => 'cloudflare',
+            'zoneId' => 'new-zone-id',
+            'apiToken' => 'new-api-token',
+        ],
+    ]);
+    Setting::setValue('delegation', 'delegationDomain', 'new.example.net');
+
+    return $delegation;
+}
+
+test('订单即时写入按同一委托的冻结目标分别写 TXT', function () {
+    [$order, $cert] = makeBLockSourceOrder();
+    $delegation = prepareSwitchedDelegationForAction($order, $cert);
+
+    $dns = Mockery::mock(DelegationDnsService::class);
+    $dns->shouldReceive('setTxtByLabel')
+        ->once()
+        ->with('proxy.example.com', $delegation->label, ['OLD-TOKEN'])
+        ->andReturnTrue();
+    $dns->shouldReceive('setTxtByLabel')
+        ->once()
+        ->with('new.example.net', $delegation->label, ['NEW-TOKEN'])
+        ->andReturnTrue();
+    app()->instance(DelegationDnsService::class, $dns);
+
+    $method = new ReflectionMethod($this->service, 'writeDelegationTxtRecords');
+    $validation = $method->invoke($this->service, [
+        [
+            'delegation_id' => $delegation->id,
+            'delegation_target' => $delegation->label.'.proxy.example.com',
+            'value' => 'OLD-TOKEN',
+        ],
+        [
+            'delegation_id' => $delegation->id,
+            'delegation_target' => $delegation->label.'.new.example.net',
+            'value' => 'NEW-TOKEN',
+        ],
+    ]);
+
+    expect($validation)->each->toHaveKey('auto_txt_written', true);
+});
+
 test('new(renew) affected-rows 守卫：源证书被并发翻走 → 订单已续费 + 回滚', function () {
     Queue::fake();
     [$sourceOrder, $sourceCert] = makeBLockSourceOrder();
@@ -2030,11 +2141,214 @@ test('reissue 成功精确迁移前驱、订单组织、新证书和验证节奏
             'order_id' => $order->id,
             'last_cert_id' => $previous->id,
             'action' => 'reissue',
-            'status' => 'unpaid',
+            'status' => 'pending',
         ])
         ->and((string) $current->amount)->toBe('0.00')
         ->and(DomainValidationRecord::where('order_id', $order->id)->exists())->toBeFalse();
 });
+
+test('切换默认委托域后手工新订单冻结新目标且取消不影响原委托', function () {
+    Queue::fake();
+    [$sourceOrder, $sourceCert, $product] = makeBLockSourceOrder();
+    $product->update(['validation_methods' => ['txt', 'delegation']]);
+    $delegation = prepareSwitchedDelegationForAction($sourceOrder, $sourceCert);
+
+    $response = expectOrderApiSuccess(fn () => $this->service->new([
+        'product_id' => $product->id,
+        'product_code' => $product->code,
+        'period' => 12,
+        'domains' => $sourceCert->alternative_names,
+        'validation_method' => 'delegation',
+        'csr_generate' => 1,
+        'user_id' => $sourceOrder->user_id,
+        'action' => 'new',
+        'channel' => 'web',
+    ]));
+
+    $newCert = Cert::where('order_id', $response['data']['order_id'])->firstOrFail();
+    expect($newCert->validation[0]['delegation_id'])->toBe($delegation->id)
+        ->and($newCert->validation[0]['delegation_target'])->toBe($delegation->label.'.new.example.net')
+        ->and($newCert->validation[0])->not->toHaveKey('delegation_pending_proxy_domain')
+        ->and($delegation->fresh()->proxy_domain)->toBe('proxy.example.com');
+
+    expectOrderApiSuccess(fn () => $this->service->commitCancel($response['data']['order_id']));
+
+    expect($delegation->fresh()->proxy_domain)->toBe('proxy.example.com');
+});
+
+test('切换默认委托域后手工续费冻结新目标且保持绑定 ID', function () {
+    Queue::fake();
+    [$sourceOrder, $sourceCert, $product] = makeBLockSourceOrder();
+    $product->update(['validation_methods' => ['txt', 'delegation']]);
+    $delegation = prepareSwitchedDelegationForAction($sourceOrder, $sourceCert);
+    $params = bLockParams($sourceOrder, $sourceCert, 'renew');
+    $params['validation_method'] = 'delegation';
+
+    expectOrderApiSuccess(fn () => $this->service->new($params));
+
+    $newCert = Cert::where('order_id', '!=', $sourceOrder->id)
+        ->where('last_cert_id', $sourceCert->id)
+        ->firstOrFail();
+    $currentDelegation = CnameDelegation::findOrFail($newCert->validation[0]['delegation_id']);
+    expect($currentDelegation->id)->toBe($delegation->id)
+        ->and($currentDelegation->proxy_domain)->toBe('proxy.example.com')
+        ->and($newCert->validation[0]['delegation_target'])->toBe($delegation->label.'.new.example.net')
+        ->and($newCert->validation[0])->not->toHaveKey('delegation_pending_proxy_domain')
+        ->and(CnameDelegation::where([
+            'user_id' => $sourceOrder->user_id,
+            'zone' => 'example.com',
+            'prefix' => '_dnsauth',
+        ])->count())->toBe(1);
+});
+
+test('自动续费沿用原委托域', function (string $channel) {
+    Queue::fake();
+    [$sourceOrder, $sourceCert, $product] = makeBLockSourceOrder();
+    $product->update(['validation_methods' => ['txt', 'delegation']]);
+    $delegation = prepareSwitchedDelegationForAction($sourceOrder, $sourceCert);
+    $params = bLockParams($sourceOrder, $sourceCert, 'renew');
+    $params['channel'] = $channel;
+    $params['validation_method'] = 'delegation';
+
+    expectOrderApiSuccess(fn () => $this->service->new($params));
+
+    $newCert = Cert::where('order_id', '!=', $sourceOrder->id)
+        ->where('last_cert_id', $sourceCert->id)
+        ->firstOrFail();
+    expect($newCert->validation[0]['delegation_id'])->toBe($delegation->id)
+        ->and($newCert->validation[0]['delegation_target'])->toBe($delegation->label.'.proxy.example.com')
+        ->and($delegation->fresh()->proxy_domain)->toBe('proxy.example.com');
+})->with(['auto', 'deploy']);
+
+test('切换默认委托域后手工重签冻结新目标且保持绑定 ID', function () {
+    Queue::fake();
+    [$sourceOrder, $sourceCert, $product] = makeBLockSourceOrder();
+    $product->update(['validation_methods' => ['txt', 'delegation']]);
+    $delegation = prepareSwitchedDelegationForAction($sourceOrder, $sourceCert);
+    $params = bLockParams($sourceOrder, $sourceCert, 'reissue');
+    $params['validation_method'] = 'delegation';
+
+    expectOrderApiSuccess(fn () => $this->service->reissue($params));
+
+    $newCert = Cert::where('last_cert_id', $sourceCert->id)->firstOrFail();
+    expect($newCert->validation[0]['delegation_id'])->toBe($delegation->id)
+        ->and($newCert->validation[0]['delegation_target'])->toBe($delegation->label.'.new.example.net')
+        ->and($newCert->validation[0])->not->toHaveKey('delegation_pending_proxy_domain')
+        ->and($delegation->fresh()->proxy_domain)->toBe('proxy.example.com');
+});
+
+test('updateDCV 切换委托时冻结当前默认域但不改变共享委托', function () {
+    Queue::fake();
+    [$order, $cert, $product] = makeBLockSourceOrder();
+    $product->update(['validation_methods' => ['txt', 'delegation']]);
+    $delegation = prepareSwitchedDelegationForAction($order, $cert);
+    $cert->update(['status' => 'pending', 'csr' => 'test-csr']);
+
+    expectOrderApiSuccess(fn () => $this->service->updateDCV($order->id, 'delegation'));
+
+    $validation = $cert->fresh()->validation;
+    expect($validation[0]['delegation_id'])->toBe($delegation->id)
+        ->and($validation[0]['delegation_target'])->toBe($delegation->label.'.new.example.net')
+        ->and($validation[0])->not->toHaveKey('delegation_pending_proxy_domain')
+        ->and($delegation->fresh()->proxy_domain)->toBe('proxy.example.com');
+});
+
+test('自动重签沿用原委托域', function (string $channel) {
+    Queue::fake();
+    [$sourceOrder, $sourceCert, $product] = makeBLockSourceOrder();
+    $product->update(['validation_methods' => ['txt', 'delegation']]);
+    $delegation = prepareSwitchedDelegationForAction($sourceOrder, $sourceCert);
+    $params = bLockParams($sourceOrder, $sourceCert, 'reissue');
+    $params['channel'] = $channel;
+    $params['validation_method'] = 'delegation';
+
+    expectOrderApiSuccess(fn () => $this->service->reissue($params));
+
+    $newCert = Cert::where('last_cert_id', $sourceCert->id)->firstOrFail();
+    expect($newCert->validation[0]['delegation_id'])->toBe($delegation->id)
+        ->and($newCert->validation[0]['delegation_target'])->toBe($delegation->label.'.proxy.example.com')
+        ->and($delegation->fresh()->proxy_domain)->toBe('proxy.example.com');
+})->with(['auto', 'deploy']);
+
+test('新订单签发不会激活尚未检测生效的委托域', function () {
+    Queue::fake();
+    [$order, $cert] = createOrderWithCertForRevoke('processing');
+    $delegation = prepareSwitchedDelegationForAction($order, $cert);
+    $cert->update([
+        'validation' => [[
+            'domain' => 'example.com',
+            'method' => 'txt',
+            'delegation_id' => $delegation->id,
+            'delegation_target' => $delegation->label.'.new.example.net',
+            'delegation_valid' => false,
+        ]],
+    ]);
+    mockSyncReturnsActive();
+
+    $this->service->sync($order->id, true);
+
+    $validation = $cert->fresh()->validation;
+    expect($delegation->fresh()->proxy_domain)->toBe('proxy.example.com')
+        ->and($validation[0]['delegation_target'])->toBe($delegation->label.'.new.example.net')
+        ->and($validation[0]['delegation_valid'])->toBeFalse();
+});
+
+test('重签关闭赠送后按最终域名集合判断是否增购', function (
+    string $previousDomains, string $domains, int $previousStandardCount,
+    int $standardCount, int $wildcardCount, int $addSan, int $replaceSan,
+    string $expectedAmount, int $expectedStandardCount,
+) {
+    Queue::fake();
+    $this->user = $this->createTestUser(['balance' => '500.00']);
+    [$order, $previous, $product] = makeBLockSourceOrder([
+        'common_name' => explode(',', $previousDomains)[0],
+        'alternative_names' => $previousDomains,
+        'standard_count' => $previousStandardCount,
+        'wildcard_count' => $wildcardCount,
+        'amount' => '100.00',
+    ]);
+    $product->update([
+        'gift_root_domain' => 0, 'add_san' => $addSan, 'replace_san' => $replaceSan,
+        'common_name_types' => ['standard', 'wildcard'],
+        'alternative_name_types' => ['standard', 'wildcard'],
+        'standard_min' => 0,
+    ]);
+    $order->update(['purchased_standard_count' => $standardCount, 'purchased_wildcard_count' => $wildcardCount]);
+    Transaction::create([
+        'user_id' => $this->user->id, 'type' => 'order', 'transaction_id' => $order->id,
+        'amount' => '-100.00', 'standard_count' => $standardCount, 'wildcard_count' => $wildcardCount,
+    ]);
+    $params = bLockParams($order, $previous, 'reissue');
+    $params['domains'] = $domains;
+
+    expectOrderApiSuccess(fn () => $this->service->reissue($params));
+    $cert = $order->fresh()->latestCert;
+    expect($cert->amount)->toBe($expectedAmount)
+        ->and($cert->standard_count)->toBe($expectedStandardCount)
+        ->and($cert->wildcard_count)->toBe($wildcardCount);
+
+    if ($expectedAmount === '0.00') {
+        expect($cert->status)->toBe('pending');
+    } else {
+        expect($cert->status)->toBe('unpaid');
+        expectOrderApiSuccess(fn () => $this->service->pay($order->id, false));
+    }
+    expect($this->user->fresh()->balance)->toBe(bcsub('400.00', $expectedAmount, 2))
+        ->and($order->fresh()->purchased_standard_count)->toBe(max($standardCount, $expectedStandardCount))
+        ->and($order->fresh()->purchased_wildcard_count)->toBe($wildcardCount)
+        ->and($cert->fresh()->status)->toBe('pending')
+        ->and(Transaction::where('type', 'order')->where('transaction_id', $order->id)->count())
+        ->toBe($expectedAmount === '0.00' ? 1 : 2);
+})->with([
+    '原样重签' => ['www.a.com,a.com,www.b.com,b.com', 'www.a.com,a.com,www.b.com,b.com', 2, 2, 0, 1, 1, '0.00', 2],
+    '顺序和大小写变化' => ['www.a.com,a.com,www.b.com,b.com', 'B.COM,WWW.B.COM,A.COM,WWW.A.COM', 2, 2, 0, 1, 1, '0.00', 2],
+    '关闭增加SAN仍可原样重签' => ['www.a.com,a.com,www.b.com,b.com', 'www.a.com,a.com,www.b.com,b.com', 2, 2, 0, 0, 1, '0.00', 2],
+    '合并旧域名后集合不变' => ['www.a.com,a.com,www.b.com,b.com', 'www.a.com,www.b.com', 2, 2, 0, 1, 0, '0.00', 2],
+    '同步已按新配置重算旧证书数量' => ['www.a.com,a.com,www.b.com,b.com', 'www.a.com,a.com,www.b.com,b.com', 4, 2, 0, 1, 1, '0.00', 2],
+    '通配符赠送根域名' => ['*.a.com,a.com', '*.a.com,a.com', 0, 0, 1, 1, 1, '0.00', 0],
+    '数量相同但替换域名不豁免计费' => ['www.a.com,a.com,www.b.com,b.com', 'www.a.com,a.com,www.b.com,c.com', 2, 2, 0, 1, 1, '20.00', 4],
+    '域名集合变化仍按现有规则增购' => ['www.a.com,a.com,www.b.com,b.com', 'www.a.com,a.com,www.b.com,b.com,c.com', 2, 2, 0, 1, 1, '30.00', 5],
+]);
 
 test('reissue 禁用产品在一分钱增购边界精确拒绝且不改变前驱', function () {
     Queue::fake();
@@ -2081,7 +2395,7 @@ test('new/reissue checkDuplicate 保留：同参 10s 内二次提交报参数重
 
 test('订单入口重复提交精确返回 10 秒提示', function (string $method, string $actionLabel) {
     $params = ['duplicate-probe' => $method];
-    Cache::put($method.'_'.md5(json_encode([$params])), time(), 10);
+    Cache::store('runtime')->put($method.'_'.md5(json_encode([$params])), time(), 10);
 
     try {
         $this->service->{$method}($params);
@@ -2098,3 +2412,48 @@ test('订单入口重复提交精确返回 10 秒提示', function (string $meth
     'renew' => ['renew', '续费'],
     'reissue' => ['reissue', '重签'],
 ]);
+
+test('sync 离开 processing 提交后清理原证书，状态未变不清理', function (string $from, string $to, bool $cleanup) {
+    Queue::fake();
+    [$order, $cert] = createOrderWithCertForRevoke($from);
+    $validation = [['delegation_id' => 123, 'delegation_target' => 'label.old.example.com', 'value' => 'old-token']];
+    $cert->update(['validation' => $validation]);
+    $api = Mockery::mock(Api::class);
+    $api->shouldReceive('get')->andReturn(['code' => 1, 'data' => ['status' => $to]]);
+    (new ReflectionProperty($this->service, 'api'))->setValue($this->service, $api);
+    $cleaner = Mockery::mock(AutoDcvTxtService::class);
+    $cleaner->shouldNotReceive('cleanupCertificate');
+    $this->app->instance(AutoDcvTxtService::class, $cleaner);
+
+    DB::beginTransaction();
+    $this->service->sync($order->id, true);
+    Queue::assertNotPushed(CleanupDelegationTxtJob::class);
+    DB::commit();
+    if ($cleanup) {
+        Queue::assertPushed(CleanupDelegationTxtJob::class, fn ($job) => $job->certId === $cert->id
+            && $job->validation === $validation && $job->queue === config('queue.names.tasks') && $job->afterCommit);
+        Queue::assertPushed(CleanupDelegationTxtJob::class, 1);
+    } else {
+        Queue::assertNotPushed(CleanupDelegationTxtJob::class);
+    }
+})->with([
+    ['processing', 'active', true],
+    ['processing', 'cancelled', true],
+    ['processing', 'approving', true],
+    ['processing', 'processing', false],
+    ['active', 'active', false],
+]);
+
+test('sync 状态事务回滚不执行委托清理', function () {
+    Queue::fake();
+    [$order] = createOrderWithCertForRevoke('processing');
+    mockSyncReturnsActive();
+    $cleaner = Mockery::mock(AutoDcvTxtService::class);
+    $cleaner->shouldNotReceive('cleanupCertificate');
+    $this->app->instance(AutoDcvTxtService::class, $cleaner);
+
+    DB::beginTransaction();
+    $this->service->sync($order->id, true);
+    DB::rollBack();
+    Queue::assertNotPushed(CleanupDelegationTxtJob::class);
+});

@@ -1,8 +1,16 @@
 <?php
 
+use App\Exceptions\ApiResponseException;
+use App\Jobs\CleanupDelegationTxtJob;
+use App\Models\Setting;
+use App\Models\SettingGroup;
 use App\Services\Delegation\AutoDcvTxtService;
+use App\Services\Delegation\DelegationConfigService;
+use App\Services\Delegation\DelegationDnsService;
+use App\Services\Order\Action;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Tests\TestCase;
 use Tests\Traits\CreatesTestData;
@@ -14,6 +22,30 @@ beforeEach(function () {
     $this->seeder = DatabaseSeeder::class;
     $this->service = new AutoDcvTxtService;
 });
+
+function configureAutoDcvProxyDomain(string $domain): void
+{
+    $config = app(DelegationConfigService::class);
+    $domain = $config->normalizeDomain($domain);
+    $group = SettingGroup::firstOrCreate(
+        ['name' => 'delegation'],
+        ['title' => '域名委托', 'weight' => 1],
+    );
+    Setting::updateOrCreate(
+        ['group_id' => $group->id, 'key' => $config->keyForDomain($domain)],
+        [
+            'type' => 'array',
+            'value' => [
+                'domain' => $domain,
+                'provider' => 'cloudflare',
+                'apiToken' => 'test-token',
+                'zoneId' => 'test-zone',
+            ],
+            'description' => '测试委托配置',
+            'weight' => 2,
+        ],
+    );
+}
 
 // ==================== handleOrder ====================
 
@@ -66,6 +98,115 @@ test('handle order returns true when all processed', function () {
     $result = $this->service->handleOrder($order);
 
     expect($result)->toBeTrue();
+});
+
+test('handle order routes each delegation write through its bound proxy domain', function () {
+    $user = $this->createTestUser();
+    $product = $this->createTestProduct();
+    $order = $this->createTestOrder($user, $product);
+    $legacyDelegation = $this->createTestDelegation($user, [
+        'zone' => 'legacy.example.com',
+        'proxy_domain' => 'legacy-proxy.example.com',
+    ]);
+    $cloudDelegation = $this->createTestDelegation($user, [
+        'zone' => 'cloud.example.com',
+        'proxy_domain' => 'cloud-proxy.example.com',
+    ]);
+    $this->createTestCert($order, [
+        'dcv' => ['method' => 'txt', 'is_delegate' => true, 'dns' => ['host' => '_dnsauth']],
+        'validation' => [
+            ['host' => '_dnsauth.legacy.example.com', 'domain' => 'legacy.example.com', 'value' => 'LEGACY-TOKEN'],
+            ['host' => '_dnsauth.cloud.example.com', 'domain' => 'cloud.example.com', 'value' => 'CLOUD-TOKEN'],
+        ],
+    ]);
+
+    $dns = Mockery::mock(DelegationDnsService::class);
+    $dns->shouldReceive('setTxtByLabel')
+        ->once()
+        ->with('legacy-proxy.example.com', $legacyDelegation->label, ['LEGACY-TOKEN'])
+        ->andReturnTrue();
+    $dns->shouldReceive('setTxtByLabel')
+        ->once()
+        ->with('cloud-proxy.example.com', $cloudDelegation->label, ['CLOUD-TOKEN'])
+        ->andReturnTrue();
+    $property = new ReflectionProperty($this->service, 'dnsService');
+    $property->setValue($this->service, $dns);
+
+    expect($this->service->handleOrder($order->fresh()))->toBeTrue();
+    expect($order->latestCert()->first()->validation)
+        ->each->toHaveKey('auto_txt_written', true);
+});
+
+test('handle order uses the persisted delegation id instead of rematching the domain', function () {
+    $user = $this->createTestUser();
+    $product = $this->createTestProduct(['ca' => 'sectigo']);
+    $order = $this->createTestOrder($user, $product);
+    $persisted = $this->createTestDelegation($user, [
+        'zone' => 'example.com',
+        'proxy_domain' => 'persisted-proxy.example.com',
+    ]);
+    $this->createTestDelegation($user, [
+        'zone' => 'sub.example.com',
+        'proxy_domain' => 'rematched-proxy.example.com',
+    ]);
+    $this->createTestCert($order, [
+        'dcv' => ['method' => 'txt', 'is_delegate' => true, 'ca' => 'sectigo', 'dns' => ['host' => '_dnsauth']],
+        'validation' => [[
+            'host' => '_dnsauth.sub.example.com',
+            'domain' => 'sub.example.com',
+            'value' => 'PERSISTED-TOKEN',
+            'delegation_id' => $persisted->id,
+        ]],
+    ]);
+
+    $dns = Mockery::mock(DelegationDnsService::class);
+    $dns->shouldReceive('setTxtByLabel')
+        ->once()
+        ->with('persisted-proxy.example.com', $persisted->label, ['PERSISTED-TOKEN'])
+        ->andReturnTrue();
+    $property = new ReflectionProperty($this->service, 'dnsService');
+    $property->setValue($this->service, $dns);
+
+    expect($this->service->handleOrder($order->fresh()))->toBeTrue();
+});
+
+test('validation target writes txt to the frozen domain without switching the shared delegation', function () {
+    configureAutoDcvProxyDomain('new.example.net');
+
+    $user = $this->createTestUser();
+    $product = $this->createTestProduct(['ca' => 'digicert']);
+    $order = $this->createTestOrder($user, $product);
+    $delegation = $this->createTestDelegation($user, [
+        'zone' => 'example.com',
+        'prefix' => '_dnsauth',
+        'proxy_domain' => 'old.example.com',
+        'valid' => true,
+    ]);
+    $this->createTestCert($order, [
+        'dcv' => ['method' => 'txt', 'is_delegate' => true, 'ca' => 'digicert', 'dns' => ['host' => '_dnsauth']],
+        'validation' => [[
+            'host' => '_dnsauth.example.com',
+            'domain' => 'example.com',
+            'value' => 'PENDING-TOKEN',
+            'delegation_id' => $delegation->id,
+            'delegation_target' => $delegation->label.'.new.example.net',
+        ]],
+    ]);
+
+    $dns = Mockery::mock(DelegationDnsService::class);
+    $dns->shouldReceive('setTxtByLabel')
+        ->once()
+        ->with('new.example.net', $delegation->label, ['PENDING-TOKEN'])
+        ->andReturnTrue();
+    $property = new ReflectionProperty($this->service, 'dnsService');
+    $property->setValue($this->service, $dns);
+
+    expect($this->service->handleOrder($order->fresh()))->toBeTrue();
+
+    $validation = $order->latestCert()->firstOrFail()->validation;
+    expect($delegation->fresh()->proxy_domain)->toBe('old.example.com')
+        ->and($validation[0]['delegation_target'])->toBe($delegation->label.'.new.example.net')
+        ->and($validation[0]['auto_txt_written'])->toBeTrue();
 });
 
 // ==================== allTxtRecordsProcessed ====================
@@ -328,7 +469,7 @@ test('collect txt records skips when missing host and dcv host', function () {
     expect($updatedValidation[0])->not->toHaveKey('auto_txt_written');
 });
 
-test('collect txt records groups by delegation', function () {
+test('collect txt records groups by delegation and frozen target', function () {
     $user = $this->createTestUser();
     $product = $this->createTestProduct();
     $order = $this->createTestOrder($user, $product);
@@ -362,9 +503,58 @@ test('collect txt records groups by delegation', function () {
     $order->refresh();
     [$txtRecords, $updatedValidation, $hasChanges] = $method->invoke($this->service, $order);
 
-    expect($txtRecords)->toHaveCount(1); // 按 delegation 分组
-    expect($txtRecords[$delegation->id]['tokens'])->toHaveCount(2);
+    expect($txtRecords)->toHaveCount(1);
+    expect(array_values($txtRecords)[0]['tokens'])->toHaveCount(2);
     expect($hasChanges)->toBeTrue();
+});
+
+test('handle order separates the same delegation tokens by frozen target', function () {
+    configureAutoDcvProxyDomain('old.example.net');
+    configureAutoDcvProxyDomain('new.example.net');
+
+    $user = $this->createTestUser();
+    $product = $this->createTestProduct(['ca' => 'digicert']);
+    $order = $this->createTestOrder($user, $product);
+    $delegation = $this->createTestDelegation($user, [
+        'zone' => 'example.com',
+        'prefix' => '_dnsauth',
+        'proxy_domain' => 'old.example.net',
+    ]);
+    $this->createTestCert($order, [
+        'dcv' => ['method' => 'txt', 'is_delegate' => true, 'ca' => 'digicert'],
+        'validation' => [
+            [
+                'host' => '_dnsauth.example.com',
+                'domain' => 'example.com',
+                'value' => 'OLD-TOKEN',
+                'delegation_id' => $delegation->id,
+                'delegation_target' => $delegation->label.'.old.example.net',
+            ],
+            [
+                'host' => '_dnsauth.example.com',
+                'domain' => 'example.com',
+                'value' => 'NEW-TOKEN',
+                'delegation_id' => $delegation->id,
+                'delegation_target' => $delegation->label.'.new.example.net',
+            ],
+        ],
+    ]);
+
+    $dns = Mockery::mock(DelegationDnsService::class);
+    $dns->shouldReceive('setTxtByLabel')
+        ->once()
+        ->with('old.example.net', $delegation->label, ['OLD-TOKEN'])
+        ->andReturnTrue();
+    $dns->shouldReceive('setTxtByLabel')
+        ->once()
+        ->with('new.example.net', $delegation->label, ['NEW-TOKEN'])
+        ->andReturnTrue();
+    $property = new ReflectionProperty($this->service, 'dnsService');
+    $property->setValue($this->service, $dns);
+
+    expect($this->service->handleOrder($order->fresh()))->toBeTrue();
+    expect($order->latestCert()->firstOrFail()->validation)
+        ->each->toHaveKey('auto_txt_written', true);
 });
 
 test('collect txt records marks delegation id', function () {
@@ -470,7 +660,7 @@ test('collect txt records falls back to root delegation for subdomain (sectigo)'
 
     // 回落命中根域委托
     expect($txtRecords)->toHaveCount(1);
-    expect($txtRecords[$delegation->id]['delegation']->id)->toBe($delegation->id);
+    expect(array_values($txtRecords)[0]['delegation']->id)->toBe($delegation->id);
     expect($updatedValidation[0]['delegation_id'])->toBe($delegation->id);
     expect($updatedValidation[0]['auto_txt_written'])->toBeTrue();
     expect($hasChanges)->toBeTrue();
@@ -687,4 +877,127 @@ test('232 未命中委托 → Log::warning（含 zone 上下文）', function ()
                 && ($context['order_id'] ?? null) === $order->id;
         })
         ->once();
+});
+
+test('清理原证书冻结目标的 TXT 值并保留同名其他值和委托绑定', function () {
+    configureAutoDcvProxyDomain('old.example.com');
+    $user = $this->createTestUser();
+    $delegation = $this->createTestDelegation($user, ['proxy_domain' => 'proxy.example.com']);
+    $order = $this->createTestOrder($user, $this->createTestProduct());
+    $cert = $this->createTestCert($order, [
+        'status' => 'active',
+        'validation' => [[
+            'delegation_id' => $delegation->id,
+            'delegation_target' => $delegation->label.'.old.example.com',
+            'value' => 'old-token',
+            'auto_txt_written' => true,
+            'auto_txt_written_at' => now()->toDateTimeString(),
+        ]],
+    ]);
+    $dns = Mockery::mock(DelegationDnsService::class);
+    $dns->shouldReceive('getAllTxtRecords')->twice()->with('old.example.com')->andReturn([
+        ['id' => 'old-id', 'name' => $delegation->label, 'value' => 'old-token'],
+        ['id' => 'new-id', 'name' => $delegation->label, 'value' => 'new-token'],
+    ], [
+        ['id' => 'new-id', 'name' => $delegation->label, 'value' => 'new-token'],
+    ]);
+    $dns->shouldReceive('deleteRecords')->once()->with('old.example.com', ['old-id']);
+    $dns->shouldReceive('deleteRecords')->once()->with('old.example.com', []);
+    (new ReflectionProperty($this->service, 'dnsService'))->setValue($this->service, $dns);
+
+    $this->service->cleanupCertificate($cert);
+    $this->service->cleanupCertificate($cert);
+
+    expect($cert->fresh()->validation[0])->toMatchArray([
+        'delegation_id' => $delegation->id,
+        'delegation_target' => $delegation->label.'.old.example.com',
+        'value' => 'old-token',
+    ])->not->toHaveKeys(['auto_txt_written', 'auto_txt_written_at']);
+});
+
+test('精准清理保留其他 processing 证书引用的相同目标和值', function (string $status, bool $protected) {
+    $user = $this->createTestUser();
+    $delegation = $this->createTestDelegation($user);
+    $validation = [['delegation_id' => $delegation->id, 'value' => 'shared-token', 'auto_txt_written' => true]];
+    $cert = $this->createTestCert($this->createTestOrder($user, $this->createTestProduct()), [
+        'status' => 'active', 'validation' => $validation,
+    ]);
+    $this->createTestCert($this->createTestOrder($user, $this->createTestProduct()), [
+        'status' => $status, 'validation' => $validation,
+    ]);
+    $dns = Mockery::mock(DelegationDnsService::class);
+    if ($protected) {
+        $dns->shouldNotReceive('getAllTxtRecords');
+    } else {
+        $dns->shouldReceive('getAllTxtRecords')->once()->with('proxy.example.com')->andReturn([]);
+        $dns->shouldReceive('deleteRecords')->once()->with('proxy.example.com', []);
+    }
+    (new ReflectionProperty($this->service, 'dnsService'))->setValue($this->service, $dns);
+    $this->service->cleanupCertificate($cert);
+    expect(isset($cert->fresh()->validation[0]['auto_txt_written']))->toBe($protected);
+})->with([['processing', true], ['approving', false]]);
+
+test('精准清理失败保留写入标记且不向同步操作抛异常', function () {
+    $user = $this->createTestUser();
+    $delegation = $this->createTestDelegation($user);
+    $cert = $this->createTestCert($this->createTestOrder($user, $this->createTestProduct()), [
+        'status' => 'cancelled',
+        'validation' => [['delegation_id' => $delegation->id, 'value' => 'token', 'auto_txt_written' => true]],
+    ]);
+    $dns = Mockery::mock(DelegationDnsService::class);
+    $dns->shouldReceive('getAllTxtRecords')->once()->andReturn([
+        ['id' => 'record-id', 'name' => $delegation->label, 'value' => 'token'],
+    ]);
+    $dns->shouldReceive('deleteRecords')->once()->andThrow(new RuntimeException('test failure'));
+    (new ReflectionProperty($this->service, 'dnsService'))->setValue($this->service, $dns);
+    Log::spy();
+
+    $this->service->cleanupCertificate($cert);
+
+    expect($cert->fresh()->validation[0]['auto_txt_written'])->toBeTrue();
+    Log::shouldHaveReceived('error')->withArgs(fn ($message) => $message === '同步后委托 TXT 清理失败')->once();
+});
+
+test('异步清理任务序列化后仍使用入队时的原证书验证快照', function () {
+    $user = $this->createTestUser();
+    $order = $this->createTestOrder($user, $this->createTestProduct());
+    $validation = [['delegation_id' => 123, 'delegation_target' => 'label.old.example.com', 'value' => 'old-token']];
+    $cert = $this->createTestCert($order, ['status' => 'cancelled', 'validation' => $validation]);
+    $payload = serialize(new CleanupDelegationTxtJob($cert->id, $validation));
+    $cert->update(['validation' => [['value' => 'new-token']]]);
+
+    $service = Mockery::mock(AutoDcvTxtService::class);
+    $service->shouldReceive('cleanupCertificate')->once()->withArgs(fn ($snapshot) => $snapshot->id === $cert->id
+        && $snapshot->validation === $validation);
+    unserialize($payload)->handle($service);
+});
+
+test('委托任务返回服务商安全错误且不标记写入成功', function () {
+    $user = $this->createTestUser();
+    $product = $this->createTestProduct(['ca' => 'sectigo']);
+    $order = $this->createTestOrder($user, $product);
+    configureAutoDcvProxyDomain('proxy.example.com');
+    $delegation = $this->createTestDelegation($user, ['zone' => 'example.com', 'proxy_domain' => 'proxy.example.com']);
+    $cert = $this->createTestCert($order, [
+        'dcv' => ['method' => 'txt', 'is_delegate' => true, 'ca' => 'sectigo'],
+        'validation' => [[
+            'domain' => 'example.com', 'host' => '_dnsauth.example.com',
+            'value' => 'test-token', 'delegation_id' => $delegation->id,
+        ]],
+    ]);
+    Http::fake(['*' => Http::response([
+        'success' => false,
+        'errors' => [['code' => 10000, 'message' => 'never-expose-secret']],
+    ], 403)]);
+
+    try {
+        app(Action::class)->delegation($order->id);
+        test()->fail('委托任务应返回失败');
+    } catch (ApiResponseException $e) {
+        expect($e->getApiResponse())->toMatchArray([
+            'code' => 0,
+            'msg' => "订单 #{$order->id} 委托解析失败：Cloudflare DNS 查询记录：身份认证失败（10000），HTTP 403",
+        ]);
+    }
+    expect($cert->fresh()->validation[0]['auto_txt_written'] ?? false)->toBeFalse();
 });

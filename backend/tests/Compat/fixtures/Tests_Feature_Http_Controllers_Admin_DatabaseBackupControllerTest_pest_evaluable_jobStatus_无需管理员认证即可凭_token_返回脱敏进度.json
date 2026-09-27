@@ -1,0 +1,23 @@
+{
+    "test": "P\\Tests\\Feature\\Http\\Controllers\\Admin\\DatabaseBackupControllerTest::__pest_evaluable_jobStatus_无需管理员认证即可凭_token_返回脱敏进度",
+    "version": "1.0.0",
+    "calls": [
+        {
+            "method": "GET",
+            "uri_pattern": "/api/admin/database/jobs/{token}",
+            "request_keys": null,
+            "response_status": "2xx",
+            "response_schema": {
+                "code": "integer",
+                "data": {
+                    "progress": {
+                        "status": "string",
+                        "message": "string",
+                        "stage": "string",
+                        "progress": "integer"
+                    }
+                }
+            }
+        }
+    ]
+}

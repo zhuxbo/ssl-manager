@@ -9,16 +9,18 @@ use App\Http\Requests\Setting\UpdateRequest;
 use App\Http\Requests\Setting\UploadSiteImageRequest;
 use App\Models\Setting;
 use App\Models\SettingGroup;
+use App\Services\Delegation\DelegationDomainRetirementService;
 use App\Services\Payment\PayConfigCache;
+use DomainException;
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Storage;
 use Throwable;
 
 class SettingController extends BaseController
 {
-    public function __construct()
-    {
+    public function __construct(
+        private readonly DelegationDomainRetirementService $domainRetirement,
+    ) {
         parent::__construct();
     }
 
@@ -111,6 +113,7 @@ class SettingController extends BaseController
             $this->error('设置数据不能为空');
         }
 
+        $updates = [];
         foreach ($settings as $settingData) {
             if (! isset($settingData['id']) || ! isset($settingData['value'])) {
                 continue;
@@ -121,8 +124,19 @@ class SettingController extends BaseController
                 continue;
             }
 
+            try {
+                $this->domainRetirement->assertUpdatePreservesIdentity($setting, [
+                    'value' => $settingData['value'],
+                ]);
+            } catch (DomainException $e) {
+                $this->error($e->getMessage());
+            }
+            $updates[] = [$setting, $settingData['value']];
+        }
+
+        foreach ($updates as [$setting, $value]) {
             // 只更新值字段
-            $setting->value = $settingData['value'];
+            $setting->value = $value;
             $setting->save();
         }
 
@@ -139,7 +153,13 @@ class SettingController extends BaseController
             $this->error('设置不存在');
         }
 
-        $setting->fill($request->validated());
+        $attributes = $request->validated();
+        try {
+            $this->domainRetirement->assertUpdatePreservesIdentity($setting, $attributes);
+        } catch (DomainException $e) {
+            $this->error($e->getMessage());
+        }
+        $setting->fill($attributes);
         $setting->save();
 
         $this->success();
@@ -155,7 +175,11 @@ class SettingController extends BaseController
             $this->error('设置不存在');
         }
 
-        $setting->delete();
+        try {
+            $this->domainRetirement->retire($setting);
+        } catch (DomainException $e) {
+            $this->error($e->getMessage());
+        }
         $this->success();
     }
 
@@ -171,7 +195,11 @@ class SettingController extends BaseController
             $this->error('设置不存在');
         }
 
-        Setting::destroy($ids);
+        try {
+            $this->domainRetirement->retireMany($settings);
+        } catch (DomainException $e) {
+            $this->error($e->getMessage());
+        }
         $this->success();
     }
 
@@ -202,12 +230,16 @@ class SettingController extends BaseController
     }
 
     /**
-     * 清除系统全部缓存
+     * 安全刷新系统设置缓存。
+     *
+     * 只删除 Setting/PayConfigCache 明确登记的键与支付证书副本；不执行
+     * cache:clear，因此保留队列 pause/restart、scheduler mutex、runtime 与会话。
+     * 路由名保留 clear-all-cache 以兼容已发布的管理端。
      */
     public function clearAllCache(): void
     {
         try {
-            Artisan::call('cache:clear-all', ['--quick' => true, '--without-composer' => true]);
+            Setting::clearAllCache();
         } catch (Throwable) {
             $this->error('缓存清除失败');
         }

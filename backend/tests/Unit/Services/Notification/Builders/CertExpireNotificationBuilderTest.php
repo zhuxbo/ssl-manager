@@ -298,3 +298,17 @@ test('NotificationPayload 正确构造', function () {
 
     expect($payload->data)->toBe(['email' => 'test@example.com', 'username' => 'testuser']);
 });
+
+test('订单与证书到期时间分别取值且缺失订单时间不使用证书时间替代', function () {
+    $service = Mockery::mock(AutoRenewService::class)->makePartial();
+    $order = buildMockOrder(['expires_at' => now()->addDays(7)]);
+    $order->period_till = now()->addYear();
+    $withoutPeriod = buildMockOrder();
+    $builder = buildPartialBuilder($service, new Collection([$order, $withoutPeriod]));
+
+    $result = $builder->build(new NotificationIntent('cert_expire', 'user', 1), buildMockUser());
+
+    expect($result->data['certificates'][0]['order_expire_at'])->toBe(now()->addYear()->format('Y-m-d'));
+    expect($result->data['certificates'][0]['expire_at'])->toBe(now()->addDays(7)->format('Y-m-d'));
+    expect($result->data['certificates'][1]['order_expire_at'])->toBeNull();
+});

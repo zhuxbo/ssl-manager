@@ -1,13 +1,15 @@
 <template>
   <el-card shadow="never" :style="{ border: 'none' }">
-    <h2 class="title">
+    <h2 class="title order-detail-title">
       <span>订单详情</span>
     </h2>
     <table class="descriptions">
       <tbody>
         <tr>
           <td class="label">用户</td>
-          <td class="content">{{ order.user.username }}</td>
+          <td class="content">
+            {{ order.user.username }} <Operate placement="transfer" />
+          </td>
         </tr>
         <tr>
           <td class="label">订单ID</td>
@@ -142,6 +144,7 @@
   </el-card>
 </template>
 <script setup lang="ts">
+import Operate from "../operate.vue";
 import { computed, inject, reactive, ref } from "vue";
 import { buildUUID } from "@pureadmin/utils";
 import { ElMessageBox } from "element-plus";

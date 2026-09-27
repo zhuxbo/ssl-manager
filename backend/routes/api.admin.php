@@ -11,6 +11,7 @@ use App\Http\Controllers\Admin\ChainController;
 use App\Http\Controllers\Admin\ContactController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\DatabaseBackupController;
+use App\Http\Controllers\Admin\DatabaseRestoreStatusController;
 use App\Http\Controllers\Admin\DelegationController;
 use App\Http\Controllers\Admin\DeployTokenController;
 use App\Http\Controllers\Admin\EnterpriseLookupController;
@@ -50,6 +51,9 @@ Route::prefix('admin')->middleware('api.admin.refresh')->group(function () {
 // 目的：浏览器原生流式下载，避免前端把整文件读进 blob
 Route::prefix('admin/database')->group(function () {
     Route::get('backups/download', [DatabaseBackupController::class, 'download']);
+    Route::get('jobs/{token}', DatabaseRestoreStatusController::class)
+        ->middleware('throttle:database-job-status')
+        ->where('token', '[A-Za-z0-9_-]{32}');
 });
 
 // 需要认证的路由
@@ -81,6 +85,7 @@ Route::prefix('admin')->middleware('api.admin')->group(function () {
     Route::prefix('user')->group(function () {
         Route::post('direct-login', [UserController::class, 'directLogin']);
         Route::post('create-user', [UserController::class, 'createUser']);
+        Route::patch('remark/{id}', [UserController::class, 'remark'])->whereNumber('id');
     });
     RouteHelper::registerResourceRoutes('user-level', UserLevelController::class);
     Route::prefix('user-level')->group(function () {
@@ -128,8 +133,7 @@ Route::prefix('admin')->middleware('api.admin')->group(function () {
         Route::post('update-dcv/{id}', [OrderController::class, 'updateDCV'])->where('id', '[0-9]+');
         Route::post('sync/{id}', [OrderController::class, 'sync'])->where('id', '[0-9]+');
         Route::post('commit-cancel/{id}', [OrderController::class, 'commitCancel'])->where('id', '[0-9]+');
-        Route::post('revoke-cancel/{id}', [OrderController::class, 'revokeCancel'])->where('id', '[0-9]+');
-        Route::post('mark-renewed/{id}', [OrderController::class, 'markRenewed'])->where('id', '[0-9]+');
+        Route::post('archive/{id}', [OrderController::class, 'archive'])->where('id', '[0-9]+');
         Route::post('remark/{id}', [OrderController::class, 'remark'])->where('id', '[0-9]+');
         Route::get('download', [OrderController::class, 'download']);
         Route::get('download-validate-file/{id}', [OrderController::class, 'downloadValidateFile'])->where('id', '[0-9]+');
@@ -139,7 +143,6 @@ Route::prefix('admin')->middleware('api.admin')->group(function () {
         Route::post('batch-revalidate', [OrderController::class, 'batchRevalidate']);
         Route::post('batch-sync', [OrderController::class, 'batchSync']);
         Route::post('batch-commit-cancel', [OrderController::class, 'batchCommitCancel']);
-        Route::post('batch-revoke-cancel', [OrderController::class, 'batchRevokeCancel']);
         Route::patch('auto-settings/{id}', [OrderController::class, 'updateAutoSettings'])->where('id', '[0-9]+');
         Route::patch('amount/{id}', [OrderController::class, 'updateAmount'])->where('id', '[0-9]+');
         Route::patch('applicant/{id}', [OrderController::class, 'updateApplicant'])->where('id', '[0-9]+');
@@ -277,13 +280,12 @@ Route::prefix('admin')->middleware('api.admin')->group(function () {
         Route::post('backups', [DatabaseBackupController::class, 'store']);
         Route::delete('backups/{backupId}', [DatabaseBackupController::class, 'destroy'])
             ->where('backupId', '[a-z_]+_[0-9]{8}_[0-9]{6}');
-        Route::get('backups/{backupId}/schema-diff', [DatabaseBackupController::class, 'schemaDiff'])
+        Route::get('backups/{backupId}/restore-preflight', [DatabaseBackupController::class, 'restorePreflight'])
             ->where('backupId', '[a-z_]+_[0-9]{8}_[0-9]{6}');
         Route::post('backups/{backupId}/restore', [DatabaseBackupController::class, 'restore'])
             ->where('backupId', '[a-z_]+_[0-9]{8}_[0-9]{6}');
         Route::post('backups/{backupId}/download-token', [DatabaseBackupController::class, 'downloadToken'])
             ->where('backupId', '[a-z_]+_[0-9]{8}_[0-9]{6}');
-        Route::get('jobs/{token}', [DatabaseBackupController::class, 'jobStatus']);
     });
 
     // 系统升级管理

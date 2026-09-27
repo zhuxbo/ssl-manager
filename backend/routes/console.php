@@ -22,7 +22,7 @@ Artisan::command('inspire', function () {
 
 // SSL证书管理系统定时任务调度
 // 证书验证任务 - 每分钟执行（生产由 1 分钟 cron 调 schedule:run，sub-minute 不会触发；如需 30 秒需改用常驻 schedule:work）
-// 互斥由 ValidateCommand 内部 Cache::add + Cache::put 心跳续期实现（支持长任务，不在此处加 withoutOverlapping）
+// 互斥由 ValidateCommand 内部 RuntimeCache::lock 实现（支持长任务，不在此处加 withoutOverlapping）
 Schedule::command('schedule:validate')
     ->everyMinute()
     ->skip($skipWhenFrozen)
@@ -48,13 +48,23 @@ Schedule::command('schedule:expire')
     ->name('expire-certificates')
     ->description('处理证书过期通知');
 
-// 缓存清理任务 - 每天凌晨2点执行
+// 数据库日志分层清理 - 每天 01:00
+Schedule::command('logs:purge')
+    ->dailyAt('01:00')
+    ->withoutOverlapping()
+    ->skip($skipWhenFrozen)
+    ->name('purge-tiered-logs')
+    ->description('清理核心与插件分层日志')
+    ->onFailure($logScheduleFailure('logs:purge'));
+
+// 运行时数据维护 - 每天 01:30
 Schedule::command('schedule:purge')
-    ->dailyAt('02:00')
+    ->dailyAt('01:30')
     ->withoutOverlapping()
     ->skip($skipWhenFrozen)
     ->name('purge-expired-data')
-    ->description('清理过期数据');
+    ->description('清理过期运行时数据')
+    ->onFailure($logScheduleFailure('schedule:purge'));
 
 // CNAME委托DNS清理任务 - 每天凌晨6点执行
 Schedule::command('delegation:cleanup')
@@ -62,7 +72,7 @@ Schedule::command('delegation:cleanup')
     ->withoutOverlapping()
     ->skip($skipWhenFrozen)
     ->name('cleanup-delegation-dns')
-    ->description('清理非processing状态订单的委托DNS记录');
+    ->description('清理本系统非处理中及超过14天的委托DNS记录');
 
 // CNAME委托健康周巡检 - 每周一 07:00 执行（错开 cleanup 06:00 / expire 09:00 / balance-forecast 周一 09:30）
 // 无 active 证书的失效委托清理；两阶段+熔断防 dnsTools 系统性停摆误删。
@@ -196,14 +206,6 @@ Schedule::command('queue:prune-failed', ['--hours' => (int) config('monitoring.f
     ->name('prune-failed-jobs')
     ->description('清理过期 failed_jobs（保留 14 天供排障）');
 
-// E6 卡单聚合告警 - 每天 06:30（processing/approving 分档，只读）
-Schedule::command('schedule:stuck-orders')
-    ->dailyAt('06:30')
-    ->withoutOverlapping()
-    ->skip($skipWhenFrozen)
-    ->name('stuck-orders')
-    ->description('聚合 processing/approving 长期卡单告警（按 validation_type 分档）');
-
 // ============================================================
 // H1 升级看门狗（自愈命令）——与上方所有命令有意不对称：
 //   - evenInMaintenanceMode()：artisan down 期 scheduler 默认跳过事件，自愈命令必须绕过；
@@ -220,7 +222,7 @@ Schedule::command('upgrade:watchdog')
 // M1 调度器心跳（P0-4.1）——继 watchdog 后第二个有意 freeze 存活者：
 //   - evenInMaintenanceMode()：与 watchdog 同款，freeze/down 全窗跳动，unfreeze 后即新鲜；
 //   - **不挂** ->skip($skipWhenFrozen)：挂了则 freeze 期心跳停，后台健康度会误报 scheduler 异常。
-// 写 Cache::forever('schedule:heartbeat')，供 /api/health 判活；health 侧 freeze 期不评估 stale（双保险）。
+// 写 runtime store 的 schedule:heartbeat，供 /api/health 判活；health 侧 freeze 期不评估 stale（双保险）。
 // ============================================================
 Schedule::command('schedule:heartbeat')
     ->everyMinute()

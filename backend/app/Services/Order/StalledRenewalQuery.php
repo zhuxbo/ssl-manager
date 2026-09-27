@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Builder;
  * 续期停滞孤儿检测查询（单一形态源）。
  *
  * 「续费/重签把前驱证书终态化（renewed/reissued）后，接替证书长期卡在非 active 停滞态」的孤儿
- * 形态条件——前驱状态集 + EXISTS 停滞接替（5 态）+ 48h 在途年龄门槛——集中在此单一私有形态，
+ * 形态条件——前驱状态集 + EXISTS 停滞接替（4 态）+ 48h 在途年龄门槛——集中在此单一私有形态，
  * 供派发侧（ExpireCommand）与重查侧（CertRenewStalledNotificationBuilder）共用，杜绝两处手写
  * 第二份查询漂移（漂移即重蹈「派发了 user、Builder 重查为空 → 静默漏发」事故）。
  *
@@ -20,7 +20,7 @@ use Illuminate\Database\Eloquent\Builder;
  *   - forUser：前驱 expires_at 施加连续 14 天超集窗口（防 NotificationJob 异步延迟跨窗漏发）。
  * 超集 ⊇ 节点窗口 → 凡派发过的 user，Builder 侧结构性可重查到。
  *
- * 免疫：markRenewed 手工标记单无接替（EXISTS 恒 falsy）、已完成续签接替=active（不在 5 态集）→
+ * 免疫：历史手工已续单无接替（EXISTS 恒 falsy）、已完成续签接替=active（不在停滞态集）→
  * 均结构性排除，绝不对存量已续签客户群发。
  *
  * 收件人经前驱 C 的 order->user 解析（certs 表无 user_id 列）：续费前驱在旧订单、重签前驱在同订单，
@@ -42,16 +42,15 @@ class StalledRenewalQuery
      *   - unpaid：pay 前失败/中断（未扣费）
      *   - pending：commit 失败/卡单（已扣费）
      *   - processing/approving：DCV/审核长期不过（已扣费——审计 critical 路径 3）
-     *   - failed：CA 拒签终态（需重开）
-     * 排除 cancelled/revoked（已终止非停滞、误报不可静音）、renewed/reissued（链延长、接替曾签发成功）、
+     * 排除 archived/cancelled/revoked（已终止非停滞、误报不可静音）、renewed/reissued（链延长、接替曾签发成功）、
      * expired（接替曾 active 走完生命周期）、cancelling（取消过渡态）——详见计划 X1。
      *
      * public：CertRenewStalledNotificationBuilder 重查后对预载 nextCert 再判停滞态白名单（毫秒级 race 兜底），
-     * 复用本单一真相源，禁在 Builder 侧手写第二份 5 态清单。
+     * 复用本单一真相源，禁在 Builder 侧手写第二份停滞态清单。
      *
      * @var string[]
      */
-    public const SUCCESSOR_STALLED_STATUSES = ['unpaid', 'pending', 'processing', 'approving', 'failed'];
+    public const SUCCESSOR_STALLED_STATUSES = ['unpaid', 'pending', 'processing', 'approving'];
 
     /**
      * 在途年龄门槛（小时）：接替 created_at 早于此才算停滞。

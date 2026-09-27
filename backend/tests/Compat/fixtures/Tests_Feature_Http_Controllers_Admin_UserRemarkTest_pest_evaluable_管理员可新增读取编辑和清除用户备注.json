@@ -1,0 +1,166 @@
+{
+    "test": "P\\Tests\\Feature\\Http\\Controllers\\Admin\\UserRemarkTest::__pest_evaluable_管理员可新增读取编辑和清除用户备注",
+    "version": "1.0.0",
+    "calls": [
+        {
+            "method": "GET",
+            "uri_pattern": "/api/admin/user",
+            "request_keys": [
+                "username"
+            ],
+            "response_status": "2xx",
+            "response_schema": {
+                "code": "integer",
+                "data": {
+                    "items": {
+                        "__list_of__": {
+                            "id": "integer",
+                            "username": "string",
+                            "email": "null",
+                            "mobile": "null",
+                            "balance": "string",
+                            "credit_limit": "string",
+                            "last_login_at": "null",
+                            "status": "integer",
+                            "created_at": "string",
+                            "level_code": "string",
+                            "custom_level_code": "null",
+                            "admin_remark": "string",
+                            "level": {
+                                "code": "string",
+                                "name": "string"
+                            },
+                            "custom_level": "null"
+                        }
+                    },
+                    "total": "integer",
+                    "pageSize": "integer",
+                    "currentPage": "integer"
+                }
+            }
+        },
+        {
+            "method": "GET",
+            "uri_pattern": "/api/admin/user/batch",
+            "request_keys": [
+                "ids"
+            ],
+            "response_status": "2xx",
+            "response_schema": {
+                "code": "integer",
+                "data": {
+                    "__list_of__": {
+                        "id": "integer",
+                        "username": "string",
+                        "email": "null",
+                        "mobile": "null",
+                        "balance": "string",
+                        "level_code": "string",
+                        "custom_level_code": "null",
+                        "credit_limit": "string",
+                        "last_login_at": "null",
+                        "last_login_ip": "null",
+                        "join_ip": "null",
+                        "join_at": "string",
+                        "source": "null",
+                        "token_version": "integer",
+                        "logout_at": "null",
+                        "email_verified_at": "null",
+                        "mobile_verified_at": "null",
+                        "notification_settings": {
+                            "cert_issued": "boolean",
+                            "cert_expire": "boolean",
+                            "acme_expire": "boolean",
+                            "security": "boolean"
+                        },
+                        "auto_settings": {
+                            "auto_renew": "boolean",
+                            "auto_reissue": "boolean"
+                        },
+                        "status": "integer",
+                        "admin_remark": "string",
+                        "created_at": "string",
+                        "updated_at": "string"
+                    }
+                }
+            }
+        },
+        {
+            "method": "GET",
+            "uri_pattern": "/api/admin/user/{id}",
+            "request_keys": null,
+            "response_status": "2xx",
+            "response_schema": {
+                "code": "integer",
+                "data": {
+                    "id": "integer",
+                    "username": "string",
+                    "email": "null",
+                    "mobile": "null",
+                    "balance": "string",
+                    "level_code": "string",
+                    "custom_level_code": "null",
+                    "credit_limit": "string",
+                    "last_login_at": "null",
+                    "last_login_ip": "null",
+                    "join_ip": "null",
+                    "join_at": "string",
+                    "source": "null",
+                    "token_version": "integer",
+                    "logout_at": "null",
+                    "email_verified_at": "null",
+                    "mobile_verified_at": "null",
+                    "notification_settings": {
+                        "cert_issued": "boolean",
+                        "cert_expire": "boolean",
+                        "acme_expire": "boolean",
+                        "security": "boolean"
+                    },
+                    "auto_settings": {
+                        "auto_renew": "boolean",
+                        "auto_reissue": "boolean"
+                    },
+                    "status": "integer",
+                    "admin_remark": "string",
+                    "created_at": "string",
+                    "updated_at": "string",
+                    "level": {
+                        "code": "string",
+                        "name": "string"
+                    },
+                    "custom_level": "null"
+                }
+            }
+        },
+        {
+            "method": "POST",
+            "uri_pattern": "/api/admin/user",
+            "request_keys": [
+                "admin_remark",
+                "level_code",
+                "password",
+                "status",
+                "username"
+            ],
+            "response_status": "2xx",
+            "response_schema": {
+                "code": "integer"
+            }
+        },
+        {
+            "method": "PUT",
+            "uri_pattern": "/api/admin/user/{id}",
+            "request_keys": [
+                "admin_remark",
+                "level_code",
+                "password",
+                "status",
+                "username"
+            ],
+            "response_status": "2xx",
+            "response_schema": {
+                "code": "integer"
+            }
+        }
+    ]
+}

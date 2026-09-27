@@ -119,6 +119,18 @@ export const searchColumns: PlusColumn[] = [
     ]
   },
   {
+    label: "模块",
+    prop: "module",
+    valueType: "input",
+    fieldProps: { placeholder: "请输入模块名称" }
+  },
+  {
+    label: "动作",
+    prop: "action",
+    valueType: "input",
+    fieldProps: { placeholder: "请输入动作名称" }
+  },
+  {
     label: "IP地址",
     prop: "ip",
     valueType: "input",

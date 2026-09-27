@@ -1,0 +1,29 @@
+{
+    "test": "P\\Tests\\Feature\\Http\\Controllers\\DcvControllerTest::__pest_evaluable_文件回落复用本地文件核验并禁用重定向",
+    "version": "1.0.0",
+    "calls": [
+        {
+            "method": "POST",
+            "uri_pattern": "/api/dcv/verify",
+            "request_keys": [
+                "0"
+            ],
+            "response_status": "2xx",
+            "response_schema": {
+                "code": "integer",
+                "data": {
+                    "results": {
+                        "8.8.8.8": {
+                            "domain": "string",
+                            "matched": "string",
+                            "value": "string",
+                            "error": "string",
+                            "content": "string",
+                            "link": "string"
+                        }
+                    }
+                }
+            }
+        }
+    ]
+}

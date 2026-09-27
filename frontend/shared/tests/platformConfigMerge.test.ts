@@ -73,3 +73,11 @@ test("AllBrands 存在时由后台完整接管品牌和站点字段", () => {
   assert.deepEqual(merged.Brands, []);
   assert.equal(merged.Title, undefined);
 });
+
+test("清空后台自定义代码会移除静态旧值", () => {
+  const merged = mergePlatformConfigSources(
+    { BodyCode: "<script>old()</script>" },
+    { AllBrands: [], BodyCode: "" }
+  );
+  assert.equal(merged.BodyCode, "");
+});

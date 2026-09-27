@@ -14,6 +14,7 @@ use App\Models\UserRefreshToken;
 use App\Services\Notification\DTOs\NotificationIntent;
 use App\Services\Notification\NotificationCenter;
 use App\Utils\Random;
+use Illuminate\Http\Request;
 use Throwable;
 use Tymon\JWTAuth\JWTAuth;
 
@@ -87,7 +88,7 @@ class UserController extends BaseController
         ])
             ->select([
                 'id', 'username', 'email', 'mobile', 'balance', 'credit_limit', 'last_login_at', 'status', 'created_at',
-                'level_code', 'custom_level_code',
+                'level_code', 'custom_level_code', 'admin_remark',
             ])
             ->when(
                 ! empty($validated['sort_prop']),
@@ -96,7 +97,7 @@ class UserController extends BaseController
             )
             ->offset(($currentPage - 1) * $pageSize)
             ->limit($pageSize)
-            ->get();
+            ->get()->makeVisible('admin_remark');
 
         $this->success([
             'items' => $items,
@@ -143,7 +144,7 @@ class UserController extends BaseController
             $this->error('用户不存在');
         }
 
-        $this->success($user->toArray());
+        $this->success($user->makeVisible('admin_remark')->toArray());
     }
 
     /**
@@ -158,7 +159,7 @@ class UserController extends BaseController
             $this->error('用户不存在');
         }
 
-        $this->success($users->toArray());
+        $this->success($users->makeVisible('admin_remark')->toArray());
     }
 
     /**
@@ -181,6 +182,23 @@ class UserController extends BaseController
         $user->fill($validated);
         $user->save();
 
+        $this->success();
+    }
+
+    /**
+     * 仅更新管理员备注，空值表示清除。
+     */
+    public function remark(Request $request, int $id): void
+    {
+        $validated = $request->validate([
+            'admin_remark' => 'present|nullable|string|max:500',
+        ]);
+        $user = User::find($id);
+        if (! $user) {
+            $this->error('用户不存在');
+        }
+
+        $user->update($validated);
         $this->success();
     }
 

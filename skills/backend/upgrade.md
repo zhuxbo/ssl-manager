@@ -2,7 +2,17 @@
 
 ## 升级系统
 
+后台升级的 `applyUpgrade()` 合并包内版本配置时保留当前版本号；由 `UpgradeService` 在清理临时文件、退出维护、补跑会话迁移和最终清理后执行 `update_version`，避免 apply、迁移或清理失败时提前显示目标版本。`upgrade.sh` 同样保留原版本文件至成功收尾（含恢复服务后的会话迁移），合并 `release_url`/`network` 后在安装目录内原子替换；发布版本文件失败仍返回非零。后台与 Shell 在发布前清除旧版本配置缓存、发布后尽力重建，重建失败回落直接加载文件，不将已完成升级改判失败。此约定依赖执行升级的代码已包含修复，不能自动纠正历史失败留下的版本号。
+
+`upgrade.sh` 兼容官方历史根地址 `https://release-cn.cnssl.com` 和 `https://release.cnssl.com`（含末尾 `/`）：下载前补齐 `/manager`，成功发布版本配置时同步迁移本地旧地址，避免后台检查更新继续请求不存在的根目录索引。自建地址及已有路径保持不变；升级失败不提前改写版本配置。
+
 ### 升级冻结契约
+
+首次 runtime 黑名单切库迁移在 freeze 期间跳过，新版后台升级在恢复服务后、发布版本号前按单文件路径补执行；旧版后台进程通过该迁移注册的应用终止回调兼容。`upgrade.sh` 在 `up` 成功后按单文件路径补跑同一迁移。补跑时复用 HTTP 启动独占锁排空在途请求，复制旧 JWT 黑名单并保留过期时间，不吊销有效会话；失败保留旧库及清理保护以便重试。迁移名保留兼容已发布版本，已执行的实例后续不重跑。关闭自动迁移时后台不主动补跑。详见认证规范。
+
+Redis 编号由 `RedisDatabaseConfig::preserve()` 统一处理：本实例 `.env` 显式设置优先，已加载配置（含 config cache）仅用于确定迁移源及补全缺失项。已有项原位更新、合并重复键，仅追加缺失项，保留属主/权限与 `APP_NAME`。若两个目标编号相同，保留 `REDIS_DB`，扫描 `MANAGER_SITES_ROOT`（默认 `/www/wwwroot`）下同一 Redis 端点的实例占用，并以独立连接确认候选库为空，从 1-15 自动分配 cache DB；同机安装和升级按顺序执行，不支持并行操作，也不依赖站点目录外的全站分配锁。后台和脚本规则一致。
+
+编号改变时必须处于维护模式并持有 HTTP 启动独占锁，先通知旧 worker 退出并等待在途队列/调度命令完成，再快照两库，按原始键及类型复制到目标并保留过期时间。先检查全部目标，同值支持重试、同名异值拒绝覆盖；本实例 worker 重启信号单独处理，不参与业务数据比较。源库保留恢复副本，不自动清空。数据就绪后写入去重后的 `.env`、清除旧配置缓存，再通知旧 worker 重启并切换升级进程的连接。新版后台在 `PackageExtractor` 持锁后、覆盖代码前调用；`upgrade.sh` 在 down/freeze 与启动锁生效后，以旧应用 bootstrap 加载目标包中的配置和迁移实现。首次旧后台进程仍由 runtime 切库 migration 补调用；首次旧后台升级必须开启自动迁移。编号无效、非空 `REDIS_URL`、无法探测/分配、在途命令未退出或数据无法安全合并时中止。此逻辑以执行升级的代码已包含修复为前提。
 
 升级期间应用进入只读维护态，避免 in-flight HTTP/Job 半执行：
 
@@ -41,9 +51,9 @@
 
 #### 定时备份互斥 + 失败告警（`schedule:backup`）
 
-- **非阻塞抢锁**：`BackupCommand` 抢 `Cache::lock(backup:mutex)` 非阻塞 `get()`——抢不到（Create/RestoreBackupJob 持锁 3600s 中）→ 去重 `SystemAlert('backup', 'backup_lock_contention')` + 返回 **SUCCESS**（跳过≠失败），避免与半恢复库并发 dump 出垃圾备份污染灾备。
-- **`--internal-no-lock` 重入旁路（对端契约）**：`CreateBackupJob`/`RestoreBackupJob` 已持 `backup:mutex`，重入命令时**必须**传 `--internal-no-lock`（`$owns=false`）绕过抢锁——**漏传则命令抢锁失败静默跳过、备份/`pre_restore` 快照缺失（恢复无护栏）**。两调用点 + 命令三处对称，Job 测试断调用参数含该 flag。
-- **失败告警（仅 `$owns`）**：client-missing → `backup_client_missing`；dump/schema 异常 → `backup_dump_error`；成功清三个去重键（恢复后下次异常立即再告警）。`--internal-no-lock` 路径不告警（父 Job 自管进度）。
+- **非阻塞抢锁**：`BackupCommand` 通过 `DatabaseOperationMutex` 非阻塞获取 MySQL named lock；抢不到则去重告警 `backup_lock_contention` 并返回 **FAILURE**，不产生任何备份文件。
+- **Job/CLI 同一入口**：`CreateBackupJob` 先上报 `dumping` 阶段，再直接调用 `schedule:backup`；它不持有第二套 Cache 锁，由命令统一获取 `DatabaseOperationMutex`。遗留恢复 Job 的互斥改造归恢复编排任务，不在备份发布中引入兼容旁路。
+- **失败告警**：client-missing → `backup_client_missing`；dump/schema 异常 → `backup_dump_error`；成功清三个去重键（恢复后下次异常立即再告警）。
 
 ### 关键服务
 
@@ -62,6 +72,8 @@
 **两条升级路径删除语义不同、且都正确**：后台升级（PHP，在被升级代码内运行、不能全量删自身）→ 只覆盖不删除，旧版删除的文件会残留（本项目路由是显式白名单不扫目录，残留基本无害）；需彻底清理残留时走 `upgrade.sh`（外部 shell，`rm -rf` 各目录 + 整体 `cp` 全量替换、天然无残留）。一致性目标是「都不漏应更新的目录」，删除策略因运行环境不同而必须不同。
 
 **升级器自更新有一次时序滞后**：本次后台升级跑的是服务器上的旧 `PackageExtractor`，逻辑修复要下一次升级才生效（或本次升级后手动补缺失资源）。因此从不带 `SSL_MANAGER_BOOTSTRAP_LOCK_V1` 的历史版本首次进入启动锁机制时，不能依赖目标包里的新 PHP 升级器自救，必须使用本次发布的 `upgrade.sh` 完成首次握手。入口已具备标记后，后台升级才受上述共享/独占锁保护。另一种可行设计是先发布桥接版本，但当前尚未实现；桥接版本除注入入口 marker 外，还必须持久化 draining 状态并等待旧请求排空。回归测试见 `PackageExtractorTest`（动态发现新目录 / storage 跳过 / resources 同步）与 `ApplicationBootstrapLockTest`（首次注入 / 中断续等 / 原生新装快路径 / 失败关闭）。
+
+Shell 首次排空阶段显示安全等待时间进度条（不是请求完成比例）：终端每秒刷新，重定向日志每 10 秒输出一次及完成状态，中断重试按准备状态中的实际剩余时间继续；原生带锁且没有准备状态时直接跳过。随后获取启动独占锁时，每 5 秒报告等待时长，取得锁后才进入代码切换。
 
 ### 升级模式
 
@@ -90,7 +102,7 @@
 - **后端 web 入口（管理后台触发）**：`UpgradeService::performUpgradeWithStatus()` 的 `check_environment` 步骤（extract 之后、apply 之前）。不通过抛 `PhpEnvironmentException`，catch 块把 `details` 写入 `status.json.error_details`，前端 ElDialog 弹窗展示
 - **cron/supervisor PHP 路径**：upgrade.sh 升级末尾调 `update_jobs_php_path`，扫 `bt_list_crontab_all` + `bt_list_supervisor_all` 中含 `/www/server/php/XX/bin/php`（或裸 `php` token）与当前 `$PHP_CMD` 不一致的项。对 install.sh 自管（cron 含 `$INSTALL_DIR/backend/artisan schedule:run`；supervisor 含 `artisan queue:work` 且 path=`$INSTALL_DIR/backend`）且类型内唯一的项，自动覆盖更新（cron 走"先删后加 + 失败用原 body 回滚"三段语义；supervisor 走 `bt_add_supervisor_process` 自带 Remove+Add，失败也回滚）。不满足"自管+唯一"的项保留列表 + 手工提示
 - **cron 日志策略**：`schedule:run` 只在 PHP 路径不一致时修复，保留原命令主体和日志策略；新安装不重定向输出，由宝塔面板保存任务日志。
-- **升级末尾 PHP-FPM reload**：upgrade.sh 完成最终权限修正后、仍处于 freeze + 维护态时显式调 `bt_reload_php_fpm`，成功或完成非阻断处置后才依次 `upgrade:unfreeze`、`artisan up`、`queue:restart`，避免恢复流量后旧 worker 与新代码竞争。
+- **升级末尾 PHP-FPM reload**：upgrade.sh 完成最终权限修正后、仍处于 freeze + 维护态时显式调 `bt_reload_php_fpm`，成功或完成非阻断处置后才依次 `upgrade:unfreeze`、`artisan up`、`queue:restart`，避免恢复流量后旧 worker 与新代码竞争。版本与最终配置缓存生成后，再重载一次当前 PHP-FPM，确保关闭 OPcache 时间戳检查时也采用新配置。
   - **通道优先级 `/etc/init.d/php-fpm-XX reload` > `systemctl reload` > 宝塔 API**（`_bt_php_fpm_send_reload`）。init 脚本是单次 `kill -USR2 $(cat php-fpm.pid)`，退出码可信且**不需要 BT API key**——这条也是 reload 不再被 key 门控的原因：过去 key 取不到就整段跳过 reload，`opcache.validate_timestamps=0` 的机器升级后会持续跑旧代码。宝塔 API 排最后：实测面板 `class/system.py::ServiceAdmin` 执行完 init 脚本后并不看其退出码，而是轮询 `check_service_status` → `public.is_php_fpm_process_exists` → `is_process_exists_by_exe`（psutil 遍历 `/proc/*/exe`），判否时**再补发最多 6 次 `systemctl reload`**、返回失败前还重复执行一次原命令，故「只发一次 reload」在 API 通道上不成立，额外重载会在等待窗口内反复翻新 worker 代际。
   - **成败只认本机可观测证据，不采信宝塔自陈的 `status`**：线上实测出现过 reload 已生效（旧 worker 代际已退、master 在、健康入口经 FPM 返回本项目 JSON）而宝塔仍返回 `{"status": false, "msg": "php-fpm-XX服务启动失败"}`。该消息在面板里只有 `class/system.py:1281` 一处，其前置条件是 `check_service_status`（→ `public.is_php_fpm_process_exists` → `is_process_exists_by_exe` → psutil 先 `pids()` 取快照、再逐个 `Process(pid).exe()`，取不到即 `except: continue`）判否。**根因**：宝塔的 php-fpm 以 `--daemonize` 启动，reload 时 master 按原始 argv `execvp` 自身后**再 fork 脱离**，于是每次 reload 都换一个新 master PID（实测 FPM 日志 `fpm is running, pid` 663089 → 663093 → 663096 …）；psutil 的快照-再查询之间正好存在「旧 master 已消失、新 master 未进快照」的窗口，命中即判否。该窗口宽度与机器相关：**实测某台约 10 次点重载有一半失败，另一些机器 10/10 正常**。它还会自我放大——一旦判否，面板补发最多 6 次 `systemctl reload`，每次再制造同一窗口。故宝塔的 `status` 不能充当成败权威（面板 UI 手工重载同样会偶发显示失败，与实际结果无关）。
   - 成功判据：①reload 已成功发出；②**master 已换代**（强因果，见下）**或** reload 前记录的旧 worker 代际全部退出，且 master 存在；③reload 后本站 `/api/health` 经 Nginx → FPM Socket → 新 worker → Laravel 返回本项目 JSON。**③ 取不到站点域名时跳过并降级告警，不据此判失败**——那是「测不了」而非「测失败」，据此判失败会把一次真实成功的 reload 拖满 timeout 再误报，而此时站点仍停在维护态。
@@ -99,7 +111,7 @@
   - 代际识别：版本归属锚 `/proc/<pid>/exe`，角色由 **cmdline** 区分（master 恒为 `php-fpm: master process (...)`）——不用「parent 不在同版本 PID 集合内」推断 master，因为 master 死后 worker 被 reparent 到 1 同样满足该条件，孤儿 worker 仍持有继承的 listen fd 能应答探活，会让代际 + 探活双证据同时被绕过而输出假成功；防 PID 复用用 `/proc/<pid>/stat` starttime（剥 `(comm)` 用贪婪 `##*) `，comm 内含 `") "` 时非贪婪会让 starttime 错位成 0）。
   - **权限收尾拆成两段**：主权限修正（`_finalize_install_permissions`：全树 chown + storage/backups/`.env` 位）前移到 reload 之前，避免新 master/worker 在文件树仍变动时加载代码；但其后的 `upgrade:unfreeze` / `up` / `queue:restart` 仍以 root 运行并会在 storage 下**新建** root 属主文件（file 缓存驱动的 `framework/cache/data/xx/yy` 二级目录 0755 会让 www 之后无法在其中写入，daily 日志跨日同理），故 `check_queue_worker_status` 之后再补一次**只覆盖 storage 与 bootstrap/cache** 的窄范围 chown。
   - 等待期间每 2 秒输出旧 worker 剩余数、当前 worker 数、master 与健康入口状态，30 秒仅作故障上限。原本无 worker 的 ondemand `0/0` 空闲态无法直接比较代际：upgrade.sh 按安装目录反查本站 vhost/普通域名，`bt_reload_php_fpm` **在发送 reload 前**通过 `curl --resolve <domain>:443|80:127.0.0.1` 请求维护态放行的 `/api/health`（HTTP 200/503 均可）生成并记录旧 worker 身份，再发送 reload。既建不起代际基线、master 也未换代时不宣告成功：等满 `BT_PHP_FPM_WAIT_TIMEOUT` 后如实告警交人工（非阻断，upgrade.sh 只 `log_warning`）。非宝塔 PHP 路径跳过
-- **OPcache 清理统一走 `App\Support\Opcache::reset()`**：换代码后必须清，否则 `opcache.validate_timestamps=0` 的机器继续跑旧字节码。三种"没清成"语义不同，不能一律当失败：①扩展未加载 → skipped；②当前 SAPI 未启用（CLI 下 `opcache.enable_cli` 默认 0，这是命令行常态）→ 含义是"本来就没缓存可清"；裸调时它与真失败一样表现为 `opcache_reset()` 返回 false，故 `Opcache` 先用 `opcache_get_status()` 探测再决定是否 reset，把它归为 skipped 而非 failed；③配了 `opcache.restrict_api` 且调用脚本路径不匹配 → PHP 发 `E_WARNING`，Laravel 引导后 `error_reporting = -1`，`HandleExceptions` 会转成 `ErrorException`——**裸调会中断升级**（实测容器内带完整 bootstrap 复现），故由 `Opcache::reset()` 就地接住并返回结构化结果，`UpgradeService` 只记账不阻断。**命令行进程只能清自己的 OPcache，够不到 PHP-FPM 常驻进程**：`cache:clear-all` 在 CLI 下即使 reset 成功也必须提示"FPM 不受影响"，否则是假成功信号；线上真正换掉字节码只能靠后台「清除缓存」按钮（`Artisan::call` 与 FPM worker 同进程）或重载 PHP-FPM。
+- **OPcache 清理统一走 `App\Support\Opcache::reset()`**：换代码后必须清，否则 `opcache.validate_timestamps=0` 的机器继续跑旧字节码。三种"没清成"语义不同，不能一律当失败：①扩展未加载 → skipped；②当前 SAPI 未启用（CLI 下 `opcache.enable_cli` 默认 0，这是命令行常态）→ 含义是"本来就没缓存可清"；裸调时它与真失败一样表现为 `opcache_reset()` 返回 false，故 `Opcache` 先用 `opcache_get_status()` 探测再决定是否 reset，把它归为 skipped 而非 failed；③配了 `opcache.restrict_api` 且调用脚本路径不匹配 → PHP 发 `E_WARNING`，Laravel 引导后 `error_reporting = -1`，`HandleExceptions` 会转成 `ErrorException`——**裸调会中断升级**（实测容器内带完整 bootstrap 复现），故由 `Opcache::reset()` 就地接住并返回结构化结果，`UpgradeService` 只记账不阻断。**命令行进程只能清自己的 OPcache，够不到 PHP-FPM 常驻进程**：`cache:clear-all` 在 CLI 下即使 reset 成功也必须提示"FPM 不受影响"，否则是假成功信号；线上真正换掉字节码需由部署/升级流程重载 PHP-FPM。
 - **fatal 兜底**：`UpgradeRunCommand::handle()` 注册 `register_shutdown_function` → `handleFatalShutdown`（静态、注入 `error_get_last()`，便于直测），捕获 `E_ERROR / E_PARSE` 等 fatal：双守卫（非 fatal / 非 running 早退）后 `unfreeze` → `artisan up` → `fail`（序契约见「freeze 接入」节；fail 放最后让 up 二次 fatal 时 status 留 running 交 watchdog 接管），避免卡 running 死锁 + freeze 滞留
 - **classmap 自愈**：新包的 autoload 在构建时优化生成；仅历史不带 vendor 的兼容路径会跑 `dump-autoload --optimize --no-scripts`。
 - **composer 触发收口 `_need_composer_install`**：依赖变化判定统一走此函数，判据「`vendor/autoload.php` 缺失 ∨ `NEED_COMPOSER_FORCE=1`（入口回迁旧 vendor）∨ composer.json/lock hash 变化」任一即装。**vendor 缺失必装是砖机兜底**——中断丢 vendor 后重跑时 `backend/composer.json` 已是新版本、新旧 hash 相等会误跳过 composer → artisan fatal 自循环，runbook 的「重跑」指引失效；从新 lock 重建始终正确幂等，宁可多装一次
@@ -107,6 +119,10 @@
 ### 数据库结构校验
 
 升级后自动校验数据库结构与标准 `structure.json` 是否一致。
+
+- 升级校验只比较核心结构语义；插件等额外表属于信息项，不作为删除建议，也不阻断仅新增结构的自动修复。
+- InnoDB 外键的 `RESTRICT` / `NO ACTION` 仅在比较时按等价规则处理；备份恢复、回滚补偿及持久外键计划保留来源规则，不将归一化值写回数据库。MySQL 5.7 的 INPLACE ADD 仍可能由引擎将 `RESTRICT` 规范化为 `NO ACTION`，验证须同时检查发出的 SQL 和同版本直接 DDL 基线，不要求元数据文本跨版本一致。`db:structure --check` 和 `--fix` 的手动提示均显示已有外键修改的当前定义与标准定义。
+- 备份侧 `<backup>.schema.json` 使用独立的恢复比较入口；备份显式记录字符集、生成列表达式时才比较这些扩展元数据，旧备份缺少字段时保持可恢复。
 
 #### 平台设置升级顺序
 

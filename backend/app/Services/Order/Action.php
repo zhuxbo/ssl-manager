@@ -7,6 +7,7 @@ namespace App\Services\Order;
 use App\Exceptions\ApiResponseException;
 use App\Http\Requests\Product\ImportCaProductRequest;
 use App\Http\Requests\Product\UpdateRequest;
+use App\Jobs\CleanupDelegationTxtJob;
 use App\Models\Callback;
 use App\Models\Cert;
 use App\Models\Chain;
@@ -211,19 +212,17 @@ class Action
         $later && $this->error('参数重复，请在 '.$later.' 秒后再提交申请');
 
         $params = $this->initParams($params);
-
         $orderData = $this->getOrder($params);
         $latestCert = $this->getCert($params);
-        $orderData['amount'] = $latestCert['amount'] = OrderUtil::getLatestCertAmount($orderData, $latestCert, $params['product']);
+        $orderData['amount'] = $latestCert['amount'] = OrderUtil::getLatestCertAmount(
+            $orderData,
+            $latestCert,
+            $params['product'],
+        );
+        OrderUtil::guardZeroAmountOrder($latestCert['amount'], $latestCert['action'] ?? 'new');
 
-        // 内层事务 attempts 固定 1：本闭包经 AutoRenew O1 / V1V2 一条龙外层事务嵌套为 savepoint，
-        // 嵌套死锁不可事务级重试（同 commitLocked 先例——非 checkDuplicate，它在事务外）。
-        // 有意不套 order_mutate 互斥：事务内零上游调用（上游 commit 由事务外承载）、与 commit/cancel
-        // 状态互斥（renew 要求源证书 active，commit 要求 pending、cancel 要求 cancelling，同订单不可能同时满足），
-        // 源订单行锁 + affected-rows 守卫即保证正确性（极窄竞态下至多一方拿到 active，另一方被拒）。
         $orderId = null;
         DB::transaction(function () use ($params, $orderData, $latestCert, &$orderId) {
-            // renew：先锁源订单行，串行化毫秒级并发双开；plain new（无源订单）不锁、行为不变。
             if (($latestCert['action'] ?? '') === 'renew') {
                 $sourceOrder = Order::whereHas('latestCert')->lock()->find($params['order_id']);
                 $sourceOrder || $this->error('订单或相关数据不存在');
@@ -233,8 +232,6 @@ class Action
             $latestCert['order_id'] = $order->id;
 
             if (($latestCert['action'] ?? '') === 'renew') {
-                // 前驱翻转 CAS：保留 WHERE status='active' 取影响行数。命中 0 行 = 源证书已被并发
-                // 续费/重签/取消抢先翻走 → 重读源证书权威状态分三态 error 后回滚（此时 pay 尚未执行、扣费从未发生）。
                 $affected = Cert::where(['status' => 'active', 'order_id' => $params['order_id']])
                     ->update(['status' => 'renewed']);
 
@@ -251,7 +248,6 @@ class Action
 
             $cert = Cert::create($latestCert);
             $order->update(['latest_cert_id' => $cert->id]);
-
             $orderId = $order->id;
         }, 1);
 
@@ -275,32 +271,38 @@ class Action
         // （BinaryLocator singleton，与 initParams 内探测共享缓存、零重复 fork）
         $this->guardSm2Capable($params['encryption']['alg'] ?? null);
 
-        $orderIds = [];
-        DB::beginTransaction();
-        try {
-            foreach ($domains as $item) {
-                $params['domains'] = $item;
+        $preparedParams = [];
+        foreach ($domains as $item) {
+            $itemParams = $params;
+            $itemParams['domains'] = $item;
+            $preparedParams[] = $this->initParams($itemParams);
+        }
 
-                $params = $this->initParams($params);
+        $rows = [];
+        foreach ($preparedParams as $itemParams) {
+            $orderData = $this->getOrder($itemParams);
+            $latestCert = $this->getCert($itemParams);
+            $orderData['amount'] = $latestCert['amount'] = OrderUtil::getLatestCertAmount(
+                $orderData,
+                $latestCert,
+                $itemParams['product'],
+            );
+            OrderUtil::guardZeroAmountOrder($latestCert['amount'], $latestCert['action'] ?? 'new');
+            $rows[] = [$orderData, $latestCert];
+        }
 
-                $orderData = $this->getOrder($params);
-                $latestCert = $this->getCert($params);
-
-                $orderData['amount'] = $latestCert['amount'] = OrderUtil::getLatestCertAmount($orderData, $latestCert, $params['product']);
-
+        $orderIds = DB::transaction(function () use ($rows): array {
+            $orderIds = [];
+            foreach ($rows as [$orderData, $latestCert]) {
                 $order = Order::create($orderData);
                 $latestCert['order_id'] = $order->id;
-
                 $cert = Cert::create($latestCert);
                 $order->update(['latest_cert_id' => $cert->id]);
-
                 $orderIds[] = $order->id;
             }
-            DB::commit();
-        } catch (Throwable $e) {
-            DB::rollback();
-            throw $e;
-        }
+
+            return $orderIds;
+        }, 1);
 
         $this->success(['order_ids' => $orderIds]);
     }
@@ -330,16 +332,17 @@ class Action
 
         $params = $this->initParams($params);
 
-        // 锁前只读：amount 预检 + 产品禁用校验（位置不变）。organization 覆盖捕获后带入锁内持久化，
-        // 不写回本无锁 $order（避免 stale 写）。
         $order = Order::find($params['order_id']);
         $order->organization = $params['organization'] ?? $order->organization;
         $organization = $order->organization;
         $latestCert = $this->getCert($params);
+        // 重签只对增购 SAN 计价；原配额内重签为零元，不依赖当前价格配置。
+        $hasAdditionalDomains = $latestCert['standard_count'] > $order->purchased_standard_count
+            || $latestCert['wildcard_count'] > $order->purchased_wildcard_count;
+        $amount = $hasAdditionalDomains
+            ? OrderUtil::getLatestCertAmount($order->toArray(), $latestCert, $params['product'])
+            : '0.00';
 
-        $amount = OrderUtil::getLatestCertAmount($order->toArray(), $latestCert, $params['product']);
-
-        // 产品禁用后 重签不能增加域名个数
         if (bccomp($amount, '0', 2) === 1) {
             $product = FindUtil::Product((int) $order->product_id);
             if ($product->status == 0) {
@@ -347,23 +350,15 @@ class Action
             }
         }
 
-        // 内层事务 attempts 固定 1：本闭包经 AutoRenew O1 / V1V2 一条龙外层事务嵌套为 savepoint，
-        // 嵌套死锁不可事务级重试（同 commitLocked 先例——非 checkDuplicate，它在事务外）。
-        // 有意不套 order_mutate 互斥：事务内零上游调用、与 commit/cancel 状态互斥（reissue 要求源证书
-        // active/expired），本订单行锁 + affected-rows 守卫即够；reissue 源=本订单，与取消路径先锁同一 order 行天然串行。
         $orderId = null;
         DB::transaction(function () use ($params, $latestCert, $amount, $organization, &$orderId) {
-            // 锁本订单行
             $order = Order::whereHas('latestCert')->lock()->find($params['order_id']);
             $order || $this->error('订单或相关数据不存在');
 
-            // 锁内重读 latest_cert_id，与 initParams 捕获的基线 last_cert_id 比对：不等 = 并发 reissue 已推进接替，拒绝
             if ((int) $order->latest_cert_id !== (int) ($params['last_cert_id'] ?? 0)) {
                 $this->error('订单已重签');
             }
 
-            // 前驱翻转 CAS：WHERE id=前驱 AND status IN('active','expired') 取影响行数。命中 0 行 = 被并发抢先 →
-            // 重读前驱权威状态分三态 error 后回滚（此时 pay 尚未执行、扣费从未发生）。
             $affected = Cert::where('id', $params['last_cert_id'] ?? 0)
                 ->whereIn('status', ['active', 'expired'])
                 ->update(['status' => 'reissued']);
@@ -381,20 +376,17 @@ class Action
             $order->organization = $organization;
             $latestCert['order_id'] = $order->id;
             $latestCert['amount'] = $amount;
-            $latestCert['status'] = 'unpaid';
-
-            // certs.last_cert_id UNIQUE 是物理底线：双开第二个 INSERT（last_cert_id 撞已占槽位）触 1062 回滚
+            $isFree = bccomp($amount, '0', 2) === 0;
+            $latestCert['status'] = $isFree ? 'pending' : 'unpaid';
             $cert = Cert::create($latestCert);
             $order->latest_cert_id = $cert->id;
+            if ($isFree) {
+                // 免费增购也要更新配额，与原支付步骤一致，但不创建零元交易。
+                $order->purchased_standard_count = max($order->purchased_standard_count, $cert->standard_count, $params['product']['standard_min']);
+                $order->purchased_wildcard_count = max($order->purchased_wildcard_count, $cert->wildcard_count, $params['product']['wildcard_min']);
+            }
             $order->save();
-
-            // 删除旧的域名验证记录：reissue 复用同一 order_id，旧记录 created_at 为原签发时间，
-            // 会让 ValidateCommand 的验证节奏（以 created_at 为锚）直接落 12 小时档。删除后
-            // ValidateCommand 在新 cert 进 processing 时重建 created_at=now 的记录，恢复快档。
-            // 落服务层单点覆盖 HTTP/API/Deploy/auto-reissue 全入口，与 OrderController::revalidate/updateDCV
-            // 的重置语义对称；事务内删除，reissue 失败 rollback 一并回滚，无孤儿。
             DomainValidationRecord::where('order_id', $order->id)->delete();
-
             $orderId = $order->id;
         }, 1);
 
@@ -478,6 +470,10 @@ class Action
             }
 
             $order->latestCert->status != 'pending' && $this->error('订单状态不是待提交');
+            OrderUtil::guardZeroAmountOrder(
+                $order->latestCert->amount,
+                $order->latestCert->action,
+            );
 
             $product = FindUtil::Product($order->product_id);
 
@@ -555,7 +551,7 @@ class Action
         } catch (Throwable $e) {
             $response = $e instanceof ApiResponseException ? $e->getApiResponse() : null;
             if (($response['code'] ?? 0) !== 1) {
-                Cache::forget($cacheKey);
+                Cache::store('runtime')->forget($cacheKey);
             }
 
             throw $e;
@@ -595,6 +591,10 @@ class Action
         }
 
         $data = $result['data'] ?? [];
+        // 兼容旧上游返回的证书终态；本地不再存储 failed。
+        if (($data['status'] ?? null) === 'failed') {
+            $data['status'] = 'archived';
+        }
 
         // 合并 dcv（保留委托验证标记）
         $data['dcv'] = $this->mergeDcv($data['dcv'] ?? null, $cert->dcv);
@@ -629,9 +629,19 @@ class Action
         if (! $order->period_from && ($data['issued_at'] ?? null) && ($data['expires_at'] ?? null)) {
             // 即使传递的是时间戳 赋值给模型属性后会转换为时间格式
             $order->period_from = $data['issued_at'];
-            $plus = ($order->product->product_type ?? '') === 'ssl' ? (int) $order->plus : 0;
-            $periodTill = $this->calculatePeriodTill((int) $data['issued_at'], (int) $order->period, $plus);
-            $order->period_till = max($data['expires_at'], $periodTill);
+            if (! empty($data['period_till'])) {
+                $order->period_till = $data['period_till'];
+            } elseif ($cert->action === 'renew') {
+                // 续费承接旧订单剩余时间，不额外赠送，也不以单张证书期限替代订购周期。
+                $lastCert = Cert::find($cert->last_cert_id);
+                $lastOrder = $lastCert ? Order::find($lastCert->order_id) : null;
+                $periodFrom = max((int) $data['issued_at'], $lastOrder?->period_till->timestamp ?? 0);
+                $order->setAttribute('period_till', $this->calculatePeriodTill($periodFrom, (int) $order->period, 0));
+            } else {
+                $plus = ($order->product->product_type ?? '') === 'ssl' ? (int) $order->plus : 0;
+                $periodTill = $this->calculatePeriodTill((int) $data['issued_at'], (int) $order->period, $plus);
+                $order->period_till = max($data['expires_at'], $periodTill);
+            }
         }
 
         // 同步退款分支：上游 cancelled + 过渡态 + new/renew/reissue + 开关开 → 专用 helper 处理退款。
@@ -662,7 +672,7 @@ class Action
         $this->guardIntermediateChain($order, $data);
 
         // 锁内重取 + 终态守卫 + 写回：慢 IO（上游 get）已在锁外完成，此事务只包状态判定副作用 + 写回。
-        // 锁序 task→order：与 commitCancel(active)/revokeCancel 统一。controller 直调 sync 时无前置 task 锁，
+        // 锁序 task→order：与 commitCancel(active)/archive 统一。controller 直调 sync 时无前置 task 锁，
         // 必须在锁 order 前先按 task→order 顺序锁住本订单的 commit/sync/revalidate 任务（与下面 deleteTask 删除范围一致），
         // 否则与 commitCancel(锁 sync,revalidate→order)/refundForSyncedCancel 反序，task 集合相交触发 InnoDB 死锁。
         // 经 TaskJob 调用时 TaskJob 已先持本 task 行锁（同事务 lockForUpdate 可重入），叠加后整体仍是 task→order，不反序。
@@ -687,7 +697,7 @@ class Action
                 : (Cert::where('id', $cert->id)->value('status') ?? $cert->status);
 
             // 终态守卫（泛化到所有路径）：本地已是终态时拒绝上游 status 覆盖，防滞后 active 复活已退款/已重签订单
-            if (in_array($lockedStatus, ['cancelled', 'revoked', 'renewed', 'reissued', 'failed'], true)) {
+            if (in_array($lockedStatus, ['cancelled', 'revoked', 'renewed', 'reissued', 'archived'], true)) {
                 unset($data['status']);
                 // 终态订单拒绝 enc 回写：上游滞后返回的 enc 不落已终结证书（防御纵深，避免死敏感数据）
                 foreach (Cert::ENC_FIELDS as $encField) {
@@ -697,6 +707,11 @@ class Action
 
             // 用锁内权威 status 重算状态变化，后续通知/回调/deleteTask 均以此为准
             $hasStatusChanged = isset($data['status']) && $data['status'] !== $lockedStatus;
+            if ($hasStatusChanged && $lockedStatus === 'processing') {
+                $cleanupCert = clone $cert;
+                DB::afterCommit(fn () => CleanupDelegationTxtJob::dispatch($cleanupCert->id, $cleanupCert->validation ?? [])
+                    ->onQueue(config('queue.names.tasks'))->afterCommit());
+            }
 
             // 证书签发后发送通知邮件
             if ($hasStatusChanged
@@ -992,7 +1007,8 @@ class Action
         $isDelegated = $autoDcvService->handleOrder($order);
 
         if (! $isDelegated) {
-            $this->error("订单 #$orderId 委托解析处理失败或未命中配置");
+            $reason = $autoDcvService->lastError() ?? '委托解析处理失败或未命中配置';
+            $this->error("订单 #$orderId 委托解析失败：$reason");
         }
 
         $this->success();
@@ -1012,19 +1028,36 @@ class Action
         // 验证域名和验证方法的兼容性
         $this->validateDomainValidationCompatibility($cert->alternative_names, $method);
 
+        $result = null;
         if (in_array($cert->status, ['unpaid', 'pending'])) {
-            $cert->dcv = $this->generateDcv($order->product->ca, $method, $cert->csr, $cert->unique_value ?? '');
-            $cert->validation = $this->generateValidation($cert->dcv, $cert->alternative_names, $order->user_id);
+            $cert->dcv = $this->generateDcv(
+                $order->product->ca,
+                $method,
+                $cert->csr,
+                $cert->unique_value ?? '',
+            );
+            $cert->validation = $this->generateValidation(
+                $cert->dcv,
+                $cert->alternative_names,
+                $order->user_id,
+                true,
+            );
         } elseif ($cert->status === 'processing') {
-            // 如果从 delegation 切换到其他方法，需要重新生成本地 dcv（会更新 is_delegate）
-            $newDcv = $this->generateDcv($order->product->ca, $method, $cert->csr, $cert->unique_value ?? '');
-            // 传递给上游 API 的方法应该是 txt 而不是 delegation（上游不认识 delegation）
+            $newDcv = $this->generateDcv(
+                $order->product->ca,
+                $method,
+                $cert->csr,
+                $cert->unique_value ?? '',
+            );
             $apiMethod = $method === 'delegation' ? 'txt' : $method;
             $result = $this->api->updateDCV($orderId, $apiMethod);
-            // 使用新生成的 dcv（包含正确的 is_delegate 标记），然后合并 API 返回的 dns/file 信息
             $cert->dcv = $this->mergeDcv($result['data']['dcv'] ?? null, $newDcv);
-            // 优先使用 API 返回的 validation（多域名场景每个域名有独立 token），合并本地委托字段
-            $localValidation = $this->generateValidation($cert->dcv, $cert->alternative_names, $order->user_id) ?? [];
+            $localValidation = $this->generateValidation(
+                $cert->dcv,
+                $cert->alternative_names,
+                $order->user_id,
+                true,
+            ) ?? [];
             $cert->validation = isset($result['data']['validation'])
                 ? $this->mergeValidation($result['data']['validation'], $localValidation)
                 : $localValidation;
@@ -1053,7 +1086,7 @@ class Action
      * 提交取消
      *
      * 并发安全：processing/approving/active 分支在事务内持 order 行级锁，
-     * 与 cancel TaskJob / revokeCancel / batchCommitCancel 串行化；锁内二次
+     * 与 cancel TaskJob / archive / batchCommitCancel 串行化；锁内二次
      * 校验 latestCert.status，避免"双重 cancelling"或"撤回竞争"产生的脏状态。
      * unpaid/pending 分支委派给 delete/cancelPending，其自身已持锁。
      *
@@ -1075,7 +1108,7 @@ class Action
         $status === 'reissued' && $this->error('订单已重签');
         $status === 'cancelling' && $this->error('订单取消中');
         $status === 'revoked' && $this->error('订单已吊销');
-        $status === 'failed' && $this->error('订单已失败');
+        $status === 'archived' && $this->error('订单已归档');
 
         if (in_array($status, ['processing', 'approving', 'active'])) {
             $this->runTaskMutationTransaction(function () use ($orderId, $product) {
@@ -1092,7 +1125,7 @@ class Action
                     $this->error('订单或相关数据不存在');
                 }
 
-                // 锁内二次校验状态，拦住并发 commitCancel / revokeCancel 竞争
+                // 锁内二次校验状态，拦住并发 commitCancel / archive 竞争
                 $lockedStatus = $order->latestCert->status;
                 in_array($lockedStatus, ['processing', 'approving', 'active'])
                 || $this->error('订单状态不是可取消状态');
@@ -1102,7 +1135,7 @@ class Action
                 $order->created_at->timestamp < now()->timestamp - 86400 * $refundPeriod
                 && $this->error("订单已超过 $refundPeriod 天不能取消");
 
-                // 2分钟后取消
+                // 事务提交后立即执行取消任务
                 $order->latestCert->update(['status' => 'cancelling']);
                 $this->deleteTask($orderId, 'sync,revalidate');
                 $this->createTask($orderId, 'cancel');
@@ -1112,89 +1145,19 @@ class Action
         $this->success();
     }
 
-    /**
-     * 手工标记订单为「已续费」（renewed 终态）
-     *
-     * 用于用户在别处已续费、不想再被本系统自动续费/到期提醒的场景。
-     * renewed 是终态：标记后该订单不再自动续费、不再到期提醒；sync 终态守卫（::577）
-     * 防止上游滞后状态把已 renewed 的订单复活为 active。
-     *
-     * 并发安全：与 commitCancel/cancel/sync 串行化（共用 order 行锁），防止
-     * 「标记 renewed 时订单正被 sync/cancel 改状态」的并发错乱。本路径不涉及资金流水
-     * （不建 Transaction、不改 balance），故无需锁 user 行，仅锁 order/cert。
-     *
-     * 校验全部放在【锁内二次校验】（锁外校验会被并发绕过）：
-     *   - 仅 active 证书可标记（须有一张签发成功的当前证书）；
-     *   - 仅【订单】到期前 30 天内且未过期可标记 —— 按 orders.period_till 判定，
-     *     与手工续费 gate（ActionTrait 的 period_till>now+30 报错）及前端 gate 对齐。
-     *     语义：用户另开新订单续了证书 → 标旧订单 renewed 止到期通知；"原订单内重签"
-     *     靠重签后 expires_at 推远自动止通知、无需本操作。不用 cert.expires_at：多年期/
-     *     中途重签订单证书将到期但订单未到期，会被自动重签接管（ExpireCommand 已排除其
-     *     到期通知），不应允许标记。
-     */
-    public function markRenewed(int $id): void
+    /** 归档只终止本地管理，不调用上游或变更资金。 */
+    public function archive(int $id): void
     {
-        DB::transaction(function () use ($id) {
-            // 锁 order（同 commitCancel 的项目约定：whereHas('latestCert')->lock()）。
-            // UserScope 全局作用域在此生效：User 端非本人订单会被滤掉 → find 返回 null。
-            $order = Order::with(['latestCert'])
-                ->whereHas('latestCert')
-                ->lock()
-                ->find($id);
+        $this->runTaskMutationTransaction(function () use ($id) {
+            // 与任务执行、同步、取消保持 task → order 锁顺序。
+            Task::lockForMutation($id, ['commit', 'sync', 'revalidate', 'cancel'])->get();
+            $order = Order::with('latestCert')->whereHas('latestCert')->lock()->find($id);
+            $order || $this->error('订单不存在或无权操作');
+            in_array($order->latestCert->status, ['processing', 'active'], true) || $this->error('仅处理中或已签发订单可以归档');
 
-            if (! $order) {
-                $this->error('订单不存在或无权操作');
-            }
-
-            // 锁内二次校验，拦住并发改状态（sync/cancel）后的窗口竞争
-            $cert = $order->latestCert;
-            $cert->status !== 'active' && $this->error('仅签发成功的证书可标记为已续费');
-
-            // 按【订单】到期时间 period_till 判定（非单张证书 expires_at）：与手工续费窗口一致
-            $periodTill = $order->period_till;
-            if (! $periodTill || $periodTill->isPast() || $periodTill->gt(now()->addDays(30))) {
-                $this->error('仅订单到期前 30 天内且未过期可标记为已续费');
-            }
-
-            $cert->update(['status' => 'renewed']);
-        });
-
-        // success 必须在事务闭包之外：它抛 ApiResponseException 会触发回滚
-        $this->success();
-    }
-
-    /**
-     * 撤回取消
-     *
-     * 设计说明：状态统一恢复为 approving，同时创建 sync 任务，
-     * 同步一次即可从上游恢复正确状态（processing/approving/active）
-     *
-     * 并发安全：按 "task → order" 的统一锁顺序拿锁（与 TaskJob::handle 一致），避免死锁。
-     * 若 TaskJob 正在 cancel 内，此处 task lockForUpdate 会阻塞至 TaskJob 提交，
-     * 拿到 task 锁后再锁 order，此时 latestCert.status 已非 cancelling，校验报错退出。
-     * 避免"撤回成功 + 钱已退 + 上游已吊销"的资金/状态三重损害与 InnoDB 死锁回滚。
-     */
-    public function revokeCancel(int $orderId): void
-    {
-        $this->runTaskMutationTransaction(function () use ($orderId) {
-            // 锁顺序 1：先锁 task（与 TaskJob 一致，避免 task↔order 循环等待死锁）
-            Task::lockForMutation($orderId, ['cancel'])->get();
-
-            // 锁顺序 2：再锁 order
-            $order = Order::with(['latestCert'])
-                ->whereHas('latestCert')
-                ->lock()
-                ->find($orderId);
-
-            if (! $order) {
-                $this->error('订单或相关数据不存在');
-            }
-
-            $order->latestCert->status !== 'cancelling' && $this->error('订单不在取消中状态');
-
-            $this->deleteTask($orderId, 'cancel');
-            $order->latestCert->update(['status' => 'approving']);
-            $this->createTask($orderId, 'sync');
+            $order->latestCert->update(['status' => 'archived']);
+            $order->update(['auto_renew' => false, 'auto_reissue' => false]);
+            $this->deleteTask($id, ['commit', 'sync', 'revalidate', 'cancel']);
         });
 
         $this->success();
@@ -1236,7 +1199,7 @@ class Action
             $status === 'renewed' && $this->error('Order has been renewed');
             $status === 'reissued' && $this->error('Order has been reissued');
             $status === 'revoked' && $this->error('Order has been revoked');
-            $status === 'failed' && $this->error('Order has failed');
+            $status === 'archived' && $this->error('Order has been archived');
             in_array($status, ['processing', 'approving', 'active', 'cancelling'], true)
             || $this->error('Order cannot be cancelled');
 
@@ -1418,7 +1381,7 @@ class Action
      * 调用前提：sync 已校验触发四条件（status=cancelled + 过渡态 + new/renew/reissue + 开关开）。
      * 与 cancel() 的区别：不调用上游 api->cancel（上游已是 cancelled 态）；不检查 refund_period（以上游状态为权威）。
      *
-     * 锁序 task→order：与 commitCancel(active)/revokeCancel/sync 统一。本方法由 sync 调用，
+     * 锁序 task→order：与 commitCancel(active)/archive/sync 统一。本方法由 sync 调用，
      * 同样要删除 cancel/commit/sync/revalidate task，故在锁 order 前先按 task→order 顺序锁住这批 task
      * （与下面 deleteTask 删除范围一致），避免与 commitCancel 反序触发 InnoDB 死锁。
      *
@@ -1475,6 +1438,12 @@ class Action
                 $transaction = OrderUtil::getCancelTransaction($order->toArray());
                 // amount=0 时 Transaction::creating 钩子返回 false 短路，不创建记录
                 Transaction::create($transaction);
+            }
+
+            if ($cert->status === 'processing') {
+                $cleanupCert = clone $cert;
+                DB::afterCommit(fn () => CleanupDelegationTxtJob::dispatch($cleanupCert->id, $cleanupCert->validation ?? [])
+                    ->onQueue(config('queue.names.tasks'))->afterCommit());
             }
 
             // 更新 cert（合并上游数据 + 强制 status=cancelled + cancelled_at）

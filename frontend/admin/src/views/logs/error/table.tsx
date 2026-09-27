@@ -28,6 +28,8 @@ export const tableColumns: TableColumnList = [
     prop: "method",
     minWidth: 100
   },
+  { label: "模块", prop: "module", minWidth: 100 },
+  { label: "动作", prop: "action", minWidth: 120 },
   {
     label: "异常类型",
     prop: "exception",

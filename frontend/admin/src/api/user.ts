@@ -31,6 +31,7 @@ export const FORM_PARAMS_DEFAULT = {
   level_code: "",
   custom_level_code: "",
   credit_limit: 0,
+  admin_remark: "",
   status: 1
 };
 
@@ -98,5 +99,16 @@ export function createUser(data: {
     {
       data
     }
+  );
+}
+
+/** 更新或清除管理员备注 */
+export function remark(
+  id: number,
+  admin_remark: string
+): Promise<BaseResponse> {
+  return http.patch<BaseResponse<null>, { admin_remark: string }>(
+    `/user/remark/${id}`,
+    { data: { admin_remark } }
   );
 }

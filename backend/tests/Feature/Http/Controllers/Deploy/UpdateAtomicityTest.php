@@ -2,16 +2,19 @@
 
 use App\Exceptions\MutationBusyException;
 use App\Models\Cert;
+use App\Models\CnameDelegation;
 use App\Models\DeployToken;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\ProductPrice;
 use App\Models\Transaction;
 use App\Models\User;
+use App\Services\Delegation\DnsResolver;
 use App\Services\Order\Api\Api;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Testing\TestResponse;
+use Tests\Traits\CreatesTestData;
 
 /**
  * O3（Deploy update 续费入口移植 V2 一条龙）守门测试 —— 真实 charge。
@@ -20,7 +23,21 @@ use Illuminate\Testing\TestResponse;
  * fundAuditGuardedTestPaths() → afterEach 跑资金 invariant。契约/行为回归用例留 OrderControllerTest.php。
  * 助手函数用 deployAtomic* 前缀避免与 OrderControllerTest 全局函数冲突。
  */
-uses(RefreshDatabase::class);
+uses(RefreshDatabase::class, CreatesTestData::class);
+
+beforeEach(function () {
+    $this->configureTestDelegationProxyDomain();
+
+    $resolver = Mockery::mock(DnsResolver::class);
+    $resolver->shouldReceive('cnameRecords')->andReturnUsing(function (string $host): array {
+        $delegation = CnameDelegation::all()->first(
+            fn (CnameDelegation $item) => strtolower("$item->prefix.$item->zone") === strtolower($host),
+        );
+
+        return $delegation ? [$delegation->target_fqdn] : [];
+    });
+    app()->instance(DnsResolver::class, $resolver);
+});
 
 afterEach(function () {
     Mockery::close();
@@ -74,6 +91,26 @@ function deployAtomicUpdate(DeployToken $token, int $orderId): TestResponse
     return test()->withHeaders(['Authorization' => "Bearer $token->token"])
         ->postJson('/api/deploy/', ['order_id' => $orderId]);
 }
+
+test('Deploy 零元重签跳过支付并在事务外提交，失败仍保留 pending', function () {
+    [$user, $token] = deployAtomicAuth('0.00');
+    [$order, $cert, $product] = deployAtomicRenewable($user);
+    $order->update(['period_till' => now()->addMonths(6)]);
+    $cert->update(['expires_at' => now()->addDays(5)]);
+    ProductPrice::where('product_id', $product->id)->delete();
+    $api = Mockery::mock(Api::class);
+    $api->shouldReceive('reissue')->once()->andReturn(['code' => 0, 'msg' => '上游暂不可用']);
+    app()->instance(Api::class, $api);
+    $transactions = Transaction::count();
+
+    deployAtomicUpdate($token, $order->id)->assertOk()->assertJsonPath('code', 1)
+        ->assertJsonPath('data.status', 'pending');
+    expect($cert->fresh()->status)->toBe('reissued')
+        ->and($order->fresh()->latestCert->status)->toBe('pending')
+        ->and($order->fresh()->latestCert->amount)->toBe('0.00')
+        ->and($user->fresh()->balance)->toBe('0.00')
+        ->and(Transaction::count())->toBe($transactions);
+});
 
 test('O3-A 原子防孤儿：charge 并发失败 → 旧证书回滚保持 active、无新单、余额未变、HTTP 报错', function () {
     [$user, $token] = deployAtomicAuth('1000.00');

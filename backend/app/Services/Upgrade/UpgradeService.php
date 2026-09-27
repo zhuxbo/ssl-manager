@@ -135,6 +135,12 @@ class UpgradeService
 
             $statusManager->completeStep('check_version');
 
+            // 升级与数据库恢复共用同一持久冻结锁。必须在备份、维护模式和下载之前原子占位，
+            // 否则“先检查、后写锁”会给恢复留下并发进入窗口。
+            if (! UpgradeFreezeLock::freeze($currentVersion, $targetVersion, 7200, 'web')) {
+                throw new RuntimeException('无法取得升级冻结锁，可能有数据库恢复正在执行');
+            }
+
             // 步骤 3: 创建备份
             $forceBackup = Config::get('upgrade.behavior.force_backup', true);
             $backupId = null;
@@ -193,13 +199,6 @@ class UpgradeService
             // 记录当前 composer 文件的 hash（用于检测变化）
             $oldComposerHashes = $this->getComposerHashes(base_path());
             Log::info('[Upgrade] Current composer hashes', $oldComposerHashes);
-
-            // 危险窗起点：切代码 + 迁移前 freeze —— 本仓已删 PreventRequestsDuringMaintenance，
-            // artisan down 不挡 HTTP（只暂停 worker/scheduler），freeze 才是唯一真正挡外部写请求
-            // （下单/支付回调/文档上传）的 HTTP 闸。写锁失败仅告警继续（不新增失败模式，保护缺失可接受）。
-            if (! UpgradeFreezeLock::freeze($currentVersion, $targetVersion, 7200, 'web')) {
-                Log::warning('[Upgrade] freeze 写锁失败，升级继续但危险窗未挡 HTTP 写');
-            }
 
             // 步骤 7: 应用升级
             $statusManager->startStep('apply');
@@ -275,9 +274,6 @@ class UpgradeService
                 $clearResult = $this->runArtisanInSubprocess('optimize:clear', ['--except' => 'view']);
                 Log::info('[Upgrade] optimize:clear (subprocess) exit='.$clearResult['exit_code'].' output: '.$clearResult['output']);
 
-                $configResult = $this->runArtisanInSubprocess('config:cache');
-                Log::info('[Upgrade] config:cache (subprocess) exit='.$configResult['exit_code'].' output: '.$configResult['output']);
-
                 // route:cache 可能因插件闭包路由等原因失败，不应阻断升级
                 $routeResult = $this->runArtisanInSubprocess('route:cache');
                 if ($routeResult['exit_code'] !== 0) {
@@ -289,28 +285,30 @@ class UpgradeService
                 $statusManager->completeStep('clear_cache');
             }
 
-            // 危险窗终点：解冻 —— 必须严格先于 artisan up（步骤 16）。
+            // 危险窗终点：解冻 —— 必须严格先于 artisan up（步骤 15）。
             // up 会解除 down、唤醒被暂停的 worker 去 pop job；若此时 freeze 仍在，
             // SkipWhenUpgradeFrozen 的 release(60) 会开始烧 job attempts。此处解冻天然满足序。
             UpgradeFreezeLock::unfreeze();
 
-            // 步骤 14: 更新版本号
-            $statusManager->startStep('update_version');
-            $this->updateEnvVersion($targetVersion);
-            $statusManager->completeStep('update_version');
-
-            // 步骤 15: 清理临时文件
+            // 步骤 14: 清理临时文件
             $statusManager->startStep('cleanup');
             $this->packageExtractor->cleanup($extractedPath);
             $this->packageExtractor->cleanupOldPackages();
             $statusManager->completeStep('cleanup');
 
-            // 步骤 16: 退出维护模式
+            // 步骤 15: 退出维护模式
             if ($inMaintenanceMode) {
                 $statusManager->startStep('maintenance_off');
                 Artisan::call('up');
                 $inMaintenanceMode = false;
                 $statusManager->completeStep('maintenance_off');
+            }
+
+            // 冻结期间跳过的会话迁移必须在发布版本号前完成（与 Shell 路径一致）。
+            if (Config::get('upgrade.behavior.auto_migrate', true)) {
+                if (Artisan::call('migrate', ['--path' => RuntimeSessionCutover::MIGRATION_PATH, '--force' => true]) !== 0) {
+                    throw new RuntimeException('会话切库迁移失败：'.Artisan::output());
+                }
             }
 
             // 重启队列 worker（让常驻 worker 跑完当前 job 后退出，加载新代码）
@@ -323,6 +321,11 @@ class UpgradeService
 
             // 最终清理
             $this->resetOpcache('[Upgrade] 最终清理');
+
+            // 步骤 16: 所有升级操作成功后才更新版本号
+            $statusManager->startStep('update_version');
+            $this->updateEnvVersion($targetVersion);
+            $statusManager->completeStep('update_version');
 
             Log::info("升级完成: $currentVersion -> $targetVersion");
             $statusManager->complete($currentVersion, $targetVersion, $structureCheckResult);
@@ -512,6 +515,11 @@ class UpgradeService
         $config['version'] = $version;
         $config['updated_at'] = date('Y-m-d H:i:s');
 
+        // 先移除含旧版本号的配置缓存；失败时不发布新版本。
+        if (Artisan::call('config:clear') !== 0) {
+            throw new RuntimeException('清除版本配置缓存失败：'.Artisan::output());
+        }
+
         $result = file_put_contents(
             $versionPath,
             json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
@@ -519,6 +527,19 @@ class UpgradeService
 
         if ($result === false) {
             throw new RuntimeException("更新版本号失败: {$versionPath}。请检查文件权限。");
+        }
+
+        Config::set('version.version', $version);
+        if (Config::get('upgrade.behavior.clear_cache', true)) {
+            // 已发布版本后仅尽力重建；失败时直接加载配置文件，不改判升级失败。
+            try {
+                $result = $this->runArtisanInSubprocess('config:cache');
+                if ($result['exit_code'] !== 0) {
+                    Log::warning('[Upgrade] config:cache 重建失败，将直接加载配置文件：'.$result['output']);
+                }
+            } catch (\Throwable $e) {
+                Log::warning('[Upgrade] config:cache 重建失败，将直接加载配置文件：'.$e->getMessage());
+            }
         }
 
         Log::info("已更新 version.json: $versionPath -> $version");
@@ -881,9 +902,6 @@ class UpgradeService
         }
         if (! empty($summary['modified_columns'])) {
             $parts[] = '需修改列: '.implode(', ', array_slice($summary['modified_columns'], 0, 3));
-        }
-        if (! empty($summary['extra_tables'])) {
-            $parts[] = '多余表: '.implode(', ', $summary['extra_tables']);
         }
         if (! empty($summary['extra_indexes'])) {
             $parts[] = '多余索引: '.implode(', ', array_slice($summary['extra_indexes'], 0, 3));

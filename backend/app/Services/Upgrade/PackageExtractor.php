@@ -21,6 +21,7 @@ class PackageExtractor
         'backend/storage/logs',
         'backend/storage/framework',
         'backend/storage/framework/cache/data',
+        'backend/storage/framework/runtime-cache/data',
         'backend/storage/framework/sessions',
         'backend/storage/framework/views',
         'backend/storage/app/public',
@@ -178,7 +179,7 @@ class PackageExtractor
                 $this->applyNginxUpgrade($nginxDir);
             }
 
-            // 更新项目根目录的 version.json（保留用户自定义的 release_url）
+            // 合并版本配置，但版本号保留到 UpgradeService 的最终更新步骤。
             $versionFile = $this->findVersionConfig($extractedPath);
             if ($versionFile) {
                 $this->updateVersionJsonWithPreservedFields($versionFile);
@@ -234,6 +235,7 @@ class PackageExtractor
             }
             $bootstrapLock = ApplicationBootstrapLock::acquireExclusive();
             ApplicationBootstrapLock::completeLegacyHttpEntryPreparation($targetIndex);
+            RedisDatabaseConfig::preserve(true);
 
             // 保护自定义 API 适配器：先备份
             $preservedApiAdapters = $this->preserveCustomApiAdapters($targetDir);
@@ -802,7 +804,8 @@ class PackageExtractor
 
         // 需要保留的用户自定义字段（安装时配置的 release_url 和 network）
         $preservedFields = ['release_url', 'network'];
-        $preserved = [];
+        // apply 后仍可能迁移或清理失败，不能提前标记为目标版本。
+        $preserved = ['version' => $versionManager->getVersionString()];
         foreach ($preservedFields as $field) {
             if (isset($existingConfig[$field])) {
                 $preserved[$field] = $existingConfig[$field];

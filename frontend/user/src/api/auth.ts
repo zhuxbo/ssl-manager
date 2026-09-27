@@ -68,17 +68,6 @@ export function getProfile() {
   return http.get<BaseResponse, null>("/me");
 }
 
-export interface UsernameParams {
-  username: string;
-}
-
-/** 更新用户名 */
-export function updateUsername(data: UsernameParams) {
-  return http.patch<BaseResponse<null>, UsernameParams>("/update-username", {
-    data
-  });
-}
-
 export interface PasswordParams {
   oldPassword: string;
   newPassword: string;

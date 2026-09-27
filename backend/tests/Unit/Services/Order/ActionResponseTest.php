@@ -19,12 +19,14 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
+use Tests\Traits\CreatesTestData;
 
-uses(TestCase::class, RefreshDatabase::class)->group('database');
+uses(TestCase::class, CreatesTestData::class, RefreshDatabase::class)->group('database');
 
 beforeEach(function () {
     Cache::flush();
     Queue::fake();
+    $this->configureTestDelegationProxyDomain();
     $this->orderMutationAction = app(Action::class);
 });
 
@@ -280,7 +282,7 @@ test('importProductItem update 依赖完整请求验证链拒绝非法周期', f
 });
 
 test('sync 锁内重读会保护每一种终态及全部国密敏感字段', function () {
-    foreach (['cancelled', 'revoked', 'renewed', 'reissued', 'failed'] as $terminalStatus) {
+    foreach (['cancelled', 'revoked', 'renewed', 'reissued', 'archived'] as $terminalStatus) {
         [$order, $cert] = orderMutationFixture('processing', [], [
             'enc_cert' => 'local-cert',
             'enc_key' => 'local-key',
@@ -315,7 +317,7 @@ test('sync 锁内重读会保护每一种终态及全部国密敏感字段', fun
 });
 
 test('sync 强制模式会在锁内保护每一种既有终态', function () {
-    foreach (['cancelled', 'revoked', 'renewed', 'reissued', 'failed'] as $terminalStatus) {
+    foreach (['cancelled', 'revoked', 'renewed', 'reissued', 'archived'] as $terminalStatus) {
         [$order, $cert] = orderMutationFixture($terminalStatus);
         $api = Mockery::mock(Api::class);
         $api->shouldReceive('get')->once()->with($order->id)->andReturn([
@@ -544,17 +546,13 @@ test('sync 自动退款精确落账、回调并只清理指定任务', function 
         ->and(Task::where('order_id', $order->id)->orderBy('action')->pluck('action')->all())->toBe(['callback']);
 });
 
-test('updateDCV 重复提交返回包含精确剩余秒数的错误', function () {
-    Carbon::setTestNow('2026-07-31 12:00:00');
-    [$order] = orderMutationFixture('unpaid', [], [
-        'alternative_names' => 'example.test',
-        'csr' => 'unused-csr',
-    ]);
+test('updateDCV 将防抖剩余秒数原样返回错误响应', function () {
+    $action = Mockery::mock(Action::class)->makePartial()->shouldAllowMockingProtectedMethods();
+    $action->shouldReceive('checkDuplicate')->once()->with('updateDCV', [123])->andReturn(37);
 
-    orderMutationSuccess(fn () => $this->orderMutationAction->updateDCV($order->id, 'txt'));
     orderMutationError(
-        fn () => $this->orderMutationAction->updateDCV($order->id, 'txt'),
-        '请在 60 秒后再提交修改',
+        fn () => $action->updateDCV(123, 'txt'),
+        '请在 37 秒后再提交修改',
     );
 });
 
@@ -576,7 +574,7 @@ test('updateDCV 防抖键按订单隔离而不会阻塞其他订单', function (
         ->and($secondCert->fresh()->dcv)->toBe(['method' => 'txt']);
 });
 
-test('updateDCV processing 精确发送方法并分别返回上游数据和保存合并数据', function () {
+test('updateDCV processing 非委托 TXT 精确发送方法且不创建可匹配的委托任务', function () {
     [$order, $cert, , $user] = orderMutationFixture('processing', [], [
         'alternative_names' => 'example.test',
         'csr' => 'unused-csr',
@@ -586,16 +584,16 @@ test('updateDCV processing 精确发送方法并分别返回上游数据和保�
     CnameDelegation::factory()->create([
         'user_id' => $user->id,
         'zone' => 'example.test',
-        'prefix' => '_dnsauth',
+        'prefix' => '_pki-validation',
         'valid' => true,
     ]);
     $apiDcv = [
         'method' => 'txt',
-        'dns' => ['host' => '_dnsauth.example.test', 'value' => 'new-token'],
+        'dns' => ['host' => '_pki-validation.example.test', 'value' => 'new-token'],
     ];
     $apiValidation = [[
         'domain' => 'example.test',
-        'host' => '_dnsauth.example.test',
+        'host' => '_pki-validation.example.test',
         'value' => 'new-token',
     ]];
     $api = Mockery::mock(Api::class);
@@ -613,7 +611,7 @@ test('updateDCV processing 精确发送方法并分别返回上游数据和保�
     ])->and($cert->fresh()->dcv)->toBe($apiDcv)
         ->and($cert->fresh()->validation)->toBe([[
             'domain' => 'example.test',
-            'host' => '_dnsauth.example.test',
+            'host' => '_pki-validation.example.test',
             'value' => 'new-token',
             'method' => 'txt',
         ]])
@@ -764,6 +762,7 @@ test('commit 为 SSL DV 新单不会泄露 SMIME 组织或前驱字段', functio
     ], [
         'action' => 'new',
         'email' => 'should-not-send@example.test',
+        'amount' => '1.00',
     ]);
     $api = Mockery::mock(Api::class);
     $api->shouldReceive('new')->once()->with(Mockery::on(function (array $data) {
@@ -788,7 +787,10 @@ test('commit 为 SSL DV 新单不会泄露 SMIME 组织或前驱字段', functio
 });
 
 test('commit 上游失败精确保留消息和结构化错误', function () {
-    [$order, $cert] = orderMutationFixture('pending', [], ['action' => 'new']);
+    [$order, $cert] = orderMutationFixture('pending', [], [
+        'action' => 'new',
+        'amount' => '1.00',
+    ]);
     $api = Mockery::mock(Api::class);
     $api->shouldReceive('new')->once()->andReturn([
         'code' => 0,
@@ -819,26 +821,14 @@ test('pay 批量上限使用严格大于语义', function () {
     );
 });
 
-test('markRenewed 只允许精确的到期前三十天窗口', function (bool $insideWindow) {
+test('archive 不受旧手工已续的三十天窗口限制', function (int $days) {
     Carbon::setTestNow('2026-07-31 12:00:00');
     [$order, $cert] = orderMutationFixture('active', [
-        'period_till' => now()->addDays(30)->addSecond($insideWindow ? 0 : 1),
+        'period_till' => now()->addDays($days),
     ]);
-
-    if ($insideWindow) {
-        orderMutationSuccess(fn () => $this->orderMutationAction->markRenewed($order->id));
-        expect($cert->fresh()->status)->toBe('renewed');
-    } else {
-        orderMutationError(
-            fn () => $this->orderMutationAction->markRenewed($order->id),
-            '仅订单到期前 30 天内且未过期可标记为已续费',
-        );
-        expect($cert->fresh()->status)->toBe('active');
-    }
-})->with([
-    'exact boundary' => [true],
-    'one second outside' => [false],
-]);
+    orderMutationSuccess(fn () => $this->orderMutationAction->archive($order->id));
+    expect($cert->fresh()->status)->toBe('archived');
+})->with([30, 200]);
 
 test('cancel 退款期在精确边界内允许而早一秒拒绝', function (bool $insideWindow) {
     Carbon::setTestNow('2026-07-31 12:00:00');

@@ -2,9 +2,12 @@
 
 namespace Database\Seeders;
 
+use App\Models\CnameDelegation;
 use App\Models\Setting;
 use App\Models\SettingGroup;
+use App\Services\Delegation\DelegationConfigService;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 
 class SettingSeeder extends Seeder
@@ -18,14 +21,15 @@ class SettingSeeder extends Seeder
         $settingGroupsData = [
             ['name' => 'site', 'title' => '站点设置', 'description' => null, 'weight' => 1],
             ['name' => 'ca', 'title' => '证书接口', 'description' => null, 'weight' => 2],
-            ['name' => 'callback', 'title' => '回调设置', 'description' => null, 'weight' => 3],
-            ['name' => 'mail', 'title' => '邮件设置', 'description' => null, 'weight' => 4],
-            ['name' => 'sms', 'title' => '短信设置', 'description' => null, 'weight' => 5],
-            ['name' => 'alipay', 'title' => '支付宝设置', 'description' => null, 'weight' => 6],
-            ['name' => 'wechat', 'title' => '微信支付设置', 'description' => null, 'weight' => 7],
-            ['name' => 'bankAccount', 'title' => '银行账户设置', 'description' => null, 'weight' => 8],
-            ['name' => 'enterprise', 'title' => '工商信息查询', 'description' => null, 'weight' => 9],
-            ['name' => 'brand', 'title' => '品牌设置', 'description' => null, 'weight' => 10],
+            ['name' => 'delegation', 'title' => '域名委托', 'description' => null, 'weight' => 3],
+            ['name' => 'callback', 'title' => '回调设置', 'description' => null, 'weight' => 4],
+            ['name' => 'mail', 'title' => '邮件设置', 'description' => null, 'weight' => 5],
+            ['name' => 'sms', 'title' => '短信设置', 'description' => null, 'weight' => 6],
+            ['name' => 'alipay', 'title' => '支付宝设置', 'description' => null, 'weight' => 7],
+            ['name' => 'wechat', 'title' => '微信支付设置', 'description' => null, 'weight' => 8],
+            ['name' => 'bankAccount', 'title' => '银行账户设置', 'description' => null, 'weight' => 9],
+            ['name' => 'enterprise', 'title' => '工商信息查询', 'description' => null, 'weight' => 10],
+            ['name' => 'brand', 'title' => '品牌设置', 'description' => null, 'weight' => 11],
         ];
 
         // 创建 setting groups 并保存到数组中，用 name 作为 key
@@ -37,6 +41,9 @@ class SettingSeeder extends Seeder
             );
             $groups[$groupData['name']] = $group;
         }
+
+        $this->positionNewDelegationGroupAfterCa($groups);
+        $this->migrateDefaultDomainKey($groups['delegation']);
 
         // 升级时先导入旧静态配置，再由下方默认值补齐其余缺失项。
         // 已有非空设置不覆盖，保证 Seeder 可幂等重跑。
@@ -53,7 +60,7 @@ class SettingSeeder extends Seeder
                 ['key' => 'qrcode', 'type' => 'image', 'options' => null, 'is_multiple' => 0, 'value' => '', 'description' => '客服微信二维码', 'weight' => 6],
                 ['key' => 'loginImage', 'type' => 'image', 'options' => null, 'is_multiple' => 0, 'value' => '', 'description' => '用户端登录配图', 'weight' => 7],
                 ['key' => 'beian', 'type' => 'string', 'options' => null, 'is_multiple' => 0, 'value' => '', 'description' => '网站备案号', 'weight' => 8],
-                ['key' => 'delegation', 'type' => 'array', 'options' => null, 'is_multiple' => 0, 'value' => ['proxyZone' => '', 'secretId' => '', 'secretKey' => ''], 'description' => 'CNAME委托', 'weight' => 9],
+                ['key' => 'dnsTools', 'type' => 'array', 'options' => null, 'is_multiple' => 0, 'value' => ['https://dns-tools-cn.cnssl.com', 'https://dns-tools-us.cnssl.com'], 'description' => 'DNS工具', 'weight' => 9],
             ],
             'ca' => [
                 ['key' => 'sources', 'type' => 'array', 'options' => null, 'is_multiple' => 0, 'value' => ['default' => 'Default'], 'description' => '来源', 'weight' => 1],
@@ -111,6 +118,9 @@ class SettingSeeder extends Seeder
                 ['key' => 'user', 'type' => 'array', 'options' => null, 'is_multiple' => 0, 'value' => $this->defaultUserBrands(), 'description' => '用户端品牌选项', 'weight' => 2],
                 ['key' => 'all', 'type' => 'array', 'options' => null, 'is_multiple' => 0, 'value' => $this->brandLabels($this->defaultAdminBrands()), 'description' => '全部品牌', 'weight' => 3],
             ],
+            'delegation' => [
+                ['key' => 'delegationDomain', 'type' => 'string', 'options' => null, 'is_multiple' => 0, 'value' => '', 'description' => '默认代理域名', 'weight' => 1],
+            ],
         ];
 
         // 创建 settings
@@ -137,13 +147,15 @@ class SettingSeeder extends Seeder
             ['beian', 6, 7],
             // loginImage 插入 qrcode 之后，其后默认权重整体 +1
             ['beian', 7, 8],
-            ['delegation', 8, 9],
         ] as [$key, $oldWeight, $newWeight]) {
             Setting::where('group_id', $groups['site']->id)
                 ->where('key', $key)
                 ->where('weight', $oldWeight)
                 ->update(['weight' => $newWeight]);
         }
+
+        $this->migrateLegacyDelegation($groups['site'], $groups['delegation']);
+        $this->seedDelegationProviderExamples($groups['delegation']);
 
         Setting::where('group_id', $groups['site']->id)
             ->where('key', 'name')
@@ -171,6 +183,169 @@ class SettingSeeder extends Seeder
             }
 
             $oldToken->delete();
+        }
+    }
+
+    /** @param array<string, SettingGroup> $groups */
+    private function positionNewDelegationGroupAfterCa(array $groups): void
+    {
+        $delegation = $groups['delegation'];
+        if (! $delegation->wasRecentlyCreated) {
+            return;
+        }
+
+        $targetWeight = (int) $groups['ca']->weight + 1;
+        DB::transaction(function () use ($delegation, $targetWeight): void {
+            $weightOccupied = SettingGroup::where('id', '!=', $delegation->id)
+                ->where('weight', $targetWeight)
+                ->exists();
+
+            if ($weightOccupied) {
+                SettingGroup::where('id', '!=', $delegation->id)
+                    ->where('weight', '>=', $targetWeight)
+                    ->increment('weight');
+            }
+
+            $delegation->update(['weight' => $targetWeight]);
+        });
+    }
+
+    private function migrateDefaultDomainKey(SettingGroup $group): void
+    {
+        DB::transaction(function () use ($group): void {
+            $target = Setting::where('group_id', $group->id)->where('key', 'delegationDomain')->first();
+            // 旧版域名派生键可能占用新保留键，先保留配置并腾出键名。
+            if ($target?->type === 'array') {
+                $key = 'delegationProvider'.$target->id;
+                $suffix = 0;
+                while (Setting::where('group_id', $group->id)->where('key', $key)->exists()) {
+                    $key = 'delegationProvider'.$target->id.'_'.++$suffix;
+                }
+                $target->update(['key' => $key]);
+                $target = null;
+            }
+
+            $legacy = Setting::where('group_id', $group->id)
+                ->where('key', 'defaultDomain')->where('type', 'string')->first();
+            if (! $legacy) {
+                return;
+            }
+
+            if (! $target) {
+                $legacy->update(['key' => 'delegationDomain']);
+
+                return;
+            }
+
+            if ($target->value === null || (is_string($target->value) && trim($target->value) === '')) {
+                $target->update(['value' => $legacy->value]);
+            }
+            $legacy->delete();
+        });
+    }
+
+    private function migrateLegacyDelegation(SettingGroup $siteGroup, SettingGroup $delegationGroup): void
+    {
+        $legacy = Setting::where('group_id', $siteGroup->id)->where('key', 'delegation')->first();
+        if (! $legacy) {
+            return;
+        }
+
+        $legacyConfig = $legacy->value;
+        $configService = app(DelegationConfigService::class);
+        $legacyDomain = is_array($legacyConfig) && is_string($legacyConfig['proxyZone'] ?? null)
+            ? $configService->normalizeDomain($legacyConfig['proxyZone'])
+            : '';
+
+        if ($legacyDomain === '') {
+            $legacy->delete();
+
+            return;
+        }
+
+        DB::transaction(function () use ($legacy, $legacyConfig, $legacyDomain, $delegationGroup): void {
+            $defaultDomain = Setting::where('group_id', $delegationGroup->id)
+                ->where('key', 'delegationDomain')
+                ->firstOrFail();
+            $defaultDomain->update(['value' => $legacyDomain]);
+
+            Setting::create([
+                'group_id' => $delegationGroup->id,
+                'key' => 'tencent',
+                'type' => 'array',
+                'options' => null,
+                'is_multiple' => false,
+                'value' => [
+                    'domain' => $legacyDomain,
+                    'provider' => 'tencent',
+                    'secretId' => is_string($legacyConfig['secretId'] ?? null) ? $legacyConfig['secretId'] : '',
+                    'secretKey' => is_string($legacyConfig['secretKey'] ?? null) ? $legacyConfig['secretKey'] : '',
+                ],
+                'description' => '腾讯云委托配置',
+                'weight' => 2,
+            ]);
+
+            CnameDelegation::whereNull('proxy_domain')->update(['proxy_domain' => $legacyDomain]);
+            $legacy->delete();
+        });
+    }
+
+    private function seedDelegationProviderExamples(SettingGroup $delegationGroup): void
+    {
+        $examples = [
+            'tencent' => [
+                'key' => 'tencent',
+                'value' => ['domain' => '', 'provider' => 'tencent', 'secretId' => '', 'secretKey' => ''],
+                'description' => '腾讯云委托配置',
+                'weight' => 2,
+            ],
+            'cloudflare' => [
+                'key' => 'cloudflare',
+                'value' => ['domain' => '', 'provider' => 'cloudflare', 'zoneId' => '', 'apiToken' => ''],
+                'description' => 'Cloudflare 委托配置',
+                'weight' => 3,
+            ],
+            'aliyun' => [
+                'key' => 'aliyun',
+                'value' => ['domain' => '', 'provider' => 'aliyun', 'accessKeyId' => '', 'accessKeySecret' => ''],
+                'description' => '阿里云委托配置',
+                'weight' => 4,
+            ],
+        ];
+
+        $configuredProviders = [];
+        $settings = Setting::where('group_id', $delegationGroup->id)->where('type', 'array')->get();
+        foreach ($settings as $setting) {
+            $config = $setting->value;
+            if (! is_array($config)
+                || ! is_string($config['domain'] ?? null)
+                || trim($config['domain']) === ''
+                || ! is_string($config['provider'] ?? null)) {
+                continue;
+            }
+
+            $provider = strtolower(trim($config['provider']));
+            if (isset($examples[$provider])) {
+                $configuredProviders[$provider] = true;
+            }
+        }
+
+        foreach ($examples as $provider => $example) {
+            if (isset($configuredProviders[$provider])) {
+                continue;
+            }
+
+            Setting::firstOrCreate(
+                ['group_id' => $delegationGroup->id, 'key' => $example['key']],
+                [
+                    'type' => 'array',
+                    'options' => null,
+                    'is_multiple' => false,
+                    'value' => $example['value'],
+                    'description' => $example['description'],
+                    'weight' => $example['weight'],
+                ],
+            );
         }
     }
 

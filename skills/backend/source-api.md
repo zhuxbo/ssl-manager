@@ -4,6 +4,12 @@ description: Source API 接入 - 新增上游来源的开发指南。修改 Orde
 
 # Source API 接入指南
 
+## 普通订单有效期同步
+
+- `Order\Action::sync` 首次取得完整签发时间且订单尚无 `period_from` 时初始化有效期，上游 `period_till` 优先；已初始化订单不回算。
+- 上游缺少 `period_till` 时，续费以新证书 `issued_at` 与前驱证书所属旧订单 `period_till` 的较晚者为起点，调用 `calculatePeriodTill(..., period, 0)`：承接剩余时间，使用固定天数周期并减 1 秒，不额外赠送 30 天，也不按单张证书期限抬高结果。缺少旧订单关联或旧订单已到期时，从新证书生效时间计算。
+- `period_from` 仍为新证书生效时间。续费字段白名单忽略 `plus`；新购缺少上游有效期时保留原有本地推算及赠送规则。
+
 Manager 通过两套 Source API 分发层与上游交互，均按 `product.source` 字段路由：
 
 | 命名空间        | 职责                                                     | 当前来源  |
@@ -169,7 +175,7 @@ app()->instance(\App\Services\Acme\Api\Api::class, $mockFactory);
 
 `Order\Api\default\Sdk::call()` 与 `Acme\Api\default\Sdk` 的上游 HTTP 调用**必须有 timeout 上限**，且**锁内调用的 timeout 必须 < `innodb_lock_wait_timeout`（已通过 `config/database.php` 的 PDO `MYSQL_ATTR_INIT_COMMAND` 固化为 session=50、覆盖 global 漂移，见 `InnodbLockWaitTimeoutTest`）**。
 
-**为什么**：`commit()`（下单 new/renew/reissue）和 `cancel()` 在 `orders`/`acmes` 行锁内同步调上游（资金安全要求见 `skills/backend/order-fund.md`）。Guzzle `new Client` 默认 `timeout=0`（无限等待），上游慢/挂时持锁事务无限阻塞，超过 50s 后任何并发访问同一订单行的 `for update`（另一个 commit/cancel/sync 写回/commitCancel/revokeCancel/markRenewed）都会报 `SQLSTATE[HY000] 1205 Lock wait timeout`。
+**为什么**：`commit()`（下单 new/renew/reissue）和 `cancel()` 在 `orders`/`acmes` 行锁内同步调上游（资金安全要求见 `skills/backend/order-fund.md`）。Guzzle `new Client` 默认 `timeout=0`（无限等待），上游慢/挂时持锁事务无限阻塞，超过 50s 后任何并发访问同一订单行的 `for update`（另一个 commit/cancel/sync 写回/commitCancel、普通订单 archive 或 ACME revokeCancel）都会报 `SQLSTATE[HY000] 1205 Lock wait timeout`。
 
 **Order default Sdk**：`call()` 带可选第四参 `?int $timeout`，经 `makeClient()` 注入缝传给 Guzzle client config（`connect_timeout = min(10, $timeout)` + `timeout`；Guzzle `timeout` 含 connect，单次墙钟上限 = `timeout`）。connect_timeout 取 10s（早期 3s）：manager 是多级代理，上游可能是任意深度的另一个 manager，网络路径/DNS/地域全不可控，按"不可控上游"处理，对齐 callback 的 `connectTimeout(10)`；10 < 50 不破坏 1205 防护（总 timeout 45s 封顶不变，connect 不叠加），黑洞上游失败慢一点换多级链路的连接宽容，是有意取舍。
 

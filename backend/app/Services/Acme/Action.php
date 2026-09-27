@@ -538,7 +538,7 @@ class Action
         // 原子占位：10 秒内不重复向上请求（Cache::add SETNX 防并发同一 acme 击穿重复调上游）。
         // 放在 find/api_id 校验之后、上游调用之前：acme 不存在/未提交始终走 error，不会因占位变 success
         $cacheKey = "acme_sync_$acmeId";
-        if (! Cache::add($cacheKey, time(), 10)) {
+        if (! Cache::store('runtime')->add($cacheKey, time(), 10)) {
             if ($force) {
                 return;
             }
@@ -640,7 +640,7 @@ class Action
                 return (string) ($acme->product->ca ?? '');
             }); // runTaskMutationTransaction 统一 attempts=3：与 Order sync 对齐；上游 get 在事务外，重试只重跑锁+写回，不重复调上游
         } catch (\Throwable $e) {
-            Cache::forget($cacheKey);
+            Cache::store('runtime')->forget($cacheKey);
             throw $e;
         }
 
@@ -707,6 +707,7 @@ class Action
             ['action' => 'new'],
             $product->toArray()
         );
+        OrderUtil::guardZeroAmountOrder($amount);
 
         return Acme::create([
             'user_id' => $params['user_id'],
@@ -828,6 +829,7 @@ class Action
             if ($locked->status !== Acme::STATUS_UNPAID) {
                 $this->error('订单不是未支付状态');
             }
+            OrderUtil::guardZeroAmountOrder($locked->amount);
 
             // 锁内取 user：序列化同一用户并发的不同订单支付。
             // Transaction::creating 虽也 lockForUpdate user 并扣款，但不再校验 credit_limit，
@@ -873,6 +875,7 @@ class Action
         if ($acme->status !== Acme::STATUS_PENDING) {
             $this->error('订单状态不是待提交');
         }
+        OrderUtil::guardZeroAmountOrder($acme->amount);
 
         $product = $acme->product;
 

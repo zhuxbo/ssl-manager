@@ -46,6 +46,10 @@ backend/
 - 统一响应格式：成功 `{"code": 1, "data": {...}}`，失败 `{"code": 0, "msg": "..."}`
 - 统一异常处理：`ApiResponseException`
 
+### 管理员用户备注
+
+用户备注存于 `users.admin_remark`（可空，最多 500 字），模型默认隐藏，仅管理员用户列表、详情与批量详情显式返回。管理员新增/编辑用户可传此字段；卡片快捷编辑使用 `PATCH /api/admin/user/remark/{id}`，必须传 `admin_remark`，空字符串或 null 清除，省略字段不执行清除。用户端不得返回或允许写入此字段。
+
 ### JWT 多端认证
 
 | 端        | 路由前缀               | 认证方式 |
@@ -105,7 +109,9 @@ php artisan queue:work --queue tasks,notifications  # 队列 worker（消费 Tas
 
 - 默认使用 `file` 驱动，不强制依赖 Redis
 - 生产环境推荐使用 Redis 提升性能
-- SnowFlake、RateLimiter 通过 `Cache` facade 操作
+- 默认缓存仓库保存设置、仪表盘、查询结果等可重建数据；`runtime` 命名仓库保存 JWT 黑名单、限流/验证码、业务锁、防重键、心跳、告警去重和任务进度等关键状态
+- Redis 模式下默认缓存走 `REDIS_CACHE_DB`，`runtime` 与 Redis 队列走 `REDIS_DB`；两库必须不同，且同一 Redis 实例上的每套 Manager 必须独占这两个 DB。禁止接入会用 path/query 覆盖数据库编号的 `REDIS_URL`，连接统一使用显式 host/port/username/password 字段
+- `cache:clear` / `cache:clear-all` 不清 `runtime`，但 Laravel 自带的队列 pause/restart 与 scheduler mutex 仍在默认缓存，执行两个命令会删除它们；`cache:clear-all` 还会删会话、视图和 Bootstrap 缓存。两者均只能作为明确了解影响的运维命令，不能接到日常后台按钮。管理后台右上角只定向刷新 Setting/PayConfigCache，保留其它默认缓存、队列/调度状态、会话文件和 OPcache；只有数据库恢复冻结流程会显式清理默认与 `runtime` 两个仓库并重建队列暂停状态
 
 ### 日志批量写入
 
@@ -130,19 +136,18 @@ php artisan queue:work --queue tasks,notifications  # 队列 worker（消费 Tas
 `aggregate()` 判定序**固化**：所有 error 分支必须全部先于 degraded 分支 return，否则「心跳缺失→degraded 200」会掩盖真 error（如 db 挂时误判 200）。
 
 - ① db ping 失败 → `error`（503）
-- ② **cache 后端故障** → `error`（503）：`cacheCheck` 只读 `Cache::get('schedule:heartbeat')` 探连通性（redis 宕机时抛）。**必须先于下方 disk/queue/heartbeat**——它们经 `get_system_setting`→`Cache::remember` 读阈值/心跳，cache 故障时会抛，早 return 规避二次抛异常；`heartbeatAge` 的 `Cache::get` 亦 try/catch 返 null（不误判 degraded，因 cache error 已先 return）
+- ② **cache 后端故障** → `error`（503）：`cacheCheck` 同时只读探测默认缓存与 `runtime`（redis 宕机时抛）。**必须先于下方 disk/queue/heartbeat**——阈值经 `get_system_setting`→`Cache::remember` 读取，心跳经 `runtime` 读取；任一后端故障都先结构化返回 error，避免二次异常冒泡
 - ③ `disk_free_gb` < `health.disk_free_threshold_gb`（默认 1.0）→ `error`（503）
 - ④ freeze=false 时：`queue_lag` 超阈 → error；心跳**存在且过旧**（stale，> `health.heartbeat_stale_seconds` 默认 300）→ `error`（503，死 scheduler）
-- ⑤ 心跳**缺失**（null）→ `degraded`（**200**）——排在全部 error 之后（新装机未跑调度 / `cache:clear` 清键，后台显示“需要关注”）
+- ⑤ 心跳**缺失**（null）→ `degraded`（**200**）——排在全部 error 之后（新装机未跑调度，后台显示“需要关注”）
 - ⑥ 其他 → `ok`（200）
 - **freeze 期**：`queue_lag` 与心跳 stale 均不参与 503（worker/scheduler 已按升级流程停止），避免升级窗误报（双保险：console.php 侧心跳不挂 skip、health 侧 freeze 期不评估 stale）；**cache 后端故障不受 freeze 豁免**（cache 是独立于升级流程的基础设施）
 
 ### schedule:heartbeat（M1，第二个有意 freeze 存活者）
 
-`HeartbeatCommand` 每分钟 `Cache::forever('schedule:heartbeat', now()->timestamp)`。调度接线与 `upgrade:watchdog` 同款**有意不对称**：`->everyMinute()->evenInMaintenanceMode()` 且**不挂** `->skip($skipWhenFrozen)`——挂了则 freeze 期心跳停，后台健康度会误报 scheduler 异常。`ScheduleFreezeSkipTest` 对 heartbeat/watchdog 断言 `filtersPass=true`。
+`HeartbeatCommand` 每分钟把 `schedule:heartbeat` 写入 `runtime` 仓库。调度接线与 `upgrade:watchdog` 同款**有意不对称**：`->everyMinute()->evenInMaintenanceMode()` 且**不挂** `->skip($skipWhenFrozen)`——挂了则 freeze 期心跳停，后台健康度会误报 scheduler 异常。`ScheduleFreezeSkipTest` 对 heartbeat/watchdog 断言 `filtersPass=true`。
 
 - **用 forever 无 TTL 是刻意选型**：死 scheduler 留旧时间戳 → age 超阈 → stale 503（正确检出）；带 TTL 则键到期消失 → 缺失 → degraded 200，把死 scheduler 误判「未装机」。
-- **访问时检测边界**（文档化于 deploy-ops.md）：「已死 scheduler + 之后 `cache:clear`」→ 键缺失 → degraded 200，后台健康度显示黄色“需要关注”，不主动发信。
 
 ### queueLag 队列语义（M2）
 
@@ -205,18 +210,18 @@ php artisan queue:work --queue tasks,notifications  # 队列 worker（消费 Tas
 
 ### 调度配置
 
-| 命令                           | 调度       | 说明                                                          |
-| ------------------------------ | ---------- | ------------------------------------------------------------- |
-| `schedule:validate`            | 每分钟     | 证书验证任务                                                  |
-| `schedule:heartbeat`           | 每分钟     | 调度心跳（写 Cache 供 /api/health 判活；freeze 存活者，见下） |
-| `schedule:auto-renew`          | 每天 00:00 | 自动续费/重签（延时 commit 0~8h）                             |
-| `schedule:reconcile-pending`   | 每 5 分钟  | pending 卡单对账重发 commit（见 order-fund.md）               |
-| `schedule:sweep-stale-tasks`   | 每 5 分钟  | 重派僵尸 executing 任务（T1，见 order-fund.md）               |
-| `schedule:reconcile-acme`      | 每 5 分钟  | ACME 卡单对账（T6，见 acme-module.md）                        |
-| `schedule:sweep-orphan-orders` | 每小时     | 清理 channel=auto 孤儿续费单（O4，见 order-fund.md）          |
-| `schedule:ca-healthcheck`      | 每 15 分钟 | 上游 CA 凭证 + 连通性告警（M7，见 notification.md）           |
-| `delegation:check`             | 每天 05:30 | CNAME 委托健康检查                                            |
-| `delegation:cleanup`           | 每天 06:00 | 委托 DNS 清理                                                 |
+| 命令                           | 调度         | 说明                                                          |
+| ------------------------------ | ------------ | ------------------------------------------------------------- |
+| `schedule:validate`            | 每分钟       | 证书验证任务                                                  |
+| `schedule:heartbeat`           | 每分钟       | 调度心跳（写 Cache 供 /api/health 判活；freeze 存活者，见下） |
+| `schedule:auto-renew`          | 每天 00:00   | 自动续费/重签（延时 commit 0~8h）                             |
+| `schedule:reconcile-pending`   | 每 5 分钟    | pending 卡单对账重发 commit（见 order-fund.md）               |
+| `schedule:sweep-stale-tasks`   | 每 5 分钟    | 重派僵尸 executing 任务（T1，见 order-fund.md）               |
+| `schedule:reconcile-acme`      | 每 5 分钟    | ACME 卡单对账（T6，见 acme-module.md）                        |
+| `schedule:sweep-orphan-orders` | 每小时       | 清理 channel=auto 孤儿续费单（O4，见 order-fund.md）          |
+| `schedule:ca-healthcheck`      | 每 15 分钟   | 上游 CA 凭证 + 连通性告警（M7，见 notification.md）           |
+| `delegation:check`             | 每周一 07:00 | CNAME 委托健康检查                                            |
+| `delegation:cleanup`           | 每天 06:00   | 委托 DNS 清理                                                 |
 
 ---
 
@@ -224,15 +229,20 @@ php artisan queue:work --queue tasks,notifications  # 队列 worker（消费 Tas
 
 ### 运行测试
 
+本地优先仓库 Docker，范围按 `skills/finish-check.md` 选择；命令示例不是每次任务的必跑清单。
+
 ```bash
-php artisan test --parallel                           # 全部测试（需 MySQL，推荐加 --parallel 与 CI 一致）
-php artisan test --parallel --exclude-group=database  # 纯单元测试（无需数据库）
-php artisan test --coverage --min=80                  # 覆盖率报告
+# 普通局部修复：选择覆盖变化行为的实际测试文件
+docker compose exec -T -e DB_DATABASE=ssl_manager_test app php artisan test tests/...Test.php
+# 完整后端检查：并行运行全部测试
+make test
+# 仅在需要检查覆盖率时使用
+docker compose exec -T -e DB_DATABASE=ssl_manager_test app php artisan test --coverage --min=80
 ```
 
 > **测试库隔离（双重兜底，勿移除）**：① `phpunit.xml` 的 `<env name="DB_DATABASE" value="ssl_manager_test" force="true"/>` 覆盖 `.env`/`.env.testing` **文件值**——但 `force` **不覆盖 OS 环境变量**（`docker -e DB_DATABASE=...` / shell `export`，实测带 `-e DB_DATABASE=ssl_manager` 仍会连开发库）；② 故 `TestCase::createApplication()` 加运行期物理断言：测试库名不含 `_test` 即 `fwrite(STDERR) + exit(1)`，在 `RefreshDatabase` 清库**之前**硬阻断，杜绝任何跑法（含 `-e` 误传 OS env）清空开发库 `ssl_manager`。`.env.testing`（gitignore、仅本地）DB 应为 `ssl_manager_test`；`make test` 显式 `-e ssl_manager_test`、CI 用 `.env`+sed 同名。注意 `make migrate`（=`migrate:fresh --seed`）走开发库、会清库重建，与测试无关。
 
-> **CI 经验**：本地务必用 `--parallel` 跑测试，与 CI 保持一致。`paratest`（并行测试）对 PHP Warning 的处理比 `phpunit` 更严格——例如无命名空间文件中的 `use Mockery;`、`use ZipArchive;` 等全局类 use 语句，`phpunit` 仅输出 Warning 继续运行，而 `paratest` 会直接 fatal exit 导致 CI 失败。
+> **CI 经验**：完整后端检查用 `--parallel` 与 CI 对齐；局部测试可单文件运行，快照和连接清理等串行行为用串行复现。`paratest`（并行测试）对 PHP Warning 的处理比 `phpunit` 更严格——例如无命名空间文件中的 `use Mockery;`、`use ZipArchive;` 等全局类 use 语句，`phpunit` 仅输出 Warning 继续运行，而 `paratest` 会直接 fatal exit 导致 CI 失败。
 
 > **deploy shell 测试的 PHP 边界**：需要 PHP 做跨实现对照的 `deploy/test/test-*.sh` 统一 source `deploy/test/php-test-runner.sh`；本地优先调用 Compose `app` 容器 PHP，GitHub Actions 无 Compose app 时回落 `setup-php`。两者都不可用必须失败，禁止以“宿主机无 PHP”为由跳过并返回绿色。
 
@@ -240,7 +250,7 @@ php artisan test --coverage --min=80                  # 覆盖率报告
 >
 > **公共后缀表（PSL）夹具**：固定 token 只保证“后续复用”，**首跑仍是空目录**（全新克隆 / 干净 CI / 新增 paratest worker）→ 必须联网，且缓存过期重抓会把测试结果绑到上游当时的表。故 `isolateWorkerStorage()` 建好目录后由 `Tests\Support\PublicSuffixListFixture::seed()` 把仓内快照 `tests/Fixtures/public_suffix_list.dat` 灌进 `domain-rules/public_suffix_list.dat`（`xxh128` 内容比对而非只比体积——同尺寸的旧版本残留/写坏缓存会让 DomainUtil 读到别的表；写同目录 `.<pid>.tmp` 再 `rename` 保证不被读到半截；命中快路径也 `touch` 一次，让 mtime 恒为当下）——**测试离线确定性，生产 `DomainUtil` 一行不改、线上照旧抓最新表**。夹具刷新：`curl -fsSL -o backend/tests/Fixtures/public_suffix_list.dat https://publicsuffix.org/list/public_suffix_list.dat`，跑 `DomainUtilTest` 绿了再提交；按需刷新即可（PSL 只增量改后缀，陈旧不影响既有断言）。夹具被截断/换掉时 `seed()` 直接抛 `RuntimeException` 报出原因与刷新命令，不让 `DomainUtil` 静默回落到**无任何多级后缀**的内置表（那会让 `example.com.cn` / `sub.example.co.uk` 解析整体变形，`DomainUtilTest` 只报“两字符串不相等”）。`PublicSuffixListFixtureTest` 做常驻守卫：夹具行数下限 + `com.cn`/`co.uk` 等多级后缀存在、缓存内容与夹具一致且 mtime 恒为当下，以及**探针用例**——往缓存的 ICANN 段首插一条现实中不存在的后缀再断言 `DomainUtil::getRootDomain()` 随之变化。**探针不可省**：缓存路径是 `DomainUtil::loadRules()` 的手抄副本，抄错时联网 CI 下 DomainUtil 会自己把真表抓回来、一切照常全绿，整套离线机制静默失效。
 
-> **API 快照对照（compat-snapshot）+ tearDown 吞 rollback 陷阱**：`compat-snapshot` job 仅 push main / tag 触发（dev PR 不跑），改了 API schema 或新增 Controller 测试后**必须** `composer test:snapshot:capture` 重新生成 fixtures 并提交，否则合 main 首跑即大面积 diff。更隐蔽的是 `TestCase::tearDown` 把 `SnapshotListener::finalizeTest()`（compare 模式命中 diff 会 `Assert::fail()` 抛异常）放在 `parent::tearDown()` 之前——**任何在 `parent::tearDown()` 之前、可能抛异常的清理逻辑都必须 `try/finally` 兜住 `parent::tearDown()`**，否则异常跳过 RefreshDatabase 的事务 rollback → 连接持锁泄漏 + 事务层级逐测试漂移 → 串行跑全套时后续测试 setUp/seed 撞锁，雪崩成 `Lock wait timeout`（单次 50s × N，job 直接卡满超时）。**只有串行全套暴露**：`--parallel` 各 worker 独立库/连接把泄漏掩盖，单文件也因同连接层级漂移不自锁而看不出。排查时 job 日志会被 MySQL service 容器 health-check 的 `Access denied ... using password: NO` 噪音淹没，真正错因在 `Run snapshot compare` step 的 `php artisan test` 输出尾部。
+> **API 快照对照（compat-snapshot）+ tearDown 吞 rollback 陷阱**：`compat-snapshot` job 仅 push main / tag 触发（dev PR 不跑），普通修改先 compare 受影响端点的全部用例，确认 `fixture_missing` 或预期 schema 差异后才定向 capture；契约、公共快照设施变化或完整检查跑全量 `composer test:snapshot`。不默认重录全部 fixtures，也不为快照自动提交，具体范围与证据按 `skills/finish-check.md`。更隐蔽的是 `TestCase::tearDown` 把 `SnapshotListener::finalizeTest()`（compare 模式命中 diff 会 `Assert::fail()` 抛异常）放在 `parent::tearDown()` 之前——**任何在 `parent::tearDown()` 之前、可能抛异常的清理逻辑都必须 `try/finally` 兜住 `parent::tearDown()`**，否则异常跳过 RefreshDatabase 的事务 rollback → 连接持锁泄漏 + 事务层级逐测试漂移 → 串行跑全套时后续测试 setUp/seed 撞锁，雪崩成 `Lock wait timeout`（单次 50s × N，job 直接卡满超时）。**只有串行全套暴露**：`--parallel` 各 worker 独立库/连接把泄漏掩盖，单文件也因同连接层级漂移不自锁而看不出。排查时 job 日志会被 MySQL service 容器 health-check 的 `Access denied ... using password: NO` 噪音淹没，真正错因在 `Run snapshot compare` step 的 `php artisan test` 输出尾部。
 
 ### 测试分组
 
@@ -391,7 +401,7 @@ python3 skills/scripts/mutation-shards.py probe \
 - **`$this->error()` 方法**：来自 `ApiResponse` trait，调用后抛出异常终止执行，不会继续后续代码
 - **Action 无 userId 构造参数**：`Acme\Action` 和 `Order\Action` 均无 `userId` 构造参数，通过 `app(Action::class)` 获取实例。用户隔离由 UserScope 全局作用域保证（`Authenticate`/`ApiAuthenticate` 中间件注册 Acme、ApiToken、Callback、CnameDelegation、Order、Fund、Transaction、Organization、Contact、OrderDocument），控制器在创建方法的 params 中传入 `user_id`。UserScope `apply()` 无条件执行 `where('user_id', ...)`，不做零值跳过
 - **无验证信息订单的定时同步**：`schedule:validate`（每分钟，`ValidateCommand`）只纳入 dcv **且** validation 都非空的 processing/approving 订单；dcv 或 validation 为 **NULL** 的订单（codesign/docsign/smime 等无 DCV 产品，验证靠 CA 人工审核/邮件）被其查询排除、无法自动同步，由独立的 `schedule:sync`（每天 9/15/21 点 `0 9,15,21 * * *`，`SyncCommand`）兜底——查 dcv 或 validation 为 NULL 的 processing/approving 订单并 `createTask(id,'sync')`。两查询条件互为补集、同一订单只被其一处理；频率低因无 DCV 产品订单量小（空数组 `[]` 非 NULL、仍归 validate）
-- **可选 dnsTools 与 DCV 本地检测**：Seeder 不创建 `site.dnsTools`；缺失时直接本地检测，如需远端节点由管理员手工新增普通数组设置。配置后按数组顺序轮询节点，任一通过即返回，均未通过再用本地实时结果复核（防远端负缓存遮住新记录）；本地仍未命中时保留最后一个远端失败诊断，只有全部节点不可达才标记 `dns_tools_down`。`VerifyUtil::verifyValidationLocal` 对 TXT/CNAME 经 `DnsResolver` 核对，对 file/http/https 从本机读取验证链接并核对内容；`DnsResolver` 不缓存结果，每次调用都重新执行 `dns_get_record`（DNS 服务器/递归解析器仍可按 TTL 缓存）。文件检测使用无应用缓存的 Laravel HTTP Client，每次实际发出请求，并带 `Cache-Control: no-cache, no-store, max-age=0` / `Pragma: no-cache`；只允许 validation domain 自身的公网 80/443，拒绝私网/保留 IP、跨域链接、重定向，以有界循环完整读取响应并拒绝超过 8 KiB 的内容。邮箱/admin 验证不经过 dnsTools 检测，本机也无法判断收件人是否已确认；`ValidateCommand` 对这类方法直接创建 sync，由 CA 状态作为权威结果。
+- **可选 dnsTools 与 DCV 本地检测**：Seeder 为缺失的 `site.dnsTools` 预置国内、海外节点，不覆盖已有配置（含空数组）；缺失或为空时后端直接本地检测。前端优先直连节点，仅服务不可用时回落公开的 `/api/dcv/verify`、`/api/dns/query`，这两个接口只做本地检测，不重复轮询节点。下述轮询及复核策略用于后端订单验证：配置后按数组顺序轮询节点，任一通过即返回，均未通过再用本地实时结果复核（防远端负缓存遮住新记录）；本地仍未命中时保留最后一个远端失败诊断，只有全部节点不可达才标记 `dns_tools_down`。`VerifyUtil::verifyValidationLocal` 对 TXT/CNAME 经 `DnsResolver` 核对，对 file/http/https 从本机读取验证链接并核对内容；`DnsResolver` 不缓存结果，每次调用都重新执行 `dns_get_record`（DNS 服务器/递归解析器仍可按 TTL 缓存）。文件检测使用无应用缓存的 Laravel HTTP Client，每次实际发出请求，并带 `Cache-Control: no-cache, no-store, max-age=0` / `Pragma: no-cache`；只允许 validation domain 自身的公网 80/443，拒绝私网/保留 IP、跨域链接、重定向，以有界循环完整读取响应并拒绝超过 8 KiB 的内容。邮箱/admin 验证不经过 dnsTools 检测，本机也无法判断收件人是否已确认；`ValidateCommand` 对这类方法直接创建 sync，由 CA 状态作为权威结果。
 
 ## 队列与 Job 约定
 
