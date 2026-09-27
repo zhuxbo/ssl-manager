@@ -70,10 +70,21 @@
       @click="handleCancel(row)"
       >取消</el-button
     >
+    <el-button
+      v-if="canRevokeOrderCancellation(row, now.getTime())"
+      class="reset-margin !outline-none"
+      type="warning"
+      link
+      :size="size"
+      @click="handleRevokeCancel(row)"
+      >撤回取消</el-button
+    >
   </div>
 </template>
 
 <script setup lang="ts">
+import { useNow } from "@vueuse/core";
+import { canRevokeOrderCancellation } from "@shared/utils/orderCancellation";
 import * as OrderApi from "@/api/order";
 import { message } from "@shared/utils";
 import { useDetail } from "./detail";
@@ -82,6 +93,8 @@ import {
   confirmOrderCancellation,
   cancellationMessage
 } from "@shared/utils/orderConfirmation";
+
+const now = useNow({ interval: 1000 });
 
 const { toDetail } = useDetail();
 
@@ -157,6 +170,11 @@ const handleCancel = async (row: any) => {
     );
     emit("refresh");
   }
+};
+const handleRevokeCancel = async (row: any) => {
+  await OrderApi.revokeCancel(row.id);
+  message("撤回取消成功，正在同步订单状态", { type: "success" });
+  emit("refresh");
 };
 </script>
 

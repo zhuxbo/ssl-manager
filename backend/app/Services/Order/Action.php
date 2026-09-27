@@ -1136,11 +1136,42 @@ class Action
                 && $this->error("订单已超过 $refundPeriod 天不能取消");
 
                 // 事务提交后立即执行取消任务
-                $order->latestCert->update(['status' => 'cancelling']);
+                $order->latestCert->update(['status' => 'cancelling', 'cancel_requested_at' => now()]);
                 $this->deleteTask($orderId, 'sync,revalidate');
                 $this->createTask($orderId, 'cancel');
             });
         }
+
+        $this->success();
+    }
+
+    /** 撤回未完成的取消，交由同步任务确认上游实际状态。 */
+    public function revokeCancel(int $orderId): void
+    {
+        $this->runTaskMutationTransaction(function () use ($orderId) {
+            // 锁顺序 1：先锁 task（与 TaskJob 一致，避免 task↔order 循环等待死锁）
+            Task::lockForMutation($orderId, ['cancel', 'sync'])->get();
+
+            // 锁顺序 2：再锁 order
+            $order = Order::with(['latestCert'])
+                ->whereHas('latestCert')
+                ->lock()
+                ->find($orderId);
+
+            if (! $order) {
+                $this->error('订单或相关数据不存在');
+            }
+
+            $order->latestCert->status !== 'cancelling' && $this->error('订单不在取消中状态');
+
+            $requestedAt = $order->latestCert->cancel_requested_at ?? $order->latestCert->updated_at;
+            (! $requestedAt || $requestedAt->gt(now()->subMinute()))
+                && $this->error('提交取消满1分钟后才能撤回');
+
+            $this->deleteTask($orderId, 'cancel');
+            $order->latestCert->update(['status' => 'approving', 'cancel_requested_at' => null]);
+            $this->createTask($orderId, 'sync');
+        });
 
         $this->success();
     }
@@ -1204,7 +1235,7 @@ class Action
             || $this->error('Order cannot be cancelled');
 
             if ($status !== 'cancelling') {
-                $order->latestCert->update(['status' => 'cancelling']);
+                $order->latestCert->update(['status' => 'cancelling', 'cancel_requested_at' => now()]);
             }
             $this->deleteTask($orderId, ['sync', 'revalidate']);
 

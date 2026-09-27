@@ -14,6 +14,7 @@ use App\Services\Notification\NotificationCenter;
 use App\Services\Order\Action;
 use App\Services\Order\Api\Api;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Queue;
 use Tests\Traits\ActsAsAdmin;
 use Tests\Traits\CreatesTestData;
 use Tests\Traits\MocksExternalApis;
@@ -780,4 +781,18 @@ test('管理员发送激活邮件：旧 GET 入口已下线（副作用端点不
     $this->actingAsAdmin($this->admin)
         ->getJson("/api/admin/order/send-active/$order->id")
         ->assertStatus(405);
+});
+
+test('管理员支持单笔和批量撤回超时取消订单', function () {
+    Queue::fake();
+    [$order, $cert] = createOrderWithCert('cancelling', [], ['cancel_requested_at' => now()->subMinutes(2)]);
+    $this->actingAsAdmin($this->admin)->getJson('/api/admin/order')->assertOk()
+        ->assertJsonPath('data.items.0.latest_cert.cancel_requested_at', $cert->toArray()['cancel_requested_at']);
+    $this->actingAsAdmin($this->admin)->postJson("/api/admin/order/revoke-cancel/$order->id")
+        ->assertOk()->assertJson(['code' => 1]);
+    expect($cert->fresh()->status)->toBe('approving');
+    [$batch, $batchCert] = createOrderWithCert('cancelling', [], ['cancel_requested_at' => now()->subMinutes(2)]);
+    $this->actingAsAdmin($this->admin)->postJson('/api/admin/order/batch-revoke-cancel', ['ids' => [$batch->id]])
+        ->assertOk()->assertJson(['code' => 1]);
+    expect($batchCert->fresh()->status)->toBe('approving');
 });

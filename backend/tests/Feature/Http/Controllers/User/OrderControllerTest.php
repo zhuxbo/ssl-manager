@@ -1077,3 +1077,49 @@ test('用户发送激活邮件-旧 GET 入口已下线（副作用端点不挂 G
         ->getJson("/api/order/send-active/$order->id")
         ->assertStatus(405);
 });
+
+test('用户撤回取消校验一分钟并返回列表计时字段', function () {
+    Queue::fake();
+    $user = User::factory()->create();
+    $order = Order::factory()->create(['user_id' => $user->id]);
+    $cert = Cert::factory()->create(['order_id' => $order->id, 'status' => 'cancelling', 'cancel_requested_at' => now()]);
+    $order->update(['latest_cert_id' => $cert->id]);
+    $this->actingAsUser($user)->postJson("/api/order/revoke-cancel/$order->id")
+        ->assertOk()->assertJson(['code' => 0]);
+    $cert->update(['cancel_requested_at' => now()->subMinutes(2)]);
+    $this->actingAsUser($user)->getJson('/api/order')->assertOk()
+        ->assertJsonPath('data.items.0.latest_cert.cancel_requested_at', $cert->fresh()->toArray()['cancel_requested_at']);
+    $this->actingAsUser($user)->postJson("/api/order/revoke-cancel/$order->id")
+        ->assertOk()->assertJson(['code' => 1]);
+    expect($cert->fresh()->status)->toBe('approving');
+});
+
+test('用户批量撤回仅处理自己的超时取消订单', function () {
+    Queue::fake();
+    $user = User::factory()->create();
+    $orders = [];
+    $certs = [];
+    foreach ([$user->id, User::factory()->create()->id] as $userId) {
+        $order = Order::factory()->create(['user_id' => $userId]);
+        $cert = Cert::factory()->create(['order_id' => $order->id, 'status' => 'cancelling', 'cancel_requested_at' => now()->subMinutes(2)]);
+        $order->update(['latest_cert_id' => $cert->id]);
+        $orders[] = $order->id;
+        $certs[] = $cert;
+    }
+    $this->actingAsUser($user)->postJson('/api/order/batch-revoke-cancel', ['ids' => $orders])
+        ->assertOk()->assertJson(['code' => 1]);
+    expect($certs[0]->fresh()->status)->toBe('approving')
+        ->and($certs[1]->fresh()->status)->toBe('cancelling');
+});
+
+test('用户不能撤回他人的取消申请', function () {
+    Queue::fake();
+    $owner = User::factory()->create();
+    $order = Order::factory()->create(['user_id' => $owner->id]);
+    $cert = Cert::factory()->create(['order_id' => $order->id, 'status' => 'cancelling', 'cancel_requested_at' => now()->subMinutes(2)]);
+    $order->update(['latest_cert_id' => $cert->id]);
+    $this->actingAsUser(User::factory()->create())->postJson("/api/order/revoke-cancel/$order->id")
+        ->assertOk()->assertJson(['code' => 0]);
+    expect($cert->fresh()->status)->toBe('cancelling');
+    expect(Task::where('order_id', $order->id)->where('action', 'sync')->exists())->toBeFalse();
+});

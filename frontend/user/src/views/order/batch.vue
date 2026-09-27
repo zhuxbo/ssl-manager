@@ -81,15 +81,30 @@
       @click="commitCancel()"
       >取消订单</el-button
     >
+    <el-button
+      v-if="canBatchRevokeOrderCancellation(getSelectedRows(), now.getTime())"
+      type="warning"
+      size="small"
+      class="ml-2"
+      @click="revokeCancel()"
+      >批量撤回取消</el-button
+    >
   </div>
 </template>
 
 <script setup lang="ts">
+import { useNow } from "@vueuse/core";
+import {
+  canRevokeOrderCancellation,
+  canBatchRevokeOrderCancellation
+} from "@shared/utils/orderCancellation";
 import { message } from "@shared/utils";
 import * as OrderApi from "@/api/order";
 import { useDetail } from "./detail";
 import dayjs from "dayjs";
 import { confirmOrderCancellation } from "@shared/utils/orderConfirmation";
+
+const now = useNow({ interval: 1000 });
 
 const { toDetail } = useDetail();
 
@@ -504,7 +519,7 @@ const commitCancel = async () => {
   if (
     await confirmOrderCancellation(
       statuses,
-      "将取消选中的可取消订单：未支付申请删除，待提交申请按规则退款；已提交上游的订单立即提交取消处理，成功后按规则退款，证书可能失效。此次操作不再提供撤回。",
+      "将取消选中的可取消订单：未支付申请删除，待提交申请按规则退款；已提交上游的订单立即提交取消处理，成功后按规则退款，证书可能失效。提交取消满1分钟仍未取消成功时可撤回。",
       () => OrderApi.batchCommitCancel(filteredIds.toString())
     )
   ) {
@@ -513,6 +528,16 @@ const commitCancel = async () => {
     });
     emit("refresh");
   }
+};
+const revokeCancel = async () => {
+  const rows = getSelectedRows();
+  if (!canBatchRevokeOrderCancellation(rows)) return;
+  const ids = rows
+    .filter(row => canRevokeOrderCancellation(row))
+    .map(row => row.id);
+  await OrderApi.batchRevokeCancel(ids.join(","));
+  message("批量撤回取消成功，正在同步订单状态", { type: "success" });
+  emit("refresh");
 };
 </script>
 <style scoped lang="scss">

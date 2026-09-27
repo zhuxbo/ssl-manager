@@ -35,6 +35,14 @@
       @click="commitCancel"
       >取消</el-button
     >
+    <el-button
+      v-if="canRevokeOrderCancellation(order, now.getTime())"
+      type="warning"
+      plain
+      size="small"
+      @click="revokeCancel"
+      >撤回取消</el-button
+    >
   </div>
   <el-button
     v-else-if="props.placement === 'commit' && status === 'pending'"
@@ -102,6 +110,8 @@
 </template>
 
 <script setup lang="ts">
+import { useNow } from "@vueuse/core";
+import { canRevokeOrderCancellation } from "@shared/utils/orderCancellation";
 import { ref, inject, reactive, computed } from "vue";
 import { buildUUID } from "@pureadmin/utils";
 import router from "@/router";
@@ -120,6 +130,8 @@ import {
   confirmOrderCancellation,
   archiveMessage
 } from "@shared/utils/orderConfirmation";
+
+const now = useNow({ interval: 1000 });
 
 const props = withDefaults(
   defineProps<{ placement?: "toolbar" | "send" | "transfer" | "commit" }>(),
@@ -242,6 +254,11 @@ const transferCert = () => {
     get();
     transferDialog.value = false;
   });
+};
+const revokeCancel = async () => {
+  await OrderApi.revokeCancel(order.id);
+  message("撤回取消成功，正在同步订单状态", { type: "success" });
+  get(true);
 };
 </script>
 

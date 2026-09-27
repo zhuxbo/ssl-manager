@@ -337,3 +337,14 @@ export function updateAutoSettings(
     { auto_renew?: boolean | null; auto_reissue?: boolean | null }
   >(`/order/auto-settings/${id}`, { data });
 }
+
+/** 撤回提交满一分钟仍未完成的取消申请。 */
+export function revokeCancel(id: number): Promise<BaseResponse> {
+  return http.post<BaseResponse<null>, any>(`/order/revoke-cancel/${id}`);
+}
+
+export function batchRevokeCancel(ids: string): Promise<BaseResponse> {
+  return http.post<BaseResponse<null>, any>("/order/batch-revoke-cancel", {
+    data: { ids }
+  });
+}

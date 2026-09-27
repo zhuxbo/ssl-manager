@@ -357,4 +357,14 @@ trait OrderController
             $cert->save();
         }
     }
+
+    public function revokeCancel(int $id): void
+    {
+        $this->action->revokeCancel($id);
+    }
+
+    public function batchRevokeCancel(GetIdsRequest $request): void
+    {
+        $this->action->batchRevokeCancel($request->validated()['ids']);
+    }
 }

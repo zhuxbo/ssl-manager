@@ -1,7 +1,7 @@
 {
     "version": "1.0",
     "mysql_version": "8.4.11",
-    "generated_at": "2026-09-21 16:48:09",
+    "generated_at": "2026-09-27 19:36:10",
     "database": {
         "name": "manager",
         "charset": "utf8mb4",
@@ -2002,8 +2002,16 @@
                     "extra": "",
                     "comment": "状态"
                 },
-                "created_at": {
+                "cancel_requested_at": {
                     "position": 39,
+                    "type": "timestamp",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "提交取消时间"
+                },
+                "created_at": {
+                    "position": 40,
                     "type": "timestamp",
                     "nullable": true,
                     "default": null,
@@ -2011,7 +2019,7 @@
                     "comment": ""
                 },
                 "updated_at": {
-                    "position": 40,
+                    "position": 41,
                     "type": "timestamp",
                     "nullable": true,
                     "default": null,

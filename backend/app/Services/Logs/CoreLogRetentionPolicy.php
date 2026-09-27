@@ -9,7 +9,7 @@ final class CoreLogRetentionPolicy
     /** @var array<string, list<string>> */
     private const USER_AUDIT_ACTIONS = [
         'Auth' => ['login', 'register', 'resetPassword', 'updateUsername', 'updatePassword', 'bindEmail', 'bindMobile', 'logout'],
-        'Order' => ['new', 'batchNew', 'renew', 'reissue', 'pay', 'batchPay', 'commit', 'batchCommit', 'commitCancel', 'batchCommitCancel', 'updateDCV', 'uploadDocument', 'updateDocument', 'deleteDocument', 'submitDocuments', 'archive', 'updateAutoSettings'],
+        'Order' => ['new', 'batchNew', 'renew', 'reissue', 'pay', 'batchPay', 'commit', 'batchCommit', 'commitCancel', 'batchCommitCancel', 'revokeCancel', 'batchRevokeCancel', 'updateDCV', 'uploadDocument', 'updateDocument', 'deleteDocument', 'submitDocuments', 'archive', 'updateAutoSettings'],
         'Acme' => ['new', 'pay', 'batchPay', 'commit', 'batchCommit', 'commitCancel', 'batchCommitCancel', 'revokeCancel', 'batchRevokeCancel'],
         'Setting' => ['updateApiToken', 'updateCallback', 'updateDeployToken', 'deleteDeployToken', 'updateAutoPreferences'],
         'TopUp' => ['alipay', 'wechat'],

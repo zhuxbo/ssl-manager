@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Order\Traits;
 
+use App\Exceptions\ApiResponseException;
 use App\Models\Order;
 use App\Models\Task;
 use Illuminate\Support\Facades\DB;
@@ -147,10 +148,47 @@ trait ActionBatchTrait
                         return;
                     }
 
-                    $locked->latestCert->update(['status' => 'cancelling']);
+                    $locked->latestCert->update(['status' => 'cancelling', 'cancel_requested_at' => now()]);
                     $this->deleteTask($locked->id, 'commit,sync,revalidate');
                     $this->createTask($locked->id, 'cancel');
                 });
+            }
+        }
+
+        $this->success();
+    }
+
+    /** 批量撤回满一分钟的取消申请，单体入口在锁内再次校验。 */
+    public function batchRevokeCancel(int|string|array $orderIds): void
+    {
+        $orderIds = is_array($orderIds) ? $orderIds : explode(',', (string) $orderIds);
+        $orderIds = array_map('intval', $orderIds);
+
+        $maxUpstream = (int) config('batch.max_upstream');
+        count($orderIds) > $maxUpstream && $this->error("订单数量不能超过{$maxUpstream}");
+
+        // 前置过滤：只保留 cancelling 状态的订单，避免对非 cancelling 订单触发报错
+        // 锁内二次校验由 revokeCancel 自身兜住（处理并发竞争）
+        $filteredIds = Order::with(['latestCert'])
+            ->whereHas('latestCert', fn ($query) => $query->where('status', 'cancelling')->whereRaw('COALESCE(cancel_requested_at, updated_at) <= ?', [now()->subMinute()]))
+            ->whereIn('id', $orderIds)
+            ->pluck('id')
+            ->all();
+
+        if (empty($filteredIds)) {
+            $this->error('没有可以撤销的订单');
+        }
+
+        foreach ($filteredIds as $id) {
+            try {
+                $this->revokeCancel($id);
+            } catch (ApiResponseException $e) {
+                $res = $e->getApiResponse();
+                if (($res['code'] ?? 0) !== 1) {
+                    // 已成功的订单保留结果，失败时中断并返回错误
+                    throw $e;
+                }
+                // code=1 是成功，继续下一条
             }
         }
 
