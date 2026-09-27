@@ -27,6 +27,8 @@ plugins/
 
 开发规范按主题拆分，索引见 [`skills/SKILL.md`](../skills/SKILL.md)。
 
+Easy 的解析检测弹窗提示 TXT 委托冲突；检测到启用 DNSSEC 时提示删除，CAA 记录存在且不允许当前证书 CA 签发时提示删除已有记录或添加允许该 CA 的记录。DNSSEC / CAA 使用静态页 `config.json` 中 `dnsTools` 节点的 `/api/domain/issue-verify` 接口，保留通配符域名进行检查；无相关问题或未取得有效结果时不显示提示，IP 地址跳过检查。这些提示不改变 DCV 检测状态。
+
 ## 安装插件
 
 ### 方式一：管理面板安装

@@ -208,14 +208,54 @@ window.API = (function () {
           r =>
             r?.type === "TXT" &&
             typeof r.value === "string" &&
-            (!r.name ||
-              (typeof r.name === "string" &&
-                r.name.toLowerCase().replace(/\.$/, "") === normalizedHost))
+            r.value &&
+            typeof r.name === "string" &&
+            r.name.toLowerCase().replace(/\.$/, "") === normalizedHost
         )
         .map(r => r.value.replace(/^"|"$/g, "").trim());
     } catch {
       return [];
     }
+  }
+
+  // 签发诊断独立于 DCV；仅外部 DNS Tools 提供此接口。
+  async function verifyIssuance(domain, brand) {
+    const warnings = { caa: "", dnssec: "" };
+    if (!brand || domain.includes(":") || /^\d+\.\d+\.\d+\.\d+$/.test(domain)) {
+      return warnings;
+    }
+    for (const host of Config.getDnsToolsHosts().filter(Boolean)) {
+      try {
+        const data = await requestDetection(
+          [`${host}/api/domain/issue-verify`],
+          { brand, domains: domain }
+        );
+        const results = data?.code === 1 ? data.data?.results : data?.errors;
+        const normalize = value => String(value || "").toLowerCase().replace(/\.$/, "");
+        const result = Array.isArray(results)
+          ? results.find(item =>
+              normalize(item?.domain) === normalize(domain) ||
+              normalize(item?.display_domain) === normalize(domain)
+            )
+          : null;
+        if (!result || typeof result.valid !== "boolean") continue;
+
+        const hasDnssec = ["secure", "bogus"].includes(result.dnssec?.state);
+        const caaConflict = result.valid === false &&
+          Array.isArray(result.caa_records) && result.caa_records.length > 0;
+        return {
+          caa: caaConflict
+            ? `检测到 ${domain} 的 CAA 记录不允许当前 CA（${brand}）签发，请删除已有 CAA 记录，或添加允许该 CA 签发的 CAA 记录`
+            : "",
+          dnssec: hasDnssec
+            ? `检测到 ${domain} 已启用 DNSSEC，请在域名注册商处关闭 DNSSEC（删除 DS 记录），并等待生效。`
+            : ""
+        };
+      } catch {
+        // 节点不可用时继续尝试下一节点。
+      }
+    }
+    return warnings;
   }
 
   return {
@@ -225,6 +265,7 @@ window.API = (function () {
     verifyDCV,
     verifyCname,
     verifyDelegationTxt,
-    queryTxtRecords
+    queryTxtRecords,
+    verifyIssuance
   };
 })();

@@ -699,6 +699,12 @@
               <th>错误</th>
               <td><span id="check-txt-error" class="error-text"></span></td>
             </tr>
+            <tr id="check-txt-conflict-row" style="display: none">
+              <th>冲突警告</th>
+              <td>
+                <span id="check-txt-conflict" style="color: var(--warning-color)"></span>
+              </td>
+            </tr>
             <tr class="file-result" style="display: none">
               <th>验证链接</th>
               <td><span id="check-link"></span></td>
@@ -714,6 +720,14 @@
             <tr>
               <th>检测状态</th>
               <td><span id="check-status" class="status-badge"></span></td>
+            </tr>
+            <tr id="check-dnssec-row" style="display: none">
+              <th>DNSSEC 提示</th>
+              <td><span id="check-dnssec" style="color: var(--warning-color)"></span></td>
+            </tr>
+            <tr id="check-caa-row" style="display: none">
+              <th>CAA 提示</th>
+              <td><span id="check-caa" style="color: var(--warning-color)"></span></td>
             </tr>
             <tr id="check-error-row" style="display: none">
               <th>错误信息</th>

@@ -994,6 +994,18 @@
           : "none";
     });
 
+    const txtConflict = isDelegate ? validation.delegation_txt_conflict : "";
+    document.getElementById("check-txt-conflict-row").style.display =
+      txtConflict ? "table-row" : "none";
+    document.getElementById("check-txt-conflict").textContent = txtConflict || "";
+
+    for (const type of ["dnssec", "caa"]) {
+      const warning = validation.issuance_check?.[type] || "";
+      document.getElementById(`check-${type}-row`).style.display =
+        warning ? "table-row" : "none";
+      document.getElementById(`check-${type}`).textContent = warning;
+    }
+
     if (isDelegate) {
       const ca = certDcv.ca || window.appState.product?.ca || "";
       const channel = window.appState.cert?.channel || "";
@@ -1111,6 +1123,19 @@
 
     setLoading(true, "recheck-btn");
 
+    const checkedValidation = window.appState.validation;
+    checkedValidation.issuance_check = { caa: "", dnssec: "" };
+    updateCheckDialog(checkedValidation);
+    const issuanceCheck = API.verifyIssuance(
+      checkedValidation.domain,
+      window.appState.cert?.dcv?.ca || window.appState.product?.ca || ""
+    ).then(result => {
+      checkedValidation.issuance_check = result;
+      if (window.appState.validation === checkedValidation) {
+        updateCheckDialog(checkedValidation);
+      }
+    });
+
     try {
       const certDcv = window.appState.cert?.dcv || {};
       const isDelegate = Boolean(certDcv.is_delegate);
@@ -1140,6 +1165,18 @@
 
         const overallChecked = cnameResult.checked && txtResult.checked;
 
+        // 与主站一致，仅提示委托主机上的直接 TXT 冲突。
+        const cnameHost = `${prefix}.${zone}`;
+        let txtConflict = "";
+        try {
+          const records = await API.queryTxtRecords(cnameHost);
+          if (records.length > 0) {
+            txtConflict = `检测到 ${cnameHost} 存在 TXT 记录，TXT 和 CNAME 同名共存会导致委托不生效，请删除 TXT 记录`;
+          }
+        } catch {
+          // 非关键检测，忽略错误。
+        }
+
         Object.assign(window.appState.validation, {
           checked: overallChecked,
           error: "",
@@ -1148,23 +1185,11 @@
           delegation_cname_error: cnameResult.error || "",
           delegation_txt_checked: txtResult.checked,
           delegation_txt_detected: txtResult.detected_value || "",
-          delegation_txt_error: txtResult.error || ""
+          delegation_txt_error: txtResult.error || "",
+          delegation_txt_conflict: txtConflict
         });
 
         updateCheckDialog(window.appState.validation);
-
-        // TXT 冲突检测：非阻塞，不影响主验证流程
-        const cnameHost = `${prefix}.${zone}`;
-        API.queryTxtRecords(cnameHost)
-          .then(records => {
-            if (records.length > 0) {
-              showToast(
-                `检测到 ${cnameHost} 存在TXT记录，TXT和CNAME同一名称同时存在会导致CNAME委托不生效，请删除TXT记录`,
-                "error"
-              );
-            }
-          })
-          .catch(() => {});
 
         const testBtn = document.getElementById("test-validation-btn");
         if (testBtn) {
@@ -1211,6 +1236,7 @@
     } catch (error) {
       showToast(error.message, "error");
     } finally {
+      await issuanceCheck;
       setLoading(false, "recheck-btn");
     }
   }
