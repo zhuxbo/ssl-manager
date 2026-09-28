@@ -121,8 +121,8 @@ test("管理端和用户端共用委托复制文本格式化实现", () => {
         value: "target.example.net"
       },
       target_fqdn: null,
-      proxy_domain: null
+      proxy_domain: "autohttps.top"
     }),
-    "域名: example.com\n主机记录: _dnsauth\n记录类型: CNAME\n记录值: target.example.net\n代理域: -"
+    "域名: example.com\n主机记录: _dnsauth\n记录类型: CNAME\n记录值: target.example.net"
   );
 });

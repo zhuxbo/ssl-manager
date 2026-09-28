@@ -152,7 +152,7 @@ export const useDelegationTable = () => {
       label: "操作",
       fixed: "right",
       slot: "operation",
-      width: 220
+      width: 260
     }
   ];
 
