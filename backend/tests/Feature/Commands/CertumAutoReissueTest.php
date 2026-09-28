@@ -2,6 +2,7 @@
 
 use App\Exceptions\ApiResponseException;
 use App\Models\Cert;
+use App\Models\CnameDelegation;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\Setting;
@@ -10,6 +11,7 @@ use App\Models\Task;
 use App\Models\User;
 use App\Services\Notification\NotificationCenter;
 use App\Services\Order\Action;
+use App\Services\Order\Api\Api;
 use App\Services\Order\AutoRenewService;
 use App\Services\Order\Utils\CsrUtil;
 use Illuminate\Support\Facades\Artisan;
@@ -231,3 +233,36 @@ test('统一设置缺失或 API 通道时各 CA 不走免委托路径', function
     $this->app->instance(Action::class, Mockery::mock(Action::class));
     $this->artisan('schedule:auto-renew')->assertSuccessful();
 })->with(['certum', 'sectigo', 'digicert'])->with(['api', 'setting-missing']);
+
+test('无效委托在验证复用窗口内经真实建单仍可提交到上游边界', function (string $ca) {
+    $this->product->update(['ca' => $ca]);
+    $this->delegation->shouldNotReceive('checkDelegationValidity');
+    $delegation = CnameDelegation::factory()->create([
+        'user_id' => $this->order->user_id,
+        'zone' => 'example.com',
+        'valid' => false,
+    ]);
+    $keys = CsrUtil::generate(['domains' => 'example.com']);
+    $this->cert->update([
+        ...$keys,
+        'dcv' => ['method' => 'txt', 'is_delegate' => true],
+        'validation' => [['domain' => 'example.com', 'delegation_id' => $delegation->id]],
+    ]);
+    $api = Mockery::mock(Api::class);
+    $api->shouldReceive('reissue')->once()->with(Mockery::on(fn ($data) => $data['validation'][0]['delegation_valid'] === false
+        && $data['validation'][0]['delegation_id'] === $delegation->id
+    ))->andReturn(['code' => 1, 'data' => ['api_id' => 'reuse-upstream-id']]);
+    app()->instance(Api::class, $api);
+
+    $this->artisan('schedule:auto-renew')->assertSuccessful();
+    expect($this->order->fresh()->latestCert->status)->toBe('pending')
+        ->and(Task::where('order_id', $this->order->id)->where('action', 'commit')->count())->toBe(1);
+
+    try {
+        app(Action::class)->commit($this->order->id);
+    } catch (ApiResponseException $e) {
+        expect($e->getApiResponse()['code'])->toBe(1);
+    }
+    expect($this->order->fresh()->latestCert->status)->toBe('processing')
+        ->and($this->order->fresh()->latestCert->api_id)->toBe('reuse-upstream-id');
+})->with(['certum', 'sectigo', 'digicert']);

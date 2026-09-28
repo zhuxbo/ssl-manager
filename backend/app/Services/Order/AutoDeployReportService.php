@@ -11,7 +11,7 @@ use Throwable;
  * 自动部署上报记录服务。
  *
  * 每次失败（客户端部署回调或服务端自写签发失败）照常入 auto_deploy_reports；管理员通知由
- * DeployFailureReminderCommand 按上一个完整小时跨订单聚合，不在业务请求中即时派发。
+ * DeployFailureReminderCommand 按前一个完整自然日跨订单聚合，不在业务请求中即时派发。
  *
  * 服务端自写签发失败行的两个写入点：local CSR 提交后的服务端处理失败（Deploy\ApiController::update）、
  * pull scheduler 自动重签失败（AutoRenewCommand），均 order_id 归因 + cert_id 取订单唯一 latestCert、

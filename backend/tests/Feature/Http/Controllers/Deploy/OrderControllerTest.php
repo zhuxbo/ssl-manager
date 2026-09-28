@@ -789,7 +789,7 @@ test('callback 参数验证', function () {
     ])->assertOk()->assertJson(['code' => 0]);
 });
 
-test('callback 失败只入表并等待小时聚合告警', function () {
+test('callback 失败只入表并等待每日聚合告警', function () {
     [$user, $token] = createDeployAuth();
     [$order] = createDeployOrder($user, 'active');
 

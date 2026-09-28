@@ -93,13 +93,13 @@ Schedule::command('schedule:auto-renew')
     ->description('自动续费/重签即将到期的证书')
     ->onFailure($logScheduleFailure('schedule:auto-renew'));
 
-// 自动部署/签发失败小时聚合 - 每个整点汇总上一个完整小时，跨订单至多一封管理员告警
+// 自动部署/签发失败每日聚合 - 每天 0 点汇总前一天，按每封最多 10 个订单拆分管理员告警
 Schedule::command('schedule:deploy-failure-reminder')
-    ->hourly()
+    ->dailyAt('00:00')
     ->withoutOverlapping()
     ->skip($skipWhenFrozen)
     ->name('deploy-failure-reminder')
-    ->description('按完整小时聚合自动部署/签发失败');
+    ->description('按完整自然日聚合自动部署/签发失败');
 
 // 余额前瞻预警 - 每周一 09:30 执行（未来 30 天自动续费余额不足则每用户一封，预估上限）
 // 周一 09:30：错开 auto-renew 00:00 / backup 02:00 / audit 03:00，且避开 schedule:expire 的 09:00
