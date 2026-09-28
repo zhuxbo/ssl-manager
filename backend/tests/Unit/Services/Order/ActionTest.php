@@ -1127,6 +1127,54 @@ test('代理前提固化：processing reissue cert issued_at=null，commitCancel
     expect($reissueCert->issued_at)->toBeNull();
 });
 
+test('导入证书按产品配置初始化已购域名数量', function (array $settings, string $domains, array $expected) {
+    Queue::fake();
+    $this->product->update($settings);
+    $apiId = 'import-san-count-test';
+    $api = Mockery::mock(Api::class);
+    $api->shouldReceive('get')->once()->andReturn(['code' => 1, 'data' => [
+        'alternative_names' => $domains,
+    ]]);
+    (new ReflectionProperty($this->service, 'api'))->setValue($this->service, $api);
+
+    expectOrderApiSuccess(fn () => $this->service->input([
+        'user_id' => $this->user->id,
+        'product_id' => $this->product->id,
+        'period' => 12,
+        'api_id' => $apiId,
+    ]));
+
+    $cert = Cert::where('api_id', $apiId)->firstOrFail();
+    $order = Order::findOrFail($cert->order_id);
+    expect([$order->purchased_standard_count, $order->purchased_wildcard_count])->toBe($expected)
+        ->and(Transaction::where('transaction_id', $order->id)->exists())->toBeFalse();
+})->with([
+    '标准域名保留产品包含数量' => [['standard_min' => 3], 'one.example.com', [3, 0]],
+    '通配符保留产品包含数量' => [['wildcard_min' => 3], '*.example.com', [0, 3]],
+    '实际数量超过产品下限' => [['standard_min' => 1, 'wildcard_min' => 1], 'one.example.com,two.example.com,*.a.example.com,*.b.example.com', [2, 2]],
+    '赠送根域名不计入已购数量' => [['gift_root_domain' => 1], 'example.com,*.example.com', [0, 1]],
+    '赠送后仍保留产品下限' => [['gift_root_domain' => 1, 'standard_min' => 2, 'wildcard_min' => 3], 'example.com,*.example.com', [2, 3]],
+]);
+
+test('sync 保留已有非零已购域名数量', function () {
+    Queue::fake();
+    $this->product->update(['standard_min' => 5, 'wildcard_min' => 5]);
+    [$order] = createOrderWithCertForRevoke('approving', [
+        'purchased_standard_count' => 2,
+        'purchased_wildcard_count' => 2,
+    ]);
+    $api = Mockery::mock(Api::class);
+    $api->shouldReceive('get')->once()->with($order->id)->andReturn(['code' => 1, 'data' => [
+        'alternative_names' => 'one.example.com,*.example.com',
+    ]]);
+    (new ReflectionProperty($this->service, 'api'))->setValue($this->service, $api);
+
+    $this->service->sync($order->id, true);
+
+    expect($order->fresh()->purchased_standard_count)->toBe(2)
+        ->and($order->fresh()->purchased_wildcard_count)->toBe(2);
+});
+
 // ==================== sync 终态守卫 ====================
 
 test('sync 订单有效期对齐上游及续费剩余时间', function (

@@ -615,9 +615,9 @@ class Action
             $data['standard_count'] = $sanCount['standard_count'] ?? 0;
             $data['wildcard_count'] = $sanCount['wildcard_count'] ?? 0;
 
-            // 如果是导入 初始化已购域名个数
-            ! $order->purchased_standard_count && $order->purchased_standard_count = $data['standard_count'];
-            ! $order->purchased_wildcard_count && $order->purchased_wildcard_count = $data['wildcard_count'];
+            // 导入初始化已购数量时，与正常购买一样保留产品最低购买数量。
+            ! $order->purchased_standard_count && $order->purchased_standard_count = max($data['standard_count'], $order->product->standard_min);
+            ! $order->purchased_wildcard_count && $order->purchased_wildcard_count = max($data['wildcard_count'], $order->product->wildcard_min);
         }
 
         if (! empty($data['cert'])) {
