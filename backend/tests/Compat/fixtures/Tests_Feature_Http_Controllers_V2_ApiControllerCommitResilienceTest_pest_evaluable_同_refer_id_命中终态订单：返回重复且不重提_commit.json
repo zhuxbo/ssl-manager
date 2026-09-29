@@ -1,5 +1,5 @@
 {
-    "test": "P\\Tests\\Feature\\Http\\Controllers\\V2\\ApiControllerCommitResilienceTest::__pest_evaluable_同_refer__id_命中终态订单（cancelled_api__id_空）：不重提上游_commit、不复活，幂等返回既有_order__id",
+    "test": "P\\Tests\\Feature\\Http\\Controllers\\V2\\ApiControllerCommitResilienceTest::__pest_evaluable_同_refer__id_命中终态订单：返回重复且不重提_commit",
     "version": "1.0.0",
     "calls": [
         {
@@ -16,12 +16,7 @@
             "response_status": "2xx",
             "response_schema": {
                 "code": "integer",
-                "data": {
-                    "order_id": "integer",
-                    "cert_apply_status": "integer",
-                    "dcv": "array<unknown>",
-                    "validation": "array<unknown>"
-                }
+                "msg": "string"
             }
         }
     ]

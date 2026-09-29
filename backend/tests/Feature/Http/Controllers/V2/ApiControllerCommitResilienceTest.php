@@ -310,7 +310,7 @@ test('同 refer_id 重试命中 pending 卡单：不硬拒，重提 commit 后�
         'period' => 12,
         'domains' => 'm5-pending-v2.example.com',
         'validation_method' => 'txt',
-        'csr_generate' => 1,
+        'csr' => Cert::withoutGlobalScopes()->where('order_id', $orderId)->value('csr'),
     ]);
 
     $second->assertOk()->assertJson(['code' => 1]);
@@ -363,7 +363,7 @@ test('同 refer_id 重试命中已提交订单：直接幂等返回，不再调�
 
 // 守卫回归（钉死）：resolveReferId 的重提 commit 分支条件是 `! api_id && status === 'pending'`，
 // 终态订单（cancelled/revoked/renewed 等，api_id 可能仍空）绝不能被"重提 commit"复活。
-test('同 refer_id 命中终态订单（cancelled/api_id 空）：不重提上游 commit、不复活，幂等返回既有 order_id', function () {
+test('同 refer_id 命中终态订单：返回重复且不重提 commit', function () {
     // 直接断言控制器层守卫：resolveReferId 对终态订单绝不调 Action::commit —— 唯一钉死控制器守卫本身。
     // 不用 Api::class ->never()：Action::commitLocked 有第二道 status!=pending 兜底，即便削弱控制器守卫
     // 也不会真触达上游 Api，Api 层断言无法区分控制器守卫是否生效（round-2 L-1 教训）。
@@ -396,9 +396,7 @@ test('同 refer_id 命中终态订单（cancelled/api_id 空）：不重提上�
         'csr_generate' => 1,
     ]);
 
-    // 幂等返回既有订单（不硬拒、不新建）
-    $response->assertOk()->assertJson(['code' => 1]);
-    expect($response->json('data.order_id'))->toBe($order->id);
+    $response->assertOk()->assertJson(['code' => 0, 'msg' => 'Refer id already exists']);
 
     // 未复活：仍 cancelled、api_id 仍空、未新增订单
     expect($cert->fresh()->status)->toBe('cancelled');
@@ -591,3 +589,36 @@ test('reissue 跨用户 order_id：所有权校验在事务内触发 Order not f
     expect($owner->refresh()->balance)->toBe('200.00');
     expect($attacker->refresh()->balance)->toBe('200.00');
 });
+
+test('同 refer_id 按状态和 CSR 判断是否返回订单', function (string $status, bool $sameCsr, string $method) {
+    $action = Mockery::mock(Action::class);
+    $action->shouldReceive('commit')->never();
+    $action->shouldReceive('new')->never();
+    $action->shouldReceive('pay')->never();
+    app()->instance(Action::class, $action);
+
+    $user = $this->createTestUser(['balance' => '200.00']);
+    $order = Order::factory()->create(['user_id' => $user->id]);
+    $csr = "-----BEGIN CERTIFICATE REQUEST-----\noriginal-csr\n-----END CERTIFICATE REQUEST-----";
+    $cert = Cert::factory()->create([
+        'order_id' => $order->id,
+        'status' => $status,
+        'api_id' => $status === 'pending' && ! $sameCsr ? null : 'existing-api-id',
+        'csr' => $csr,
+    ]);
+    $order->update(['latest_cert_id' => $cert->id]);
+
+    $response = commitResPost($user, "/api/v2/$method", [
+        'refer_id' => $cert->refer_id,
+        'csr' => $sameCsr ? str_replace("\n", "\r\n", $csr)."\r\n" : 'different-csr',
+    ]);
+
+    if ($sameCsr && in_array($status, ['pending', 'processing', 'approving', 'active'], true)) {
+        $response->assertOk()->assertJson(['code' => 1, 'data' => ['order_id' => $order->id]]);
+    } else {
+        $response->assertOk()->assertJson(['code' => 0, 'msg' => 'Refer id already exists']);
+    }
+    expect($cert->fresh()->status)->toBe($status);
+    expect(Order::withoutGlobalScopes()->where('user_id', $user->id)->count())->toBe(1);
+    expect($user->fresh()->balance)->toBe('200.00');
+})->with(['pending', 'processing', 'approving', 'active', 'unpaid', 'cancelled', 'revoked', 'renewed', 'expired', 'cancelling', 'archived', 'reissued'])->with([true, false])->with(['new', 'renew', 'reissue']);

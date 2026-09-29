@@ -205,7 +205,7 @@ class ApiController extends Controller
             $this->error('API 不支持委托验证方法');
         }
 
-        $this->resolveReferId($params['refer_id'] ?? '');
+        $this->resolveReferId($params['refer_id'] ?? '', $params);
 
         $product = Product::where('code', $params['product_code'] ?? null)->where('status', 1)->first();
         if (! $product) {
@@ -263,7 +263,7 @@ class ApiController extends Controller
             $this->error('API 不支持委托验证方法');
         }
 
-        $this->resolveReferId($params['refer_id'] ?? '');
+        $this->resolveReferId($params['refer_id'] ?? '', $params);
 
         $params['action'] = 'renew';
         $params['channel'] = 'api';
@@ -309,7 +309,7 @@ class ApiController extends Controller
             $this->error('API 不支持委托验证方法');
         }
 
-        $this->resolveReferId($params['refer_id'] ?? '');
+        $this->resolveReferId($params['refer_id'] ?? '', $params);
 
         $params['action'] = 'reissue';
         $params['channel'] = 'api';
@@ -624,7 +624,7 @@ class ApiController extends Controller
     /**
      * 根据 refer_id 做幂等推进。
      */
-    private function resolveReferId(string $refer_id): void
+    private function resolveReferId(string $refer_id, array $params): void
     {
         if (! $refer_id) {
             return;
@@ -640,6 +640,18 @@ class ApiController extends Controller
 
         if (! $order) {
             return;
+        }
+
+        if (! in_array($order->latestCert->status, ['pending', 'processing', 'approving', 'active'], true)) {
+            $this->error('Refer id already exists');
+        }
+
+        // 自动生成 CSR 的重试可省略 CSR；显式提交时必须与原订单一致。
+        $csr = $params['csr'] ?? null;
+        if ($csr !== null || empty($params['csr_generate'])) {
+            if (! is_string($csr) || str_replace("\r\n", "\n", trim($csr)) !== str_replace("\r\n", "\n", trim($order->latestCert->csr ?? ''))) {
+                $this->error('Refer id already exists');
+            }
         }
 
         // manager 的卡单态是 pending 且 api_id=NULL（不是 gateway 的 processing）。
