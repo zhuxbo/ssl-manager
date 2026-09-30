@@ -72,7 +72,6 @@
             <div class="deploy-block">
               <div class="deploy-block-title">下载证书</div>
               <Install />
-              <Operate placement="send" />
             </div>
             <div v-if="!isGm" class="deploy-block">
               <div class="deploy-block-title">自动部署</div>

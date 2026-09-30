@@ -67,6 +67,7 @@
           @click="OrderApi.download(order.id)"
           >全部</el-button
         >
+        <Operate placement="send" />
         <el-text
           v-if="encMissing"
           type="info"
@@ -148,6 +149,7 @@
 <script setup lang="ts">
 import { computed, inject, ref, watchEffect } from "vue";
 import * as OrderApi from "@/api/order";
+import Operate from "../operate.vue";
 import { message } from "@shared/utils";
 
 const order = inject("order") as any;
@@ -188,6 +190,14 @@ watchEffect(() => {
 
 .descriptions {
   border-left: none;
+
+  :deep(.el-button) {
+    padding: 0;
+    font-size: 14px;
+    line-height: 28px;
+    vertical-align: top;
+    border: 0;
+  }
 }
 
 :deep(.el-textarea__inner) {
