@@ -27,7 +27,7 @@
 - **契约签名**：`send(string $category, string $title, string $message, array $details = [], ?string $dedupeKey = null, int $dedupeTtlHours = 24, ?string $fingerprint = null): bool`（返回 false = 去重跳过 / 无 admin / dispatch 失败）+ `clearDedupe(string $dedupeKey): void`
 - **五步时序（勿改序）**：① 去重预检（`system_alert:{dedupeKey}` 键值 === 指纹 → 不发）→ ② 解析 admin（有 `site.adminEmail` 时它始终作为目标邮箱，优先绑定同邮箱 Admin、否则任取一条 Admin 作为通知归属；未配置时跳过空邮箱账号，取首个有效 Admin 邮箱；无归属 Admin/目标邮箱 → Log::warning 返回 false、**不占键**）→ ③ 写端把 `admin_email = $targetEmail` 显式写入 intent context（镜像 `FundAuditCommand` 写端；Admin 专用 Builder 和 MailChannel 必须允许 `site.adminEmail` 运维别名覆盖登录账号邮箱）→ ④ dispatch（失败只 Log::warning、**不占键**——否则整个 TTL 静默丢告警）→ ⑤ `DB::afterCommit` 置键（键值=指纹快照；无事务时立即执行，事务内调用回滚时键随 NotificationJob 一起丢弃、语义对齐）
 - **固定指纹 vs 内容指纹**：`fingerprint=null` → 内容指纹 `sha1(json([category,title,message,details]))`——同一故障内容恒定则 TTL 内一封、**新增异常项指纹变则立即再发**（E1 凭证 / E3 支付证书这类集合型用它）；**计数/波动型（卡单数、偏差秒数、失败计数、outage 轮数）必须传固定指纹**，否则每轮计数变化翻新内容指纹击穿去重 → 刷屏（in-tree 范式：AutoRenewCommand `'missing'`、E4 `'clock_skew'`、E5 `'threshold_exceeded'`、M7 `'ca_outage'`、T1 `'swept_exhausted_{id}'`、T6 `'acme_maxed_{id}'`、W 委托巡检 `'patrol_outage'`）
-- **每日快照日期指纹（T5，吸收 M5）**：卡单转人工 admin 汇总 `reconcile_maxed` 用 **fingerprint 含当天日期** `'maxed_summary_'.now()->toDateString()`——既非纯固定（否则 SMTP 瞬断丢首封后整期静默）、亦非内容指纹（否则每轮卡单集变化刷屏）。语义：每天首个非空轮发一封含当天全部转人工单，同日不重发、次日指纹变化必发（含存量+新增），新增单最坏延迟 1 天。原「reconcile 去重标记带 TTL 24h（M5）」由本机制单源吸收
+- **卡单每日快照（T5）**：`reconcile_maxed` 将当日首个非空订单集合保存在 runtime 缓存至日末，按订单编号排序、每封 10 单逐项列出，不截取样本。每批独立按日期去重，派发失败不占键；同日补发使用原快照，避免订单恢复后批次位移而漏发。邮件标明快照时间与本封订单数；当日新增订单于次日快照纳入。
 - **M7 上游整体连通性（`CaHealthcheckCommand` 连通性维度）**：与凭证维度（`ca_credentials`，主信号 401/403 + 辅助 Unauthorized）分离。连接超时/请求失败/5xx 等 `code=0` 非鉴权失败走连通性——`Cache::forever` 跨 cron 周期**累计连续失败计数**，达 `connectivity_threshold`（默认 3，3×15min=45min 滤上游滚动重启瞬断）才发 SystemAlert，**固定指纹 `ca_outage`**（计数型防 churn 击穿）+ TTL `connectivity_ttl_hours`（默认 6h ≥ 3×45min）。**healthy / 上游可达分支**（code=1 或返回鉴权错误=上游可达）必须重置：清计数 + `clearDedupe(ca_connectivity)`（否则恢复后复发被旧键静默压掉）。**未配置态**（`'Api url or token is not set'`）Log::info 剔出、不占键不动计数（新装/测试实例把「没填」当「失效」是狼来了）
 - **TTL 语义**：固定指纹场景 TTL = 同一持续异常的**重复提醒间隔**（不是缓存过期直觉），按场景重要性定；契约要求 ≥3× 巡检周期（防 TTL≈周期时去重形同虚设）。**备份失败（日频 cron）用 24h=每天一封是有意偏离**：备份连续失败不应静默 3 天，主控书面选择
 - **恢复清键分两类（选型须知）**：**level/状态监控型**消费方（E1/E3~E5/H3/A4/W 委托巡检，健康态可周期性检测）healthy 分支**必须** `clearDedupe`——否则条件恢复后复发被旧键静默压掉；**窗口聚合或事件驱动告警型**（部署失败自然日窗口 / F2-4 chain fail-open / H1 watchdog 自愈）无稳定的「healthy」轮询点，不要求清键：部署聚合靠日期与批次去重保证同日每批至多一封，chain 恢复即写链使下次 `Chain::exists()` 短路 send 不可达，watchdog 自愈后 status→failed 早返且内容指纹含 pid 新进程必变。
@@ -109,3 +109,7 @@ M4 分档在 **send 阶段**，管不到 **build 阶段**（Builder 产出 paylo
 - **观察项**：build-failed 记录经 `persistBuildFailure` 直建、不落 `context_fingerprint`，故 send 重试轮 `findReusableRow` 的指纹过滤（notify ④）恒不命中 → **不再被误复用翻 SENT**（原「可见性记录被抹除」观察项已随实体指纹关闭）；build-failed 记录不支持专属手动重发（顶层无 order_id → resend 走永久失败 append-only 无害，补齐需存 context 破携密红线或建 idempotency 破零迁移）。
 
 - **到期模板时间口径**：`cert_expire` 每项 `order_expire_at` 取订单 `period_till`，`expire_at` 保留原含义，取当前证书 `expires_at`；`days_left` 仍按证书计算。订单时间缺失展示“未提供”，不以证书时间代替。已安装站点在通知模板管理中重置“证书到期提醒”后启用新版内容，Seeder 不覆盖自定义模板。
+
+- **默认模板中文展示**：运维告警类别/详情字段、任务动作/状态在 Blade 展示层映射中文，原始 payload 与脱敏顺序不变；未知扩展字段及原始诊断数据保留原值。已安装站点需在通知模板管理中重置对应模板后生效，Seeder 不覆盖自定义内容。
+
+- **云部署结果通知**：`poll_pending` 使用“结果待确认”主题与正文，提醒先查云端结果、勿重复推送；其他失败说明原因后再按需部署。云产品展示名取插件注册表，原始产品及错误代码保留，异常原文仍不进入通知。

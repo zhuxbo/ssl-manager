@@ -70,7 +70,7 @@ class FundInvariants
 
         return [
             'layer' => 'L1',
-            'message' => 'L1 账目恒等破：'.count($rows).' 个用户的 balance 与 transactions 累计存在偏离',
+            'message' => '账目余额不一致：'.count($rows).' 个用户的余额与交易流水累计金额不一致',
             'rows' => array_map(fn ($r) => (array) $r, $rows),
         ];
     }
@@ -99,7 +99,7 @@ class FundInvariants
 
         return [
             'layer' => 'L2',
-            'message' => 'L2 事件唯一破：'.count($rows).' 组 (type, transaction_id) 出现重复',
+            'message' => '交易记录重复：'.count($rows).' 组交易类型与关联业务编号出现重复',
             'rows' => array_map(fn ($r) => (array) $r, $rows),
         ];
     }
@@ -151,15 +151,15 @@ class FundInvariants
 
         $msgParts = [];
         if (! empty($forward)) {
-            $msgParts[] = count($forward).' 条 fund 缺失对应 transaction';
+            $msgParts[] = count($forward).' 条资金记录缺少对应交易流水';
         }
         if (! empty($reverse)) {
-            $msgParts[] = count($reverse).' 条资金 transaction 缺失对应已完成/已退 fund（孤儿或状态未落地）';
+            $msgParts[] = count($reverse).' 条交易流水缺少对应的已完成或已退款资金记录';
         }
 
         return [
             'layer' => 'L3',
-            'message' => 'L3 状态-事件配对破：'.implode('；', $msgParts),
+            'message' => '资金记录与交易流水关联异常：'.implode('；', $msgParts),
             'rows' => $rows,
         ];
     }
@@ -196,7 +196,7 @@ class FundInvariants
 
         return [
             'layer' => 'L4',
-            'message' => 'L4 金额配对破：'.count($rows).' 条 fund 与对应 transaction 金额或符号不匹配',
+            'message' => '资金金额不一致：'.count($rows).' 条资金记录与对应交易流水的金额或正负号不一致',
             'rows' => array_map(fn ($r) => (array) $r, $rows),
         ];
     }

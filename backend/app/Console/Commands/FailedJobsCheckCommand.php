@@ -55,8 +55,8 @@ class FailedJobsCheckCommand extends Command
             ]);
             app(SystemAlert::class)->send(
                 'failed_jobs',
-                "failed_jobs 近 {$windowHours}h 新增超阈",
-                "近 {$windowHours} 小时新增 failed_jobs {$count} 条，超过阈值 {$threshold}，请排查队列异常",
+                "近 {$windowHours} 小时新增失败任务数超过阈值",
+                "近 {$windowHours} 小时新增失败任务 {$count} 条，超过阈值 {$threshold}，请排查队列异常",
                 ['window_hours' => $windowHours, 'count' => $count, 'threshold' => $threshold],
                 self::DEDUPE_KEY,
                 (int) config('monitoring.failed_jobs.dedupe_ttl_hours', 72),

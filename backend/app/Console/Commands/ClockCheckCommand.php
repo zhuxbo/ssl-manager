@@ -78,7 +78,7 @@ class ClockCheckCommand extends Command
             app(SystemAlert::class)->send(
                 'clock',
                 '服务器时钟偏差',
-                '服务器时钟偏差约 '.round(abs($median)).'s（'.count($agreeing).' 源一致），请核对系统时间/NTP',
+                '服务器时钟偏差约 '.round(abs($median)).' 秒（'.count($agreeing).' 个时间源一致），请核对系统时间与网络时间同步配置',
                 [
                     'sources_agreed' => count($agreeing),
                     'skew_seconds' => (int) round($median),

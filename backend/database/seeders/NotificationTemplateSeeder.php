@@ -98,7 +98,7 @@ class NotificationTemplateSeeder extends Seeder implements ProvidesNotificationT
             // required 是「预估上限」，模板文案「预计最多需要」。site_url 由 Builder 从系统设置注入。
             [
                 'code' => 'balance_forecast',
-                'name' => '余额前瞻预警',
+                'name' => '自动续费余额不足预警',
                 'content' => $this->getBalanceForecastHtml(),
                 'variables' => [
                     'available',
@@ -406,7 +406,7 @@ HTML;
                                             <th align="left" style="padding: 12px 10px; border-bottom: 2px solid #fcd34d; font-size: 13px; font-weight: 600; color: #92400e; text-transform: uppercase;">证书标识</th>
                                             <th align="left" style="padding: 12px 10px; border-bottom: 2px solid #fcd34d; font-size: 13px; font-weight: 600; color: #92400e; text-transform: uppercase;">订单到期时间</th>
                                             <th align="left" style="padding: 12px 10px; border-bottom: 2px solid #fcd34d; font-size: 13px; font-weight: 600; color: #92400e;">证书到期时间</th>
-                                            <th align="center" style="padding: 12px 10px; border-bottom: 2px solid #fcd34d; font-size: 13px; font-weight: 600; color: #92400e; text-transform: uppercase;">证书剩余</th>
+                                            <th align="center" style="padding: 12px 10px; border-bottom: 2px solid #fcd34d; font-size: 13px; font-weight: 600; color: #92400e; text-transform: uppercase;">证书剩余天数</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -599,7 +599,7 @@ HTML;
                                 <div class="warning-box" style="background-color: #fffbeb; border-left: 4px solid #f59e0b; padding: 15px; border-radius: 0 4px 4px 0; margin-bottom: 30px;">
                                     <p class="warning-text" style="margin: 0; font-size: 14px; line-height: 22px; color: #92400e;">
                                         <strong>重要提示：</strong><br>
-                                        订阅到期后 ACME 客户端续签将被 CA 拒绝，证书无人续期，最终随有效期到期失效，导致站点“不安全”告警。
+                                        订阅到期后将无法通过该订阅继续自动签发证书。如未及时续订或通过其他方式更换证书，网站可能在现有证书到期后出现安全警告。
                                     </p>
                                 </div>
 
@@ -731,7 +731,7 @@ HTML;
                                     </thead>
                                     <tbody>
                                         @foreach($certificates as $index => $cert)
-                                        @php($stall_label = ['unpaid' => '未支付', 'pending' => '处理中', 'processing' => '验证中', 'approving' => '审核中', 'failed' => '已失败'][$cert['stall_status'] ?? ''] ?? '停滞')
+                                        @php($stall_label = ['unpaid' => '未支付', 'pending' => '待提交', 'processing' => '待验证', 'approving' => '待审核', 'failed' => '已失败'][$cert['stall_status'] ?? ''] ?? '停滞')
                                         <tr>
                                             <td align="left" style="padding: 12px 10px; border-bottom: 1px solid #eeeeee; font-size: 14px; color: #666666; vertical-align: top;">
                                                 {{ $index + 1 }}
@@ -851,7 +851,7 @@ HTML;
 <body style="margin: 0; padding: 0; background-color: #f4f6f8;">
 
     <div style="display: none; font-size: 1px; line-height: 1px; max-height: 0px; max-width: 0px; opacity: 0; overflow: hidden; mso-hide: all; font-family: sans-serif;">
-        您的 {{ $product_type_label ?? 'SSL' }} 证书续签订单已取消，原证书不再受续期监控，如需继续使用请手动续期。
+        您的 {{ $product_type_label ?? 'SSL' }} 证书续签订单已取消，原证书不再受续期监控，如需继续使用请重新申请证书或联系技术支持。
     </div>
 
     <center style="width: 100%; background-color: #f4f6f8;">
@@ -883,7 +883,7 @@ HTML;
                                 </div>
 
                                 <p style="margin: 0 0 20px 0; font-size: 15px; line-height: 26px; color: #555555;">
-                                    您的 {{ $product_type_label ?? 'SSL' }} 证书续签订单（订单号 {{ $order_id }}）已取消。原证书目前仍在有效期内，但<strong>已不再受自动续期、到期提醒与续期停滞监控</strong>。如需继续使用该证书，请在到期前<strong>手动重新发起续期</strong>。
+                                    您的 {{ $product_type_label ?? 'SSL' }} 证书续签订单（订单号 {{ $order_id }}）已取消。原证书<strong>已不再受自动续期、到期提醒与续期停滞监控</strong>。如需继续使用该证书，请<strong>重新申请证书或联系技术支持</strong>。
                                 </p>
 
                                 <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin-bottom: 24px;">
@@ -915,7 +915,7 @@ HTML;
                                         @else
                                             原证书到期后将不再具备有效信任状态，可能影响身份验证、签名或加密业务。
                                         @endif
-                                        由于该证书已脱离自动续期监控，系统不会再就其到期向您发送提醒，请务必自行安排手动续期。
+                                        由于该证书已脱离自动续期监控，系统不会再就其到期向您发送提醒，请务必自行安排重新申请证书或联系技术支持。
                                     </p>
                                 </div>
 
@@ -1042,7 +1042,7 @@ HTML;
                                 @if($is_successor)
                                 <div class="successor-box" style="background-color: #fffbeb; border-left: 4px solid #f59e0b; padding: 15px; border-radius: 0 4px 4px 0; margin-bottom: 24px;">
                                     <p class="successor-text" style="margin: 0; font-size: 14px; line-height: 22px; color: #92400e;">
-                                        <strong>请注意：</strong>被吊销的是续签后签发的新证书，原证书已因本次续期<strong>不再受自动续期、到期提醒与续期停滞监控</strong>。系统不会再就原证书到期向您发送提醒，请务必自行安排手动续期。
+                                        <strong>请注意：</strong>被吊销的是续签后签发的新证书，原证书已因本次续期<strong>不再受自动续期、到期提醒与续期停滞监控</strong>。系统不会再就原证书到期向您发送提醒，请务必自行安排重新申请证书或联系技术支持。
                                     </p>
                                 </div>
                                 @endif
@@ -1206,13 +1206,13 @@ HTML;
                                 </div>
 
                                 <p style="margin: 0 0 12px 0; font-size: 15px; line-height: 24px; color: #666666;">
-                                    请按以下情况对照处理，处理后系统会在后续检测窗口自动重试：
+                                    请根据失败原因处理。仅仍满足自动续期条件的订单会在后续检测时重试；重试次数已耗尽或产品已下线的订单，请联系技术支持核实处理进度：
                                 </p>
                                 <p style="margin: 0 0 8px 0; font-size: 15px; line-height: 24px; color: #555555;">
-                                    • <strong>账户余额不足</strong>：请充值后等待自动重试，或手动续期
+                                    • <strong>账户余额不足</strong>：请充值，并在控制台确认订单是否仍可自动续期
                                 </p>
                                 <p style="margin: 0 0 8px 0; font-size: 15px; line-height: 24px; color: #555555;">
-                                    • <strong>域名委托无效</strong>：请配置并验证域名 CNAME 委托
+                                    • <strong>域名委托无效</strong>：请配置并验证域名 CNAME 委托，再检查订单处理状态
                                 </p>
                                 <p style="margin: 0 0 8px 0; font-size: 15px; line-height: 24px; color: #555555;">
                                     • <strong>IP 地址证书</strong>：IP 证书自动续签须由自动部署工具发起，请配置自动部署工具
@@ -1268,7 +1268,7 @@ HTML;
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>账户余额前瞻预警</title>
+    <title>自动续费余额不足预警</title>
     <style>
         body, table, td, a { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
         table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
@@ -1312,7 +1312,7 @@ HTML;
                             <td class="mobile-padding" style="padding: 40px 40px 30px 40px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
 
                                 <h1 style="margin: 0 0 20px 0; font-size: 22px; line-height: 30px; color: #333333; font-weight: 700;">
-                                    💰 账户余额前瞻预警
+                                    💰 自动续费余额不足预警
                                 </h1>
 
                                 <p style="margin: 0 0 24px 0; font-size: 16px; line-height: 26px; color: #555555;">
@@ -1326,7 +1326,7 @@ HTML;
                                             <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
                                                 <tr>
                                                     <td style="padding-bottom: 8px; font-size: 13px; color: #888888; font-family: sans-serif;">证书域名</td>
-                                                    <td style="padding-bottom: 8px; font-size: 13px; color: #888888; font-family: sans-serif; text-align: right;">到期日 / 预估金额</td>
+                                                    <td style="padding-bottom: 8px; font-size: 13px; color: #888888; font-family: sans-serif; text-align: right;">证书到期日 / 预估续费金额</td>
                                                 </tr>
                                                 @foreach($certificates as $cert)
                                                 <tr class="cert-row" style="border-bottom: 1px solid #eeeeee;">
@@ -1390,6 +1390,25 @@ HTML;
     private function getTaskFailedHtml(): string
     {
         return <<<'HTML'
+@php
+    $actionLabels = [
+        'commit' => '提交',
+        'sync' => '同步',
+        'revalidate' => '验证',
+        'cancel' => '取消',
+        'callback' => '回调',
+        'delegation' => '委托',
+        'commit_acme' => '提交 ACME 订阅',
+        'sync_acme' => '同步 ACME 订阅',
+        'cancel_acme' => '取消 ACME 订阅',
+    ];
+    $statusLabels = [
+        'executing' => '执行中',
+        'successful' => '成功',
+        'failed' => '失败',
+        'stopped' => '停止',
+    ];
+@endphp
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -1430,7 +1449,7 @@ HTML;
 <body style="margin: 0; padding: 0; background-color: #f4f6f8;">
 
     <div style="display: none; font-size: 1px; line-height: 1px; max-height: 0px; max-width: 0px; opacity: 0; overflow: hidden; mso-hide: all; font-family: sans-serif;">
-        任务执行失败：{{ $task_action }} (订单ID: {{ $order_id }}) - {{ $error_message }}
+        任务执行失败：{{ $actionLabels[$task_action] ?? $task_action }} (订单编号： {{ $order_id }}) - {{ $error_message }}
     </div>
 
     <center style="width: 100%; background-color: #f4f6f8;">
@@ -1465,23 +1484,23 @@ HTML;
                                 <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="border-collapse: collapse;">
 
                                     <tr class="data-row">
-                                        <td class="data-label" width="30%" style="padding: 10px 0; font-size: 13px; color: #888888; vertical-align: top; border-bottom: 1px solid #f0f0f0;">订单 ID</td>
+                                        <td class="data-label" width="30%" style="padding: 10px 0; font-size: 13px; color: #888888; vertical-align: top; border-bottom: 1px solid #f0f0f0;">订单编号</td>
                                         <td class="data-value" style="padding: 10px 0; font-size: 14px; color: #333333; font-family: monospace; font-weight: 600; border-bottom: 1px solid #f0f0f0;">
                                             {{ $order_id }}
                                         </td>
                                     </tr>
 
                                     <tr class="data-row">
-                                        <td class="data-label" style="padding: 10px 0; font-size: 13px; color: #888888; vertical-align: top; border-bottom: 1px solid #f0f0f0;">任务记录 ID</td>
+                                        <td class="data-label" style="padding: 10px 0; font-size: 13px; color: #888888; vertical-align: top; border-bottom: 1px solid #f0f0f0;">任务编号</td>
                                         <td class="data-value" style="padding: 10px 0; font-size: 14px; color: #333333; font-family: monospace; border-bottom: 1px solid #f0f0f0;">
                                             {{ $task_id }}
                                         </td>
                                     </tr>
 
                                     <tr class="data-row">
-                                        <td class="data-label" style="padding: 10px 0; font-size: 13px; color: #888888; vertical-align: top; border-bottom: 1px solid #f0f0f0;">动作 (Action)</td>
+                                        <td class="data-label" style="padding: 10px 0; font-size: 13px; color: #888888; vertical-align: top; border-bottom: 1px solid #f0f0f0;">任务动作</td>
                                         <td class="data-value" style="padding: 10px 0; font-size: 14px; color: #333333; border-bottom: 1px solid #f0f0f0;">
-                                            {{ $task_action }}
+                                            {{ $actionLabels[$task_action] ?? $task_action }}
                                         </td>
                                     </tr>
 
@@ -1489,7 +1508,7 @@ HTML;
                                         <td class="data-label" style="padding: 10px 0; font-size: 13px; color: #888888; vertical-align: top; border-bottom: 1px solid #f0f0f0;">执行状态</td>
                                         <td class="data-value" style="padding: 10px 0; font-size: 14px; color: #333333; border-bottom: 1px solid #f0f0f0;">
                                             <span style="background-color: #fee2e2; color: #991b1b; padding: 2px 6px; border-radius: 4px; font-size: 12px; font-weight: bold;">
-                                                {{ $task_status }}
+                                                {{ $statusLabels[$task_status] ?? $task_status }}
                                             </span>
                                         </td>
                                     </tr>
@@ -1511,8 +1530,8 @@ HTML;
                                     <tr class="data-row">
                                         <td class="data-label" style="padding: 10px 0; font-size: 13px; color: #888888; vertical-align: top; border-bottom: 1px solid #f0f0f0;">时间</td>
                                         <td class="data-value" style="padding: 10px 0; font-size: 13px; color: #555555; border-bottom: 1px solid #f0f0f0;">
-                                            创建于: {{ $created_at }}<br>
-                                            执行于: {{ $executed_at }}
+                                            创建时间： {{ $created_at }}<br>
+                                            最近执行时间： {{ $executed_at }}
                                         </td>
                                     </tr>
                                 </table>
@@ -1522,12 +1541,12 @@ HTML;
                                 </div>
 
                                 <div class="code-block" style="background-color: #f8f9fa; border: 1px solid #e9ecef; border-radius: 6px; padding: 15px; font-size: 13px; line-height: 1.6; color: #333;">
-                                    <div style="font-weight: bold; margin-bottom: 5px; color: #555;">Params:</div>
+                                    <div style="font-weight: bold; margin-bottom: 5px; color: #555;">请求参数：</div>
                                     <pre style="margin: 0; white-space: pre-wrap; word-break: break-all; font-family: 'Menlo', 'Consolas', monospace; font-size: 12px; color: #4b5563;">{{ $params }}</pre>
                                 </div>
 
                                 <div class="code-block" style="background-color: #f8f9fa; border: 1px solid #e9ecef; border-radius: 6px; padding: 15px; font-size: 13px; line-height: 1.6; color: #333;">
-                                    <div style="font-weight: bold; margin-bottom: 5px; color: #555;">Result:</div>
+                                    <div style="font-weight: bold; margin-bottom: 5px; color: #555;">执行结果：</div>
                                     <pre style="margin: 0; white-space: pre-wrap; word-break: break-all; font-family: 'Menlo', 'Consolas', monospace; font-size: 12px; color: #4b5563;">{{ $result }}</pre>
                                 </div>
 
@@ -1585,7 +1604,7 @@ HTML;
 <body style="margin: 0; padding: 0; background-color: #f4f6f8;">
 
     <div style="display: none; font-size: 1px; line-height: 1px; max-height: 0px; max-width: 0px; opacity: 0; overflow: hidden; mso-hide: all; font-family: sans-serif;">
-        资金审计校验发现 {{ $violation_count }} 项违反，请立即排查。
+        资金审计发现 {{ $violation_count }} 项一致性检查未通过，请立即排查。
     </div>
 
     <center style="width: 100%; background-color: #f4f6f8;">
@@ -1612,8 +1631,8 @@ HTML;
 
                                 <div class="summary-box" style="background-color: #fef2f2; border-left: 4px solid #dc2626; padding: 15px; border-radius: 0 4px 4px 0; margin-bottom: 28px;">
                                     <p class="summary-text" style="margin: 0; font-size: 15px; line-height: 24px; color: #991b1b;">
-                                        <strong>共发现 {{ $violation_count }} 项不变式违反。</strong><br>
-                                        请立即排查 funds / transactions / users.balance 相关数据，并在控制台运行 <code>php artisan finance:audit</code> 复核。
+                                        <strong>共 {{ $violation_count }} 项资金一致性检查未通过。</strong><br>
+                                        请立即排查资金记录、交易流水与用户余额，并在服务器终端运行 <code>php artisan finance:audit</code> 复核。
                                     </p>
                                 </div>
 
@@ -1621,7 +1640,7 @@ HTML;
                                 <div style="margin-bottom: 24px; padding: 16px; border: 1px solid #fecaca; border-radius: 6px; background-color: #fffafa;">
                                     <div style="margin-bottom: 10px;">
                                         <span class="layer-badge" style="display: inline-block; background-color: #fee2e2; color: #991b1b; padding: 3px 10px; border-radius: 4px; font-size: 12px; font-weight: 700; font-family: monospace;">
-                                            {{ $v['layer'] ?? '?' }}
+                                            {{ ['L1' => '账目恒等校验', 'L2' => '事件唯一校验', 'L3' => '状态与事件配对校验', 'L4' => '金额配对校验'][$v['layer'] ?? ''] ?? ($v['layer'] ?? '未知校验') }}
                                         </span>
                                         <span style="margin-left: 8px; font-size: 14px; color: #444444;">{{ $v['message'] ?? '' }}</span>
                                     </div>
@@ -1669,6 +1688,77 @@ HTML;
     private function getSystemAlertHtml(): string
     {
         return <<<'HTML'
+@php
+    $categoryLabels = [
+        'deploy_failure' => '自动部署或签发失败',
+        'payment_health' => '支付渠道证书检查',
+        'reconcile_maxed' => '订单对账转人工',
+        'acme_reconcile' => 'ACME 订阅对账',
+        'clock' => '服务器时钟检查',
+        'task_stale' => '任务停滞',
+        'missing_price' => '产品价格缺失',
+        'failed_jobs' => '队列任务失败',
+        'upgrade' => '系统升级',
+        'ca_credentials' => '证书颁发机构凭证检查',
+        'ca_connectivity' => '证书颁发机构连通性检查',
+        'backup' => '数据库备份',
+        'chain_verify' => '证书链校验',
+    ];
+    $detailLabels = [
+        'report_count' => '本封失败记录数',
+        'order_count' => '本封涉及订单数',
+        'client_failure_count' => '本封客户端上报失败记录数',
+        'server_failure_count' => '本封服务端记录失败数',
+        'order_sample' => '待处理订单编号（部分）',
+        'window_start' => '统计开始时间',
+        'window_end' => '统计结束时间',
+        'batch' => '当前批次',
+        'batch_count' => '总批次数',
+        'snapshot_at' => '快照生成时间',
+        'total' => '快照待处理订单总数',
+        'maxed_total' => '重试耗尽订单数',
+        'product_missing_total' => '产品缺失订单数',
+        'sources_agreed' => '一致时间源数量',
+        'skew_seconds' => '时钟偏差（秒）',
+        'local' => '本地时间',
+        'window_hours' => '统计时长（小时）',
+        'count' => '新增失败任务数',
+        'threshold' => '告警阈值',
+        'version' => '版本',
+        'pid' => '进程编号',
+        'lock_owner' => '锁持有方',
+        'stale_seconds' => '超时判定阈值（秒）',
+        'task_id' => '任务编号',
+        'task_action' => '任务动作',
+        'order_id' => '订单编号',
+        'acme_id' => '订阅编号',
+        'refer_id' => '请求关联标识',
+        'product_id' => '产品编号',
+        'period' => '订单服务周期（月）',
+        'level_code' => '用户等级',
+        'sample_order_id' => '触发告警的订单编号',
+        'probe' => '探测方式',
+        'consecutive' => '连续失败次数',
+        'issuer' => '签发机构',
+        'reason' => '原因',
+        'alipay_expiring' => '支付宝即将到期证书',
+        'alipay_invalid' => '支付宝无效证书',
+        'wechat_expiring' => '微信支付即将到期证书',
+        'wechat_invalid' => '微信支付无效证书',
+        '_truncated' => '省略字段数',
+    ];
+    $actionLabels = [
+        'commit' => '提交',
+        'sync' => '同步',
+        'revalidate' => '验证',
+        'cancel' => '取消',
+        'callback' => '回调',
+        'delegation' => '委托',
+        'commit_acme' => '提交 ACME 订阅',
+        'sync_acme' => '同步 ACME 订阅',
+        'cancel_acme' => '取消 ACME 订阅',
+    ];
+@endphp
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -1725,7 +1815,7 @@ HTML;
 
                                 @if(! empty($category))
                                 <p style="margin: 0 0 20px 0;">
-                                    <span class="category-badge" style="display: inline-block; background-color: #fff7ed; color: #b45309; padding: 3px 10px; border-radius: 4px; font-size: 12px; font-weight: 700; font-family: monospace;">{{ $category }}</span>
+                                    <span class="category-badge" style="display: inline-block; background-color: #fff7ed; color: #b45309; padding: 3px 10px; border-radius: 4px; font-size: 12px; font-weight: 700; font-family: monospace;">{{ $categoryLabels[$category] ?? $category }}</span>
                                 </p>
                                 @endif
 
@@ -1739,8 +1829,15 @@ HTML;
                                 <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="border-collapse: collapse; margin-bottom: 12px;">
                                     @foreach($details as $key => $value)
                                     <tr>
-                                        <td class="detail-key" width="35%" style="padding: 10px 0; font-size: 13px; color: #888888; vertical-align: top; border-bottom: 1px solid #f0f0f0; word-break: break-all;">{{ $key }}</td>
-                                        <td class="detail-value" style="padding: 10px 0; font-size: 14px; color: #333333; font-family: monospace; border-bottom: 1px solid #f0f0f0; word-break: break-all;">{{ $value }}</td>
+                                        <td class="detail-key" width="35%" style="padding: 10px 0; font-size: 13px; color: #888888; vertical-align: top; border-bottom: 1px solid #f0f0f0; word-break: break-all;">{{ $detailLabels[$key] ?? $key }}</td>
+                                        <td class="detail-value" style="padding: 10px 0; font-size: 14px; color: #333333; font-family: monospace; border-bottom: 1px solid #f0f0f0; word-break: break-all;">{{ match ($key) {
+                                            'alipay_expiring', 'alipay_invalid', 'wechat_expiring', 'wechat_invalid' => is_string($value) ? strtr($value, ['certPublicKeyRSA2' => '支付宝验签公钥或证书', 'appCertPublicKey' => '应用公钥证书', 'rootCert' => '根证书', 'apiclientCert' => '商户证书']) : $value,
+                                            'task_action' => $actionLabels[$value] ?? $value,
+                                            '_truncated' => is_string($value) ? preg_replace('/^\[truncated:(\d+) keys\]$/', '已省略 $1 个字段', $value) : $value,
+                                            'probe' => $value === 'get-products' ? '获取产品列表' : $value,
+                                            'reason' => ['chain_verify_failed' => '证书链签名校验失败', 'openssl_unavailable' => '证书校验工具不可用'][$value] ?? $value,
+                                            default => $value === '[filtered:non-scalar]' ? '复杂数据已过滤' : $value,
+                                        } }}</td>
                                     </tr>
                                     @endforeach
                                 </table>

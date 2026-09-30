@@ -57,10 +57,10 @@ test('L1 反例：直接 UPDATE balance 制造账目偏离，invariant 报违反
     expect($report['rows'])->toHaveCount(1);
     expect((int) $report['rows'][0]['id'])->toBe($user->id);
     // 防 ConcatRemoveLeft/Right + RemoveArrayItem：layer 标识 + 描述关键词都要在
-    expect($report['message'])->toContain('L1 账目恒等破');
+    expect($report['message'])->toContain('账目余额不一致');
     expect($report['message'])->toContain('个用户');
     expect($report['message'])->toBe(
-        'L1 账目恒等破：1 个用户的 balance 与 transactions 累计存在偏离'
+        '账目余额不一致：1 个用户的余额与交易流水累计金额不一致'
     );
 
     // 清理：恢复 balance 让后续测试干净
@@ -141,10 +141,10 @@ test('L3 反例（正向）：直接 INSERT funds.status=1 不写 transaction，
     expect($report['rows'][0]['direction'])->toBe('forward');
     expect((int) $report['rows'][0]['fund_id'])->toBe((int) $fundId);
     // 防 L156 RemoveNot (反转 if (! empty($forward))) + ConcatRemove*
-    expect($report['message'])->toContain('L3 状态-事件配对破');
-    expect($report['message'])->toContain('缺失对应 transaction');
+    expect($report['message'])->toContain('资金记录与交易流水关联异常');
+    expect($report['message'])->toContain('缺少对应交易流水');
     expect($report['message'])->toBe(
-        'L3 状态-事件配对破：1 条 fund 缺失对应 transaction'
+        '资金记录与交易流水关联异常：1 条资金记录缺少对应交易流水'
     );
 
     // 清理
@@ -175,11 +175,11 @@ test('L3 反例（反向）：fund 被违规删除留下孤儿 transaction，inv
     expect($report['layer'])->toBe('L3');
     expect(collect($report['rows'])->where('direction', 'reverse')->count())->toBe(1);
     // 防 L161 RemoveNot (反转 if (! empty($reverse))) + ConcatRemove*
-    expect($report['message'])->toContain('L3 状态-事件配对破');
-    expect($report['message'])->toContain('缺失对应已完成');
+    expect($report['message'])->toContain('资金记录与交易流水关联异常');
+    expect($report['message'])->toContain('缺少对应的已完成');
     expect($report['message'])->toBe(
-        'L3 状态-事件配对破：1 条资金 transaction '
-        .'缺失对应已完成/已退 fund（孤儿或状态未落地）'
+        '资金记录与交易流水关联异常：1 条交易流水'
+        .'缺少对应的已完成或已退款资金记录'
     );
 
     $reverseRow = collect($report['rows'])->firstWhere('direction', 'reverse');
@@ -225,8 +225,8 @@ test('L3 反例（反向）：transaction 已写但 fund 仍是处理中，invar
 
     expect($report)->not->toBeNull();
     expect($report['layer'])->toBe('L3');
-    expect($report['message'])->toContain('L3 状态-事件配对破');
-    expect($report['message'])->toContain('缺失对应已完成');
+    expect($report['message'])->toContain('资金记录与交易流水关联异常');
+    expect($report['message'])->toContain('缺少对应的已完成');
 
     $reverseRow = collect($report['rows'])->firstWhere('direction', 'reverse');
     expect($reverseRow)->not->toBeNull();
@@ -286,10 +286,10 @@ test('L4 反例：篡改 transaction.amount 制造金额错配，invariant 报�
     expect($report['layer'])->toBe('L4');
     expect($report['rows'])->toHaveCount(1);
     expect((int) $report['rows'][0]['fund_id'])->toBe($fund->id);
-    expect($report['message'])->toContain('L4 金额配对破');
-    expect($report['message'])->toContain('与对应 transaction');
+    expect($report['message'])->toContain('资金金额不一致');
+    expect($report['message'])->toContain('与对应交易流水');
     expect($report['message'])->toBe(
-        'L4 金额配对破：1 条 fund 与对应 transaction 金额或符号不匹配'
+        '资金金额不一致：1 条资金记录与对应交易流水的金额或正负号不一致'
     );
 
     // 清理
@@ -328,8 +328,8 @@ test('L4 符号反例：deduct 的 transaction 被错写成正数（应为负）
     expect($report['rows'])->toHaveCount(1);
     expect((int) $report['rows'][0]['fund_id'])->toBe($fund->id);
     expect($report['rows'][0]['type'])->toBe('deduct');
-    expect($report['message'])->toContain('L4 金额配对破');
-    expect($report['message'])->toContain('与对应 transaction');
+    expect($report['message'])->toContain('资金金额不一致');
+    expect($report['message'])->toContain('与对应交易流水');
 
     // 清理
     DB::table('transactions')->where('id', $tx->id)->update(['amount' => '-50.00']);

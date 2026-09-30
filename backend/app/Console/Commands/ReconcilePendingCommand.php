@@ -11,6 +11,7 @@ use App\Services\Order\Action;
 use App\Services\Order\PendingReconcileQuery;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Throwable;
@@ -20,6 +21,9 @@ use Throwable;
  */
 class ReconcilePendingCommand extends Command
 {
+    // 每封逐条列出 10 个订单，预留汇总字段，避免通知详情长度与字段数量上限截断。
+    private const ORDERS_PER_EMAIL = 10;
+
     protected $signature = 'schedule:reconcile-pending';
 
     protected $description = 'Requeue paid pending orders without upstream api_id';
@@ -201,31 +205,52 @@ class ReconcilePendingCommand extends Command
             $summaryRows[] = ['order_id' => (int) $order->id, 'product_missing' => $isProductMissing];
         }
 
-        if (empty($summaryRows)) {
+        $date = now()->toDateString();
+        $snapshotKey = "reconcile_order_maxed_snapshot_$date";
+        $snapshot = Cache::store('runtime')->get($snapshotKey);
+        if ($snapshot === null && $summaryRows !== []) {
+            // 固定当日首个非空快照，避免订单处理中途退出列表后批次位移，导致补发遗漏。
+            Cache::store('runtime')->add($snapshotKey, [
+                'rows' => $summaryRows,
+                'created_at' => now()->toDateTimeString(),
+            ], now()->endOfDay());
+            $snapshot = Cache::store('runtime')->get($snapshotKey);
+        }
+        if ($snapshot === null) {
             return;
         }
+        $summaryRows = $snapshot['rows'];
 
         $maxedTotal = count(array_filter($summaryRows, fn ($row) => ! $row['product_missing']));
         $productMissingTotal = count($summaryRows) - $maxedTotal;
-        $sample = implode(',', array_slice(array_map(fn ($row) => $row['order_id'], $summaryRows), 0, 20));
-
-        // 每日快照 admin 告警（吸收 M5）：fingerprint 含当天日期 → 每天首个非空轮发一封含当天全部转人工单，
-        // 同日指纹相同不重发，次日指纹变化必发（含存量+新增，防 SMTP 瞬断永久丢失）。新增单最坏延迟 1 天。
-        // details 键名避 denylist（total/maxed_total/product_missing_total/order_sample，无 cert/key/token）。
-        app(SystemAlert::class)->send(
-            'reconcile_maxed',
-            '卡单对账转人工每日汇总',
-            count($summaryRows).' 单已达重试上限或产品缺失，需人工处理（后续自动取消并退款）',
-            [
+        $batches = collect($summaryRows)->sortBy('order_id')->chunk(self::ORDERS_PER_EMAIL);
+        foreach ($batches as $index => $rows) {
+            $batch = $index + 1;
+            $batchCount = $batches->count();
+            $details = [
+                'snapshot_at' => $snapshot['created_at'],
                 'total' => count($summaryRows),
                 'maxed_total' => $maxedTotal,
                 'product_missing_total' => $productMissingTotal,
-                'order_sample' => $sample,
-            ],
-            'reconcile_order_maxed_summary',
-            24,
-            'maxed_summary_'.now()->toDateString()
-        );
+                'order_count' => $rows->count(),
+                'batch' => $batch,
+                'batch_count' => $batchCount,
+            ];
+            foreach ($rows as $row) {
+                $details['订单_'.$row['order_id']] = $row['product_missing'] ? '产品已下线或不存在' : '已达重试上限';
+            }
+
+            // 每批独立按日期去重；派发失败不占键，同日重跑可补发失败批次。
+            app(SystemAlert::class)->send(
+                'reconcile_maxed',
+                "卡单对账转人工每日汇总（{$batch}/{$batchCount}）",
+                count($summaryRows)." 个订单在快照生成时已达重试上限或产品缺失，需人工处理。本封列出 {$rows->count()} 个订单，请在控制台核实订单状态及后续处理安排。",
+                $details,
+                "reconcile_order_maxed_summary_$batch",
+                24,
+                "maxed_summary_{$date}_$batch"
+            );
+        }
     }
 
     /**

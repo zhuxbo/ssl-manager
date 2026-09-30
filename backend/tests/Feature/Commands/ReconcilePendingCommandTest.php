@@ -6,6 +6,7 @@ use App\Models\Order;
 use App\Models\Product;
 use App\Models\Task;
 use App\Models\User;
+use App\Services\Notification\Builders\SystemAlertNotificationBuilder;
 use App\Services\Notification\DTOs\NotificationIntent;
 use App\Services\Notification\NotificationCenter;
 use Illuminate\Support\Carbon;
@@ -195,7 +196,7 @@ test('到顶单触发 admin 每日快照告警且同日不重复告警', functio
         ->and($intent->notifiableType)->toBe('admin')
         ->and($intent->context['category'])->toBe('reconcile_maxed')
         ->and($intent->context['details']['total'])->toBe(1)
-        ->and($intent->context['details']['order_sample'])->toContain((string) $order->id)
+        ->and($intent->context['details']['订单_'.$order->id])->toBe('已达重试上限')
         ->and(hasReconcileCommitTask($order->id))->toBeFalse(); // 到顶单不建新 task
 });
 
@@ -582,4 +583,47 @@ test('T5：跨日快照重发（日期指纹变化）', function () {
     Carbon::setTestNow();
 
     expect($snapshotCount)->toBe(2);
+});
+
+test('卡单汇总完整分批且失败批次可补发而成功批次不重复', function () {
+    $admin = Admin::factory()->create(['email' => 'ops@example.test']);
+    $orderIds = [];
+    for ($i = 0; $i < 23; $i++) {
+        $order = makeReconcileOrder(['channel' => 'web']);
+        makeProductMissingFailedTask($order->id);
+        $orderIds[] = $order->id;
+    }
+    $sent = [];
+    $failOnce = true;
+    $mock = Mockery::mock(NotificationCenter::class);
+    $mock->shouldReceive('dispatch')->andReturnUsing(function (NotificationIntent $intent) use (&$sent, &$failOnce, $admin) {
+        $payload = app(SystemAlertNotificationBuilder::class)->build($intent, $admin);
+        $details = $payload->data['details'];
+        if ($details['batch'] === 2 && $failOnce) {
+            $failOnce = false;
+            throw new RuntimeException('模拟派发失败');
+        }
+        assertSystemAlertDetailsSafe($details);
+        $sent[] = $details;
+    });
+    $this->app->instance(NotificationCenter::class, $mock);
+    $this->artisan('schedule:reconcile-pending')->assertSuccessful();
+    expect($sent)->toHaveCount(2);
+    // 首批订单已恢复也不能改变失败批次的成员，补发仍使用当日原始快照。
+    Cert::where('order_id', $orderIds[0])->update(['status' => 'active']);
+    $this->artisan('schedule:reconcile-pending')->assertSuccessful();
+    $this->artisan('schedule:reconcile-pending')->assertSuccessful();
+    expect($sent)->toHaveCount(3);
+    $listed = [];
+    foreach ($sent as $details) {
+        expect($details['total'])->toBe(23)->and($details['batch_count'])->toBe(3);
+        foreach ($details as $key => $value) {
+            if (str_starts_with($key, '订单_')) {
+                $listed[] = (int) substr($key, strlen('订单_'));
+            }
+        }
+    }
+    sort($listed);
+    sort($orderIds);
+    expect($listed)->toBe($orderIds);
 });

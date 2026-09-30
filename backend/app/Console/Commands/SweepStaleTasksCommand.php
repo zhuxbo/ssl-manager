@@ -110,7 +110,7 @@ class SweepStaleTasksCommand extends Command
                 app(SystemAlert::class)->send(
                     'task_stale',
                     '僵尸任务重派耗尽转人工',
-                    "task #{$id} action={$task->action} order={$task->order_id} 重派 {$swept} 次仍未消费，已置 stopped，可在任务列表「启动」恢复",
+                    "任务 #{$id}（订单编号 {$task->order_id}）重新派发 {$swept} 次仍未被执行，已停止，可在任务列表点击「启动」恢复",
                     ['task_id' => $id, 'task_action' => $task->action, 'order_id' => (int) $task->order_id],
                     "task_swept_exhausted_$id",
                     24,

@@ -291,15 +291,24 @@ class CloudDeployJob implements ShouldQueue
     }
 
     /**
-     * 业务终态失败通知 target 所属 user（context 白名单 4 字段：不放 deployer message 原文，防 AK 外溢）。
+     * 业务终态失败通知 target 所属 user（context 白名单产品代码、展示名、域名、账号名与错误码：不放 deployer message 原文，防 AK 外溢）。
      * 复用既有 code cloud_deploy_failed（Builder/模板/偏好均在位，零新增）；error_code 区分场景。
      */
     private function notifyBusinessFailure(CloudDeployTarget $target, CloudDeployAccess $access, string $errorCode): void
     {
+        $registry = app(Registry::class);
+        $productLabel = $target->product;
+        try {
+            if ($registry->hasDeployer($access->provider, $target->product)) {
+                $productLabel = $registry->resolveDeployer($access->provider, $target->product)->label();
+            }
+        } catch (Throwable) {
+            // 展示名读取失败不应阻止原有失败通知。
+        }
         app(NotificationCenter::class)->dispatch(
             new NotificationIntent(
                 'cloud_deploy_failed', 'user', (int) $target->user_id,
-                ['product' => $target->product, 'domain' => $target->config['domain'] ?? '-', 'access_name' => $access->name ?? '-', 'error_code' => $errorCode],
+                ['product' => $target->product, 'product_label' => $productLabel, 'domain' => $target->config['domain'] ?? '-', 'access_name' => $access->name ?? '-', 'error_code' => $errorCode],
             )
         );
     }

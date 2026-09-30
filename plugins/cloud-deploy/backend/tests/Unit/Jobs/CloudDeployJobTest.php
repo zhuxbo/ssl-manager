@@ -1264,6 +1264,8 @@ test('failed() 重试耗尽派 cloud_deploy_failed 通知，context 仅白名单
             && $intent->notifiableType === 'user'
             && $intent->notifiableId === (int) $target->user_id
             && ($intent->context['error_code'] ?? null) === 'retries_exhausted'
+            && ($intent->context['product'] ?? null) === 'cdn'
+            && ($intent->context['product_label'] ?? null) === '阿里云 CDN'
             && ! array_key_exists('error', $intent->context);   // 白名单：无 message 原文
     });
     app()->instance(NotificationCenter::class, $spy);

@@ -85,7 +85,7 @@ class PaymentHealthCommand extends Command
         app(SystemAlert::class)->send(
             'payment_health',
             '充值渠道证书异常',
-            '支付渠道存在即将到期或无法解析的已配置证书，请检查：'.implode('; ', array_keys($details)),
+            '支付渠道存在即将到期或无法解析的已配置证书，请检查下方明细。',
             $details,
             self::DEDUPE_KEY,
             (int) config('monitoring.payment_health.dedupe_ttl_hours', 168),

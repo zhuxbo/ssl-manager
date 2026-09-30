@@ -139,7 +139,7 @@ class ReconcileAcmeCommand extends Command
             app(SystemAlert::class)->send(
                 'acme_reconcile',
                 'ACME 订单对账重试耗尽转人工',
-                "acme #$acmeId refer_id={$acme->refer_id} 多次提交上游失败，需人工处理",
+                "ACME 订阅编号 {$acmeId}（请求关联标识 {$acme->refer_id}）多次提交上游失败，需人工处理",
                 ['acme_id' => $acmeId, 'refer_id' => $acme->refer_id], // 键名避 denylist
                 "acme_reconcile_maxed_$acmeId",
                 24,

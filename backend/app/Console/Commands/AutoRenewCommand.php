@@ -245,7 +245,7 @@ class AutoRenewCommand extends Command
                 app(SystemAlert::class)->send(
                     'missing_price',
                     '产品价格未配置（自动续费已跳过）',
-                    "product_id={$product->id} period={$order->period} 无任何价格行，该组合自动续费已跳过，请补配价格",
+                    "产品编号 {$product->id}、服务周期 {$order->period} 个月未配置价格，已跳过自动续费，请补充价格配置",
                     [
                         'product_id' => $product->id,
                         'period' => $order->period,
