@@ -2511,13 +2511,12 @@ test('revokeCancel 满一分钟才允许撤回并同步状态', function (int $s
     Queue::fake();
     $this->freezeTime();
     [$order, $cert] = createOrderWithCertForRevoke('cancelling');
-    $cert->update(['cancel_requested_at' => now()->subSeconds($seconds)]);
+    $cert->forceFill(['updated_at' => now()->subSeconds($seconds)])->save();
     $task = Task::factory()->create(['order_id' => $order->id, 'action' => 'cancel', 'status' => 'executing']);
 
     if ($allowed) {
         expectOrderApiSuccess(fn () => $this->service->revokeCancel($order->id));
         expect($cert->fresh()->status)->toBe('approving')
-            ->and($cert->fresh()->cancel_requested_at)->toBeNull()
             ->and($task->fresh())->toBeNull();
         expect(Task::where('order_id', $order->id)->where('action', 'sync')->exists())->toBeTrue();
         expect(Transaction::where('transaction_id', $order->id)->exists())->toBeFalse();
@@ -2529,12 +2528,12 @@ test('revokeCancel 满一分钟才允许撤回并同步状态', function (int $s
 
 test('revokeCancel 拒绝已取消订单', function () {
     [$order, $cert] = createOrderWithCertForRevoke('cancelled');
-    $cert->update(['cancel_requested_at' => now()->subMinutes(2)]);
+    $cert->forceFill(['updated_at' => now()->subMinutes(2)])->save();
     expectOrderApiError(fn () => $this->service->revokeCancel($order->id), '不在取消中');
     expect($cert->fresh()->status)->toBe('cancelled');
 });
 
-test('revokeCancel 兼容历史取消中订单', function () {
+test('revokeCancel 使用证书最后更新时间', function () {
     Queue::fake();
     [$order, $cert] = createOrderWithCertForRevoke('cancelling');
     DB::table('certs')->where('id', $cert->id)->update(['updated_at' => now()->subMinutes(2)]);
@@ -2547,8 +2546,8 @@ test('batchRevokeCancel 只撤回已满一分钟的取消中订单', function ()
     [$old, $oldCert] = createOrderWithCertForRevoke('cancelling');
     [$recent, $recentCert] = createOrderWithCertForRevoke('cancelling');
     [$done, $doneCert] = createOrderWithCertForRevoke('cancelled');
-    $oldCert->update(['cancel_requested_at' => now()->subMinutes(2)]);
-    $recentCert->update(['cancel_requested_at' => now()]);
+    $oldCert->forceFill(['updated_at' => now()->subMinutes(2)])->save();
+    $recentCert->forceFill(['updated_at' => now()])->save();
     expectOrderApiSuccess(fn () => $this->service->batchRevokeCancel([$old->id, $recent->id, $done->id]));
     expect($oldCert->fresh()->status)->toBe('approving')
         ->and($recentCert->fresh()->status)->toBe('cancelling')
@@ -2560,9 +2559,23 @@ test('commitCancel 重新提交取消重置一分钟计时', function () {
     $this->freezeTime();
     $this->product->update(['refund_period' => 30]);
     [$order, $cert] = createOrderWithCertForRevoke('cancelling');
-    $cert->update(['cancel_requested_at' => now()->subMinutes(2)]);
+    $cert->forceFill(['updated_at' => now()->subMinutes(2)])->save();
     expectOrderApiSuccess(fn () => $this->service->revokeCancel($order->id));
     expectOrderApiSuccess(fn () => $this->service->commitCancel($order->id));
-    expect($cert->fresh()->cancel_requested_at->timestamp)->toBe(now()->timestamp);
+    expect($cert->fresh()->updated_at->timestamp)->toBe(now()->timestamp);
     expectOrderApiError(fn () => $this->service->revokeCancel($order->id), '满1分钟');
+});
+
+test('证书再次更新会延后单笔和批量撤回', function () {
+    Queue::fake();
+    $this->freezeTime();
+    [$order, $cert] = createOrderWithCertForRevoke('cancelling');
+    $cert->forceFill(['updated_at' => now()->subMinutes(2)])->save();
+    $cert->update(['common_name' => 'updated.example.com']);
+    expectOrderApiError(fn () => $this->service->revokeCancel($order->id), '满1分钟');
+    expectOrderApiError(fn () => $this->service->batchRevokeCancel([$order->id]), '没有可以撤销');
+    expect($cert->fresh()->status)->toBe('cancelling');
+    $this->travel(60)->seconds();
+    expectOrderApiSuccess(fn () => $this->service->revokeCancel($order->id));
+    expect($cert->fresh()->status)->toBe('approving');
 });

@@ -325,7 +325,7 @@ export function updateAutoSettings(
   >(`/order/auto-settings/${id}`, { data });
 }
 
-/** 撤回提交满一分钟仍未完成的取消申请。 */
+/** 撤回证书最后更新满一分钟仍未完成的取消申请。 */
 export function revokeCancel(id: number): Promise<BaseResponse> {
   return http.post<BaseResponse<null>, any>(`/order/revoke-cancel/${id}`);
 }

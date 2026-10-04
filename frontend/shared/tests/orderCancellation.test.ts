@@ -9,12 +9,11 @@ const now = Date.parse("2026-09-27T12:00:00+08:00");
 const row = (seconds: number, status = "cancelling") => ({
   latest_cert: {
     status,
-    cancel_requested_at: new Date(now - seconds * 1000).toISOString(),
-    updated_at: new Date(now).toISOString()
+    updated_at: new Date(now - seconds * 1000).toISOString()
   }
 });
 
-test("满一分钟才显示撤回，不受其他更新时间影响", () => {
+test("证书最后更新满一分钟才显示撤回", () => {
   assert.equal(canRevokeOrderCancellation(row(59), now), false);
   assert.equal(canRevokeOrderCancellation(row(60), now), true);
   assert.equal(canRevokeOrderCancellation(row(61), now), true);
@@ -22,7 +21,7 @@ test("满一分钟才显示撤回，不受其他更新时间影响", () => {
   assert.equal(canRevokeOrderCancellation({}, now), false);
 });
 
-test("历史取消中订单使用更新时间，缺失或非法时间不显示", () => {
+test("更新时间缺失或非法时不显示", () => {
   for (const updated_at of [
     undefined,
     "invalid",
@@ -64,4 +63,13 @@ test("批量必须有取消中订单且全部满一分钟", () => {
     canBatchRevokeOrderCancellation([row(120), row(60), row(0, "active")], now),
     true
   );
+});
+
+test("证书再次更新会延后单笔和批量撤回", () => {
+  const order = row(120);
+  assert.equal(canRevokeOrderCancellation(order, now), true);
+  order.latest_cert.updated_at = new Date(now).toISOString();
+  assert.equal(canRevokeOrderCancellation(order, now), false);
+  assert.equal(canBatchRevokeOrderCancellation([row(120), order], now), false);
+  assert.equal(canRevokeOrderCancellation(order, now + 60_000), true);
 });

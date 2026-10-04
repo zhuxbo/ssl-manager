@@ -519,7 +519,7 @@ const commitCancel = async () => {
   if (
     await confirmOrderCancellation(
       statuses,
-      "将取消选中的可取消订单：未支付申请删除，待提交申请按规则退款；已提交上游的订单立即提交取消处理，成功后按规则退款，证书可能失效。提交取消满1分钟仍未取消成功时可撤回。",
+      "将取消选中的可取消订单：未支付申请删除，待提交申请按规则退款；已提交上游的订单立即提交取消处理，成功后按规则退款，证书可能失效。仍在取消中且证书最后更新满1分钟时可撤回。",
       () => OrderApi.batchCommitCancel(filteredIds.toString())
     )
   ) {

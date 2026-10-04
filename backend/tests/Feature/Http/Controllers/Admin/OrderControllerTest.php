@@ -785,13 +785,13 @@ test('管理员发送激活邮件：旧 GET 入口已下线（副作用端点不
 
 test('管理员支持单笔和批量撤回超时取消订单', function () {
     Queue::fake();
-    [$order, $cert] = createOrderWithCert('cancelling', [], ['cancel_requested_at' => now()->subMinutes(2)]);
+    [$order, $cert] = createOrderWithCert('cancelling', [], ['updated_at' => now()->subMinutes(2)]);
     $this->actingAsAdmin($this->admin)->getJson('/api/admin/order')->assertOk()
-        ->assertJsonPath('data.items.0.latest_cert.cancel_requested_at', $cert->toArray()['cancel_requested_at']);
+        ->assertJsonPath('data.items.0.latest_cert.updated_at', $cert->toArray()['updated_at']);
     $this->actingAsAdmin($this->admin)->postJson("/api/admin/order/revoke-cancel/$order->id")
         ->assertOk()->assertJson(['code' => 1]);
     expect($cert->fresh()->status)->toBe('approving');
-    [$batch, $batchCert] = createOrderWithCert('cancelling', [], ['cancel_requested_at' => now()->subMinutes(2)]);
+    [$batch, $batchCert] = createOrderWithCert('cancelling', [], ['updated_at' => now()->subMinutes(2)]);
     $this->actingAsAdmin($this->admin)->postJson('/api/admin/order/batch-revoke-cancel', ['ids' => [$batch->id]])
         ->assertOk()->assertJson(['code' => 1]);
     expect($batchCert->fresh()->status)->toBe('approving');

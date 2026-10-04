@@ -148,7 +148,7 @@ trait ActionBatchTrait
                         return;
                     }
 
-                    $locked->latestCert->update(['status' => 'cancelling', 'cancel_requested_at' => now()]);
+                    $locked->latestCert->update(['status' => 'cancelling']);
                     $this->deleteTask($locked->id, 'commit,sync,revalidate');
                     $this->createTask($locked->id, 'cancel');
                 });
@@ -170,7 +170,7 @@ trait ActionBatchTrait
         // 前置过滤：只保留 cancelling 状态的订单，避免对非 cancelling 订单触发报错
         // 锁内二次校验由 revokeCancel 自身兜住（处理并发竞争）
         $filteredIds = Order::with(['latestCert'])
-            ->whereHas('latestCert', fn ($query) => $query->where('status', 'cancelling')->whereRaw('COALESCE(cancel_requested_at, updated_at) <= ?', [now()->subMinute()]))
+            ->whereHas('latestCert', fn ($query) => $query->where('status', 'cancelling')->where('updated_at', '<=', now()->subMinute()))
             ->whereIn('id', $orderIds)
             ->pluck('id')
             ->all();

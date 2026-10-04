@@ -1136,7 +1136,7 @@ class Action
                 && $this->error("订单已超过 $refundPeriod 天不能取消");
 
                 // 事务提交后立即执行取消任务
-                $order->latestCert->update(['status' => 'cancelling', 'cancel_requested_at' => now()]);
+                $order->latestCert->update(['status' => 'cancelling']);
                 $this->deleteTask($orderId, 'sync,revalidate');
                 $this->createTask($orderId, 'cancel');
             });
@@ -1164,12 +1164,12 @@ class Action
 
             $order->latestCert->status !== 'cancelling' && $this->error('订单不在取消中状态');
 
-            $requestedAt = $order->latestCert->cancel_requested_at ?? $order->latestCert->updated_at;
-            (! $requestedAt || $requestedAt->gt(now()->subMinute()))
-                && $this->error('提交取消满1分钟后才能撤回');
+            $updatedAt = $order->latestCert->updated_at;
+            (! $updatedAt || $updatedAt->gt(now()->subMinute()))
+                && $this->error('证书最后更新满1分钟后才能撤回');
 
             $this->deleteTask($orderId, 'cancel');
-            $order->latestCert->update(['status' => 'approving', 'cancel_requested_at' => null]);
+            $order->latestCert->update(['status' => 'approving']);
             $this->createTask($orderId, 'sync');
         });
 
@@ -1235,7 +1235,7 @@ class Action
             || $this->error('Order cannot be cancelled');
 
             if ($status !== 'cancelling') {
-                $order->latestCert->update(['status' => 'cancelling', 'cancel_requested_at' => now()]);
+                $order->latestCert->update(['status' => 'cancelling']);
             }
             $this->deleteTask($orderId, ['sync', 'revalidate']);
 

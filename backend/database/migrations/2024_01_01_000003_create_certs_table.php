@@ -61,7 +61,6 @@ return new class extends Migration
                     'reissued',
                     'expired',
                 ])->default('unpaid')->index()->comment('状态');
-                $table->timestamp('cancel_requested_at')->nullable()->comment('提交取消时间');
                 $table->timestamps();
             });
         }

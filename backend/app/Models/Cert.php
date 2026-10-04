@@ -51,7 +51,6 @@ class Cert extends BaseModel
         'dcv',
         'validation',
         'documents',
-        'cancel_requested_at',
         'issued_at',
         'expires_at',
         'csr_md5',
@@ -83,7 +82,6 @@ class Cert extends BaseModel
         'cert_apply_status' => 'integer',
         'domain_verify_status' => 'integer',
         'org_verify_status' => 'integer',
-        'cancel_requested_at' => 'datetime',
         'issued_at' => 'datetime',
         'expires_at' => 'datetime',
     ];
