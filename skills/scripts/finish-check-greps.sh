@@ -341,8 +341,11 @@ z14_task_lock_scope_wiring() {
     if ! printf '%s\n' "$method" | grep -Fq -- "->whereIn('action', \$actions)"; then
         echo "$file: scopeLockForMutation missing whereIn('action', \$actions)"
     fi
-    if ! printf '%s\n' "$method" | grep -Fq -- "->whereIn('status', ['executing', 'stopped'])"; then
-        echo "$file: scopeLockForMutation missing whereIn('status', ['executing', 'stopped'])"
+    if ! printf '%s\n' "$method" | grep -Fq -- "array \$statuses = ['executing', 'stopped']"; then
+        echo "$file: scopeLockForMutation missing default executing/stopped statuses"
+    fi
+    if ! printf '%s\n' "$method" | grep -Fq -- "->whereIn('status', \$statuses)"; then
+        echo "$file: scopeLockForMutation missing whereIn('status', statuses)"
     fi
     if ! printf '%s\n' "$method" | grep -Fq -- "->select('id')"; then
         echo "$file: scopeLockForMutation missing select('id')"

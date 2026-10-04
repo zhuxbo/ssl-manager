@@ -41,7 +41,16 @@
       plain
       size="small"
       @click="revokeCancel"
-      >撤回取消</el-button
+      >撤回</el-button
+    >
+    <el-button
+      v-if="canRevokeOrderCancellation(order, now.getTime())"
+      type="warning"
+      plain
+      size="small"
+      :loading="retryingCancel"
+      @click="retryCancel"
+      >重试</el-button
     >
   </div>
   <el-button
@@ -259,6 +268,18 @@ const revokeCancel = async () => {
   await OrderApi.revokeCancel(order.id);
   message("撤回取消成功，正在同步订单状态", { type: "success" });
   get(true);
+};
+const retryingCancel = ref(false);
+const retryCancel = async () => {
+  if (retryingCancel.value) return;
+  retryingCancel.value = true;
+  try {
+    await OrderApi.retryCancel(order.id);
+    message("取消任务已重新提交", { type: "success" });
+    await get(true);
+  } finally {
+    retryingCancel.value = false;
+  }
 };
 </script>
 

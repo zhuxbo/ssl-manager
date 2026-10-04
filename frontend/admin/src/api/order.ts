@@ -348,3 +348,8 @@ export function batchRevokeCancel(ids: string): Promise<BaseResponse> {
     data: { ids }
   });
 }
+
+/** 重试尚未完成的取消任务。 */
+export function retryCancel(id: number): Promise<BaseResponse> {
+  return http.post<BaseResponse<null>, any>(`/order/retry-cancel/${id}`);
+}

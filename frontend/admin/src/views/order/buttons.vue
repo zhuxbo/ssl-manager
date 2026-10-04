@@ -77,7 +77,7 @@
       link
       :size="size"
       @click="handleRevokeCancel(row)"
-      >撤回取消</el-button
+      >撤回</el-button
     >
   </div>
 </template>

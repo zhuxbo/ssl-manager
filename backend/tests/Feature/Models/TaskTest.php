@@ -111,3 +111,14 @@ test('任务 source 字段', function () {
     $task2 = Task::factory()->create(['source' => 'user']);
     expect($task2->source)->toBe('user');
 });
+
+test('任务变更锁默认只包含执行中及停止任务，重试可显式锁失败任务', function () {
+    $order = Order::factory()->create();
+    foreach (['executing', 'stopped', 'failed', 'successful'] as $status) {
+        Task::factory()->create(['order_id' => $order->id, 'action' => 'cancel', 'status' => $status]);
+    }
+    $default = Task::lockForMutation($order->id, ['cancel'])->addSelect('status')->get();
+    expect($default->pluck('status')->sort()->values()->all())->toBe(['executing', 'stopped']);
+    $retry = Task::lockForMutation($order->id, ['cancel'], ['executing', 'stopped', 'failed'])->addSelect('status')->get();
+    expect($retry->pluck('status')->sort()->values()->all())->toBe(['executing', 'failed', 'stopped']);
+});

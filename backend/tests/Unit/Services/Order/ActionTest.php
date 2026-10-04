@@ -2,6 +2,7 @@
 
 use App\Exceptions\ApiResponseException;
 use App\Jobs\CleanupDelegationTxtJob;
+use App\Jobs\TaskJob;
 use App\Models\Admin;
 use App\Models\Callback;
 use App\Models\Cert;
@@ -2578,4 +2579,81 @@ test('证书再次更新会延后单笔和批量撤回', function () {
     $this->travel(60)->seconds();
     expectOrderApiSuccess(fn () => $this->service->revokeCancel($order->id));
     expect($cert->fresh()->status)->toBe('approving');
+});
+
+test('retryCancel 重启失败或停止任务，无任务时新建并只派发一次', function (?string $taskStatus) {
+    Queue::fake();
+    $this->freezeTime();
+    [$order, $cert] = createOrderWithCertForRevoke('cancelling');
+    $cert->forceFill(['updated_at' => now()->subMinutes(2)])->save();
+    $oldTask = $taskStatus ? Task::factory()->create([
+        'order_id' => $order->id, 'action' => 'cancel', 'status' => $taskStatus,
+        'started_at' => now()->addHour(), 'attempts' => 3,
+    ]) : null;
+    expectOrderApiSuccess(fn () => $this->service->retryCancel($order->id));
+    $task = Task::where('order_id', $order->id)->where('action', 'cancel')->sole();
+    expect($task->status)->toBe('executing')
+        ->and($task->started_at->timestamp)->toBe(now()->timestamp)
+        ->and($task->weight)->toBe($task->id)
+        ->and($cert->fresh()->status)->toBe('cancelling')
+        ->and($cert->fresh()->updated_at->timestamp)->toBe(now()->timestamp);
+    if ($oldTask) {
+        expect($task->id)->toBe($oldTask->id)->and($task->attempts)->toBe(3);
+    }
+    Queue::assertPushed(TaskJob::class, 1);
+    Queue::assertPushed(TaskJob::class, fn ($job) => $job->afterCommit === true && $job->delay === null);
+    expectOrderApiError(fn () => $this->service->retryCancel($order->id), '满1分钟');
+    Queue::assertPushed(TaskJob::class, 1);
+})->with([null, 'failed', 'stopped']);
+
+test('retryCancel 已有执行中任务不重新派发或新建', function () {
+    Queue::fake();
+    [$order, $cert] = createOrderWithCertForRevoke('cancelling');
+    $cert->forceFill(['updated_at' => now()->subMinutes(2)])->save();
+    foreach (['failed', 'executing'] as $status) {
+        Task::factory()->create(['order_id' => $order->id, 'action' => 'cancel', 'status' => $status]);
+    }
+    expectOrderApiError(fn () => $this->service->retryCancel($order->id), '正在执行');
+    expect(Task::where('order_id', $order->id)->where('status', 'failed')->count())->toBe(1);
+    Queue::assertNothingPushed();
+});
+
+test('retryCancel 拒绝不满足状态或时间条件的订单', function (string $status, int $seconds) {
+    Queue::fake();
+    [$order, $cert] = createOrderWithCertForRevoke($status);
+    $cert->forceFill(['updated_at' => now()->subSeconds($seconds)])->save();
+    expectOrderApiError(fn () => $this->service->retryCancel($order->id), $status === 'cancelling' ? '满1分钟' : '不在取消中');
+    expect(Task::where('order_id', $order->id)->count())->toBe(0);
+    Queue::assertNothingPushed();
+})->with([['cancelled', 120], ['processing', 120], ['cancelling', 59]]);
+
+test('retryCancel 优先只重启最新失败任务', function () {
+    Queue::fake();
+    [$order, $cert] = createOrderWithCertForRevoke('cancelling');
+    $cert->forceFill(['updated_at' => now()->subMinutes(2)])->save();
+    $older = Task::factory()->create(['order_id' => $order->id, 'action' => 'cancel', 'status' => 'failed']);
+    $latest = Task::factory()->create(['order_id' => $order->id, 'action' => 'cancel', 'status' => 'failed']);
+    $stopped = Task::factory()->create(['order_id' => $order->id, 'action' => 'cancel', 'status' => 'stopped']);
+    expectOrderApiSuccess(fn () => $this->service->retryCancel($order->id));
+    expect($older->fresh()->status)->toBe('failed')
+        ->and($latest->fresh()->status)->toBe('executing')
+        ->and($stopped->fresh()->status)->toBe('stopped');
+    Queue::assertPushed(TaskJob::class, 1);
+});
+
+test('retryCancel 重启后的任务实际再次调用上游取消', function () {
+    Queue::fake();
+    $this->product->update(['refund_period' => 30]);
+    [$order, $cert] = createOrderWithCertForRevoke('cancelling');
+    $cert->forceFill(['updated_at' => now()->subMinutes(2)])->save();
+    $task = Task::factory()->create(['order_id' => $order->id, 'action' => 'cancel', 'status' => 'failed', 'attempts' => 3]);
+    $api = Mockery::mock(Api::class);
+    $api->shouldReceive('cancel')->once()->with($order->id)->andThrow(new ApiResponseException('上游仍拒绝取消'));
+    $this->app->instance(Api::class, $api);
+    expectOrderApiSuccess(fn () => $this->service->retryCancel($order->id));
+    (new TaskJob(['id' => $task->id]))->handle();
+    expect($task->fresh()->status)->toBe('failed')
+        ->and($task->fresh()->attempts)->toBe(4)
+        ->and($task->fresh()->result['msg'])->toBe('上游仍拒绝取消');
+    expect($cert->fresh()->status)->toBe('cancelling');
 });

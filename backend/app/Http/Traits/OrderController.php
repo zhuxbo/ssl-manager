@@ -358,6 +358,11 @@ trait OrderController
         }
     }
 
+    public function retryCancel(int $id): void
+    {
+        $this->action->retryCancel($id);
+    }
+
     public function revokeCancel(int $id): void
     {
         $this->action->revokeCancel($id);

@@ -1,5 +1,6 @@
 <?php
 
+use App\Jobs\TaskJob;
 use App\Models\Admin;
 use App\Models\AutoDeployReport;
 use App\Models\Cert;
@@ -8,6 +9,7 @@ use App\Models\Product;
 use App\Models\ProductPrice;
 use App\Models\Setting;
 use App\Models\SettingGroup;
+use App\Models\Task;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Services\Notification\NotificationCenter;
@@ -795,4 +797,13 @@ test('管理员支持单笔和批量撤回超时取消订单', function () {
     $this->actingAsAdmin($this->admin)->postJson('/api/admin/order/batch-revoke-cancel', ['ids' => [$batch->id]])
         ->assertOk()->assertJson(['code' => 1]);
     expect($batchCert->fresh()->status)->toBe('approving');
+});
+
+test('管理员详情可重试取消并创建缺失任务', function () {
+    Queue::fake();
+    [$order] = createOrderWithCert('cancelling', [], ['updated_at' => now()->subMinutes(2)]);
+    $this->actingAsAdmin($this->admin)->postJson("/api/admin/order/retry-cancel/$order->id")
+        ->assertOk()->assertJson(['code' => 1]);
+    expect(Task::where('order_id', $order->id)->where('action', 'cancel')->where('status', 'executing')->count())->toBe(1);
+    Queue::assertPushed(TaskJob::class, 1);
 });

@@ -1,5 +1,6 @@
 <?php
 
+use App\Jobs\TaskJob;
 use App\Models\AutoDeployReport;
 use App\Models\Cert;
 use App\Models\Contact;
@@ -1123,3 +1124,20 @@ test('用户不能撤回他人的取消申请', function () {
     expect($cert->fresh()->status)->toBe('cancelling');
     expect(Task::where('order_id', $order->id)->where('action', 'sync')->exists())->toBeFalse();
 });
+
+test('用户可重试自己的取消任务且不能重试他人订单', function (bool $own) {
+    Queue::fake();
+    $user = User::factory()->create();
+    $order = Order::factory()->create(['user_id' => $own ? $user->id : User::factory()->create()->id]);
+    $cert = Cert::factory()->create(['order_id' => $order->id, 'status' => 'cancelling', 'updated_at' => now()->subMinutes(2)]);
+    $order->update(['latest_cert_id' => $cert->id]);
+    $task = Task::factory()->create(['order_id' => $order->id, 'action' => 'cancel', 'status' => 'failed']);
+    $this->actingAsUser($user)->postJson("/api/order/retry-cancel/$order->id")
+        ->assertOk()->assertJson(['code' => $own ? 1 : 0]);
+    expect($task->fresh()->status)->toBe($own ? 'executing' : 'failed');
+    if ($own) {
+        Queue::assertPushed(TaskJob::class, 1);
+    } else {
+        Queue::assertNothingPushed();
+    }
+})->with([true, false]);

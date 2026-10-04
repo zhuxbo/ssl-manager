@@ -8,6 +8,7 @@ use App\Exceptions\ApiResponseException;
 use App\Http\Requests\Product\ImportCaProductRequest;
 use App\Http\Requests\Product\UpdateRequest;
 use App\Jobs\CleanupDelegationTxtJob;
+use App\Jobs\TaskJob;
 use App\Models\Callback;
 use App\Models\Cert;
 use App\Models\Chain;
@@ -1173,6 +1174,35 @@ class Action
             $this->createTask($orderId, 'sync');
         });
 
+        $this->success();
+    }
+
+    /** 重试未完成的取消，沿用 task→order 锁序及提交后派发。 */
+    public function retryCancel(int $orderId): void
+    {
+        $this->runTaskMutationTransaction(function () use ($orderId) {
+            $tasks = Task::lockForMutation($orderId, ['cancel'], ['executing', 'stopped', 'failed'])
+                ->addSelect(['status'])->get();
+            $order = Order::with('latestCert')->whereHas('latestCert')->lock()->find($orderId);
+            $order || $this->error('订单或相关数据不存在');
+            $cert = $order->latestCert;
+            $cert->status === 'cancelling' || $this->error('订单不在取消中状态');
+            (! $cert->updated_at || $cert->updated_at->gt(now()->subMinute()))
+                && $this->error('证书最后更新满1分钟后才能重试');
+            $tasks->contains('status', 'executing') && $this->error('取消任务正在执行，请稍后刷新');
+
+            $task = $tasks->where('status', 'failed')->sortByDesc('id')->first()
+                ?? $tasks->where('status', 'stopped')->sortByDesc('id')->first();
+            $task ??= new Task([
+                'order_id' => $orderId,
+                'action' => 'cancel',
+                'source' => getControllerCategory(),
+            ]);
+            $task->fill(['status' => 'executing', 'started_at' => now(), 'weight' => $task->id ?? 0]);
+            $task->save();
+            TaskJob::dispatch(['id' => $task->id])->afterCommit()->onQueue(config('queue.names.tasks'));
+            $cert->touch();
+        });
         $this->success();
     }
 

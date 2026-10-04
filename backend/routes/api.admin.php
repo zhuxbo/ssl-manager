@@ -134,6 +134,7 @@ Route::prefix('admin')->middleware('api.admin')->group(function () {
         Route::post('sync/{id}', [OrderController::class, 'sync'])->where('id', '[0-9]+');
         Route::post('commit-cancel/{id}', [OrderController::class, 'commitCancel'])->where('id', '[0-9]+');
         Route::post('revoke-cancel/{id}', [OrderController::class, 'revokeCancel'])->where('id', '[0-9]+');
+        Route::post('retry-cancel/{id}', [OrderController::class, 'retryCancel'])->where('id', '[0-9]+');
         Route::post('archive/{id}', [OrderController::class, 'archive'])->where('id', '[0-9]+');
         Route::post('remark/{id}', [OrderController::class, 'remark'])->where('id', '[0-9]+');
         Route::get('download', [OrderController::class, 'download']);
