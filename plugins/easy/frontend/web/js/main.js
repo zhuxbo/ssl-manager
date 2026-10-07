@@ -999,12 +999,19 @@
       txtConflict ? "table-row" : "none";
     document.getElementById("check-txt-conflict").textContent = txtConflict || "";
 
-    for (const type of ["dnssec", "caa"]) {
-      const warning = validation.issuance_check?.[type] || "";
-      document.getElementById(`check-${type}-row`).style.display =
-        warning ? "table-row" : "none";
-      document.getElementById(`check-${type}`).textContent = warning;
-    }
+    const caaWarning = validation.issuance_check?.caa || "";
+    document.getElementById("check-caa-row").style.display =
+      caaWarning ? "table-row" : "none";
+    document.getElementById("check-caa").textContent = caaWarning;
+
+    const dnssec = validation.issuance_check?.dnssec;
+    document.getElementById("check-dnssec-row").style.display =
+      dnssec?.message ? "table-row" : "none";
+    const dnssecElement = document.getElementById("check-dnssec");
+    dnssecElement.textContent = dnssec?.message || "";
+    dnssecElement.style.color = dnssec?.state === "secure"
+      ? "var(--success-color)"
+      : dnssec?.state === "bogus" ? "var(--danger-color)" : "var(--warning-color)";
 
     if (isDelegate) {
       const ca = certDcv.ca || window.appState.product?.ca || "";
@@ -1124,7 +1131,7 @@
     setLoading(true, "recheck-btn");
 
     const checkedValidation = window.appState.validation;
-    checkedValidation.issuance_check = { caa: "", dnssec: "" };
+    checkedValidation.issuance_check = { caa: "", dnssec: null };
     updateCheckDialog(checkedValidation);
     const issuanceCheck = API.verifyIssuance(
       checkedValidation.domain,

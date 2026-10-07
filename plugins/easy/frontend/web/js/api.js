@@ -220,8 +220,16 @@ window.API = (function () {
 
   // 签发诊断独立于 DCV；仅外部 DNS Tools 提供此接口。
   async function verifyIssuance(domain, brand) {
-    const warnings = { caa: "", dnssec: "" };
-    if (!brand || domain.includes(":") || /^\d+\.\d+\.\d+\.\d+$/.test(domain)) {
+    const warnings = { caa: "", dnssec: null };
+    if (domain.includes(":") || /^\d+\.\d+\.\d+\.\d+$/.test(domain)) {
+      return warnings;
+    }
+    warnings.dnssec = {
+      state: "indeterminate",
+      message: "DNSSEC 暂无法判定：检测服务不可用，请重新检测"
+    };
+    if (!brand) {
+      warnings.dnssec.message = "DNSSEC 暂无法判定：缺少证书 CA 信息";
       return warnings;
     }
     for (const host of Config.getDnsToolsHosts().filter(Boolean)) {
@@ -240,17 +248,36 @@ window.API = (function () {
           : null;
         if (!result || typeof result.valid !== "boolean") continue;
 
-        const hasDnssec = ["secure", "bogus"].includes(result.dnssec?.state);
         const caaConflict = result.valid === false &&
           Array.isArray(result.caa_records) && result.caa_records.length > 0;
-        return {
-          caa: caaConflict
-            ? `检测到 ${domain} 的 CAA 记录不允许当前 CA（${brand}）签发，请删除已有 CAA 记录，或添加允许该 CA 签发的 CAA 记录`
-            : "",
-          dnssec: hasDnssec
-            ? `检测到 ${domain} 已启用 DNSSEC，请在域名注册商处关闭 DNSSEC（删除 DS 记录），并等待生效。`
-            : ""
-        };
+        warnings.caa = caaConflict
+          ? `检测到 ${domain} 的 CAA 记录不允许当前 CA（${brand}）签发，请删除已有 CAA 记录，或添加允许该 CA 签发的 CAA 记录`
+          : "";
+
+        const info = result.dnssec;
+        if (!info || !["insecure", "secure", "bogus", "indeterminate"].includes(info.state)) {
+          continue;
+        }
+        if (info.state === "insecure") {
+          warnings.dnssec = null;
+        } else if (info.state === "secure") {
+          warnings.dnssec = { state: "secure", message: "有效 DNSSEC" };
+        } else if (info.state === "bogus") {
+          const detail = typeof info.message === "string" ? info.message : "";
+          const action = typeof info.action === "string" ? info.action : "";
+          warnings.dnssec = {
+            state: "bogus",
+            message: [detail.startsWith("DNSSEC 配置错误")
+              ? detail : `DNSSEC 配置错误${detail ? `：${detail}` : ""}`, action]
+              .filter(Boolean).join("；")
+          };
+        } else {
+          warnings.dnssec = {
+            state: "indeterminate",
+            message: `DNSSEC 暂无法判定${typeof info.message === "string" && info.message ? `：${info.message}` : ""}，请重新检测`
+          };
+        }
+        return warnings;
       } catch {
         // 节点不可用时继续尝试下一节点。
       }

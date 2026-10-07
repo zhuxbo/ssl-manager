@@ -8,6 +8,7 @@
   ],
   "exclude": [
     ".gitignore",
-    "backend/tests/"
+    "backend/tests/",
+    "frontend/web/tests/"
   ]
 }
