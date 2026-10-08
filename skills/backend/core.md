@@ -111,7 +111,7 @@ php artisan queue:work --queue tasks,notifications  # 队列 worker（消费 Tas
 - 生产环境推荐使用 Redis 提升性能
 - 默认缓存仓库保存设置、仪表盘、查询结果等可重建数据；`runtime` 命名仓库保存 JWT 黑名单、限流/验证码、业务锁、防重键、心跳、告警去重和任务进度等关键状态
 - Redis 模式下默认缓存走 `REDIS_CACHE_DB`，`runtime` 与 Redis 队列走 `REDIS_DB`；两库必须不同，且同一 Redis 实例上的每套 Manager 必须独占这两个 DB。禁止接入会用 path/query 覆盖数据库编号的 `REDIS_URL`，连接统一使用显式 host/port/username/password 字段
-- `cache:clear` / `cache:clear-all` 不清 `runtime`，但 Laravel 自带的队列 pause/restart 与 scheduler mutex 仍在默认缓存，执行两个命令会删除它们；`cache:clear-all` 还会删会话、视图和 Bootstrap 缓存。两者均只能作为明确了解影响的运维命令，不能接到日常后台按钮。管理后台右上角只定向刷新 Setting/PayConfigCache，保留其它默认缓存、队列/调度状态、会话文件和 OPcache；只有数据库恢复冻结流程会显式清理默认与 `runtime` 两个仓库并重建队列暂停状态
+- `cache:clear` / `cache:clear-all` 不清 `runtime`，但 Laravel 自带的队列 pause/restart 与 scheduler mutex 仍在默认缓存，执行两个命令会删除它们；`cache:clear-all` 还会删会话、视图和 Bootstrap 缓存。两者均只能作为明确了解影响的运维命令，不能接到日常后台按钮。管理后台右上角定向刷新 Setting/PayConfigCache，并执行 config:clear、route:clear、event:clear、view:clear；保留其它默认缓存、队列/调度状态、会话文件、包发现缓存和 OPcache。配置文件缓存清除后新请求重新加载配置；常驻队列在进程重启后加载，安装脚本的 `--max-time 3600` 会触发定期轮换，也可用 `queue:restart` 提前触发；只有数据库恢复冻结流程会显式清理默认与 `runtime` 两个仓库并重建队列暂停状态
 
 ### 日志批量写入
 

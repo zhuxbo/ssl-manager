@@ -117,7 +117,7 @@ export function clearCache(): Promise<BaseResponse> {
   return http.request<BaseResponse>("post", "/setting/clear-cache");
 }
 
-// 安全刷新系统设置缓存（保留队列、调度、运行状态和会话）
+// 清理系统设置及可重建文件缓存（保留队列、调度、运行状态和会话）
 export function refreshSettingCacheSafely(): Promise<BaseResponse> {
   return http.request<BaseResponse>("post", "/setting/clear-all-cache");
 }

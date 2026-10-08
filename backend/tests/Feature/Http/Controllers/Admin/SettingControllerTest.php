@@ -13,6 +13,7 @@ use Illuminate\Console\Scheduling\CacheEventMutex;
 use Illuminate\Console\Scheduling\Event;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Storage;
@@ -475,8 +476,32 @@ test('管理员可以清除设置缓存', function () {
     $response->assertOk()->assertJson(['code' => 1]);
 });
 
+function settingControllerIsolateCacheFiles(): Closure
+{
+    $bootstrap = app()->bootstrapPath();
+    $compiled = config('view.compiled');
+    $temporary = sys_get_temp_dir().'/setting-cache-'.bin2hex(random_bytes(8));
+    File::ensureDirectoryExists($temporary.'/cache');
+    File::ensureDirectoryExists($temporary.'/views');
+    app()->useBootstrapPath($temporary);
+    config(['view.compiled' => $temporary.'/views']);
+
+    return static function () use ($bootstrap, $compiled, $temporary): void {
+        app()->useBootstrapPath($bootstrap);
+        config(['view.compiled' => $compiled]);
+        File::deleteDirectory($temporary);
+    };
+}
+
 test('管理后台安全刷新设置缓存并保留框架运行状态', function () {
-    $viewFile = storage_path('framework/views/pest-safe-clear.view.php');
+    $restoreCachePaths = settingControllerIsolateCacheFiles();
+    $viewFile = config('view.compiled').'/pest-safe-clear.view.php';
+    $cacheFiles = [app()->getCachedConfigPath(), app()->getCachedRoutesPath(), app()->getCachedEventsPath()];
+    foreach ($cacheFiles as $file) {
+        File::put($file, '<?php return [];');
+    }
+    $packageFile = app()->getCachedPackagesPath();
+    File::put($packageFile, '<?php return [];');
     $sessionFile = storage_path('framework/sessions/pest-safe-clear.session');
     File::ensureDirectoryExists(dirname($viewFile));
     File::ensureDirectoryExists(dirname($sessionFile));
@@ -510,8 +535,12 @@ test('管理后台安全刷新设置缓存并保留框架运行状态', function
             ->and(Cache::get('illuminate:queue:restart'))->toBe(1234567890)
             ->and($queue->isPaused('database', 'safe-clear'))->toBeTrue()
             ->and($mutex->exists($event))->toBeTrue()
-            ->and(File::exists($viewFile))->toBeTrue()
+            ->and(File::exists($viewFile))->toBeFalse()
+            ->and(File::exists($packageFile))->toBeTrue()
             ->and(File::exists($sessionFile))->toBeTrue();
+        foreach ($cacheFiles as $file) {
+            expect(File::exists($file))->toBeFalse();
+        }
     } finally {
         $queue->resume('database', 'safe-clear');
         Cache::forget('illuminate:queue:restart');
@@ -519,10 +548,12 @@ test('管理后台安全刷新设置缓存并保留框架运行状态', function
         Cache::store('runtime')->forget('admin-safe-clear-runtime');
         $mutex->forget($event);
         File::delete([$viewFile, $sessionFile]);
+        $restoreCachePaths();
     }
 });
 
 test('管理后台安全刷新在默认缓存指向 runtime 时也不删除其它键', function () {
+    $restoreCachePaths = settingControllerIsolateCacheFiles();
     config(['cache.default' => 'runtime']);
     Cache::store('runtime')->put('safe-clear-overlap-critical', 'preserved', 600);
 
@@ -535,7 +566,17 @@ test('管理后台安全刷新在默认缓存指向 runtime 时也不删除其�
         expect(Cache::store('runtime')->get('safe-clear-overlap-critical'))->toBe('preserved');
     } finally {
         Cache::store('runtime')->forget('safe-clear-overlap-critical');
+        $restoreCachePaths();
     }
+});
+
+test('管理后台清理命令失败时不返回成功', function () {
+    Artisan::shouldReceive('call')->once()->with('config:clear')->andReturn(1);
+
+    $this->actingAsAdmin($this->admin)
+        ->postJson('/api/admin/setting/clear-all-cache')
+        ->assertOk()
+        ->assertJson(['code' => 0, 'msg' => '缓存清除失败']);
 });
 
 test('未认证用户无法访问设置管理', function () {

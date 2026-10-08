@@ -13,7 +13,9 @@ use App\Services\Delegation\DelegationDomainRetirementService;
 use App\Services\Payment\PayConfigCache;
 use DomainException;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Storage;
+use RuntimeException;
 use Throwable;
 
 class SettingController extends BaseController
@@ -230,16 +232,20 @@ class SettingController extends BaseController
     }
 
     /**
-     * 安全刷新系统设置缓存。
+     * 清理可重建的配置、路由、事件、视图和系统设置缓存。
      *
-     * 只删除 Setting/PayConfigCache 明确登记的键与支付证书副本；不执行
-     * cache:clear，因此保留队列 pause/restart、scheduler mutex、runtime 与会话。
+     * 不执行 cache:clear 或清空 Bootstrap 目录，保留队列、调度锁、runtime 与会话。
      * 路由名保留 clear-all-cache 以兼容已发布的管理端。
      */
     public function clearAllCache(): void
     {
         try {
             Setting::clearAllCache();
+            foreach (['config:clear', 'route:clear', 'event:clear', 'view:clear'] as $command) {
+                if (Artisan::call($command) !== 0) {
+                    throw new RuntimeException("$command 执行失败");
+                }
+            }
         } catch (Throwable) {
             $this->error('缓存清除失败');
         }

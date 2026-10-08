@@ -86,7 +86,7 @@ exec, shell_exec, pcntl_signal, pcntl_alarm, pcntl_async_signals
 - **Redis DB 分配**：安装器保持 `APP_NAME` 不变，按 phpdotenv 覆盖语义扫描同机 Manager 的 `.env`，对归一化后 `REDIS_HOST + REDIS_PORT` 相同的 Redis 实例从 DB 1 起分配独占的 `REDIS_DB`（关键运行状态/队列）与 `REDIS_CACHE_DB`（应用缓存）二元组；同实例配置无法静态确定时失败关闭，不同实例互不占用编号；默认 16 DB 最多自动分配 7 套，耗尽时需改用独立 Redis 实例。系统不接入会用 path/query 覆盖编号的 `REDIS_URL`；扫描到旧站点或目标站点的非空 `REDIS_URL` 时拒绝自动分配，须先转换为显式连接配置及实际 DB 编号
 - **同机安装与升级边界**：暂不支持并行执行。Redis 自动分库保留已有站点编号和目标库占用检查，不依赖全站锁文件；旧 `.ssl-manager-redis-db.lock` 文件不再使用，无需由后台修改权限或删除。
 - **首次运行态分库**：沿用 `2026_09_04_000001_invalidate_sessions_for_runtime_cache_cutover` 迁移名，成功收尾后复用 HTTP 启动独占锁复制旧 JWT 黑名单及其过期时间，保留有效会话。搬迁完成前双读旧库并阻止缓存清理；失败保留旧数据供重试。已执行旧版吊销迁移的实例不重跑，也不恢复此前失效的会话。
-- **管理端安全刷新**：右上角按钮只定向失效 Setting/PayConfigCache 已登记的键与支付证书副本，不执行 `cache:clear`；队列 pause/restart、scheduler mutex、`runtime`、其它默认缓存、编译视图、会话文件、OPcache 和 Composer 缓存均保留
+- **管理端安全刷新**：右上角按钮定向失效 Setting/PayConfigCache 已登记的键与支付证书副本，并清理配置、路由、事件和编译视图缓存，不执行 `cache:clear` 或清空 Bootstrap 目录；队列 pause/restart、scheduler mutex、`runtime`、其它默认缓存、会话文件、包发现缓存、OPcache 和 Composer 缓存均保留。修改 `.env` 后，新请求会重新加载配置；常驻队列在进程重启后加载：安装脚本设置 `--max-time 3600`，任务结束后到期退出并由守护进程重新拉起，也可执行 `php artisan queue:restart` 提前触发。旧站点需核对实际启动参数
 
 ### 手工配置步骤（仅自动化失败时）
 

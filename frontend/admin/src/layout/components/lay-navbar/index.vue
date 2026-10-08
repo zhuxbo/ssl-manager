@@ -22,8 +22,8 @@ const clearingCache = ref(false);
 function handleClearCache() {
   if (clearingCache.value) return;
   ElMessageBox.confirm(
-    "确认刷新系统设置缓存？队列、调度器、登录会话、限流和任务锁等运行状态不会被清除。",
-    "安全刷新设置缓存",
+    "确认清理系统设置、配置、路由、事件和编译视图缓存？队列、调度锁及登录会话会保留。",
+    "安全清理系统缓存",
     {
       type: "warning",
       confirmButtonText: "确认清理",
@@ -33,7 +33,7 @@ function handleClearCache() {
     clearingCache.value = true;
     refreshSettingCacheSafely()
       .then(() => {
-        message("系统设置缓存已安全刷新", { type: "success" });
+        message("系统缓存已安全清理", { type: "success" });
       })
       .catch(() => {
         message("缓存清除失败", { type: "error" });
@@ -76,7 +76,7 @@ function handleClearCache() {
       </a>
       <span
         class="cache-icon navbar-bg-hover"
-        title="安全刷新系统设置缓存"
+        title="安全清理系统缓存"
         @click="handleClearCache"
       >
         <IconifyIconOffline
