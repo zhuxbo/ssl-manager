@@ -4,6 +4,7 @@ use App\Models\Admin;
 use App\Models\Cert;
 use App\Models\CnameDelegation;
 use App\Models\ErrorLog;
+use App\Models\NotificationTemplate;
 use App\Models\Setting;
 use App\Models\SettingGroup;
 use App\Services\Delegation\DelegationConfigService;
@@ -17,6 +18,7 @@ use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\View\Component;
 use Tests\Traits\ActsAsAdmin;
 
 uses(ActsAsAdmin::class);
@@ -535,7 +537,7 @@ test('管理后台安全刷新设置缓存并保留框架运行状态', function
             ->and(Cache::get('illuminate:queue:restart'))->toBe(1234567890)
             ->and($queue->isPaused('database', 'safe-clear'))->toBeTrue()
             ->and($mutex->exists($event))->toBeTrue()
-            ->and(File::exists($viewFile))->toBeFalse()
+            ->and(File::exists($viewFile))->toBeTrue()
             ->and(File::exists($packageFile))->toBeTrue()
             ->and(File::exists($sessionFile))->toBeTrue();
         foreach ($cacheFiles as $file) {
@@ -548,6 +550,30 @@ test('管理后台安全刷新设置缓存并保留框架运行状态', function
         Cache::store('runtime')->forget('admin-safe-clear-runtime');
         $mutex->forget($event);
         File::delete([$viewFile, $sessionFile]);
+        $restoreCachePaths();
+    }
+});
+
+test('管理后台清缓存后常驻进程仍可渲染已使用的邮件模板', function () {
+    $restoreCachePaths = settingControllerIsolateCacheFiles();
+    $template = new NotificationTemplate(['content' => '证书签发通知：{{ $domain }}']);
+
+    try {
+        expect($template->render(['domain' => 'before.example.com']))->toBe('证书签发通知：before.example.com');
+        $viewFiles = File::glob(config('view.compiled').'/*.blade.php');
+        expect($viewFiles)->not->toBeEmpty();
+
+        $this->actingAsAdmin($this->admin)
+            ->postJson('/api/admin/setting/clear-all-cache')
+            ->assertOk()
+            ->assertJson(['code' => 1]);
+
+        foreach ($viewFiles as $viewFile) {
+            expect(File::exists($viewFile))->toBeTrue();
+        }
+        expect($template->render(['domain' => 'after.example.com']))->toBe('证书签发通知：after.example.com');
+    } finally {
+        Component::flushCache();
         $restoreCachePaths();
     }
 });

@@ -232,7 +232,7 @@ class SettingController extends BaseController
     }
 
     /**
-     * 清理可重建的配置、路由、事件、视图和系统设置缓存。
+     * 清理可重建的配置、路由、事件和系统设置缓存。
      *
      * 不执行 cache:clear 或清空 Bootstrap 目录，保留队列、调度锁、runtime 与会话。
      * 路由名保留 clear-all-cache 以兼容已发布的管理端。
@@ -241,7 +241,8 @@ class SettingController extends BaseController
     {
         try {
             Setting::clearAllCache();
-            foreach (['config:clear', 'route:clear', 'event:clear', 'view:clear'] as $command) {
+            // 保留视图文件，避免常驻邮件队列引用的 Blade 临时模板被删除。
+            foreach (['config:clear', 'route:clear', 'event:clear'] as $command) {
                 if (Artisan::call($command) !== 0) {
                     throw new RuntimeException("$command 执行失败");
                 }

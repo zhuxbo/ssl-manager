@@ -22,7 +22,7 @@ const clearingCache = ref(false);
 function handleClearCache() {
   if (clearingCache.value) return;
   ElMessageBox.confirm(
-    "确认清理系统设置、配置、路由、事件和编译视图缓存？队列、调度锁及登录会话会保留。",
+    "确认清理系统设置、配置、路由和事件缓存？队列、调度锁及登录会话会保留。",
     "安全清理系统缓存",
     {
       type: "warning",
