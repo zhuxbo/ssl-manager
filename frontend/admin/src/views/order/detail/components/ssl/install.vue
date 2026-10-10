@@ -191,7 +191,7 @@ watchEffect(() => {
 .descriptions {
   border-left: none;
 
-  :deep(.el-button) {
+  :deep(.el-button.is-link) {
     padding: 0;
     font-size: 14px;
     line-height: 28px;

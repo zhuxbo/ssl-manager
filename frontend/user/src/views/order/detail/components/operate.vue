@@ -69,7 +69,7 @@
     >发送邮件</el-button
   >
   <el-dialog v-model="sendEmailDialog" title="发送邮件">
-    <el-form-item label="邮箱" :label-width="100">
+    <el-form-item label="邮箱" :label-width="50">
       <el-input v-model="email" autocomplete="off" />
     </el-form-item>
     <template #footer>

@@ -77,7 +77,7 @@
     >过户</el-button
   >
   <el-dialog v-model="sendEmailDialog" title="发送邮件" width="400px">
-    <el-form-item label="邮箱" :label-width="100" class="ml-3 mr-3">
+    <el-form-item label="邮箱" :label-width="50" class="ml-3 mr-3">
       <el-input v-model="email" autocomplete="off" />
     </el-form-item>
     <template #footer>
