@@ -23,8 +23,14 @@ test('Cloud Deploy 插件 Seeder 幂等补齐通知模板、保留定制并支�
             'domain',
             'access_name',
             'error_code',
-        ])
-        ->and($template->content)->toContain('{{ $product }}');
+        ]);
+    expect($template->render([
+        'product' => 'cdn',
+        'domain' => 'example.com',
+        'access_name' => '测试云账号',
+        'error_code' => 'business_error',
+    ]))->toContain('云产品：cdn', '域名：example.com', '云账号：测试云账号')
+        ->toContain('失败原因：云平台未能完成部署，请查看部署日志');
 
     $template->update(['content' => '管理员自定义内容', 'status' => 0]);
     $seeder->run();

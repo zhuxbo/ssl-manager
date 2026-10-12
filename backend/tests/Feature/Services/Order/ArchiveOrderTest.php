@@ -53,15 +53,13 @@ test('归档拒绝处理中和已签发以外的状态', function (string $statu
     expect($cert->fresh()->status)->toBe($status);
 })->with(['unpaid', 'pending', 'approving', 'cancelling', 'cancelled', 'expired', 'renewed', 'reissued', 'revoked', 'archived']);
 
-test('归档不允许访问他人订单，旧已续及撤回入口已关闭', function () {
+test('归档不允许访问他人订单，旧已续入口已关闭', function () {
     [$owner, $order, $cert] = $this->archiveFixture;
     $this->actingAsUser($this->createTestUser());
     $this->postJson("/api/order/archive/$order->id")->assertOk()->assertJsonPath('code', 0);
     expect($cert->fresh()->status)->toBe('active');
     $this->actingAsUser($owner);
-    foreach (["mark-renewed/$order->id", "revoke-cancel/$order->id", 'batch-revoke-cancel'] as $route) {
-        $this->postJson("/api/order/$route")->assertNotFound();
-    }
+    $this->postJson("/api/order/mark-renewed/$order->id")->assertNotFound();
 });
 
 test('同步在途期间归档不被上游 active 覆盖，归档不作为续期停滞', function (string $status) {

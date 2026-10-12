@@ -93,7 +93,7 @@ test('管理员可以同时重置主系统与插件 Seeder 管理的选中模板
         ->and($restoredSystem->status)->toBe(1)
         ->and($restoredPlugin->id)->toBe($pluginTemplate->id)
         ->and($restoredPlugin->name)->toBe('云部署失败')
-        ->and($restoredPlugin->content)->toContain('证书已签发但推送到云平台失败')
+        ->and($restoredPlugin->content)->toContain('证书已签发，但部署任务未能确认成功。')
         ->and($restoredPlugin->status)->toBe(1)
         ->and($notification->fresh()->template_id)->toBe($systemTemplate->id)
         ->and(NotificationTemplate::whereIn('id', $oldIds)->count())->toBe(2)

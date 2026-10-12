@@ -270,7 +270,7 @@ test('⑤ message 含 <script> 经 system_alert 模板渲染后被 HTML 转义',
     expect($rendered)->not->toContain('<script>alert(1)</script>')
         ->and($rendered)->toContain('&lt;script&gt;')
         ->and($rendered)->toContain('告警标题')
-        ->and($rendered)->toContain('get-products');
+        ->and($rendered)->toContain('获取产品列表');
 });
 
 test('⑤ details 键/值经模板渲染保持 HTML 转义（键含尖括号被转义）', function () {

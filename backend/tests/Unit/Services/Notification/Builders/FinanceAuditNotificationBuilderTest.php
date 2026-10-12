@@ -120,9 +120,9 @@ test('Seeder 的 finance_audit HTML 模板能用 Blade 正确渲染', function (
     ]);
 
     expect($rendered)->toContain('资金审计告警');
-    expect($rendered)->toContain('共发现 2 项不变式违反');
-    expect($rendered)->toContain('L1');
-    expect($rendered)->toContain('L3');
+    expect($rendered)->toContain('共 2 项资金一致性检查未通过。');
+    expect($rendered)->toContain('账目恒等校验');
+    expect($rendered)->toContain('状态与事件配对校验');
     expect($rendered)->toContain('2026-05-08 03:00:00');
     // Blade {{ }} 自动 escape，渲染后是 &quot;fund_id&quot;
     expect($rendered)->toContain('fund_id');

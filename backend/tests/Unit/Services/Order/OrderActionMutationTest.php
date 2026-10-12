@@ -100,7 +100,7 @@ test('证书链门禁 bad 删除中间证书并精确记录日志和告警', fun
     $alert->shouldReceive('send')->once()->with(
         'chain_verify',
         '证书链签名校验失败（坏链已拒写）',
-        '订单 #321 上游返回的中间证书未签发叶证书，已拒绝写入 chains，订单将转 approving 等待重新同步。',
+        '订单 #321 上游返回的中间证书未签发叶证书，已拒绝保存该证书链，订单将转为待审核状态，等待重新同步。',
         ['order_id' => 321, 'issuer' => 'Bad CA', 'reason' => 'chain_verify_failed'],
         'chain_bad:Bad CA',
         24,
@@ -135,8 +135,8 @@ test('证书链门禁 unverifiable 放行数据并精确记录日志和告警', 
     $alert->shouldReceive('send')->once()->with(
         'chain_verify',
         '证书链签名校验无法执行（已放行写链）',
-        '订单 #654 的证书链签名校验无法执行（openssl 不可用或输出异常），已按 fail-open 放行写入 chains。'
-            .'故障期间新写入的证书链建议人工复核（Admin 链管理）。',
+        '订单 #654 的证书链签名校验无法执行（证书校验工具不可用或输出异常），已放行保存证书链。'
+            .'故障期间新写入的证书链建议人工复核（管理员控制台的证书链管理）。',
         ['order_id' => 654, 'issuer' => 'Unknown CA', 'reason' => 'openssl_unavailable'],
         'chain_unverifiable',
         24,
