@@ -1,0 +1,19 @@
+{
+    "test": "P\\Tests\\Feature\\Http\\Controllers\\V2\\ApiControllerCommitResilienceTest::__pest_evaluable_同_refer__id_按状态和_CSR_判断是否返回订单@('archived') / (true) / ('new') with data ('archived', true, 'new')",
+    "version": "1.0.0",
+    "calls": [
+        {
+            "method": "POST",
+            "uri_pattern": "/api/v2/new",
+            "request_keys": [
+                "csr",
+                "refer_id"
+            ],
+            "response_status": "2xx",
+            "response_schema": {
+                "code": "integer",
+                "msg": "string"
+            }
+        }
+    ]
+}
