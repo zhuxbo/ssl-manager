@@ -375,6 +375,7 @@ class Action
             }
 
             $order->organization = $organization;
+            $order->review_note = null;
             $latestCert['order_id'] = $order->id;
             $latestCert['amount'] = $amount;
             $isFree = bccomp($amount, '0', 2) === 0;
@@ -765,6 +766,14 @@ class Action
                 $this->deleteTask($orderId, 'commit,sync,revalidate');
             }
 
+            // 旧申请的慢同步不得覆盖重签后的订单审核意见；缺字段兼容旧上游。
+            if ($lockedOrder && (int) $lockedOrder->latest_cert_id === (int) $cert->id
+                && array_key_exists('review_note', $data)) {
+                // 使用锁内快照判断脏字段，避免锁外原值为 null 时漏掉并发后的清空。
+                $lockedOrder->review_note = $data['review_note'];
+                $lockedOrder->save();
+            }
+            unset($data['review_note']);
             $order->save();
             // 先把 issuer 落到模型，确保随后 update 触发 setIntermediateCertAttribute 时 issuer 已就位，
             // 非空 intermediate_cert 在本轮即写入 chains。fill 顺序不保证 issuer 早于 intermediate_cert，
@@ -1450,7 +1459,8 @@ class Action
      */
     private function refundForSyncedCancel(Order $order, array $certData, bool $suppressCallback = false): void
     {
-        $this->runTaskMutationTransaction(function () use ($order, $certData, $suppressCallback) {
+        $reviewCertId = $order->latest_cert_id;
+        $this->runTaskMutationTransaction(function () use ($order, $certData, $suppressCallback, $reviewCertId) {
             // 锁顺序 1：先锁 cancel/commit/sync/revalidate task（与 deleteTask 删除范围、项目 task→order 锁序一致）
             Task::lockForMutation($order->id, ['cancel', 'commit', 'sync', 'revalidate'])->get();
 
@@ -1510,6 +1520,10 @@ class Action
             // 更新 cert（合并上游数据 + 强制 status=cancelled + cancelled_at）
             $certData['status'] = 'cancelled';
             $certData['cancelled_at'] = now();
+            if ((int) $order->latest_cert_id === (int) $reviewCertId && array_key_exists('review_note', $certData)) {
+                $order->review_note = $certData['review_note'];
+            }
+            unset($certData['review_note']);
             $cert->update($certData);
 
             // 记录取消时间

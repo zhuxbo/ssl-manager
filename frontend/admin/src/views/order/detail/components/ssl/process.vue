@@ -41,6 +41,7 @@
         >
           <td class="label" />
           <td class="content">
+            <OrderReviewNote :note="order.review_note" />
             <Documents v-if="hasDocuments" />
             <DocumentUpload />
           </td>
@@ -103,6 +104,7 @@ import Validation from "./validation.vue";
 import Install from "./install.vue";
 import Deploy from "./deploy.vue";
 import Documents from "../documents.vue";
+import OrderReviewNote from "@shared/components/OrderReviewNote.vue";
 import DocumentUpload from "../documentUpload.vue";
 import { Select } from "@element-plus/icons-vue";
 import { getPluginWidgets } from "@shared/utils/plugin-loader";

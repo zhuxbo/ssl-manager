@@ -24,6 +24,7 @@ return new class extends Migration
                 $table->integer('purchased_wildcard_count')->default(0)->comment('已购通配符数');
                 $table->text('organization')->nullable()->comment('组织');
                 $table->text('contact')->nullable()->comment('联系人');
+                $table->longText('review_note')->nullable()->comment('文档审核意见');
                 $table->timestamp('cancelled_at')->nullable()->comment('取消时间');
                 $table->string('admin_remark', 255)->default('')->comment('管理员备注');
                 $table->string('remark', 255)->default('')->comment('会员备注');

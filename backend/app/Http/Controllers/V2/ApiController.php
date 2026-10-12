@@ -403,7 +403,7 @@ class ApiController extends Controller
             'status',
         ];
 
-        $orderFields = ['latest_cert_id', 'organization', 'contact', 'period_from', 'period_till'];
+        $orderFields = ['latest_cert_id', 'organization', 'contact', 'period_from', 'period_till', 'review_note'];
 
         $order = $this->model
             ->with(['latestCert' => fn ($query) => $query->select($latestCertFields)])

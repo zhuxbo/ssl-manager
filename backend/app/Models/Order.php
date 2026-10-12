@@ -37,6 +37,7 @@ class Order extends BaseModel
         'cancelled_at',
         'admin_remark',
         'remark',
+        'review_note',
         'auto_renew',
         'auto_reissue',
     ];

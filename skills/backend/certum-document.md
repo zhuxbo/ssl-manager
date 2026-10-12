@@ -27,3 +27,9 @@ Certum（及 OV/EV 等非 DV 产品）的验证文档上传：用户/Admin 上�
 ## 跨级去重（content_hash）
 
 - `order_documents` 加 `content_hash`(sha256) + 唯一索引 `(order_id, content_hash)`。**纯接收端**实现 —— `uploadDocumentFromBase64` 对解码字节算 hash，同 order 同内容已存在则跳过（重试/重复推送幂等），唯一索引兜底并发竞态（catch `QueryException` errorInfo 1062）。**发送端/线协议不变**，旧版下游推到新接收端也能去重。Gateway 侧 `V2/ApiController::uploadDocument` 镜像同一逻辑（对端对称）。防止 Job 重试在上游产生重复行 → Certum 重复提交
+
+## 文档审核意见
+
+- 上游 V2 `get.review_note` 为纯文本或 `null`，同步到 `orders.review_note`（可空长文本，容纳完整文档问题与依据），不写入证书、文档 JSON 或申请参数。
+- 有字段则覆盖（包括 `null` 清空）；缺字段保留，兼容旧上游。Gateway 已提交 CA 后返回 `null`。重签创建新申请时清空，旧申请的迟到同步不得覆盖当前申请意见。
+- 管理端、用户端 SSL、代码签名、文档签名及 S/MIME 详情的 Certum 文档区域显示“审核意见”，纯文本保留换行，空值隐藏。复用现有订单同步；V2 `get` 同步透传该字段给下游。

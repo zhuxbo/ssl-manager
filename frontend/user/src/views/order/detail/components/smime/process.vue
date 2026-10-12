@@ -40,6 +40,7 @@
         >
           <td class="label" />
           <td class="content">
+            <OrderReviewNote :note="order.review_note" />
             <Documents v-if="hasDocuments" />
             <DocumentUpload />
           </td>
@@ -80,6 +81,7 @@ import Operate from "../operate.vue";
 import SmimeValidation from "./validation.vue";
 import SmimeInstall from "./install.vue";
 import Documents from "../documents.vue";
+import OrderReviewNote from "@shared/components/OrderReviewNote.vue";
 import DocumentUpload from "../documentUpload.vue";
 import { Select } from "@element-plus/icons-vue";
 

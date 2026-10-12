@@ -40,6 +40,7 @@
         >
           <td class="label" />
           <td class="content">
+            <OrderReviewNote :note="order.review_note" />
             <Documents v-if="hasDocuments" />
             <DocumentUpload />
           </td>
@@ -62,6 +63,7 @@ import { computed, inject } from "vue";
 import { statusType, status } from "@/views/order/dictionary";
 import Operate from "../operate.vue";
 import Documents from "../documents.vue";
+import OrderReviewNote from "@shared/components/OrderReviewNote.vue";
 import DocumentUpload from "../documentUpload.vue";
 import { Select } from "@element-plus/icons-vue";
 

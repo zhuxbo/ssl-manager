@@ -1,7 +1,7 @@
 {
     "version": "1.0",
     "mysql_version": "8.4.11",
-    "generated_at": "2026-10-04 22:18:06",
+    "generated_at": "2026-10-11 20:14:26",
     "database": {
         "name": "manager",
         "charset": "utf8mb4",
@@ -3841,8 +3841,16 @@
                     "extra": "",
                     "comment": "联系人"
                 },
-                "cancelled_at": {
+                "review_note": {
                     "position": 15,
+                    "type": "longtext",
+                    "nullable": true,
+                    "default": null,
+                    "extra": "",
+                    "comment": "文档审核意见"
+                },
+                "cancelled_at": {
+                    "position": 16,
                     "type": "timestamp",
                     "nullable": true,
                     "default": null,
@@ -3850,7 +3858,7 @@
                     "comment": "取消时间"
                 },
                 "admin_remark": {
-                    "position": 16,
+                    "position": 17,
                     "type": "varchar(255)",
                     "nullable": false,
                     "default": "",
@@ -3858,7 +3866,7 @@
                     "comment": "管理员备注"
                 },
                 "remark": {
-                    "position": 17,
+                    "position": 18,
                     "type": "varchar(255)",
                     "nullable": false,
                     "default": "",
@@ -3866,7 +3874,7 @@
                     "comment": "会员备注"
                 },
                 "auto_renew": {
-                    "position": 18,
+                    "position": 19,
                     "type": "tinyint(1)",
                     "nullable": true,
                     "default": null,
@@ -3874,7 +3882,7 @@
                     "comment": "自动续费"
                 },
                 "auto_reissue": {
-                    "position": 19,
+                    "position": 20,
                     "type": "tinyint(1)",
                     "nullable": true,
                     "default": null,
@@ -3882,7 +3890,7 @@
                     "comment": "自动重签"
                 },
                 "created_at": {
-                    "position": 20,
+                    "position": 21,
                     "type": "timestamp",
                     "nullable": true,
                     "default": null,
@@ -3890,7 +3898,7 @@
                     "comment": ""
                 },
                 "updated_at": {
-                    "position": 21,
+                    "position": 22,
                     "type": "timestamp",
                     "nullable": true,
                     "default": null,
