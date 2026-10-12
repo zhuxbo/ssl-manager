@@ -48,6 +48,36 @@ function captureApiResponse(callable $callback): array
     }
 }
 
+test('v2 get-orders 返回最新证书的 channel', function (string $channel) {
+    $user = $this->createTestUser();
+    $product = $this->createTestProduct();
+    $order = $this->createTestOrder($user, $product);
+    $this->createTestCert($order, ['channel' => $channel]);
+
+    $controller = buildV2Controller([], 'GET', Mockery::mock(Action::class), $user->id);
+    $response = captureApiResponse(fn () => $controller->getOrders());
+
+    expect($response['code'])->toBe(1)
+        ->and($response['data']['data'][0]['cert']['channel'])->toBe($channel);
+})->with(['admin', 'web', 'api', 'deploy', 'auto']);
+
+test('v2 get 返回最新证书的 channel', function (string $channel, bool $cached) {
+    $user = $this->createTestUser();
+    $product = $this->createTestProduct();
+    $order = $this->createTestOrder($user, $product);
+    $this->createTestCert($order, ['channel' => $channel, 'status' => 'cancelled']);
+
+    if ($cached) {
+        Cache::store('runtime')->put('api_get_'.$order->id, time(), 10);
+    }
+
+    $controller = buildV2Controller(['order_id' => $order->id], 'GET', Mockery::mock(Action::class), $user->id);
+    $response = captureApiResponse(fn () => $controller->get());
+
+    expect($response['code'])->toBe(1)
+        ->and($response['data']['channel'])->toBe($channel);
+})->with(['admin', 'web', 'api', 'deploy', 'auto'])->with([false, true]);
+
 test('v2 cancel 对已取消订单直接返回成功（幂等）', function () {
     $user = $this->createTestUser();
     $product = $this->createTestProduct(['refund_period' => 30]);

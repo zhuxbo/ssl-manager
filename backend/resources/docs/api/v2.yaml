@@ -99,7 +99,10 @@ paths:
                               type: object
                               properties:
                                 order: { type: object }
-                                cert: { type: object }
+                                cert:
+                                  type: object
+                                  properties:
+                                    channel: { type: string, enum: [admin, web, api, deploy, auto], description: 最新证书的提交渠道 }
                                 product: { type: object }
 
   /new:
@@ -399,6 +402,7 @@ components:
     OrderDetail:
       type: object
       properties:
+        channel: { type: string, enum: [admin, web, api, deploy, auto], description: 最新证书的提交渠道 }
         common_name: { type: string }
         alternative_names: { type: string }
         organization:
