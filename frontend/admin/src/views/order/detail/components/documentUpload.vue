@@ -64,6 +64,11 @@
           </el-tag>
         </template>
       </el-table-column>
+      <el-table-column prop="created_at" label="上传时间" width="160">
+        <template #default="{ row }">
+          {{ formatDate(row.created_at) }}
+        </template>
+      </el-table-column>
       <el-table-column label="操作" width="60">
         <template #default="{ row }">
           <el-button
@@ -312,6 +317,17 @@ const previewIsImage = computed(() => {
     name.endsWith(".jpg") || name.endsWith(".jpeg") || name.endsWith(".png")
   );
 });
+
+const formatDate = (dateStr: string) => {
+  if (!dateStr) return "";
+  return new Date(dateStr).toLocaleString("zh-CN", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+};
 
 const formatSize = (bytes: number) => {
   if (bytes < 1024) return bytes + "B";
