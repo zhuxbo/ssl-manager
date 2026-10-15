@@ -177,7 +177,7 @@ test('[路径3] 已扣费在途接替（processing/approving）孤儿命中 + �
     expect($cert['stall_status'])->toBe($sucStatus);
 
     expect($cert['action_hint'])->toContain('域名验证/审核')
-        ->and($cert['action_hint'])->toContain('费用已扣除');
+        ->and($cert['action_hint'])->not->toContain('费用已扣除');
 })->with(['processing', 'approving']);
 
 // ── 测试 4：重签孤儿命中（同 order，前驱 reissued ← 接替 pending） ──────────────

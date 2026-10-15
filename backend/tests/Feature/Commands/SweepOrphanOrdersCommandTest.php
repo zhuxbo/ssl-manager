@@ -275,7 +275,7 @@ test('㉑ 并发：cancelPending 与并发 late-commit（推 processing）→ �
         ->and($user->fresh()->balance)->toBe('900.00');
 });
 
-test('㉒ 补集断言（防漂移锁）：O4 pending 接手集 == 转人工集 ∩ 非产品缺失 ∩ channel=auto ∩ 无 executing', function () {
+test('㉒ 补集断言（防漂移锁）：O4 pending 接手集 == 转人工集 ∩ 非产品缺失 ∩ channel=auto ∩ 非重签 ∩ 无 executing', function () {
     // 矩阵：到顶/未到顶 × 产品缺失/非缺失 × executing/无 × channel auto/deploy
     [, $o1] = makeOrphanPending('auto');
     orphanFailedCommits($o1->id, 3);                         // 到顶 非缺失 无executing auto → 接手
@@ -297,7 +297,7 @@ test('㉒ 补集断言（防漂移锁）：O4 pending 接手集 == 转人工集 
     // 左：O4 实际接手集（maxedAndNotProductMissing + channel=auto whereHas + 无 executing）
     $left = PendingReconcileQuery::maxedAndNotProductMissing(
         Order::query()->whereHas('latestCert', fn ($q) => $q
-            ->where('status', 'pending')->whereNull('api_id')->where('channel', 'auto'))
+            ->where('status', 'pending')->whereNull('api_id')->where('channel', 'auto')->where('action', '!=', 'reissue'))
             ->whereNotExists(fn ($q) => $q->select(DB::raw(1))->from('tasks')
                 ->whereColumn('tasks.order_id', 'orders.id')
                 ->where('tasks.action', 'commit')->where('tasks.status', 'executing')),
@@ -307,7 +307,7 @@ test('㉒ 补集断言（防漂移锁）：O4 pending 接手集 == 转人工集 
     // 右：从 T5 转人工集（maxedOrProductMissing）PHP 过滤 非产品缺失 + 无 executing 推导（两侧消费同一共享物）
     $right = PendingReconcileQuery::maxedOrProductMissing(
         Order::query()->with('latestCert')->whereHas('latestCert', fn ($q) => $q
-            ->where('status', 'pending')->whereNull('api_id')->where('channel', 'auto')),
+            ->where('status', 'pending')->whereNull('api_id')->where('channel', 'auto')->where('action', '!=', 'reissue')),
         $max
     )->get()->filter(function (Order $order) {
         $anchor = $order->latestCert?->created_at;
@@ -323,3 +323,57 @@ test('㉒ 补集断言（防漂移锁）：O4 pending 接手集 == 转人工集 
     expect($left)->toBe($right)
         ->and($left)->toBe([$o1->id]); // 仅 o1 落接手集
 });
+
+test('失败重签保留证书链和任务且不占用自动清理批次', function (string $status, string $amount) {
+    config(['reconcile.orphan.batch' => 1]);
+    $user = User::factory()->withBalance('1000.00')->create();
+    $product = Product::factory()->create();
+    $order = Order::factory()->create([
+        'user_id' => $user->id, 'product_id' => $product->id, 'amount' => '100.00',
+    ]);
+    $oldCert = Cert::factory()->create([
+        'order_id' => $order->id, 'status' => 'reissued', 'action' => 'new',
+    ]);
+    $cert = Cert::factory()->create([
+        'order_id' => $order->id, 'status' => $status, 'action' => 'reissue',
+        'channel' => 'auto', 'api_id' => null, 'amount' => $amount,
+        'last_cert_id' => $oldCert->id, 'created_at' => now()->subHours(2),
+    ]);
+    $order->update(['latest_cert_id' => $cert->id]);
+    Transaction::create([
+        'user_id' => $user->id, 'type' => 'order', 'transaction_id' => $order->id,
+        'amount' => '-100.00', 'standard_count' => 1, 'wildcard_count' => 0,
+    ]);
+    if ($status === 'pending' && bccomp($amount, '0.00', 2) > 0) {
+        Transaction::create([
+            'user_id' => $user->id, 'type' => 'order', 'transaction_id' => $order->id,
+            'amount' => '-'.$amount, 'standard_count' => 1, 'wildcard_count' => 0,
+        ]);
+    }
+    orphanFailedCommits($order->id);
+    $balance = $user->fresh()->balance;
+    $transactionCount = Transaction::where('transaction_id', $order->id)->count();
+    $taskIds = Task::where('order_id', $order->id)->pluck('id')->all();
+    [, $renewOrder, $renewCert] = $status === 'unpaid' ? makeOrphanUnpaid() : makeOrphanPending();
+    orphanFailedCommits($renewOrder->id);
+
+    $this->artisan('schedule:sweep-orphan-orders')->assertSuccessful();
+
+    expect($cert->fresh()->status)->toBe($status)
+        ->and($cert->fresh()->last_cert_id)->toBe($oldCert->id)
+        ->and($oldCert->fresh()->status)->toBe('reissued')
+        ->and($order->fresh()->latest_cert_id)->toBe($cert->id)
+        ->and($user->fresh()->balance)->toBe($balance)
+        ->and(Transaction::where('transaction_id', $order->id)->count())->toBe($transactionCount)
+        ->and(Transaction::where('transaction_id', $order->id)->where('type', 'cancel')->exists())->toBeFalse()
+        ->and(Task::where('order_id', $order->id)->pluck('id')->all())->toBe($taskIds);
+    if ($status === 'unpaid') {
+        expect($renewOrder->fresh())->toBeNull();
+    } else {
+        expect($renewCert->fresh()->status)->toBe('cancelled');
+    }
+})->with([
+    '免费待提交重签' => ['pending', '0.00'],
+    '已付费增购重签' => ['pending', '20.00'],
+    '未支付重签' => ['unpaid', '20.00'],
+]);

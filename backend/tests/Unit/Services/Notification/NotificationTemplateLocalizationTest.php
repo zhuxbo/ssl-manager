@@ -111,3 +111,11 @@ test('运维详情明确阈值和时间口径并翻译支付证书名称', funct
     expect($rendered)->toContain('超时判定阈值（秒）', '订单服务周期（月）', '触发告警的订单编号', '根证书(解析失败)')
         ->not->toContain('示例订单', 'rootCert', '停滞时长');
 });
+
+test('ACME 到期提醒引导联系支持且不提供不存在的续订入口', function () {
+    $rendered = localizedNotificationTemplate('acme_expire')->render([
+        'username' => '用户', 'subscriptions' => [], 'site_url' => '/', 'site_name' => '站点',
+    ]);
+    expect($rendered)->toContain('联系技术支持确认后续订阅安排', '查看订阅')
+        ->not->toContain('续订订阅', '请及时续订');
+});

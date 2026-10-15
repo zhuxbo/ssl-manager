@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\DB;
 use Throwable;
 
 /**
- * O4：清理 channel=auto 卡死的孤儿续费/重签单（P0-1 路径 3/4）。
+ * O4：清理 channel=auto 卡死的孤儿单；重签保留给人工处理。
  *
  * unpaid 清理保留独立开关；pending 已确认未提交上游且重试到顶，必须退款收尾：
  *  - unpaid（stale 超时）→ Action::delete：恢复旧证书 active、删新单，无退款无流水（安全）。
@@ -24,7 +24,7 @@ class SweepOrphanOrdersCommand extends Command
 {
     protected $signature = 'schedule:sweep-orphan-orders';
 
-    protected $description = '清理 channel=auto 卡死的 unpaid（删除恢复）/ pending 到顶（退款）孤儿单';
+    protected $description = '清理 channel=auto 卡死的 unpaid（删除恢复）/ pending 到顶（退款）孤儿单（排除重签）';
 
     public function handle(): int
     {
@@ -54,6 +54,7 @@ class SweepOrphanOrdersCommand extends Command
             ->whereHas('latestCert', function ($query) use ($cutoff) {
                 $query->where('status', 'unpaid')
                     ->where('channel', 'auto')
+                    ->where('action', '!=', 'reissue')
                     ->where('created_at', '<=', $cutoff);
             })
             ->orderBy('id')
@@ -62,7 +63,7 @@ class SweepOrphanOrdersCommand extends Command
 
         foreach ($orders as $order) {
             try {
-                // delete 锁内只放行 unpaid（并发变更即报错跳过，无害）；renew 删新单 / reissue 回切 latest_cert_id
+                // delete 锁内只放行 unpaid（并发变更即报错跳过，无害）；重签已在扫描阶段排除
                 $action->delete((int) $order->id);
                 $this->info("孤儿 unpaid #{$order->id} 已删除并恢复旧证书");
             } catch (Throwable $e) {
@@ -85,7 +86,8 @@ class SweepOrphanOrdersCommand extends Command
                 ->whereHas('latestCert', function ($query) {
                     $query->where('status', 'pending')
                         ->whereNull('api_id')
-                        ->where('channel', 'auto');
+                        ->where('channel', 'auto')
+                        ->where('action', '!=', 'reissue');
                 })
                 // cross-ref：与 ReconcilePendingCommand::handle 的 executing 排除语义同源，改动须两处同步。
                 ->whereNotExists(function ($query) {

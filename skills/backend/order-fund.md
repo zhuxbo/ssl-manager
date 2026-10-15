@@ -179,7 +179,7 @@ active 续费分支**完整移植** V2 范式（非「只包事务」）：
 
 ### O4 schedule:sweep-orphan-orders 孤儿清理
 
-`SweepOrphanOrdersCommand`（每小时）清理 `channel=auto` 卡死的孤儿续费/重签单：
+`SweepOrphanOrdersCommand`（每小时）清理 `channel=auto` 且 `action != reissue` 的卡死孤儿单；unpaid/pending 重签均保留证书链、任务和资金记录供人工处理，不自动撤回。重签继续参与 reconcile 转人工通知和每日管理员快照：
 
 - **unpaid 分支**（`RECONCILE_ORPHAN_UNPAID_ENABLED` 默认 **true**）：stale > `orphan.unpaid_stale_minutes`（默认 60）→ `Action::delete`（恢复旧证书 active、删新单，无退款无流水；锁内只放行 unpaid，并发变更报错跳过无害）。
 - **pending 分支无开关**：消费 `PendingReconcileQuery::maxedAndNotProductMissing`（到顶 ∩ 非产品缺失）+ 镜像 reconcile 排除 executing commit task。此时订单已扣费、`api_id=null`、无执行中 commit，确认未提交上游，必须调用 `Action::cancelPending` 退款并恢复旧证书；锁内二次校验 status=pending，late-commit 推 processing 即早退不误退款。
@@ -199,7 +199,7 @@ active 续费分支**完整移植** V2 范式（非「只包事务」）：
 
 - **队头前移**：到顶/产品缺失单经 `actionable()` 在主扫描 SQL 内排除，**不占 limit 名额**——否则批量产品下线/持续失败挤满窗口、饿死真正可动作卡单（队头阻塞）。
 - **两段式原子**：前移后主扫描 (a) 内不再触发到顶告警，必须由 handle 末尾转人工扫描 (b) `alertMaxedOrders` 承载（同一 handle 原子落地，否则「前移已落、告警丢失」）。(b) 消费 `maxedOrProductMissing`、不占 limit（候选=卡单终局态总量、有界）。
-- **user 逐单 + admin 每日快照**：user 复刻 C2（channel=auto+email gate、单周期一封、`task.result.reconcile_user_alerted_at` 去重、dispatch 成功后落键），文案中性化——产品缺失走「请重新选购」可行动文案、其余走「正在处理；长时间未完成将自动取消并退款」不承诺重试（因 O4 会自动取消退款）；admin 每日快照 SystemAlert `reconcile_maxed` **fingerprint 含当天日期**（吸收 M5，见 `skills/backend/notification.md`）。
+- **user 逐单 + admin 每日快照**：user 复刻 C2（channel=auto+email gate、单周期一封、`task.result.reconcile_user_alerted_at` 去重、dispatch 成功后落键），文案中性化——产品缺失走「所选产品暂不可用，请联系技术支持处理」、其余走「证书提交上游多次未成功，我们正在处理」，不承诺自动取消、退款或重试；admin 每日快照 SystemAlert `reconcile_maxed` **fingerprint 含当天日期**（吸收 M5，见 `skills/backend/notification.md`）。
 
 **测试**：`AutoRenewAtomicityTest`（O1 回滚）、`Deploy/UpdateAtomicityTest`（O3）、`SweepOrphanOrdersCommandTest`（O4 双开关 + GUARD PROBE 反向变异）、`SweepStaleTasksCommandTest`（T1 DELETE jobs 注入范式）、`ReconcilePendingCommandTest`（T5 前移 + 护栏 channel 不变式）、`Admin/TaskControllerTest`（T3 delay）。守门三独立文件登记 `tests/Support/FundAuditGuard.php`。
 
@@ -384,15 +384,15 @@ DB 部分唯一索引 `WHERE type != 'order'` 与此一致，覆盖应用层漏�
 ### 限定条件
 
 - `cert.status = 'processing'`
-- `cert.action IN ('new', 'renew', 'reissue')`（**B3/审计 P1-12**：reissue 原被排除致退款期到期卡 processing、无兜底取消；现纳入，退款由 `cancelLocked` reissue 分支处理，processing+ 已提交上游不再恢复前驱、置 cancelled 终结，见下节）
+- 自动取消仅 `cert.action IN ('new', 'renew')`；reissue 保留人工处理，不因临近退款期限自动撤回。
 - `products.refund_period >= 5`（退款期 < 5 天的产品跳过）
 
 ### 实现位置
 
-`backend/app/Console/Commands/PurgeCommand.php` 两段 query 的 `whereHas('latestCert', ...)` 闭包同时加 `whereIn('action', ['new','renew','reissue'])`：
+`backend/app/Console/Commands/PurgeCommand.php` 按职责区分两段查询：
 
-- 预同步 query（refund_period - 4 ~ refund_period - 2 天的订单创建 sync 预热任务）
-- 取消 query（refund_period - 2 ~ refund_period 天的订单走 sync + cancel）
+- 预同步 query 保留 new/renew/reissue（refund_period - 4 ~ refund_period - 2 天的订单创建 sync 预热任务）。
+- 取消 query 只纳入 new/renew（refund_period - 2 ~ refund_period 天的订单走 sync + cancel）。
 
 ### 取消路径锁序对齐（P3 包R）
 
@@ -471,7 +471,7 @@ DB 部分唯一索引 `WHERE type != 'order'` 与此一致，覆盖应用层漏�
 ### 测试覆盖
 
 - `tests/Feature/Services/Order/SyncedCancelRefundTest.php`：20 个用例覆盖开关开/关 / status / action（含 **reissue 订单全额退款 + 通知**）/ 0 元订单 / 并发幂等 / 已退款防重 / revoked 不触发 / **通用写回通知收口**（开关关 renew·reissue 有前驱发通知不退款 + 防重）
-- `tests/Feature/Commands/PurgeCommandTest.php`：编排断言 reissue 取消（置 cancelling + cancel task）/ new 仍取消（不跑资金）
+- `tests/Feature/Commands/PurgeCommandTest.php`：编排断言 reissue 保留且不建 cancel task / new 仍取消（不跑资金）
 - `tests/Unit/Services/Order/ActionTest.php`：cancelLocked reissue 分支资金断言（订单/证书/交易总额 120 时退 120 / reissue 增量为 0 仍退订单全额 / 订单终结门 / last_cert_id 保留 / F1 二次预检 / 上游失败回滚）以及 cancelPending reissue 增量退款恢复路径，落 `fundAuditGuardedTestPaths()` 守门
 
 ### TaskJob 取消告警幂等判据（②，与 sync 收口互补）

@@ -94,13 +94,13 @@ class PurgeCommand extends Command
         }
         $this->info("Pre-sync created for $preSyncCount orders");
 
-        // 取消临近退款期限的处理中订单（还剩2天内的订单）
+        // 取消临近退款期限的处理中 new/renew 订单；重签保留人工处理。
         // 退款期限<5天的产品跳过，同上
         $orders = Order::with(['latestCert'])
             ->join('products', 'orders.product_id', '=', 'products.id')
             ->whereHas('latestCert', fn ($query) => $query
                 ->where('status', 'processing')
-                ->whereIn('action', ['new', 'renew', 'reissue']))
+                ->whereIn('action', ['new', 'renew']))
             ->where('products.refund_period', '>=', 5)
             ->where('orders.created_at', '>', DB::raw('DATE_SUB(NOW(), INTERVAL products.refund_period DAY)'))
             ->where('orders.created_at', '<=', DB::raw('DATE_SUB(NOW(), INTERVAL (products.refund_period - 2) DAY)'))

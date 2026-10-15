@@ -31,15 +31,14 @@ class ReconcilePendingCommand extends Command
     /**
      * 到顶（多次提交上游失败）时给自动续签用户的 auto_renew_failed 通知理由。
      *
-     * 中性措辞：不承诺「请稍后重试」——后续包O O4 会在转人工后自动取消并退款，承诺式措辞会误导用户
-     * 以为需自行重试。此处如实告知「正在处理、长时间未完成将自动取消并退款」。
+     * 统一告知正在处理，不对续费或重签承诺自动取消、退款或重试。
      */
-    private const RECONCILE_USER_REASON = '证书提交上游多次未成功，我们正在处理；若长时间未完成将自动取消并退款';
+    private const RECONCILE_USER_REASON = '证书提交上游多次未成功，我们正在处理';
 
     /**
-     * 产品缺失（上游产品下线/删除）专属理由：这是用户可行动项（需重新选购），非承诺式措辞。
+     * 产品缺失时先由技术支持核实已有订单，避免引导用户重复购买。
      */
-    private const RECONCILE_USER_REASON_PRODUCT_MISSING = '所选产品已下线，请重新选购后提交';
+    private const RECONCILE_USER_REASON_PRODUCT_MISSING = '所选产品暂不可用，请联系技术支持处理';
 
     public function handle(): int
     {
@@ -163,7 +162,7 @@ class ReconcilePendingCommand extends Command
      *
      * 不占 limit（无 limit）：候选 = 卡单终局态总量，正常有界（数十以内）；未加 whereNotExists(executing)：
      * 被 admin batchStart 重启的到顶单可能短暂进本扫描（user 键已落不重发，仅 admin 每日快照多列一个 id
-     * 的外观噪音，可接受）。到顶单自动收尾（cancelPending 退款）属包O O4，本扫描正是 O4「已转人工」判据来源。
+     * 的外观噪音，可接受）。非重签到顶单自动收尾（cancelPending 退款）由 O4 处理；重签保留人工，本扫描提供转人工告警。
      */
     private function alertMaxedOrders(int $maxAttempts, Carbon $cutoff): void
     {

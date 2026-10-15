@@ -93,7 +93,7 @@ test('邮箱为空时抛出异常', function () {
 })->throws(RuntimeException::class, '邮箱为空');
 
 // ── 测试 15：4 态 → stall_status/action_hint 映射逐一断言 ───────────────────────
-test('4 态 → stall_status/action_hint 映射：unpaid 中性、已扣费勿重付、归档不再提醒', function () {
+test('4 态 → stall_status/action_hint 映射：unpaid 提示处理、在途不假定扣费、归档不再提醒', function () {
     $predecessors = new Collection([
         stalledMockPredecessor('unpaid', 'u.com'),
         stalledMockPredecessor('pending', 'p.com'),
@@ -112,15 +112,15 @@ test('4 态 → stall_status/action_hint 映射：unpaid 中性、已扣费勿�
         ->and($byDomain['u.com']['action_hint'])->toContain('可重新支付以继续签发，或取消该订单')
         ->and($byDomain['u.com']['action_hint'])->toContain('可能被系统自动清理');
 
-    // pending：已扣费，勿重复支付
+    // pending：免费重签也会进入该状态，不断言已扣费。
     expect($byDomain['p.com']['stall_status'])->toBe('pending')
-        ->and($byDomain['p.com']['action_hint'])->toContain('费用已扣除')
+        ->and($byDomain['p.com']['action_hint'])->not->toContain('费用已扣除')
         ->and($byDomain['p.com']['action_hint'])->toContain('请勿重复下单或重复支付');
 
-    // processing/approving：已扣费、验证/审核中（审计 critical 路径 3 的正面文案）
+    // processing/approving：验证/审核中，不根据状态推断扣费。
     expect($byDomain['pr.com']['stall_status'])->toBe('processing')
         ->and($byDomain['pr.com']['action_hint'])->toContain('域名验证/审核')
-        ->and($byDomain['pr.com']['action_hint'])->toContain('费用已扣除');
+        ->and($byDomain['pr.com']['action_hint'])->not->toContain('费用已扣除');
     expect($byDomain['ap.com']['stall_status'])->toBe('approving')
         ->and($byDomain['ap.com']['action_hint'])->toContain('域名验证/审核');
 

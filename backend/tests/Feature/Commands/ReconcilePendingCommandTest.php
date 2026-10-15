@@ -216,10 +216,10 @@ test('失败后仍在退避窗口内时不创建任务', function () {
 
 // ==================== C2：到顶同步通知用户（auto_renew_failed） ====================
 
-test('C2：channel=auto 到顶时发 admin 每日快照 + user auto_renew_failed', function () {
+test('C2：channel=auto 到顶时发 admin 每日快照 + user auto_renew_failed', function (string $action) {
     // admin 通道换形态（task_failed → system_alert 每日快照）；user 可达性/内容字段是 C2 红线，原样保留。
     Admin::factory()->create(['email' => 'ops@example.test']);
-    $order = makeReconcileOrder(['channel' => 'auto']);
+    $order = makeReconcileOrder(['channel' => 'auto', 'action' => $action]);
     $user = $order->user;
     $cert = $order->latestCert;
     $latestFailed = makeInCycleFailedTasks($order->id, 3);
@@ -249,13 +249,14 @@ test('C2：channel=auto 到顶时发 admin 每日快照 + user auto_renew_failed
         ->and($userIntent->notifiableId)->toBe($user->id)
         ->and($userIntent->context['common_name'])->toBe($cert->common_name)
         ->and($userIntent->context['action'])->toBe($cert->action)
+        ->and($userIntent->context['reason'])->toBe('证书提交上游多次未成功，我们正在处理')
         ->and($userIntent->context['email'])->toBe($user->email);
 
     // user 键落库；admin 载体迁 Cache 日期指纹后不再落 task.result
     $result = $latestFailed->fresh()->result;
     expect($result['reconcile_user_alerted_at'] ?? null)->not->toBeNull()
         ->and($result['reconcile_alerted_at'] ?? null)->toBeNull();
-});
+})->with(['续费' => 'renew', '重签' => 'reissue']);
 
 test('C2：channel≠auto（web）到顶时只发 admin 快照、不发用户', function () {
     // channel gate 语义（手动单不发「自动X失败」）不变；仅 admin 通道换 system_alert 快照形态。
@@ -493,7 +494,7 @@ test('T8：产品缺失 auto 单转人工发 user（产品已下线文案）+ �
     expect($byCode['system_alert']->context['details']['product_missing_total'])->toBe(1)
         ->and($byCode['system_alert']->context['details']['maxed_total'])->toBe(0);
     // user 专属文案（产品缺失是可行动项，非承诺式措辞）
-    expect($byCode['auto_renew_failed']->context['reason'])->toBe('所选产品已下线，请重新选购后提交');
+    expect($byCode['auto_renew_failed']->context['reason'])->toBe('所选产品暂不可用，请联系技术支持处理');
     // 产品缺失单不建新 commit task（被主扫描排除）
     expect(hasReconcileCommitTask($order->id))->toBeFalse();
 });

@@ -59,11 +59,11 @@
 续费/重签把前驱证书**终态化**（renewed/reissued）后，接替证书长期卡在非 active 停滞态、前驱即将到期——`cert_expire` 对 renewed/reissued 前驱抑制、AutoRenew 因 active 前置不再处理 → 这是审计四条 critical 触发路径的**唯一止血**（尤其路径 3：DCV 长期不过的 processing 形态）。
 
 - **证书为轴、前驱侧扫描**（`Services/Order/StalledRenewalQuery`，非审计字面反查）：前驱状态集 `{renewed,reissued}` + `whereHas('nextCert', 停滞 4 态 + 48h 门槛)`。`Cert::nextCert`（HasOne，`last_cert_id` nullable UNIQUE → 至多一条接替）单点表达「存在接替」，避免多处裸 `whereExists` 拼写漂移。
-- **接替 4 态**（`SUCCESSOR_STALLED_STATUSES`，「非 active」的显式工程化非字面 `!= 'active'`）：`unpaid`（pay 前中断未扣费）/ `pending`（commit 卡单已扣费）/ `processing`/`approving`（DCV/审核长期不过已扣费）。排除 archived/cancelled/revoked（已终止非停滞、误报不可静音）、renewed/reissued（链延长、接替曾签发）、expired（接替曾 active 走完生命周期）、cancelling（过渡态）。
+- **接替 4 态**（`SUCCESSOR_STALLED_STATUSES`，「非 active」的显式工程化非字面 `!= 'active'`）：`unpaid`（pay 前中断未扣费）/ `pending`（commit 卡单）/ `processing`/`approving`（DCV/审核长期不过）；这些在途状态也包含免费重签，不代表已扣费。排除 archived/cancelled/revoked（已终止非停滞、误报不可静音）、renewed/reissued（链延长、接替曾签发）、expired（接替曾 active 走完生命周期）、cancelling（过渡态）。
 - **48h 在途年龄门槛**（`IN_FLIGHT_AGE_HOURS`）：接替 `created_at` 早于此才算停滞。挡两类误报——① 健康在途（续费当天创建当天 processing 正常、手工单跨日完成 DCV）② `auto_renew_failed` 当日重叠。对主人群（到期前 14 天建单的自动续费孤儿）首封恒落 node-7（age≫48h），零节点代价。
 - **历史手工已续单结构性免疫**：手工标记单**无接替链**（nextCert EXISTS 恒 falsy）→ 结构性排除，绝不对存量已续签客户群发（比审计字面反查更强的双向互斥）。已完成续签接替=active（不在停滞态集）同理排除。
 - **节点窗口复发**：派发侧 `forDispatch` 施加离散节点窗口（14/7/3/1，防每日重复），停滞持续则随前驱逼近到期在各节点复发提醒。收件人经前驱 `order->user` 解析（certs 表无 user_id：续费前驱在旧订单、重签前驱在同订单，均正确指向本人）。三件套 / 双侧同源 / 4 态文案见 `skills/backend/notification.md`。
-- **与 O4 时序三 regime**：pending 卡单同时被 X（到期止血提醒）与 O4（arm 后自动取消退款）覆盖——**关闭期** X node-7/3/1 + T5 user 中性通知接住；**开启期** O4 到顶自动 `cancelPending` 后接替转 cancelled/删除（脱离 4 态）、X 自然停发；**armed 窄窗** X 与 O4 无冲突（X 只提醒不改状态）。
+- **与自动清理的分工**：O4 不清理 unpaid/pending 重签，退款期限清理也不自动取消 processing 重签；失败重签保留人工处理，继续由 reconcile 转人工快照及 X 到期停滞提醒覆盖。非重签 pending 经 O4 取消后脱离停滞状态，X 自然停发。
 
 ## 接替单取消止血（cert_renew_cancelled）
 

@@ -556,7 +556,7 @@ HTML;
                                 </p>
 
                                 <p style="margin: 0 0 25px 0; font-size: 15px; line-height: 26px; color: #555555;">
-                                    您的下列 ACME 订阅即将到期。<strong>订阅到期后，ACME 客户端（如 certbot）将无法继续自动续签证书</strong>；已签发的证书会在其各自有效期到期后失效。请及时续订 ACME 订阅，避免自动化链路中断。
+                                    您的下列 ACME 订阅即将到期。<strong>订阅到期后，ACME 客户端（如 certbot）将无法继续自动续签证书</strong>；已签发的证书会在其各自有效期到期后失效。请在到期前联系技术支持确认后续订阅安排，避免自动续签中断。
                                 </p>
 
                                 <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" class="data-table" style="margin-bottom: 24px; border-collapse: collapse; width: 100%;">
@@ -599,7 +599,7 @@ HTML;
                                 <div class="warning-box" style="background-color: #fffbeb; border-left: 4px solid #f59e0b; padding: 15px; border-radius: 0 4px 4px 0; margin-bottom: 30px;">
                                     <p class="warning-text" style="margin: 0; font-size: 14px; line-height: 22px; color: #92400e;">
                                         <strong>重要提示：</strong><br>
-                                        订阅到期后将无法通过该订阅继续自动签发证书。如未及时续订或通过其他方式更换证书，网站可能在现有证书到期后出现安全警告。
+                                        订阅到期后将无法通过该订阅继续自动签发证书。如未及时安排后续订阅或通过其他方式更换证书，网站可能在现有证书到期后出现安全警告。
                                     </p>
                                 </div>
 
@@ -607,7 +607,7 @@ HTML;
                                     <tr>
                                         <td align="center">
                                             <a href="{{ $site_url }}" style="background-color:#f59e0b; border-radius:4px; color:#ffffff; display:inline-block; font-family:sans-serif; font-size:16px; font-weight:bold; line-height:44px; text-align:center; text-decoration:none; width:200px; -webkit-text-size-adjust:none;">
-                                                续订订阅
+                                                查看订阅
                                             </a>
                                         </td>
                                     </tr>
