@@ -102,7 +102,7 @@ export const useUserTable = () => {
       label: "操作",
       fixed: "right",
       slot: "operation",
-      width: 160
+      width: 210
     }
   ];
 

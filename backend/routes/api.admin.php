@@ -84,6 +84,7 @@ Route::prefix('admin')->middleware('api.admin')->group(function () {
     RouteHelper::registerResourceRoutes('user', UserController::class);
     Route::prefix('user')->group(function () {
         Route::post('direct-login', [UserController::class, 'directLogin']);
+        Route::post('unlock/{id}', [UserController::class, 'unlock'])->whereNumber('id');
         Route::post('create-user', [UserController::class, 'createUser']);
         Route::patch('remark/{id}', [UserController::class, 'remark'])->whereNumber('id');
     });

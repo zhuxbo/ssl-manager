@@ -43,6 +43,7 @@ const {
   handleDestroy,
   handleBatchDestroy,
   handleDirectLogin,
+  handleUnlock,
   handleSortChange
 } = useUser(tableRef);
 
@@ -179,6 +180,22 @@ onMounted(() => {
             >
               编辑
             </el-button>
+            <el-popconfirm
+              title="确定解除该用户的登录锁定并清除失败次数吗？"
+              width="260px"
+              @confirm="handleUnlock(row.id)"
+            >
+              <template #reference>
+                <el-button
+                  class="reset-margin !outline-none"
+                  link
+                  type="warning"
+                  :size="size"
+                >
+                  解锁
+                </el-button>
+              </template>
+            </el-popconfirm>
             <el-popconfirm
               title="确定要删除吗？"
               width="160px"

@@ -15,6 +15,8 @@ use App\Services\Notification\DTOs\NotificationIntent;
 use App\Services\Notification\NotificationCenter;
 use App\Utils\Random;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\RateLimiter;
 use Throwable;
 use Tymon\JWTAuth\JWTAuth;
 
@@ -199,6 +201,31 @@ class UserController extends BaseController
         }
 
         $user->update($validated);
+        $this->success();
+    }
+
+    /**
+     * 清除用户各登录标识的锁定和失败计数。
+     */
+    public function unlock(int $id): void
+    {
+        $user = User::find($id);
+        if (! $user) {
+            $this->error('用户不存在');
+        }
+
+        foreach ([$user->username, $user->email, $user->mobile] as $account) {
+            $account = mb_strtolower(trim((string) $account));
+            if ($account === '') {
+                continue;
+            }
+
+            $key = 'user:'.$account;
+            RateLimiter::clear($key);
+            RateLimiter::clear($key.':lockout');
+            Cache::store('runtime')->forget($key.'_locked');
+        }
+
         $this->success();
     }
 

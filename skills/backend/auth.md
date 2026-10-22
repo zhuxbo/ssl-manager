@@ -42,6 +42,10 @@ JWT 撤销黑名单由 `App\Auth\JwtBlacklistStorage` 显式写入 `runtime` 缓
 
 ## 安全补强
 
+### 管理员解除用户登录锁定
+
+管理端用户列表的“解锁”操作调用 `POST /api/admin/user/unlock/{id}`，沿用管理员认证。按用户当前用户名、邮箱、手机号（去首尾空白并转小写）清除 `runtime` 登录锁定及短期、累计失败计数；不修改用户启用状态或密码。重复解锁可安全执行，用户不存在时返回业务错误。
+
 ### 邮件验证码防爆破（VerifyCodeRateLimiter）
 
 - 中间件 `App\Http\Middleware\VerifyCodeRateLimiter` 挂在发码/校验路由（注册、重置密码）；`VerifyCodeHelper` 按失败次数计数 + 冷却，验证码用 `random_int` 生成

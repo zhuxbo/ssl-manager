@@ -62,6 +62,12 @@ export function useUser(tableRef) {
     });
   };
 
+  const handleUnlock = (id: number) => {
+    userApi.unlock(id).then(() => {
+      message("解锁成功", { type: "success" });
+    });
+  };
+
   const handleDirectLogin = (id: number) => {
     userApi
       .directLogin(id)
@@ -166,6 +172,7 @@ export function useUser(tableRef) {
     handleDestroy,
     handleBatchDestroy,
     handleDirectLogin,
+    handleUnlock,
     handleSortChange
   };
 }

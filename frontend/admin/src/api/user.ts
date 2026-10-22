@@ -112,3 +112,8 @@ export function remark(
     { data: { admin_remark } }
   );
 }
+
+/** 解除用户登录锁定 */
+export function unlock(id: number): Promise<BaseResponse> {
+  return http.post<BaseResponse<null>, never>(`/user/unlock/${id}`);
+}
