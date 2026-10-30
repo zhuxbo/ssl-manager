@@ -313,13 +313,20 @@ test('FPM 空 PATH 下 JKS 转换使用 BinaryLocator 返回的绝对 keytool �
     }
 });
 
-test('Modern2026 在当前不具备 PBMAC1 能力的 OpenSSL CLI 上明确拒绝并提示替代方案', function () {
+test('Modern2026 在不具备 PBMAC1 能力的 OpenSSL CLI 上明确拒绝并提示替代方案', function () {
     $material = s3GeneratedCertificate();
     $deployer = new class extends S3Deployer
     {
         public function convert(string $cert, string $key): string
         {
             return $this->buildPfx($cert, $key, 'pfx-secret', 'Modern2026');
+        }
+
+        protected function openSslPkcs12Capabilities(string $binary): OpenSslPkcs12Capabilities
+        {
+            return OpenSslPkcs12Capabilities::probe('fixture-openssl-without-pbmac1', static fn (array $command): array => $command[1] === 'pkcs12'
+                ? ['exitCode' => 0, 'output' => '-export -macalg -iter', 'errorOutput' => '']
+                : ['exitCode' => 0, 'output' => 'OpenSSL 3.0.0 fixture', 'errorOutput' => '']);
         }
     };
 
