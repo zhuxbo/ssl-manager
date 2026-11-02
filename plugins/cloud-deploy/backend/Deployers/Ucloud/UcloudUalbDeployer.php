@@ -49,10 +49,13 @@ class UcloudUalbDeployer extends AbstractDeployer
         return [
             ['key' => 'endpoint', 'label' => '接口端点（选填）', 'type' => 'string', 'required' => false, 'destination' => true],
             ['key' => 'region', 'label' => '地域', 'type' => 'string', 'required' => true],
-            ['key' => 'deploy_target', 'label' => '部署目标', 'type' => 'string', 'required' => true],
+            ['key' => 'deploy_target', 'label' => '证书部署方式', 'type' => 'select', 'required' => true, 'default' => 'listener', 'options' => [
+                ['label' => '负载均衡实例', 'value' => 'loadbalancer'],
+                ['label' => '指定监听器', 'value' => 'listener'],
+            ]],
             ['key' => 'loadbalancer_id', 'label' => '负载均衡实例 ID', 'type' => 'string', 'required' => true],
-            ['key' => 'listener_id', 'label' => '监听器 ID（部署目标为监听器时必填）', 'type' => 'string', 'required' => false],
-            ['key' => 'domain', 'label' => 'SNI 域名（监听器扩展证书，可选）', 'type' => 'string', 'required' => false],
+            ['key' => 'listener_id', 'label' => '监听器 ID（部署目标为监听器时必填）', 'type' => 'string', 'required' => false, 'visible_when' => ['key' => 'deploy_target', 'equals' => 'listener'], 'required_when' => ['key' => 'deploy_target', 'equals' => 'listener']],
+            ['key' => 'domain', 'label' => 'SNI 域名（监听器扩展证书，可选）', 'type' => 'string', 'required' => false, 'visible_when' => ['any' => [['key' => 'deploy_target', 'equals' => 'loadbalancer'], ['key' => 'deploy_target', 'equals' => 'listener']]]],
         ];
     }
 

@@ -5,6 +5,7 @@ use Plugins\CloudDeploy\Deployers\Tencent\TencentCdnDeployer;
 use Plugins\CloudDeploy\Deployers\Tencent\TencentClbDeployer;
 use Plugins\CloudDeploy\Deployers\Tencent\TencentCosDeployer;
 use Plugins\CloudDeploy\Deployers\Tencent\TencentCssDeployer;
+use Plugins\CloudDeploy\Deployers\Tencent\TencentDdosproDeployer;
 use Plugins\CloudDeploy\Deployers\Tencent\TencentEcdnDeployer;
 use Plugins\CloudDeploy\Deployers\Tencent\TencentEoDeployer;
 use Plugins\CloudDeploy\Deployers\Tencent\TencentEoMakersDeployer;
@@ -42,4 +43,5 @@ return function (Registry $registry): void {
     $registry->registerDeployer('tencent', 'ssl-deploy', fn () => new TencentSslDeployDeployer);
     $registry->registerDeployer('tencent', 'ssl-update', fn () => new TencentSslUpdateDeployer);
     $registry->registerDeployer('tencent', 'tse', fn () => new TencentTseDeployer);
+    $registry->registerDeployer('tencent', 'ddospro', fn () => new TencentDdosproDeployer);
 };

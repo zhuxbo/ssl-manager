@@ -52,7 +52,7 @@ test('新建路径（未填 certificate_id）：createCustomCertificate(zone, �
     expect($body['certificate'])->toContain('CERTPEM')->toContain('CHAINPEM');
     expect($body['private_key'])->toBe('KEYPEM');
     expect($body['bundle_method'])->toBe('ubiquitous');
-    expect($body['deploy'])->toBe('production'); // environment 默认
+    expect($body)->not->toHaveKey('deploy'); // 未配置时交由 Cloudflare 决定部署环境
 });
 
 test('更新路径（填 certificate_id）：editCustomCertificate(zone, certId, body)，不新建', function () {
@@ -94,4 +94,10 @@ test('bind 遇 CloudflareApiException 时脱敏重抛（含错误码、无 token
         expect($e->getPrevious())->toBeNull();
         expect($e->getTraceAsString())->not->toContain('TOKEN-LEAK-123');
     }
+});
+
+test('Cloudflare 更新证书时空环境不发送 deploy', function () {
+    $client = Mockery::mock(CloudflareClient::class);
+    $client->shouldReceive('editCustomCertificate')->once()->with('zone-1', 'cert-1', Mockery::on(fn ($body) => ! array_key_exists('deploy', $body)));
+    cloudflareSslDeployerWith(fn () => $client)->bind(cloudflareCertRef(), ['api_token' => 'TOKEN'], ['zone_id' => 'zone-1', 'certificate_id' => 'cert-1', 'environment' => '']);
 });

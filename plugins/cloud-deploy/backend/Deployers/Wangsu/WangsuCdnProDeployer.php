@@ -59,7 +59,10 @@ class WangsuCdnProDeployer extends AbstractDeployer implements HasPollBudget, Re
     {
         return [
             ['key' => 'domain', 'label' => '加速域名', 'type' => 'string', 'required' => true],
-            ['key' => 'environment', 'label' => '部署环境（如 production / staging）', 'type' => 'string', 'required' => true],
+            ['key' => 'environment', 'label' => '部署环境（如 production / staging）', 'type' => 'select', 'required' => true, 'default' => 'production', 'options' => [
+                ['label' => '生产环境', 'value' => 'production'],
+                ['label' => '预发布环境', 'value' => 'staging'],
+            ]],
             ['key' => 'certificate_id', 'label' => '证书 ID（选填，填则更新已有证书）', 'type' => 'string', 'required' => false],
             ['key' => 'webhook_id', 'label' => 'Webhook ID（选填）', 'type' => 'string', 'required' => false],
         ];

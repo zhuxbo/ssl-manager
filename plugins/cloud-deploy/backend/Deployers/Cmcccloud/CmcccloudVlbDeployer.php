@@ -49,13 +49,13 @@ class CmcccloudVlbDeployer extends AbstractDeployer
     {
         return [
             ['key' => 'pool_id', 'label' => '资源池 ID', 'type' => 'string', 'required' => true],
-            ['key' => 'deploy_target', 'label' => '部署目标', 'type' => 'string', 'required' => true, 'options' => [
+            ['key' => 'deploy_target', 'label' => '证书部署方式', 'type' => 'select', 'required' => true, 'default' => 'listener', 'options' => [
                 ['label' => '负载均衡器（全部 HTTPS 监听）', 'value' => 'loadbalancer'],
                 ['label' => '指定监听器', 'value' => 'listener'],
             ]],
-            ['key' => 'loadbalancer_id', 'label' => '负载均衡器 ID', 'type' => 'string', 'required' => true],
-            ['key' => 'listener_id', 'label' => '监听器 ID（部署目标为指定监听器时必填）', 'type' => 'string', 'required' => false],
-            ['key' => 'domain', 'label' => 'SNI 域名（选填，填则部署到 SNI 证书）', 'type' => 'string', 'required' => false],
+            ['key' => 'loadbalancer_id', 'label' => '负载均衡器 ID', 'type' => 'string', 'required' => false, 'visible_when' => ['key' => 'deploy_target', 'equals' => 'loadbalancer'], 'required_when' => ['key' => 'deploy_target', 'equals' => 'loadbalancer']],
+            ['key' => 'listener_id', 'label' => '监听器 ID（部署目标为指定监听器时必填）', 'type' => 'string', 'required' => false, 'visible_when' => ['key' => 'deploy_target', 'equals' => 'listener'], 'required_when' => ['key' => 'deploy_target', 'equals' => 'listener']],
+            ['key' => 'domain', 'label' => 'SNI 域名（选填，填则部署到 SNI 证书）', 'type' => 'string', 'required' => false, 'visible_when' => ['any' => [['key' => 'deploy_target', 'equals' => 'loadbalancer'], ['key' => 'deploy_target', 'equals' => 'listener']]]],
         ];
     }
 

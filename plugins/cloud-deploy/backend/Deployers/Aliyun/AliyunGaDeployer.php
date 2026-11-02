@@ -53,10 +53,13 @@ class AliyunGaDeployer extends AbstractDeployer
     public function configSchema(): array
     {
         return [
-            ['key' => 'deploy_target', 'label' => '部署目标', 'type' => 'string', 'required' => false, 'default' => 'listener'],
+            ['key' => 'deploy_target', 'label' => '证书部署方式', 'type' => 'select', 'required' => false, 'default' => 'listener', 'options' => [
+                ['label' => '加速实例', 'value' => 'accelerator'],
+                ['label' => '指定监听器', 'value' => 'listener'],
+            ]],
             ['key' => 'accelerator_id', 'label' => '全球加速实例 ID', 'type' => 'string', 'required' => true],
-            ['key' => 'listener_id', 'label' => '监听 ID', 'type' => 'string', 'required' => false],
-            ['key' => 'domain', 'label' => 'SNI 域名', 'type' => 'string', 'required' => false],
+            ['key' => 'listener_id', 'label' => '监听 ID', 'type' => 'string', 'required' => false, 'visible_when' => ['key' => 'deploy_target', 'equals' => 'listener'], 'required_when' => ['key' => 'deploy_target', 'equals' => 'listener']],
+            ['key' => 'domain', 'label' => 'SNI 域名', 'type' => 'string', 'required' => false, 'visible_when' => ['any' => [['key' => 'deploy_target', 'equals' => 'accelerator'], ['key' => 'deploy_target', 'equals' => 'listener']]]],
         ];
     }
 

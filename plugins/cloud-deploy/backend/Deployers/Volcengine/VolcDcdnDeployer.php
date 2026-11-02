@@ -42,7 +42,11 @@ class VolcDcdnDeployer extends AbstractDeployer implements ReceivesRemoteCertifi
     {
         return [
             ['key' => 'region', 'label' => '地域（默认 cn-beijing）', 'type' => 'string', 'required' => false],
-            ['key' => 'domain_match_pattern', 'label' => '域名匹配模式', 'type' => 'string', 'required' => false, 'default' => 'exact'],
+            ['key' => 'domain_match_pattern', 'label' => '域名匹配模式', 'type' => 'select', 'required' => false, 'default' => 'exact', 'options' => [
+                ['label' => '精确匹配', 'value' => 'exact'],
+                ['label' => '泛域名匹配', 'value' => 'wildcard'],
+                ['label' => '根据证书自动匹配', 'value' => 'certsan'],
+            ]],
             ['key' => 'domain', 'label' => '加速域名', 'type' => 'string', 'required' => false],
         ];
     }

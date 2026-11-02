@@ -51,6 +51,18 @@ class RatpanelRestClient
         ]);
     }
 
+    /** @param list<string> $domains */
+    public function updateCertificate(int $certificateId, array $domains, string $certPem, string $keyPem): void
+    {
+        $this->call('PUT', 'cert/cert/'.$certificateId, [
+            'id' => $certificateId,
+            'type' => 'upload',
+            'domains' => $domains,
+            'cert' => $certPem,
+            'key' => $keyPem,
+        ]);
+    }
+
     /**
      * 设置面板控制台 SSL 证书。
      * REF: certimate ratpanel-console SetSettingCert —— POST /setting/cert {cert, key}

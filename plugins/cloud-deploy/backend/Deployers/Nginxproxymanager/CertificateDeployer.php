@@ -40,11 +40,22 @@ class CertificateDeployer extends AbstractDeployer
     public function configSchema(): array
     {
         return [
-            ['key' => 'deploy_target', 'label' => '部署目标（certificate/host）', 'type' => 'string', 'required' => false],
-            ['key' => 'host_type', 'label' => '主机类型（proxy/redirection/stream/dead）', 'type' => 'string', 'required' => false],
-            ['key' => 'host_match_pattern', 'label' => '主机匹配（specified/certsan）', 'type' => 'string', 'required' => false],
-            ['key' => 'host_id', 'label' => '主机 ID', 'type' => 'number', 'required' => false],
-            ['key' => 'certificate_id', 'label' => '证书 ID', 'type' => 'number', 'required' => false],
+            ['key' => 'deploy_target', 'label' => '证书部署方式', 'type' => 'select', 'required' => false, 'default' => 'certificate', 'options' => [
+                ['label' => '主机', 'value' => 'host'],
+                ['label' => '替换指定证书', 'value' => 'certificate'],
+            ]],
+            ['key' => 'host_type', 'label' => '主机类型', 'type' => 'select', 'required' => false, 'default' => 'proxy', 'visible_when' => ['key' => 'deploy_target', 'equals' => 'host'], 'required_when' => ['key' => 'deploy_target', 'equals' => 'host'], 'options' => [
+                ['label' => '反向代理', 'value' => 'proxy'],
+                ['label' => '重定向', 'value' => 'redirection'],
+                ['label' => '流代理', 'value' => 'stream'],
+                ['label' => '默认主机', 'value' => 'dead'],
+            ]],
+            ['key' => 'host_match_pattern', 'label' => '主机匹配模式', 'type' => 'select', 'required' => false, 'default' => 'specified', 'visible_when' => ['key' => 'deploy_target', 'equals' => 'host'], 'options' => [
+                ['label' => '指定 ID', 'value' => 'specified'],
+                ['label' => '根据证书自动匹配', 'value' => 'certsan'],
+            ]],
+            ['key' => 'host_id', 'label' => '主机 ID', 'type' => 'number', 'required' => false, 'visible_when' => ['all' => [['key' => 'deploy_target', 'equals' => 'host'], ['key' => 'host_match_pattern', 'not_equals' => 'certsan']]], 'required_when' => ['all' => [['key' => 'deploy_target', 'equals' => 'host'], ['key' => 'host_match_pattern', 'not_equals' => 'certsan']]]],
+            ['key' => 'certificate_id', 'label' => '证书 ID', 'type' => 'number', 'required' => false, 'visible_when' => ['key' => 'deploy_target', 'equals' => 'certificate'], 'required_when' => ['key' => 'deploy_target', 'equals' => 'certificate']],
         ];
     }
 
@@ -185,6 +196,9 @@ class CertificateDeployer extends AbstractDeployer
     protected function makeClient(string $kind, array $credentials): object
     {
         $authMethod = (string) ($credentials['auth_method'] ?? '');
+        if (! in_array($authMethod, ['', 'password', 'token'], true)) {
+            $this->fail('不支持的 NPM 认证方式');
+        }
         // 仅 auth_method=token 时使用 api_token；password（含空缺省）走账号登录
         $apiToken = $authMethod === 'token' ? (string) ($credentials['api_token'] ?? '') : '';
 

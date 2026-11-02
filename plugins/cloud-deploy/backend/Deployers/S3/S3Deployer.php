@@ -45,18 +45,27 @@ class S3Deployer extends AbstractDeployer
     {
         return [
             ['key' => 'bucket', 'label' => '存储桶名', 'type' => 'string', 'required' => true],
-            ['key' => 'file_format', 'label' => '文件格式（pem/pfx/jks）', 'type' => 'string', 'required' => false],
+            ['key' => 'file_format', 'label' => '文件格式（pem/pfx/jks）', 'type' => 'select', 'required' => false, 'default' => 'pem', 'options' => [
+                ['label' => 'pem', 'value' => 'pem'],
+                ['label' => 'pfx', 'value' => 'pfx'],
+                ['label' => 'jks', 'value' => 'jks'],
+            ]],
             ['key' => 'signature_version', 'label' => 'S3 签名版本（选填）', 'type' => 'string', 'required' => false],
             ['key' => 'object_key_for_crt', 'label' => '证书文件对象键（完整链，如 ssl/full.pem）', 'type' => 'string', 'required' => false],
-            ['key' => 'object_key_for_key', 'label' => '私钥文件对象键（如 ssl/key.pem）', 'type' => 'string', 'required' => false],
-            ['key' => 'object_key_for_crt_server', 'label' => '服务器证书对象键（仅 leaf，选填）', 'type' => 'string', 'required' => false],
-            ['key' => 'object_key_for_crt_inter', 'label' => '中间证书对象键（仅中间证书，选填）', 'type' => 'string', 'required' => false],
+            ['key' => 'object_key_for_key', 'label' => '私钥文件对象键（如 ssl/key.pem）', 'type' => 'string', 'required' => false, 'visible_when' => ['key' => 'file_format', 'equals' => 'pem']],
+            ['key' => 'object_key_for_crt_server', 'label' => '服务器证书对象键（仅 leaf，选填）', 'type' => 'string', 'required' => false, 'visible_when' => ['key' => 'file_format', 'equals' => 'pem']],
+            ['key' => 'object_key_for_crt_inter', 'label' => '中间证书对象键（仅中间证书，选填）', 'type' => 'string', 'required' => false, 'visible_when' => ['key' => 'file_format', 'equals' => 'pem']],
             ['key' => 'use_path_style', 'label' => '使用路径风格寻址（MinIO/自建 S3 需勾选）', 'type' => 'bool', 'required' => false],
-            ['key' => 'pfx_password', 'label' => 'PFX 密码', 'type' => 'string', 'required' => false, 'secret' => true],
-            ['key' => 'pfx_encoder', 'label' => 'PFX 编码器（留空使用 OpenSSL 默认）', 'type' => 'string', 'required' => false],
-            ['key' => 'jks_alias', 'label' => 'JKS Alias', 'type' => 'string', 'required' => false],
-            ['key' => 'jks_keypass', 'label' => 'JKS Key Password', 'type' => 'string', 'required' => false, 'secret' => true],
-            ['key' => 'jks_storepass', 'label' => 'JKS Store Password', 'type' => 'string', 'required' => false, 'secret' => true],
+            ['key' => 'pfx_password', 'label' => 'PFX 密码', 'type' => 'string', 'required' => false, 'secret' => true, 'visible_when' => ['key' => 'file_format', 'equals' => 'pfx'], 'required_when' => ['key' => 'file_format', 'equals' => 'pfx']],
+            ['key' => 'pfx_encoder', 'label' => 'PFX 编码器（留空使用 OpenSSL 默认）', 'type' => 'select', 'required' => false, 'visible_when' => ['key' => 'file_format', 'equals' => 'pfx'], 'options' => [
+                ['label' => 'LegacyRC2', 'value' => 'LegacyRC2'],
+                ['label' => 'LegacyDES', 'value' => 'LegacyDES'],
+                ['label' => 'Modern2023', 'value' => 'Modern2023'],
+                ['label' => 'Modern2026', 'value' => 'Modern2026'],
+            ]],
+            ['key' => 'jks_alias', 'label' => 'JKS Alias', 'type' => 'string', 'required' => false, 'visible_when' => ['key' => 'file_format', 'equals' => 'jks'], 'required_when' => ['key' => 'file_format', 'equals' => 'jks']],
+            ['key' => 'jks_keypass', 'label' => 'JKS Key Password', 'type' => 'string', 'required' => false, 'secret' => true, 'visible_when' => ['key' => 'file_format', 'equals' => 'jks'], 'required_when' => ['key' => 'file_format', 'equals' => 'jks']],
+            ['key' => 'jks_storepass', 'label' => 'JKS Store Password', 'type' => 'string', 'required' => false, 'secret' => true, 'visible_when' => ['key' => 'file_format', 'equals' => 'jks'], 'required_when' => ['key' => 'file_format', 'equals' => 'jks']],
         ];
     }
 

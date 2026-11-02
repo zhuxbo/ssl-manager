@@ -23,7 +23,7 @@ interface DeployerInterface
     /**
      * config 字段 schema，供前端表单渲染 + 后端服务端校验。
      *
-     * @return list<array{key:string,label:string,type?:string,required?:bool,default?:mixed,required_when?:array{key:string,equals:mixed},visible_when?:array{key:string,equals:mixed}}>
+     * @return list<array{key:string,label:string,type?:string,required?:bool,default?:mixed,required_when?:array{key?:string,equals?:mixed,not_equals?:mixed,all?:list<array<string,mixed>>,any?:list<array<string,mixed>>},visible_when?:array{key?:string,equals?:mixed,not_equals?:mixed,all?:list<array<string,mixed>>,any?:list<array<string,mixed>>}}>
      */
     public function configSchema(): array;
 

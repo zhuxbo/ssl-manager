@@ -104,7 +104,7 @@ trait ValidatesAgainstSchema
     /**
      * 逐 required 字段断言存在且非空（null / '' 视为缺失，与 AbstractDeployer::requireConfig 同口径）。
      *
-     * @param  list<array{key:string,label?:string,required?:bool,default?:mixed,required_when?:array{key:string,equals:mixed}}>  $schema
+     * @param  list<array{key:string,label?:string,required?:bool,default?:mixed,required_when?:array<string,mixed>}>  $schema
      * @param  array<string,mixed>  $values
      */
     private function assertRequiredFields(Validator $validator, string $attribute, array $schema, array $values): void
@@ -156,10 +156,23 @@ trait ValidatesAgainstSchema
      */
     private function matchesSchemaCondition(mixed $condition, array $schema, array $values): bool
     {
-        if (! is_array($condition)
-            || ! is_string($condition['key'] ?? null)
+        if (! is_array($condition)) {
+            return false;
+        }
+        foreach (['all', 'any'] as $operator) {
+            if (array_key_exists($operator, $condition)) {
+                $items = $condition[$operator];
+                if (! is_array($items) || $items === []) {
+                    return false;
+                }
+                $matches = array_map(fn ($item) => $this->matchesSchemaCondition($item, $schema, $values), $items);
+
+                return $operator === 'all' ? ! in_array(false, $matches, true) : in_array(true, $matches, true);
+            }
+        }
+        if (! is_string($condition['key'] ?? null)
             || $condition['key'] === ''
-            || ! array_key_exists('equals', $condition)) {
+            || (! array_key_exists('equals', $condition) && ! array_key_exists('not_equals', $condition))) {
             return false;
         }
 
@@ -175,7 +188,9 @@ trait ValidatesAgainstSchema
             }
         }
 
-        return $value === $condition['equals'];
+        return array_key_exists('equals', $condition)
+            ? $value === $condition['equals']
+            : $value !== $condition['not_equals'];
     }
 
     /**

@@ -52,7 +52,7 @@ class TencentTseDeployer extends AbstractDeployer
         return [
             ['key' => 'endpoint', 'label' => '接口端点（选填）', 'type' => 'string', 'required' => false, 'destination' => true],
             ['key' => 'region', 'label' => '地域', 'type' => 'string', 'required' => true],
-            ['key' => 'service_type', 'label' => '服务类型', 'type' => 'string', 'required' => false, 'default' => 'cloudnative', 'options' => [
+            ['key' => 'service_type', 'label' => '服务类型', 'type' => 'select', 'required' => false, 'default' => 'cloudnative', 'options' => [
                 ['label' => '云原生 API 网关', 'value' => 'cloudnative'],
             ]],
             ['key' => 'gateway_id', 'label' => '云原生网关 ID', 'type' => 'string', 'required' => true],

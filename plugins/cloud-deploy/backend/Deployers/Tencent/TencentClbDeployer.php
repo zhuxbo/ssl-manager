@@ -64,14 +64,14 @@ class TencentClbDeployer extends AbstractDeployer implements HasPollBudget, Resu
     {
         return [
             ['key' => 'endpoint', 'label' => '接口端点（选填）', 'type' => 'string', 'required' => false, 'destination' => true],
-            ['key' => 'deploy_target', 'label' => '部署目标', 'type' => 'select', 'required' => false, 'default' => 'listener', 'options' => [
+            ['key' => 'deploy_target', 'label' => '证书部署方式', 'type' => 'select', 'required' => false, 'default' => 'listener', 'options' => [
                 ['label' => '负载均衡实例', 'value' => 'loadbalancer'],
                 ['label' => '指定监听器', 'value' => 'listener'],
                 ['label' => '七层规则域名', 'value' => 'ruledomain'],
             ]],
             ['key' => 'load_balancer_id', 'label' => '负载均衡实例 ID', 'type' => 'string', 'required' => true],
-            ['key' => 'listener_id', 'label' => '监听器 ID', 'type' => 'string', 'required' => false],
-            ['key' => 'domain', 'label' => '七层规则域名', 'type' => 'string', 'required' => false],
+            ['key' => 'listener_id', 'label' => '监听器 ID', 'type' => 'string', 'required' => false, 'visible_when' => ['any' => [['key' => 'deploy_target', 'equals' => 'listener'], ['key' => 'deploy_target', 'equals' => 'ruledomain']]], 'required_when' => ['any' => [['key' => 'deploy_target', 'equals' => 'listener'], ['key' => 'deploy_target', 'equals' => 'ruledomain']]]],
+            ['key' => 'domain', 'label' => '七层规则域名', 'type' => 'string', 'required' => false, 'visible_when' => ['key' => 'deploy_target', 'equals' => 'ruledomain'], 'required_when' => ['key' => 'deploy_target', 'equals' => 'ruledomain']],
             ['key' => 'region', 'label' => '地域', 'type' => 'string', 'required' => true],
         ];
     }

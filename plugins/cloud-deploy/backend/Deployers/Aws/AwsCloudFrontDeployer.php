@@ -50,7 +50,10 @@ class AwsCloudFrontDeployer extends AbstractDeployer
         return [
             ['key' => 'region', 'label' => '地域（须 us-east-1）', 'type' => 'string', 'required' => true],
             ['key' => 'distribution_id', 'label' => '分发 ID', 'type' => 'string', 'required' => true],
-            ['key' => 'certificate_source', 'label' => '证书来源（ACM/IAM）', 'type' => 'string', 'required' => false],
+            ['key' => 'certificate_source', 'label' => '证书来源（ACM/IAM）', 'type' => 'select', 'required' => false, 'default' => 'ACM', 'options' => [
+                ['label' => 'ACM', 'value' => 'ACM'],
+                ['label' => 'IAM', 'value' => 'IAM'],
+            ]],
         ];
     }
 

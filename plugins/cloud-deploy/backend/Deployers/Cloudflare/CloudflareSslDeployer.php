@@ -11,13 +11,13 @@ use Throwable;
  *
  * 对齐 certimate cloudflare-ssl：把证书直灌到 Cloudflare Zone 的自定义证书（Custom SSL）。
  * - 未填 certificate_id：`POST /zones/{zone}/custom_certificates` 新建（certificate=完整链 + private_key
- *   + bundle_method=ubiquitous + deploy=environment||production）。
+ *   + bundle_method=ubiquitous，填写 environment 时才传 deploy）。
  * - 填了 certificate_id：`PATCH /zones/{zone}/custom_certificates/{id}` 更新已有证书内容。
  *
  * 内联型（usesRemoteCertStore=false）：bind 收 {cert,key,chain} 三元组，certificate 用 cert+chain 完整链。
  * 鉴权 Bearer Token（api_token 凭证）。仅企业版 Zone 支持 Custom SSL（对齐 certimate，不额外校验）。
  *
- * config：zone_id（必填）/ certificate_id（选填，填则走更新）/ environment（选填，默认 production）。
+ * config：zone_id（必填）/ certificate_id（选填，填则走更新）/ environment（选填）。
  */
 class CloudflareSslDeployer extends AbstractDeployer
 {
@@ -43,7 +43,7 @@ class CloudflareSslDeployer extends AbstractDeployer
         return [
             ['key' => 'zone_id', 'label' => 'Zone ID', 'type' => 'string', 'required' => true],
             ['key' => 'certificate_id', 'label' => '自定义证书 ID（选填，填则更新已有证书）', 'type' => 'string', 'required' => false],
-            ['key' => 'environment', 'label' => '部署环境（选填，默认 production）', 'type' => 'string', 'required' => false],
+            ['key' => 'environment', 'label' => '部署环境（选填）', 'type' => 'string', 'required' => false],
         ];
     }
 
@@ -56,17 +56,17 @@ class CloudflareSslDeployer extends AbstractDeployer
     {
         $zoneId = (string) $this->requireConfig($config, 'zone_id');
         $certificateId = isset($config['certificate_id']) ? (string) $config['certificate_id'] : '';
-        $environment = isset($config['environment']) && (string) $config['environment'] !== ''
-            ? (string) $config['environment']
-            : 'production';
+        $environment = (string) ($config['environment'] ?? '');
         $fullChain = rtrim($certRef['cert'])."\n".trim($certRef['chain']);
 
         $body = [
             'certificate' => $fullChain,
             'private_key' => $certRef['key'],
             'bundle_method' => 'ubiquitous',
-            'deploy' => $environment,
         ];
+        if ($environment !== '') {
+            $body['deploy'] = $environment;
+        }
 
         $this->guardSdk(function () use ($credentials, $zoneId, $certificateId, $body) {
             /** @var CloudflareClient $client */

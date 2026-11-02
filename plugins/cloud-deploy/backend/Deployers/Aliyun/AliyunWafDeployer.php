@@ -60,11 +60,16 @@ class AliyunWafDeployer extends AbstractDeployer
         return [
             ['key' => 'instance_id', 'label' => 'WAF 实例 ID', 'type' => 'string', 'required' => true],
             ['key' => 'region', 'label' => '地域', 'type' => 'string', 'required' => true],
-            ['key' => 'service_version', 'label' => '服务版本', 'type' => 'string', 'required' => false, 'default' => '3.0'],
-            ['key' => 'service_type', 'label' => '服务类型', 'type' => 'string', 'required' => false, 'default' => 'cname'],
-            ['key' => 'resource_product', 'label' => '云产品类型', 'type' => 'string', 'required' => false],
-            ['key' => 'resource_id', 'label' => '云产品资源 ID', 'type' => 'string', 'required' => false],
-            ['key' => 'resource_port', 'label' => '云产品资源端口', 'type' => 'number', 'required' => false],
+            ['key' => 'service_version', 'label' => '服务版本', 'type' => 'select', 'required' => false, 'default' => '3.0', 'options' => [
+                ['label' => '3.0', 'value' => '3.0'],
+            ]],
+            ['key' => 'service_type', 'label' => '服务类型', 'type' => 'select', 'required' => false, 'default' => 'cname', 'options' => [
+                ['label' => '云产品接入', 'value' => 'cloudresource'],
+                ['label' => 'CNAME 接入', 'value' => 'cname'],
+            ]],
+            ['key' => 'resource_product', 'label' => '云产品类型', 'type' => 'string', 'required' => false, 'visible_when' => ['key' => 'service_type', 'equals' => 'cloudresource'], 'required_when' => ['key' => 'service_type', 'equals' => 'cloudresource']],
+            ['key' => 'resource_id', 'label' => '云产品资源 ID', 'type' => 'string', 'required' => false, 'visible_when' => ['key' => 'service_type', 'equals' => 'cloudresource'], 'required_when' => ['key' => 'service_type', 'equals' => 'cloudresource']],
+            ['key' => 'resource_port', 'label' => '云产品资源端口', 'type' => 'number', 'required' => false, 'visible_when' => ['key' => 'service_type', 'equals' => 'cloudresource'], 'required_when' => ['key' => 'service_type', 'equals' => 'cloudresource']],
             ['key' => 'domain', 'label' => '扩展域名', 'type' => 'string', 'required' => false],
         ];
     }

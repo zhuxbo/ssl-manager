@@ -47,9 +47,13 @@ class TencentEoDeployer extends AbstractDeployer implements ReceivesRemoteCertif
         return [
             ['key' => 'endpoint', 'label' => '接口端点（选填）', 'type' => 'string', 'required' => false, 'destination' => true],
             ['key' => 'zone_id', 'label' => '站点 ID', 'type' => 'string', 'required' => true],
-            ['key' => 'domain_match_pattern', 'label' => '域名匹配模式', 'type' => 'string', 'required' => false, 'default' => 'exact'],
-            ['key' => 'domains', 'label' => '加速域名列表', 'type' => 'string', 'required' => false],
-            ['key' => 'domain', 'label' => '加速域名（兼容旧配置）', 'type' => 'string', 'required' => false],
+            ['key' => 'domain_match_pattern', 'label' => '域名匹配模式', 'type' => 'select', 'required' => false, 'default' => 'exact', 'options' => [
+                ['label' => '精确匹配', 'value' => 'exact'],
+                ['label' => '泛域名匹配', 'value' => 'wildcard'],
+                ['label' => '根据证书自动匹配', 'value' => 'certsan'],
+            ]],
+            ['key' => 'domains', 'label' => '加速域名列表', 'type' => 'string', 'required' => false, 'visible_when' => ['key' => 'domain_match_pattern', 'not_equals' => 'certsan']],
+            ['key' => 'domain', 'label' => '加速域名（兼容旧配置）', 'type' => 'string', 'required' => false, 'visible_when' => ['key' => 'domain_match_pattern', 'not_equals' => 'certsan']],
             ['key' => 'enable_multiple_ssl', 'label' => '同域名多证书', 'type' => 'boolean', 'required' => false, 'default' => false],
         ];
     }

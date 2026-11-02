@@ -31,7 +31,9 @@ class VodDeployer extends AbstractDeployer implements ReceivesRemoteCertificateM
     {
         return [
             ['key' => 'region', 'label' => '地域', 'type' => 'string', 'required' => true],
-            ['key' => 'domain_match_pattern', 'label' => '域名匹配模式', 'type' => 'string', 'required' => false, 'default' => 'exact'],
+            ['key' => 'domain_match_pattern', 'label' => '域名匹配模式', 'type' => 'select', 'required' => false, 'default' => 'exact', 'options' => [
+                ['label' => '精确匹配', 'value' => 'exact'],
+            ]],
             ['key' => 'domain', 'label' => '点播加速域名', 'type' => 'string', 'required' => true],
         ];
     }

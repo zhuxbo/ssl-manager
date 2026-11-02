@@ -36,7 +36,7 @@ class VolcWafDeployer extends AbstractDeployer
     {
         return [
             ['key' => 'region', 'label' => '地域', 'type' => 'string', 'required' => true],
-            ['key' => 'access_mode', 'label' => 'WAF 接入模式', 'type' => 'string', 'required' => true, 'options' => [
+            ['key' => 'access_mode', 'label' => 'WAF 接入模式', 'type' => 'select', 'required' => true, 'default' => 'cname', 'options' => [
                 ['label' => 'CNAME 接入', 'value' => 'cname'],
             ]],
             ['key' => 'domain', 'label' => '防护域名', 'type' => 'string', 'required' => true],
@@ -138,6 +138,13 @@ class VolcWafDeployer extends AbstractDeployer
             }
             if (isset($domainInfo['LBAlgorithm']) && is_string($domainInfo['LBAlgorithm']) && $domainInfo['LBAlgorithm'] !== '') {
                 $body['LBAlgorithm'] = $domainInfo['LBAlgorithm'];
+            }
+
+            $body['PublicRealServer'] = $domainInfo['PublicRealServer'] ?? 1;
+            foreach (['VpcID', 'BackendGroups', 'CloudAccessConfig'] as $field) {
+                if (array_key_exists($field, $domainInfo)) {
+                    $body[$field] = $domainInfo[$field];
+                }
             }
 
             $client->callJson('UpdateDomain', '2023-12-25', $body);

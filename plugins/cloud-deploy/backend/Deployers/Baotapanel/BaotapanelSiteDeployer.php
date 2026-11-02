@@ -43,7 +43,18 @@ class BaotapanelSiteDeployer extends AbstractDeployer
     public function configSchema(): array
     {
         return [
-            ['key' => 'site_type', 'label' => '网站类型（any=批量；proxy=反代；空=普通）', 'type' => 'string', 'required' => false],
+            ['key' => 'site_type', 'label' => '网站类型', 'type' => 'select', 'required' => false, 'default' => '', 'options' => [
+                ['label' => 'php', 'value' => 'php'],
+                ['label' => 'java', 'value' => 'java'],
+                ['label' => 'nodejs', 'value' => 'nodejs'],
+                ['label' => 'go', 'value' => 'go'],
+                ['label' => 'python', 'value' => 'python'],
+                ['label' => '反向代理', 'value' => 'proxy'],
+                ['label' => '静态网站', 'value' => 'html'],
+                ['label' => '通用网站', 'value' => 'general'],
+                ['label' => '自动批量匹配', 'value' => 'any'],
+                ['label' => '自动识别（兼容旧配置）', 'value' => ''],
+            ]],
             ['key' => 'site_names', 'label' => '网站名称（逗号或换行分隔）', 'type' => 'string', 'required' => true],
         ];
     }

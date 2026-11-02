@@ -40,7 +40,11 @@ class WebhostDeployer extends AbstractDeployer
     public function configSchema(): array
     {
         return [
-            ['key' => 'space_provider', 'label' => '服务空间提供商（aliyun / alipay / tencent）', 'type' => 'string', 'required' => true],
+            ['key' => 'space_provider', 'label' => '服务空间提供商（aliyun / alipay / tencent）', 'type' => 'select', 'required' => true, 'default' => 'tencent', 'options' => [
+                ['label' => '阿里云', 'value' => 'aliyun'],
+                ['label' => '支付宝云', 'value' => 'alipay'],
+                ['label' => '腾讯云', 'value' => 'tencent'],
+            ]],
             ['key' => 'space_id', 'label' => '服务空间 ID', 'type' => 'string', 'required' => true],
             ['key' => 'domain', 'label' => '托管网站域名（不支持泛域名）', 'type' => 'string', 'required' => true],
         ];

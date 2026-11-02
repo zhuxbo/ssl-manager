@@ -23,8 +23,8 @@ uses(TestCase::class);
 function expectedCloudDeployCatalog(): array
 {
     return [
-        'aliyun' => ['cdn', 'dcdn', 'live', 'vod', 'alb', 'nlb', 'clb', 'ga', 'waf', 'oss', 'fc', 'apigw', 'ddospro', 'esa', 'cas', 'casdeploy', 'esasaas'],
-        'tencent' => ['cdn', 'ecdn', 'eo', 'eo-makers', 'css', 'vod', 'clb', 'scf', 'waf', 'cos', 'gaap', 'ssl-deploy', 'ssl', 'ssl-update', 'tse', 'ga2'],
+        'aliyun' => ['cdn', 'dcdn', 'live', 'vod', 'alb', 'nlb', 'clb', 'ga', 'waf', 'oss', 'fc', 'apigw', 'ddospro', 'esa', 'cas', 'casdeploy', 'esasaas', 'mse'],
+        'tencent' => ['cdn', 'ecdn', 'eo', 'eo-makers', 'css', 'vod', 'clb', 'scf', 'waf', 'cos', 'gaap', 'ssl-deploy', 'ssl', 'ssl-update', 'tse', 'ga2', 'ddospro'],
         'qiniu' => ['cdn', 'kodo', 'pili'],
         'baidu' => ['cdn', 'blb', 'appblb', 'cert'],
         'cloudflare' => ['ssl'],
@@ -73,6 +73,7 @@ function expectedCloudDeployCatalog(): array
         'goedge' => ['goedge'],
         'flexcdn' => ['flexcdn'],
         'lecdn' => ['lecdn'],
+        'asiaispcdn' => ['cdn'],
         'nginxproxymanager' => ['certificate'],
         'synologydsm' => ['certificate'],
         'proxmoxve' => ['node'],
@@ -86,15 +87,15 @@ function expectedCloudDeployCatalog(): array
     ];
 }
 
-test('注册端点总数为 156（非云清洁 + 面板 31；ssh/ftp/local 不实现）', function () {
+test('注册端点总数为 159（非云清洁 + 面板 31；ssh/ftp/local 不实现）', function () {
     $registry = app(Registry::class);
     $all = $registry->allDeployers();
 
-    expect($all)->toHaveCount(156);
+    expect($all)->toHaveCount(159);
 
     $expected = expectedCloudDeployCatalog();
-    expect(count($expected['aliyun']))->toBe(17);
-    expect(count($expected['tencent']))->toBe(16);
+    expect(count($expected['aliyun']))->toBe(18);
+    expect(count($expected['tencent']))->toBe(17);
     expect(count($expected['qiniu']))->toBe(3);
     expect(count($expected['baidu']))->toBe(4);
     expect(count($expected['cloudflare']))->toBe(1);
@@ -280,4 +281,79 @@ test('catalog() 的 providers/products 与实际注册集完全一致（数量 +
             expect($productEntry['configSchema'])->toBeArray();
         }
     }
+});
+
+test('全量配置及凭证 schema 的控件、选项、默认值和条件引用必须自洽', function () {
+    $errors = [];
+    $check = function (string $name, array $schema) use (&$errors) {
+        $fields = array_column($schema, null, 'key');
+        $checkCondition = function (mixed $condition, string $where) use (&$checkCondition, &$errors, $fields) {
+            if (! is_array($condition)) {
+                $errors[] = "$where 条件必须为数组";
+
+                return;
+            }
+            foreach (['all', 'any'] as $operator) {
+                if (array_key_exists($operator, $condition)) {
+                    if (count($condition) !== 1 || ! is_array($condition[$operator]) || $condition[$operator] === []) {
+                        $errors[] = "$where $operator 必须为非空条件列表";
+
+                        return;
+                    }
+                    foreach ($condition[$operator] as $child) {
+                        $checkCondition($child, $where);
+                    }
+
+                    return;
+                }
+            }
+            $key = $condition['key'] ?? '';
+            $operators = array_intersect(['equals', 'not_equals'], array_keys($condition));
+            if (! isset($fields[$key]) || count($operators) !== 1 || count($condition) !== 2) {
+                $errors[] = "$where 引用了不存在的字段或无效操作符";
+
+                return;
+            }
+            if (isset($fields[$key]['options']) && ! in_array($condition[array_values($operators)[0]], array_column($fields[$key]['options'], 'value'), true)) {
+                $errors[] = "$where 条件值不在 $key 选项中";
+            }
+        };
+        foreach ($schema as $field) {
+            $where = "$name.{$field['key']}";
+            $type = $field['type'] ?? 'string';
+            if (! in_array($type, ['string', 'number', 'select', 'bool', 'boolean'], true)) {
+                $errors[] = "$where 前端不支持控件 $type";
+            }
+            if (array_key_exists('options', $field) && $type !== 'select') {
+                $errors[] = "$where 带 options 的字段必须使用 select";
+            }
+            if ($type === 'select') {
+                $options = $field['options'] ?? [];
+                $values = array_column($options, 'value');
+                if ($options === [] || count($values) !== count($options) || count(array_unique($values, SORT_REGULAR)) !== count($values)) {
+                    $errors[] = "$where 选项缺失或重复";
+                }
+                foreach ($options as $option) {
+                    if (! is_string($option['label'] ?? null) || $option['label'] === '' || ! is_string($option['value'] ?? null)) {
+                        $errors[] = "$where 选项必须有非空标签和字符串值";
+                    }
+                }
+                if (array_key_exists('default', $field) && ! in_array($field['default'], $values, true)) {
+                    $errors[] = "$where 默认值不在选项中";
+                }
+            }
+            foreach (['visible_when', 'required_when'] as $kind) {
+                if (isset($field[$kind])) {
+                    $checkCondition($field[$kind], "$where.$kind");
+                }
+            }
+        }
+    };
+    foreach (app(Registry::class)->catalog()['providers'] as $provider) {
+        $check($provider['key'].'.credentials', $provider['credentialSchema']);
+        foreach ($provider['products'] as $product) {
+            $check($provider['key'].'.'.$product['product'], $product['configSchema']);
+        }
+    }
+    expect($errors)->toBe([], implode("\n", $errors));
 });

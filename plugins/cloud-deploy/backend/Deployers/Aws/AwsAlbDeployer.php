@@ -50,7 +50,10 @@ class AwsAlbDeployer extends AbstractDeployer
             ['key' => 'region', 'label' => '地域', 'type' => 'string', 'required' => true],
             ['key' => 'load_balancer_arn', 'label' => '负载均衡器 ARN', 'type' => 'string', 'required' => true],
             ['key' => 'listener_arn', 'label' => '侦听器 ARN', 'type' => 'string', 'required' => true],
-            ['key' => 'certificate_source', 'label' => '证书来源（ACM/IAM）', 'type' => 'string', 'required' => false],
+            ['key' => 'certificate_source', 'label' => '证书来源（ACM/IAM）', 'type' => 'select', 'required' => false, 'default' => 'ACM', 'options' => [
+                ['label' => 'ACM', 'value' => 'ACM'],
+                ['label' => 'IAM', 'value' => 'IAM'],
+            ]],
             ['key' => 'is_default', 'label' => '设为默认证书', 'type' => 'boolean', 'required' => false],
         ];
     }

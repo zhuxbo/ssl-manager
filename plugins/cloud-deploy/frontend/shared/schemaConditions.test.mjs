@@ -11,11 +11,8 @@ registerHooks({
   }
 });
 
-const {
-  configForVisibleSchema,
-  isSchemaFieldRequired,
-  isSchemaFieldVisible
-} = await import("./schemaConditions.ts");
+const { configForVisibleSchema, isSchemaFieldRequired, isSchemaFieldVisible } =
+  await import("./schemaConditions.ts");
 
 const fields = [
   { key: "service_type", type: "select", default: "cloudnative" },
@@ -41,7 +38,11 @@ test("条件 schema 以默认值判定可见与必填", () => {
 });
 
 test("条件 schema 切换分支后丢弃隐藏旧值，只提交当前分支字段", () => {
-  const traditional = { service_type: "traditional", gateway_id: "old", group_id: "group-1" };
+  const traditional = {
+    service_type: "traditional",
+    gateway_id: "old",
+    group_id: "group-1"
+  };
 
   assert.equal(isSchemaFieldVisible(fields[1], traditional, fields), false);
   assert.equal(isSchemaFieldRequired(fields[2], traditional, fields), true);
@@ -105,4 +106,93 @@ test("Oracle principal 分支会裁剪 API Key 字段且不触发隐藏字段必
   assert.deepEqual(configForVisibleSchema(fields, values), {
     auth_method: "resourceprincipal"
   });
+});
+
+test("1Panel 自动匹配隐藏网站 ID，证书分支同时移除网站匹配模式和网站 ID", () => {
+  const fields = [
+    { key: "deploy_target", type: "select", default: "website" },
+    {
+      key: "website_match_pattern",
+      type: "select",
+      default: "specified",
+      visible_when: { key: "deploy_target", equals: "website" }
+    },
+    {
+      key: "website_id",
+      type: "number",
+      visible_when: {
+        all: [
+          { key: "deploy_target", equals: "website" },
+          { key: "website_match_pattern", not_equals: "certsan" }
+        ]
+      }
+    },
+    {
+      key: "certificate_id",
+      type: "number",
+      visible_when: { key: "deploy_target", equals: "certificate" }
+    }
+  ];
+  const current = {
+    deploy_target: "website",
+    website_match_pattern: "certsan",
+    website_id: 99,
+    certificate_id: 18
+  };
+  assert.deepEqual(configForVisibleSchema(fields, current), {
+    deploy_target: "website",
+    website_match_pattern: "certsan"
+  });
+  assert.deepEqual(
+    configForVisibleSchema(fields, {
+      ...current,
+      deploy_target: "certificate"
+    }),
+    { deploy_target: "certificate", certificate_id: 18 }
+  );
+  // 从证书分支切回网站时恢复默认匹配模式，不能保留上一个分支字段。
+  assert.deepEqual(
+    configForVisibleSchema(fields, {
+      deploy_target: "website",
+      certificate_id: 18
+    }),
+    {
+      deploy_target: "website",
+      website_match_pattern: "specified",
+      website_id: ""
+    }
+  );
+});
+
+test("any 条件只在匹配的分支显示并必填，空条件不能通过", () => {
+  const condition = {
+    any: [
+      { key: "target", equals: "listener" },
+      { key: "target", equals: "ruledomain" }
+    ]
+  };
+  const field = {
+    key: "listener_id",
+    visible_when: condition,
+    required_when: condition
+  };
+  const fields = [{ key: "target", default: "listener" }, field];
+  for (const target of ["listener", "ruledomain", "loadbalancer"]) {
+    assert.equal(
+      isSchemaFieldVisible(field, { target }, fields),
+      target !== "loadbalancer"
+    );
+    assert.equal(
+      isSchemaFieldRequired(field, { target }, fields),
+      target !== "loadbalancer"
+    );
+  }
+  assert.equal(
+    isSchemaFieldVisible({ key: "x", visible_when: { all: [] } }, {}, []),
+    false
+  );
+  assert.equal(
+    isSchemaFieldVisible({ key: "x", visible_when: { any: [] } }, {}, []),
+    false
+  );
 });

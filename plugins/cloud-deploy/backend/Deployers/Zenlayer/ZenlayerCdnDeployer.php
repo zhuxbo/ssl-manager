@@ -55,10 +55,17 @@ class ZenlayerCdnDeployer extends AbstractDeployer implements HasPollBudget, Rec
     public function configSchema(): array
     {
         return [
-            ['key' => 'deploy_target', 'label' => '部署目标（domain/certificate）', 'type' => 'string', 'required' => false],
-            ['key' => 'domain_match_pattern', 'label' => '域名匹配（exact/wildcard/certsan）', 'type' => 'string', 'required' => false],
-            ['key' => 'domain', 'label' => '加速域名', 'type' => 'string', 'required' => false],
-            ['key' => 'certificate_id', 'label' => '证书 ID（certificate 目标）', 'type' => 'string', 'required' => false],
+            ['key' => 'deploy_target', 'label' => '证书部署方式', 'type' => 'select', 'required' => false, 'default' => 'domain', 'options' => [
+                ['label' => '加速域名', 'value' => 'domain'],
+                ['label' => '替换指定证书', 'value' => 'certificate'],
+            ]],
+            ['key' => 'domain_match_pattern', 'label' => '域名匹配模式', 'type' => 'select', 'required' => false, 'default' => 'exact', 'visible_when' => ['key' => 'deploy_target', 'equals' => 'domain'], 'options' => [
+                ['label' => '精确匹配', 'value' => 'exact'],
+                ['label' => '泛域名匹配', 'value' => 'wildcard'],
+                ['label' => '根据证书自动匹配', 'value' => 'certsan'],
+            ]],
+            ['key' => 'domain', 'label' => '加速域名', 'type' => 'string', 'required' => false, 'visible_when' => ['key' => 'deploy_target', 'equals' => 'domain'], 'required_when' => ['all' => [['key' => 'deploy_target', 'equals' => 'domain'], ['key' => 'domain_match_pattern', 'not_equals' => 'certsan']]]],
+            ['key' => 'certificate_id', 'label' => '证书 ID（certificate 目标）', 'type' => 'string', 'required' => false, 'visible_when' => ['key' => 'deploy_target', 'equals' => 'certificate'], 'required_when' => ['key' => 'deploy_target', 'equals' => 'certificate']],
         ];
     }
 

@@ -46,9 +46,16 @@ class AliyunFcDeployer extends AbstractDeployer
     {
         return [
             ['key' => 'region', 'label' => '地域', 'type' => 'string', 'required' => true],
-            ['key' => 'service_version', 'label' => '服务版本', 'type' => 'string', 'required' => false, 'default' => '3.0'],
-            ['key' => 'domain_match_pattern', 'label' => '域名匹配模式', 'type' => 'string', 'required' => false, 'default' => 'exact'],
-            ['key' => 'domain', 'label' => '自定义域名', 'type' => 'string', 'required' => false],
+            ['key' => 'service_version', 'label' => '服务版本', 'type' => 'select', 'required' => false, 'default' => '3.0', 'options' => [
+                ['label' => '2.0', 'value' => '2.0'],
+                ['label' => '3.0', 'value' => '3.0'],
+            ]],
+            ['key' => 'domain_match_pattern', 'label' => '域名匹配模式', 'type' => 'select', 'required' => false, 'default' => 'exact', 'options' => [
+                ['label' => '精确匹配', 'value' => 'exact'],
+                ['label' => '泛域名匹配', 'value' => 'wildcard'],
+                ['label' => '根据证书自动匹配', 'value' => 'certsan'],
+            ]],
+            ['key' => 'domain', 'label' => '自定义域名', 'type' => 'string', 'required' => false, 'visible_when' => ['key' => 'domain_match_pattern', 'not_equals' => 'certsan'], 'required_when' => ['key' => 'domain_match_pattern', 'not_equals' => 'certsan']],
         ];
     }
 

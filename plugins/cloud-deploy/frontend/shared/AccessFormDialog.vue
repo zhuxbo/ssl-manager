@@ -15,8 +15,8 @@ export interface CredentialField {
   type?: "string" | "number" | "select" | "bool" | "boolean";
   required?: boolean;
   default?: unknown;
-  required_when?: { key: string; equals: unknown };
-  visible_when?: { key: string; equals: unknown };
+  required_when?: import("./schemaConditions").SchemaCondition;
+  visible_when?: import("./schemaConditions").SchemaCondition;
   options?: Array<{ label: string; value: string }>;
   secret?: boolean;
   description?: string;
@@ -107,10 +107,7 @@ function open() {
     setForm({
       name: props.access.name,
       provider: props.access.provider,
-      credentials: configForVisibleSchema(
-        provider?.credentialSchema ?? [],
-        {}
-      )
+      credentials: configForVisibleSchema(provider?.credentialSchema ?? [], {})
     });
     return;
   }

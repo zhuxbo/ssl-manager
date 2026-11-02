@@ -35,6 +35,7 @@ $fixture = [
         'aliyun.casdeploy' => 'aliyun-cas-deploy',
         'aliyun.esasaas' => 'aliyun-esa-saas',
         'apisix.certificate' => 'apisix',
+        'asiaispcdn.cdn' => 'asiaispcdn',
         'axisnow.certificate' => 'axisnow',
         'baotapanel.site' => 'baotapanel',
         'baotapanelgo.site' => 'baotapanelgo',

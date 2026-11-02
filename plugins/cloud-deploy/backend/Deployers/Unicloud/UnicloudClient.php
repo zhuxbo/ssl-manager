@@ -3,6 +3,7 @@
 namespace Plugins\CloudDeploy\Deployers\Unicloud;
 
 use GuzzleHttp\ClientInterface;
+use phpseclib3\Crypt\RSA;
 use Psr\Http\Message\ResponseInterface;
 
 /**
@@ -18,9 +19,7 @@ use Psr\Http\Message\ResponseInterface;
  *
  * 签名：generateSignature 对 payload 键升序拼 "k=v&..."，HMAC-MD5(canonical, clientSecret) 十六进制。
  *
- * **与 certimate 的有意偏差**：certimate 登录 params 写死 `password:"password"`（疑似其源码笔误，会使真实登录
- * 必失败）；本移植改用凭证里的真实 password（用户在凭证表单填的控制台密码），否则功能不可用。其余字段名/
- * 结构/签名算法严格对齐 certimate。
+ * 密码通过 createPasswordChallenge + RSA-OAEP-256/AES-256-GCM 信封交付，不发送明文密码。
  *
  * 此类是 deployer 的 makeClient('api', …) 唯一产物 —— 测试 override makeClient 返回 mock 即覆盖 REST。
  */
@@ -88,15 +87,21 @@ class UnicloudClient
             return;
         }
 
-        // 账号类型判定：手机号 / 邮箱 / 用户名（对齐 certimate 正则）
-        $params = ['password' => $this->password];
-        if (preg_match('/^1\d{10}$/', $this->username)) {
-            $params['mobile'] = $this->username;
-        } elseif (preg_match('/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/', $this->username)) {
-            $params['email'] = $this->username;
-        } else {
-            $params['username'] = $this->username;
+        $challenge = $this->invokeServerless(
+            self::UNI_IDENTITY_ENDPOINT, self::UNI_IDENTITY_CLIENT_SECRET,
+            self::UNI_IDENTITY_APP_ID, self::UNI_IDENTITY_SPACE_ID,
+            'uni-id-co', 'createPasswordChallenge', '',
+            ['action' => 'login', 'resetAppId' => self::UNI_CONSOLE_APP_ID, 'resetUniPlatform' => 'web'], null,
+        );
+        $data = $challenge['data'] ?? [];
+        if (! is_array($data) || empty($data['challengeId']) || ($data['algorithm'] ?? '') !== 'RSA-OAEP-256+A256GCM') {
+            throw new UnicloudApiException('AuthError', 'uniCloud 密码挑战无效或算法不支持');
         }
+        $params = [
+            'captcha' => '', 'resetAppId' => self::UNI_CONSOLE_APP_ID,
+            'resetUniPlatform' => 'web', 'isReturnToken' => false,
+            'passwordEnvelope' => $this->passwordEnvelope($data),
+        ];
 
         $json = $this->invokeServerless(
             self::UNI_IDENTITY_ENDPOINT,
@@ -119,6 +124,36 @@ class UnicloudClient
 
         $this->serverlessToken = $token;
         $this->serverlessTokenExpireMs = $expired;
+    }
+
+    /** RSA-OAEP-SHA256 包装随机 AES 密钥，AAD 字段顺序必须与控制台一致。 */
+    private function passwordEnvelope(array $challenge): array
+    {
+        $plain = ['action' => 'login', 'challengeId' => $challenge['challengeId'], 'issuedAt' => (int) (microtime(true) * 1000), 'password' => $this->password];
+        $accountField = preg_match('/^1\d{10}$/', $this->username) ? 'mobile'
+            : (preg_match('/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/', $this->username) ? 'email' : 'username');
+        $plain[$accountField] = $this->username;
+        $aad = [
+            'version' => (int) ($challenge['version'] ?? 0), 'algorithm' => 'RSA-OAEP-256+A256GCM',
+            'keyId' => (string) ($challenge['keyId'] ?? ''), 'challengeId' => (string) $challenge['challengeId'],
+        ];
+        $key = random_bytes(32);
+        $iv = random_bytes(12);
+        $tag = '';
+        $ciphertext = openssl_encrypt(json_encode($plain, JSON_THROW_ON_ERROR), 'aes-256-gcm', $key, OPENSSL_RAW_DATA, $iv, $tag, json_encode($aad, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR), 16);
+        if ($ciphertext === false) {
+            throw new UnicloudApiException('AuthError', 'uniCloud 密码信封加密失败');
+        }
+        $publicKey = RSA::loadPublicKey((string) ($challenge['publicKey'] ?? ''));
+        if (! $publicKey instanceof RSA\PublicKey) {
+            throw new UnicloudApiException('AuthError', 'uniCloud 密码挑战公钥必须为 RSA');
+        }
+        $publicKey = $publicKey->withPadding(RSA::ENCRYPTION_OAEP)->withHash('sha256')->withMGFHash('sha256');
+        $encoded = array_map(static fn (string $value): string => rtrim(base64_encode($value), '='), [
+            'encryptedKey' => $publicKey->encrypt($key), 'ciphertext' => $ciphertext, 'iv' => $iv, 'tag' => $tag,
+        ]);
+
+        return $aad + $encoded;
     }
 
     /** 懒换 apiUser token（uni-cloud-kernel user/getUserToken），依赖 serverless token。 */
@@ -178,8 +213,8 @@ class UnicloudClient
             'http_errors' => false,
             'headers' => [
                 'Content-Type' => 'application/json',
-                'Origin' => 'https://unicloud.dcloud.net.cn',
-                'Referer' => 'https://unicloud.dcloud.net.cn',
+                'Origin' => 'https://account.dcloud.net.cn',
+                'Referer' => 'https://account.dcloud.net.cn',
                 'X-Client-Info' => (string) json_encode($clientInfo),
                 'X-Client-Token' => $this->serverlessToken,
                 'X-Serverless-Sign' => $sign,
@@ -188,6 +223,10 @@ class UnicloudClient
 
         $json = $this->decode($resp);
         $this->guardServerless($resp->getStatusCode(), $json);
+        $errorCode = $json['data']['errCode'] ?? null;
+        if ($errorCode !== null && $errorCode !== '' && (string) $errorCode !== '0') {
+            throw new UnicloudApiException('AuthError', 'uniCloud 身份认证失败');
+        }
 
         return $json;
     }
@@ -210,8 +249,10 @@ class UnicloudClient
     ): array {
         $functionArgs = [
             'clientInfo' => $this->buildClientInfo($appId),
-            'uniIdToken' => $this->serverlessToken,
         ];
+        if ($this->serverlessToken !== '') {
+            $functionArgs['uniIdToken'] = $this->serverlessToken;
+        }
         if ($method !== '') {
             $functionArgs['method'] = $method;
             $functionArgs['params'] = [];
@@ -252,18 +293,25 @@ class UnicloudClient
 
         return [
             'PLATFORM' => 'web',
-            'OS' => strtoupper($os),
+            'OS' => $os,
             'APPID' => $appId,
             'DEVICEID' => self::APP_NAME,
             'LOCALE' => 'zh-Hans',
             'osName' => $os,
             'appId' => $appId,
             'appName' => 'uniCloud',
+            'appLanguage' => 'zh-Hans',
+            'appVersion' => '1.0.0',
+            'appVersionCode' => '100',
+            'deviceModel' => 'PC',
+            'locale' => 'zh-Hans',
+            'osVersion' => php_uname('m'),
+            'scene' => 1001,
             'deviceId' => self::APP_NAME,
             'deviceType' => 'pc',
             'uniPlatform' => 'web',
-            'uniCompilerVersion' => '4.45',
-            'uniRuntimeVersion' => '4.45',
+            'uniCompilerVersion' => '5.23',
+            'uniRuntimeVersion' => '5.23',
         ];
     }
 

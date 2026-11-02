@@ -10,7 +10,7 @@ use Throwable;
  * 火山引擎 CLB 传统型负载均衡（证书服务型）：证书经证书中心上传拿 InstanceId（走 RemoteCertStore 去重），
  * 再设到 CLB 的 HTTPS 监听器。对齐 certimate volcengine-clb（universal/RPC query 协议，GET /）：
  *   - deploy_target=loadbalancer：DescribeListeners(Protocol=HTTPS) 枚举 → 逐个 ModifyListenerAttributes
- *   - deploy_target=listener：直接对 listener_id 调 ModifyListenerAttributes
+ *   - deploy_target=listener：查询监听器后更新默认或 SNI 证书
  *   ModifyListenerAttributes {ListenerId, CertificateSource:"cert_center", CertCenterCertificateId}
  *   （Action=ModifyListenerAttributes / DescribeListeners, Version=2020-04-01）
  *
@@ -37,12 +37,13 @@ class VolcClbDeployer extends AbstractDeployer
     {
         return [
             ['key' => 'region', 'label' => '地域', 'type' => 'string', 'required' => true],
-            ['key' => 'deploy_target', 'label' => '部署目标', 'type' => 'string', 'required' => true, 'options' => [
+            ['key' => 'deploy_target', 'label' => '证书部署方式', 'type' => 'select', 'required' => true, 'default' => 'listener', 'options' => [
                 ['label' => '负载均衡实例（全部 HTTPS 监听）', 'value' => 'loadbalancer'],
                 ['label' => '指定监听器', 'value' => 'listener'],
             ]],
-            ['key' => 'loadbalancer_id', 'label' => '负载均衡实例 ID（部署目标为实例时必填）', 'type' => 'string', 'required' => false],
-            ['key' => 'listener_id', 'label' => '监听器 ID（部署目标为指定监听器时必填）', 'type' => 'string', 'required' => false],
+            ['key' => 'loadbalancer_id', 'label' => '负载均衡实例 ID（部署目标为实例时必填）', 'type' => 'string', 'required' => false, 'visible_when' => ['key' => 'deploy_target', 'equals' => 'loadbalancer'], 'required_when' => ['key' => 'deploy_target', 'equals' => 'loadbalancer']],
+            ['key' => 'domain', 'label' => 'SNI 域名（选填，留空更新默认证书）', 'type' => 'string', 'required' => false, 'visible_when' => ['any' => [['key' => 'deploy_target', 'equals' => 'loadbalancer'], ['key' => 'deploy_target', 'equals' => 'listener']]]],
+            ['key' => 'listener_id', 'label' => '监听器 ID（部署目标为指定监听器时必填）', 'type' => 'string', 'required' => false, 'visible_when' => ['key' => 'deploy_target', 'equals' => 'listener'], 'required_when' => ['key' => 'deploy_target', 'equals' => 'listener']],
         ];
     }
 
@@ -64,7 +65,7 @@ class VolcClbDeployer extends AbstractDeployer
     /**
      * @param  string  $certRef  证书中心 InstanceId
      * @param  array{access_key_id?:string,secret_access_key?:string}  $credentials
-     * @param  array{region:string,deploy_target:string,loadbalancer_id?:string,listener_id?:string}  $config
+     * @param  array{region:string,deploy_target:string,loadbalancer_id?:string,listener_id?:string,domain?:string}  $config
      */
     public function bind(string|array $certRef, array $credentials, array $config): void
     {
@@ -83,7 +84,7 @@ class VolcClbDeployer extends AbstractDeployer
             $this->fail("不支持的部署目标 $deployTarget");
         }
 
-        $this->guardSdk(function () use ($credentials, $deployTarget, $loadbalancerId, $listenerId, $certId, $region) {
+        $this->guardSdk(function () use ($credentials, $deployTarget, $loadbalancerId, $listenerId, $certId, $region, $config) {
             /** @var VolcRestClient $client */
             $client = $this->makeClient('clb', $credentials, $region);
 
@@ -92,10 +93,36 @@ class VolcClbDeployer extends AbstractDeployer
                 : [$listenerId];
 
             foreach ($listenerIds as $id) {
-                $client->callQuery('ModifyListenerAttributes', '2020-04-01', [
+                $domain = (string) ($config['domain'] ?? '');
+                $attrs = $client->callQuery('DescribeListenerAttributes', '2020-04-01', ['ListenerId' => $id]);
+                if ($domain === '') {
+                    if (($attrs['CertCenterCertificateId'] ?? '') !== $certId) {
+                        $client->callQuery('ModifyListenerAttributes', '2020-04-01', [
+                            'ListenerId' => $id, 'CertificateSource' => 'cert_center', 'CertCenterCertificateId' => $certId,
+                        ]);
+                    }
+
+                    continue;
+                }
+                $extension = null;
+                foreach ($attrs['DomainExtensions'] ?? [] as $item) {
+                    if (($item['Domain'] ?? '') === $domain) {
+                        $extension = $item;
+                        break;
+                    }
+                }
+                if ($extension === null) {
+                    throw new VolcApiException('DomainNotFound', '未找到监听器 SNI 扩展域名');
+                }
+                if (($extension['CertCenterCertificateId'] ?? '') === $certId) {
+                    continue;
+                }
+                $client->callQuery('ModifyListenerDomainExtensions', '2020-04-01', [
                     'ListenerId' => $id,
-                    'CertificateSource' => 'cert_center',
-                    'CertCenterCertificateId' => $certId,
+                    'ModifyDomainExtensions' => [[
+                        'DomainExtensionId' => $extension['DomainExtensionId'],
+                        'CertificateSource' => 'cert_center', 'CertCenterCertificateId' => $certId,
+                    ]],
                 ]);
             }
         });

@@ -1,5 +1,10 @@
 <?php
 
+use GuzzleHttp\Client;
+use GuzzleHttp\Handler\MockHandler;
+use GuzzleHttp\HandlerStack;
+use GuzzleHttp\Middleware;
+use GuzzleHttp\Psr7\Response;
 use Plugins\CloudDeploy\Deployers\Ratpanel\RatpanelApiException;
 use Plugins\CloudDeploy\Deployers\Ratpanel\RatpanelRestClient;
 use Plugins\CloudDeploy\Deployers\Ratpanel\RatpanelSiteDeployer;
@@ -101,3 +106,40 @@ test('bind 遇 RatpanelApiException 时脱敏（含错误码、无凭证、不�
         expect($e->getTraceAsString())->not->toContain('TOKEN-LEAK-123');
     }
 });
+
+test('指定证书分支通过真实 REST 客户端发送 PUT、DNS SAN 和完整链，不调用网站接口', function () {
+    $leaf = file_get_contents(dirname(__DIR__, 3).'/Fixtures/example-san.pem');
+    $requests = [];
+    $http = new Client([
+        'base_uri' => 'https://panel.example/api/',
+        'handler' => HandlerStack::create(new MockHandler([
+            new Response(200, [], '{"msg":"success"}'),
+        ])),
+    ]);
+    $http->getConfig('handler')->push(Middleware::history($requests));
+    $client = new RatpanelRestClient($http, '/api', 1, 'test-key');
+    $deployer = ratpanelSiteDeployerWith(fn () => $client);
+    $deployer->bind(['cert' => $leaf, 'key' => 'PRIVATEKEY', 'chain' => 'CHAIN'], ratpanelCreds(), [
+        'deploy_target' => 'certificate', 'certificate_id' => 18,
+    ]);
+    expect($requests)->toHaveCount(1);
+    $request = $requests[0]['request'];
+    expect($request->getMethod())->toBe('PUT');
+    expect($request->getUri()->getPath())->toBe('/api/cert/cert/18');
+    expect(json_decode((string) $request->getBody(), true))->toBe([
+        'id' => 18, 'type' => 'upload', 'domains' => ['example.com', 'www.example.com'],
+        'cert' => rtrim($leaf)."\nCHAIN", 'key' => 'PRIVATEKEY',
+    ]);
+    expect($request->getHeaderLine('Authorization'))->toStartWith('HMAC-SHA256 Credential=1, Signature=');
+});
+
+test('证书替换参数非法时不创建远端客户端', function (array $config, string $message) {
+    $deployer = ratpanelSiteDeployerWith(fn () => throw new LogicException('不应调用远端'));
+    expect(fn () => $deployer->bind(ratpanelCertRef(), ratpanelCreds(), $config))
+        ->toThrow(RuntimeException::class, $message);
+})->with([
+    [['deploy_target' => 'certificate'], '缺少配置 certificate_id'],
+    [['deploy_target' => 'certificate', 'certificate_id' => 0], '证书 ID 必须为正整数'],
+    [['deploy_target' => 'certificate', 'certificate_id' => 18], '无法解析证书'],
+    [['deploy_target' => 'invalid'], '不支持的部署目标'],
+]);

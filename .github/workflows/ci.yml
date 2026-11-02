@@ -649,6 +649,25 @@ jobs:
         # 插件前端产物不入库（方案 B），CI 现构建以验证各插件可编译、防 src 漂移无人发现
         run: make plugins-build
 
+      - name: Cloud-Deploy form contract tests
+        run: node --test plugins/cloud-deploy/frontend/shared/*.test.mjs plugins/cloud-deploy/tools/*.test.mjs
+
+      - name: Read pinned Certimate form revision
+        id: certimate-forms
+        run: |
+          node --input-type=module -e 'import fs from "node:fs"; const sha = JSON.parse(fs.readFileSync("plugins/cloud-deploy/backend/tests/Fixtures/certimate-form-contracts.json")).source.sha; if (!/^[a-f0-9]{40}$/.test(sha)) process.exit(1); fs.appendFileSync(process.env.GITHUB_OUTPUT, `sha=${sha}\n`);'
+
+      - name: Checkout pinned Certimate source
+        uses: actions/checkout@v5
+        with:
+          repository: certimate-go/certimate
+          ref: ${{ steps.certimate-forms.outputs.sha }}
+          path: .superpowers/certimate-form-source
+          persist-credentials: false
+
+      - name: Verify generated Certimate form baseline
+        run: node plugins/cloud-deploy/tools/sync-certimate-forms.mjs .superpowers/certimate-form-source plugins/cloud-deploy/backend/tests/Fixtures/certimate-form-contracts.json --check
+
   lint:
     name: Lint
     runs-on: ubuntu-latest

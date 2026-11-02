@@ -49,8 +49,12 @@ class BytePlusCdnDeployer extends AbstractDeployer
     public function configSchema(): array
     {
         return [
-            ['key' => 'domain_match_pattern', 'label' => '域名匹配模式', 'type' => 'string', 'required' => false, 'default' => 'exact'],
-            ['key' => 'domain', 'label' => '加速域名', 'type' => 'string', 'required' => false],
+            ['key' => 'domain_match_pattern', 'label' => '域名匹配模式', 'type' => 'select', 'required' => false, 'default' => 'exact', 'options' => [
+                ['label' => '精确匹配', 'value' => 'exact'],
+                ['label' => '泛域名匹配', 'value' => 'wildcard'],
+                ['label' => '根据证书自动匹配', 'value' => 'certsan'],
+            ]],
+            ['key' => 'domain', 'label' => '加速域名', 'type' => 'string', 'required' => false, 'visible_when' => ['key' => 'domain_match_pattern', 'not_equals' => 'certsan'], 'required_when' => ['key' => 'domain_match_pattern', 'not_equals' => 'certsan']],
         ];
     }
 
@@ -92,6 +96,9 @@ class BytePlusCdnDeployer extends AbstractDeployer
                 default => throw new BytePlusApiException('UnsupportedDomainMatchPattern', "不支持的域名匹配模式: $pattern"),
             };
 
+            if ($domains === []) {
+                throw new BytePlusApiException('DomainNotFound', '未找到匹配的 CDN 域名');
+            }
             foreach ($domains as $matchedDomain) {
                 // 关联证书与加速域名：Action=BatchDeployCert Version=2021-03-01 body {CertId, Domain}
                 $client->openApi('POST', 'BatchDeployCert', '2021-03-01', [], [
@@ -148,10 +155,7 @@ class BytePlusCdnDeployer extends AbstractDeployer
                 }
             }
         }
-        $specified = is_object($result) && is_array($result->SpecifiedCertConfig ?? null)
-            ? $result->SpecifiedCertConfig
-            : [];
-        if ($domains === [] && $specified === []) {
+        if ($domains === []) {
             throw new BytePlusApiException('DomainNotFound', '未找到证书匹配的 CDN 域名');
         }
 

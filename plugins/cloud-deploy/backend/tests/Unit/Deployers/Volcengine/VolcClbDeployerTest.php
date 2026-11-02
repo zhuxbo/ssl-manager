@@ -35,7 +35,8 @@ test('火山 CLB：证书服务型（storeKind volc_certcenter）', function () 
 test('listener 目标：ModifyListenerAttributes 设 cert_center + CertCenterCertificateId', function () {
     $params = null;
     $client = Mockery::mock(VolcRestClient::class);
-    $client->shouldReceive('callQuery')->once()->andReturnUsing(function (string $action, string $version, array $p) use (&$params) {
+    $client->shouldReceive('callQuery')->with('DescribeListenerAttributes', '2020-04-01', ['ListenerId' => 'lsn-1'])->once()->andReturn([]);
+    $client->shouldReceive('callQuery')->with('ModifyListenerAttributes', '2020-04-01', Mockery::type('array'))->once()->andReturnUsing(function (string $action, string $version, array $p) use (&$params) {
         $params = compact('action', 'p');
 
         return [];
@@ -104,4 +105,23 @@ test('bind SDK 抛 VolcApiException 时脱敏重抛（无 AK/SK、不挂 previou
         expect($e->getMessage())->not->toContain('AK-SECRET-XYZ')->not->toContain('SK-SECRET-ABC');
         expect($e->getPrevious())->toBeNull();
     }
+});
+
+test('CLB SNI 更新扩展域名证书且不改默认证书', function (string $current) {
+    $client = Mockery::mock(VolcRestClient::class);
+    $client->shouldReceive('callQuery')->with('DescribeListenerAttributes', '2020-04-01', ['ListenerId' => 'lsn-1'])->once()->andReturn([
+        'DomainExtensions' => [['Domain' => '*.example.com', 'DomainExtensionId' => 'ext-1', 'CertCenterCertificateId' => $current]],
+    ]);
+    if ($current !== 'cert-9') {
+        $client->shouldReceive('callQuery')->with('ModifyListenerDomainExtensions', '2020-04-01', [
+            'ListenerId' => 'lsn-1', 'ModifyDomainExtensions' => [['DomainExtensionId' => 'ext-1', 'CertificateSource' => 'cert_center', 'CertCenterCertificateId' => 'cert-9']],
+        ])->once()->andReturn([]);
+    }
+    volcClbDeployerWith(fn () => $client)->bind('cert-9', volcClbCreds(), ['region' => 'cn-beijing', 'deploy_target' => 'listener', 'listener_id' => 'lsn-1', 'domain' => '*.example.com']);
+})->with(['old', 'cert-9']);
+
+test('CLB 指定 SNI 不存在时失败，不能退回修改默认证书', function () {
+    $client = Mockery::mock(VolcRestClient::class);
+    $client->shouldReceive('callQuery')->with('DescribeListenerAttributes', '2020-04-01', ['ListenerId' => 'lsn-1'])->once()->andReturn(['DomainExtensions' => []]);
+    expect(fn () => volcClbDeployerWith(fn () => $client)->bind('cert-9', volcClbCreds(), ['region' => 'cn-beijing', 'deploy_target' => 'listener', 'listener_id' => 'lsn-1', 'domain' => 'example.com']))->toThrow(RuntimeException::class, 'DomainNotFound');
 });

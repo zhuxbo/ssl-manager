@@ -16,8 +16,8 @@ export interface ConfigField {
   type: "string" | "number" | "select" | "bool" | "boolean";
   required?: boolean;
   default?: unknown;
-  required_when?: { key: string; equals: unknown };
-  visible_when?: { key: string; equals: unknown };
+  required_when?: import("./schemaConditions").SchemaCondition;
+  visible_when?: import("./schemaConditions").SchemaCondition;
   options?: Array<{ label: string; value: string }>;
   description?: string;
   help?: string;
@@ -39,8 +39,8 @@ export interface ProviderCatalogItem {
     type?: "string" | "number" | "select" | "bool" | "boolean";
     required?: boolean;
     default?: unknown;
-    required_when?: { key: string; equals: unknown };
-    visible_when?: { key: string; equals: unknown };
+    required_when?: import("./schemaConditions").SchemaCondition;
+    visible_when?: import("./schemaConditions").SchemaCondition;
     options?: Array<{ label: string; value: string }>;
     secret?: boolean;
     description?: string;
@@ -392,9 +392,7 @@ function sameConfig(
       </el-form-item>
 
       <el-form-item label="云凭证">
-        <div
-          style="display: flex; width: 100%; align-items: center; gap: 8px"
-        >
+        <div style="display: flex; width: 100%; align-items: center; gap: 8px">
           <el-select
             v-model="form.access_id"
             :placeholder="accessPlaceholder"

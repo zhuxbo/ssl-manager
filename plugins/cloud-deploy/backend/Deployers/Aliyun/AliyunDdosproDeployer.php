@@ -56,9 +56,13 @@ class AliyunDdosproDeployer extends AbstractDeployer implements ReceivesRemoteCe
     public function configSchema(): array
     {
         return [
-            ['key' => 'domain', 'label' => '网站域名', 'type' => 'string', 'required' => false],
+            ['key' => 'domain', 'label' => '网站域名', 'type' => 'string', 'required' => false, 'visible_when' => ['key' => 'domain_match_pattern', 'not_equals' => 'certsan'], 'required_when' => ['key' => 'domain_match_pattern', 'not_equals' => 'certsan']],
             ['key' => 'region', 'label' => '地域', 'type' => 'string', 'required' => false],
-            ['key' => 'domain_match_pattern', 'label' => '域名匹配模式', 'type' => 'string', 'required' => false, 'default' => 'exact'],
+            ['key' => 'domain_match_pattern', 'label' => '域名匹配模式', 'type' => 'select', 'required' => false, 'default' => 'exact', 'options' => [
+                ['label' => '精确匹配', 'value' => 'exact'],
+                ['label' => '泛域名匹配', 'value' => 'wildcard'],
+                ['label' => '根据证书自动匹配', 'value' => 'certsan'],
+            ]],
         ];
     }
 

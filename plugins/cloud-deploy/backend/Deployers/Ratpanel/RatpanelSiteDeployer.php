@@ -16,7 +16,7 @@ use Throwable;
  * 多站点逐个调用、**尝试全部并聚合错误**（与 certimate errors.Join 一致：单站点失败不中断其余）。
  * 内联型（usesRemoteCertStore=false）：bind 收 {cert,key,chain} 三元组。鉴权 HMAC-SHA256 签名。
  *
- * config：site_names（站点名，必填，可多）。server_url / access_token_id / access_token / allow_insecure 归 credentialSchema。
+ * config：deploy_target 默认 website；site_names（网站分支必填，可多），certificate_id（证书分支必填）。server_url / access_token_id / access_token / allow_insecure 归 credentialSchema。
  */
 class RatpanelSiteDeployer extends AbstractDeployer
 {
@@ -40,17 +40,35 @@ class RatpanelSiteDeployer extends AbstractDeployer
     public function configSchema(): array
     {
         return [
-            ['key' => 'site_names', 'label' => '站点名（多个用分号/换行分隔）', 'type' => 'string', 'required' => true],
+            ['key' => 'deploy_target', 'label' => '证书部署方式', 'type' => 'select', 'required' => false, 'default' => 'website', 'options' => [
+                ['label' => '网站', 'value' => 'website'],
+                ['label' => '替换指定证书', 'value' => 'certificate'],
+            ]],
+            ['key' => 'site_names', 'label' => '站点名（多个用分号/换行分隔）', 'type' => 'string', 'required' => false,
+                'visible_when' => ['key' => 'deploy_target', 'equals' => 'website'],
+                'required_when' => ['key' => 'deploy_target', 'equals' => 'website']],
+            ['key' => 'certificate_id', 'label' => '证书 ID', 'type' => 'number', 'required' => false,
+                'visible_when' => ['key' => 'deploy_target', 'equals' => 'certificate'],
+                'required_when' => ['key' => 'deploy_target', 'equals' => 'certificate']],
         ];
     }
 
     /**
      * @param  array{cert:string,key:string,chain:string}|string  $certRef  内联 PEM 三元组
      * @param  array<string,mixed>  $credentials
-     * @param  array{site_names:string}  $config
+     * @param  array{deploy_target?:string,site_names?:string,certificate_id?:int|string}  $config
      */
     public function bind(string|array $certRef, array $credentials, array $config): void
     {
+        $target = (string) ($config['deploy_target'] ?? 'website');
+        if ($target === 'certificate') {
+            $this->replaceCertificate($certRef, $credentials, $config);
+
+            return;
+        }
+        if ($target !== 'website') {
+            $this->fail('不支持的部署目标：'.$target);
+        }
         $siteNames = $this->parseSiteNames($this->requireConfig($config, 'site_names'));
         if ($siteNames === []) {
             $this->fail('缺少配置 site_names');
@@ -78,6 +96,28 @@ class RatpanelSiteDeployer extends AbstractDeployer
         if ($errors !== []) {
             $this->fail(implode('; ', $errors));
         }
+    }
+
+    /** @param array{cert:string,key:string,chain:string} $certRef */
+    private function replaceCertificate(array $certRef, array $credentials, array $config): void
+    {
+        $certificateId = filter_var($this->requireConfig($config, 'certificate_id'), FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+        if ($certificateId === false) {
+            $this->fail('证书 ID 必须为正整数');
+        }
+        $parsed = openssl_x509_parse($certRef['cert']);
+        if ($parsed === false) {
+            $this->fail('无法解析证书');
+        }
+        preg_match_all('/(?:^|,\s*)DNS:([^,]+)/', (string) ($parsed['extensions']['subjectAltName'] ?? ''), $matches);
+        $domains = array_map('trim', $matches[1]);
+        $fullChain = rtrim($certRef['cert']);
+        if (trim($certRef['chain']) !== '') {
+            $fullChain .= "\n".trim($certRef['chain']);
+        }
+        $this->guardSdk(function () use ($credentials, $certificateId, $domains, $fullChain, $certRef) {
+            $this->makeClient('api', $credentials)->updateCertificate($certificateId, $domains, $fullChain, $certRef['key']);
+        });
     }
 
     protected function makeClient(string $kind, array $credentials): object

@@ -49,16 +49,16 @@ class OnepanelSiteDeployer extends AbstractDeployer
     public function configSchema(): array
     {
         return [
-            ['key' => 'deploy_target', 'label' => '部署目标', 'type' => 'string', 'required' => true, 'options' => [
+            ['key' => 'deploy_target', 'label' => '证书部署方式', 'type' => 'select', 'required' => true, 'default' => 'website', 'options' => [
                 ['label' => '网站', 'value' => 'website'],
                 ['label' => '证书（替换指定证书）', 'value' => 'certificate'],
             ]],
-            ['key' => 'website_match_pattern', 'label' => '网站匹配模式（部署目标为网站时）', 'type' => 'string', 'required' => false, 'options' => [
+            ['key' => 'website_match_pattern', 'label' => '网站匹配模式', 'type' => 'select', 'required' => false, 'default' => 'specified', 'visible_when' => ['key' => 'deploy_target', 'equals' => 'website'], 'options' => [
                 ['label' => '指定网站 ID', 'value' => 'specified'],
-                ['label' => '证书 SAN 匹配', 'value' => 'certsan'],
+                ['label' => '根据证书自动匹配', 'value' => 'certsan'],
             ]],
-            ['key' => 'website_id', 'label' => '网站 ID（指定网站时必填）', 'type' => 'number', 'required' => false],
-            ['key' => 'certificate_id', 'label' => '证书 ID（部署目标为证书时必填）', 'type' => 'number', 'required' => false],
+            ['key' => 'website_id', 'label' => '网站 ID（指定网站时必填）', 'type' => 'number', 'required' => false, 'visible_when' => ['all' => [['key' => 'deploy_target', 'equals' => 'website'], ['key' => 'website_match_pattern', 'not_equals' => 'certsan']]], 'required_when' => ['all' => [['key' => 'deploy_target', 'equals' => 'website'], ['key' => 'website_match_pattern', 'not_equals' => 'certsan']]]],
+            ['key' => 'certificate_id', 'label' => '证书 ID（部署目标为证书时必填）', 'type' => 'number', 'required' => false, 'visible_when' => ['key' => 'deploy_target', 'equals' => 'certificate'], 'required_when' => ['key' => 'deploy_target', 'equals' => 'certificate']],
         ];
     }
 
@@ -80,6 +80,10 @@ class OnepanelSiteDeployer extends AbstractDeployer
             $matchPattern = isset($config['website_match_pattern']) && (string) $config['website_match_pattern'] !== ''
                 ? (string) $config['website_match_pattern']
                 : 'specified';
+
+            if (! in_array($matchPattern, ['specified', 'certsan'], true)) {
+                $this->fail('不支持的网站匹配模式：'.$matchPattern);
+            }
 
             // specified 模式：requireConfig website_id 须在任何 SDK 调用前（供契约测试记账）
             $specifiedWebsiteId = $matchPattern === 'specified'

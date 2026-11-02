@@ -48,9 +48,12 @@ class CtcccloudElbDeployer extends AbstractDeployer
     {
         return [
             ['key' => 'region_id', 'label' => '资源池 ID', 'type' => 'string', 'required' => true],
-            ['key' => 'deploy_target', 'label' => '部署目标（loadbalancer/listener）', 'type' => 'string', 'required' => true],
-            ['key' => 'loadbalancer_id', 'label' => '负载均衡实例 ID（部署目标为 loadbalancer 时必填）', 'type' => 'string', 'required' => false],
-            ['key' => 'listener_id', 'label' => '监听器 ID（部署目标为 listener 时必填）', 'type' => 'string', 'required' => false],
+            ['key' => 'deploy_target', 'label' => '证书部署方式', 'type' => 'select', 'required' => true, 'default' => 'listener', 'options' => [
+                ['label' => '负载均衡实例', 'value' => 'loadbalancer'],
+                ['label' => '指定监听器', 'value' => 'listener'],
+            ]],
+            ['key' => 'loadbalancer_id', 'label' => '负载均衡实例 ID（部署目标为 loadbalancer 时必填）', 'type' => 'string', 'required' => false, 'visible_when' => ['key' => 'deploy_target', 'equals' => 'loadbalancer']],
+            ['key' => 'listener_id', 'label' => '监听器 ID（部署目标为 listener 时必填）', 'type' => 'string', 'required' => false, 'visible_when' => ['key' => 'deploy_target', 'equals' => 'listener']],
         ];
     }
 

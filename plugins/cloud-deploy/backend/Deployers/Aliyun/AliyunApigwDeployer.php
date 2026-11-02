@@ -78,23 +78,18 @@ class AliyunApigwDeployer extends AbstractDeployer implements ReceivesRemoteCert
     public function configSchema(): array
     {
         return [
-            ['key' => 'service_type', 'label' => '服务类型', 'type' => 'select', 'required' => false, 'default' => self::SERVICE_TYPE_CLOUDNATIVE, 'options' => [
-                ['label' => '云原生 API 网关', 'value' => self::SERVICE_TYPE_CLOUDNATIVE],
-                ['label' => '传统 API 网关', 'value' => self::SERVICE_TYPE_TRADITIONAL],
+            ['key' => 'service_type', 'label' => '服务类型', 'type' => 'select', 'required' => false, 'default' => 'cloudnative', 'options' => [
+                ['label' => '云原生 API 网关', 'value' => 'cloudnative'],
+                ['label' => '传统 API 网关', 'value' => 'traditional'],
             ]],
-            ['key' => 'gateway_id', 'label' => '云原生 API 网关实例 ID', 'type' => 'string', 'required' => false,
-                'required_when' => ['key' => 'service_type', 'equals' => self::SERVICE_TYPE_CLOUDNATIVE],
-                'visible_when' => ['key' => 'service_type', 'equals' => self::SERVICE_TYPE_CLOUDNATIVE]],
-            ['key' => 'group_id', 'label' => '传统 API 网关分组 ID', 'type' => 'string', 'required' => false,
-                'required_when' => ['key' => 'service_type', 'equals' => self::SERVICE_TYPE_TRADITIONAL],
-                'visible_when' => ['key' => 'service_type', 'equals' => self::SERVICE_TYPE_TRADITIONAL]],
+            ['key' => 'gateway_id', 'label' => '云原生 API 网关实例 ID', 'type' => 'string', 'required' => false, 'required_when' => ['key' => 'service_type', 'equals' => 'cloudnative'], 'visible_when' => ['key' => 'service_type', 'equals' => 'cloudnative']],
+            ['key' => 'group_id', 'label' => '传统 API 网关分组 ID', 'type' => 'string', 'required' => false, 'required_when' => ['key' => 'service_type', 'equals' => 'traditional'], 'visible_when' => ['key' => 'service_type', 'equals' => 'traditional']],
             ['key' => 'domain_match_pattern', 'label' => '域名匹配模式', 'type' => 'select', 'required' => false, 'default' => 'exact', 'options' => [
                 ['label' => '精确匹配', 'value' => 'exact'],
                 ['label' => '泛域名匹配', 'value' => 'wildcard'],
                 ['label' => '证书 SAN 匹配', 'value' => 'certsan'],
             ]],
-            // exact/wildcard 由统一 domain_match_pattern 校验要求；certsan 可省略。
-            ['key' => 'domain', 'label' => '自定义域名', 'type' => 'string', 'required' => false],
+            ['key' => 'domain', 'label' => '自定义域名', 'type' => 'string', 'required' => false, 'visible_when' => ['key' => 'domain_match_pattern', 'not_equals' => 'certsan'], 'required_when' => ['key' => 'domain_match_pattern', 'not_equals' => 'certsan']],
             ['key' => 'region', 'label' => '地域', 'type' => 'string', 'required' => false],
         ];
     }

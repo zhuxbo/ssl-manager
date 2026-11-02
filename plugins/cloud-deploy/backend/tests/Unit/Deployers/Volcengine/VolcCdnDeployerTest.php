@@ -180,3 +180,9 @@ test('upload SDK 抛网络类异常时脱敏只暴露类名（无 AK/SK、不挂
         expect($e->getPrevious())->toBeNull();
     }
 });
+
+test('火山 CDN 证书仅有已配置项时无可部署域名必须报错', function () {
+    $client = Mockery::mock(VolcRestClient::class);
+    $client->shouldReceive('callJson')->once()->with('DescribeCertConfig', '2021-03-01', ['CertId' => 'cert-1'])->andReturn(['SpecifiedCertConfig' => [['Domain' => 'example.com']]]);
+    expect(fn () => volcCdnDeployerWith(fn () => $client)->bind('cert-1', volcCreds(), ['domain_match_pattern' => 'certsan']))->toThrow(RuntimeException::class, '未找到');
+});

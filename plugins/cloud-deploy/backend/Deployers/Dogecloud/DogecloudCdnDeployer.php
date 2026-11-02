@@ -40,8 +40,11 @@ class DogecloudCdnDeployer extends AbstractDeployer implements ReceivesRemoteCer
     public function configSchema(): array
     {
         return [
-            ['key' => 'domain_match_pattern', 'label' => '域名匹配（exact/certsan）', 'type' => 'string', 'required' => false],
-            ['key' => 'domain', 'label' => '加速域名', 'type' => 'string', 'required' => false],
+            ['key' => 'domain_match_pattern', 'label' => '域名匹配模式', 'type' => 'select', 'required' => false, 'default' => 'exact', 'options' => [
+                ['label' => '精确匹配', 'value' => 'exact'],
+                ['label' => '根据证书自动匹配', 'value' => 'certsan'],
+            ]],
+            ['key' => 'domain', 'label' => '加速域名', 'type' => 'string', 'required' => false, 'visible_when' => ['key' => 'domain_match_pattern', 'not_equals' => 'certsan'], 'required_when' => ['key' => 'domain_match_pattern', 'not_equals' => 'certsan']],
         ];
     }
 

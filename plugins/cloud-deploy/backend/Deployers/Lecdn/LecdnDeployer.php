@@ -8,10 +8,10 @@ use Throwable;
 /**
  * LeCDN 证书（内联型）。
  *
- * 对齐 certimate lecdn（deployTarget=certificate）：更新 LeCDN 已有证书内容（PUT /certificate/{id}，PEM 原样）。
+ * 对齐 certimate lecdn（deployTarget=certificate）：更新 LeCDN 已有证书内容（PUT /certificate/{id}，PEM 经客户端 base64 编码）。
  * 按凭证 api_role 选 client（用户端）/ master（主控端）SDK 分支：master 端 body 多 client_id。
- * - 完整链（certRef.cert + certRef.chain）→ ssl_pem（原样，非 base64）
- * - 私钥（certRef.key）→ ssl_key（原样）
+ * - 完整链（certRef.cert + certRef.chain）→ ssl_pem（客户端 base64 编码）
+ * - 私钥（certRef.key）→ ssl_key（客户端 base64 编码）
  *
  * 内联型（usesRemoteCertStore=false）：bind 收 {cert,key,chain} 三元组。鉴权账号密码登录 + `Authorization: Bearer`。
  *
@@ -56,7 +56,19 @@ class LecdnDeployer extends AbstractDeployer
         // 角色/版本校验是业务错误，须在 guardSdk 外抛（否则会被脱敏成通用文案）
         $this->assertRoleSupported($credentials);
 
-        // 完整链（leaf + 中间证书），与 certimate 传 certPEM 完整链一致；LeCDN 收原样 PEM（非 base64）
+        $authMethod = (string) ($credentials['auth_method'] ?? 'password');
+        if (! in_array($authMethod, ['', 'password', 'apikey'], true)) {
+            $this->fail('LeCDN 不支持的认证方式');
+        }
+        if ($authMethod === 'apikey') {
+            if (empty($credentials['api_key'])) {
+                $this->fail('LeCDN API Key 不能为空');
+            }
+        } elseif (empty($credentials['username']) || empty($credentials['password'])) {
+            $this->fail('LeCDN 用户名和密码不能为空');
+        }
+
+        // 完整链（leaf + 中间证书），与 certimate 传 certPEM 完整链一致；客户端统一 base64 编码
         $fullChain = rtrim($certRef['cert']);
         if (trim($certRef['chain']) !== '') {
             $fullChain .= "\n".trim($certRef['chain']);
@@ -71,7 +83,7 @@ class LecdnDeployer extends AbstractDeployer
     }
 
     /**
-     * 校验 api_version/api_role 合法（仅 v3 + client/master，对齐 certimate）。业务错误，须在 guardSdk 外调用。
+     * 校验 api_version/api_role 合法（v3/v4 + client/master，对齐 certimate）。业务错误，须在 guardSdk 外调用。
      *
      * @param  array<string,mixed>  $credentials
      */
@@ -79,8 +91,8 @@ class LecdnDeployer extends AbstractDeployer
     {
         $apiVersion = (string) ($credentials['api_version'] ?? '');
         $apiRole = (string) ($credentials['api_role'] ?? '');
-        if ($apiVersion !== 'v3' || ! in_array($apiRole, [LecdnRestClient::ROLE_CLIENT, LecdnRestClient::ROLE_MASTER], true)) {
-            $this->fail('LeCDN 仅支持 api_version=v3 且 api_role 为 client/master');
+        if (! in_array($apiVersion, ['v3', 'v4'], true) || ! in_array($apiRole, [LecdnRestClient::ROLE_CLIENT, LecdnRestClient::ROLE_MASTER], true)) {
+            $this->fail('LeCDN 仅支持 api_version=v3/v4 且 api_role 为 client/master');
         }
     }
 
@@ -99,6 +111,8 @@ class LecdnDeployer extends AbstractDeployer
                 $apiRole,
                 (string) ($credentials['username'] ?? ''),
                 (string) ($credentials['password'] ?? ''),
+                (string) ($credentials['api_version'] ?? 'v3'),
+                ($credentials['auth_method'] ?? '') === 'apikey' ? (string) ($credentials['api_key'] ?? '') : '',
             ),
         };
     }

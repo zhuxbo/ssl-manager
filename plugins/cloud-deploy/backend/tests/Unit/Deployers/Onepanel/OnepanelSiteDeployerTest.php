@@ -224,3 +224,10 @@ test('bind 遇 OnepanelApiException 时脱敏重抛（无 apiKey、不挂 previo
         expect($e->getTraceAsString())->not->toContain('APIKEY-LEAK-9');
     }
 });
+
+test('旧记录中的非法网站匹配模式在上传证书前失败', function () {
+    $deployer = onepanelSiteDeployerWith(fn () => throw new LogicException('不应创建远端客户端'));
+    expect(fn () => $deployer->bind(['cert' => ONEPANEL_LEAF_CERT, 'key' => 'KEY', 'chain' => ''], [], [
+        'deploy_target' => 'website', 'website_match_pattern' => 'dsjet.cn',
+    ]))->toThrow(RuntimeException::class, '不支持的网站匹配模式');
+});

@@ -39,13 +39,17 @@ class VolcVodDeployer extends AbstractDeployer implements ReceivesRemoteCertific
     {
         return [
             ['key' => 'space_name', 'label' => '点播空间名称', 'type' => 'string', 'required' => true],
-            ['key' => 'domain_type', 'label' => '点播域名类型', 'type' => 'string', 'required' => true, 'options' => [
+            ['key' => 'domain_type', 'label' => '点播域名类型', 'type' => 'select', 'required' => true, 'default' => 'play', 'options' => [
                 ['label' => '点播加速域名', 'value' => 'play'],
                 ['label' => '图片处理域名', 'value' => 'image'],
                 ['label' => '第三方域名', 'value' => 'third'],
             ]],
-            ['key' => 'domain_match_pattern', 'label' => '域名匹配模式', 'type' => 'string', 'required' => false, 'default' => 'exact'],
-            ['key' => 'domain', 'label' => '点播加速域名', 'type' => 'string', 'required' => false],
+            ['key' => 'domain_match_pattern', 'label' => '域名匹配模式', 'type' => 'select', 'required' => false, 'default' => 'exact', 'options' => [
+                ['label' => '精确匹配', 'value' => 'exact'],
+                ['label' => '泛域名匹配', 'value' => 'wildcard'],
+                ['label' => '根据证书自动匹配', 'value' => 'certsan'],
+            ]],
+            ['key' => 'domain', 'label' => '点播加速域名', 'type' => 'string', 'required' => false, 'visible_when' => ['key' => 'domain_match_pattern', 'not_equals' => 'certsan']],
         ];
     }
 

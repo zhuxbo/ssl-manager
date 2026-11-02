@@ -39,9 +39,12 @@ class CdnDeployer extends AbstractDeployer
     public function configSchema(): array
     {
         return [
-            ['key' => 'deploy_target', 'label' => '部署目标（website 网站 / certificate 证书）', 'type' => 'string', 'required' => true],
-            ['key' => 'site_id', 'label' => '网站 ID（部署目标为 website 时必填）', 'type' => 'string', 'required' => false],
-            ['key' => 'certificate_id', 'label' => '证书 ID（部署目标为 certificate 时必填）', 'type' => 'string', 'required' => false],
+            ['key' => 'deploy_target', 'label' => '证书部署方式', 'type' => 'select', 'required' => true, 'default' => 'website', 'options' => [
+                ['label' => '网站', 'value' => 'website'],
+                ['label' => '替换指定证书', 'value' => 'certificate'],
+            ]],
+            ['key' => 'site_id', 'label' => '网站 ID（部署目标为 website 时必填）', 'type' => 'string', 'required' => false, 'visible_when' => ['key' => 'deploy_target', 'equals' => 'website'], 'required_when' => ['key' => 'deploy_target', 'equals' => 'website']],
+            ['key' => 'certificate_id', 'label' => '证书 ID（部署目标为 certificate 时必填）', 'type' => 'string', 'required' => false, 'visible_when' => ['key' => 'deploy_target', 'equals' => 'certificate'], 'required_when' => ['key' => 'deploy_target', 'equals' => 'certificate']],
         ];
     }
 

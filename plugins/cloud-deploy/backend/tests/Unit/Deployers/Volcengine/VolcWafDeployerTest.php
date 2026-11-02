@@ -42,6 +42,10 @@ test('bind：ListDomain 精确查 → UpdateDomain 设 VolcCertificateID + certi
 
             return ['Data' => [[
                 'LBAlgorithm' => 'wrr',
+                'PublicRealServer' => 0,
+                'VpcID' => 'vpc-1',
+                'BackendGroups' => [['Name' => 'origin', 'AccessPort' => [443], 'Backends' => [['IP' => '10.0.0.1', 'Port' => 8443, 'Protocol' => 'HTTPS', 'Weight' => 100]]]],
+                'CloudAccessConfig' => [['InstanceID' => 'instance-1', 'ListenerID' => 'listener-1']],
                 'Protocols' => 'HTTP',
                 'ProtocolPorts' => ['HTTP' => [80, 8080]],
             ]]];
@@ -57,6 +61,10 @@ test('bind：ListDomain 精确查 → UpdateDomain 设 VolcCertificateID + certi
     $deployer = volcWafDeployerWith(fn (string $kind) => $kind === 'waf' ? $client : new stdClass);
     $deployer->bind('cert-9', volcWafCreds(), ['region' => 'cn-beijing', 'access_mode' => 'cname', 'domain' => 'waf.example.com']);
 
+    expect($update['PublicRealServer'])->toBe(0);
+    expect($update['VpcID'])->toBe('vpc-1');
+    expect($update['BackendGroups'][0]['Backends'][0]['Port'])->toBe(8443);
+    expect($update['CloudAccessConfig'][0]['ListenerID'])->toBe('listener-1');
     expect($update['VolcCertificateID'])->toBe('cert-9');
     expect($update['CertificatePlatform'])->toBe('certificate-service');
     expect($update['AccessMode'])->toBe(10);

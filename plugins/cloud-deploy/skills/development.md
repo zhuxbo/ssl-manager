@@ -74,6 +74,19 @@
 | 腾讯 SSL 证书服务型         | `TencentCdnDeployer` | `TencentSslUploader` | `storeKind=tencent_ssl`；`bind` 收 CertificateId                                                       |
 | 腾讯异步部署（轮询）        | `TencentCosDeployer` | `TencentSslUploader` | `bind` 调 SSL `DeployCertificateInstance` + `TencentDeployRecordPoller::poll(deployRecordId)` 轮询终态 |
 
+### v0.4.36 部署接口变更
+
+- 新增阿里云 MSE 云原生网关、腾讯云 DDoS 高防、橙域网络 AsiaISP CDN；均支持精确、泛域名和证书域名匹配。MSE 国际区域的 CAS 上传使用 `ap-southeast-1`；腾讯高防只修改指定实例规则；AsiaISP 域名操作中通过队列退避重试。
+- LeCDN 支持 `api_version=v3/v4` 与 `auth_method=password/apikey`，缺省认证仍为账号密码；API Key 直接放入 Authorization，证书及私钥均 Base64 编码。v4 不发送 v3 的 `type/client_id`。
+- 火山 CLB 可选 `domain` 更新 SNI 扩展域名，留空更新默认证书；WAF 换证书保留 VPC、回源组和云接入配置；ALB 已绑定相同 SNI 证书时跳过。
+- Cloudflare 未填写 `environment` 时不发送 `deploy`；BytePlus/火山 CDN 无匹配目标时报错；NPM 拒绝未知认证方式。
+- uniCloud 登录先获取密码挑战，再发送 RSA-OAEP-SHA256 + AES-256-GCM 密码信封，复用既有 phpseclib，不发送明文密码。
+- 目录快照由 `tools/sync-certimate-catalog.php` 从固定上游 checkout 生成；端点目录对齐不代表真实云账号已验收，也不覆盖 Certimate 自身的签发与工作流节点。
+- 表单基准由 `node tools/sync-certimate-forms.mjs /path/to/certimate backend/tests/Fixtures/certimate-form-contracts.json` 从同一提交的 TSX 静态提取；需先安装插件 admin 前端依赖。它提取 Select/Radio 的有限选项、静态默认值和 Show 的可见条件，不执行上游代码；不认识的选项/条件表达式会失败。`--check` 只比较、不写入。CI 按基准 SHA 拉取上游重新提取，防止手改基准绕过检查。
+- `CertimateFormAlignmentTest` 遍历实际注册表，对比选项和所有选择分支下的字段可见性；`RegistryCompletenessTest` 校验全量配置/凭证 schema 的控件类型、选项、默认值和条件引用。新增带 `options` 的字段必须为 `select`。`visible_when` / `required_when` 支持 `{key, equals}`、`{key, not_equals}`、`{all: [...]}`、`{any: [...]}`，前后端语义必须一致。
+- 上游只有一个取值且本地能力固定时可省略无意义的选择器；NPM 的旧默认 certificate、宝塔空类型自动识别及宝塔 Go 的 aspx 兼容值通过测试中的显式差异保留。S3 格式值映射为本地小写。其他选项/可见条件不得无记录跳过。表单门禁不证明动态必填校验、字段含义、云 API 或全部部署行为一致；这些仍需运行路径测试。
+- 升级时同时重生成目录与表单基准（SHA 必须一致），执行 `vendor/bin/pest ../plugins/cloud-deploy/backend/tests/Unit/Deployers` 及 `node --test plugins/cloud-deploy/frontend/shared/*.test.mjs plugins/cloud-deploy/tools/*.test.mjs`（后者从仓库根运行）。不能仅更新目录数量就宣称功能已完全对齐。
+
 ### Step 1 — 加 SDK（仅当 product 用新 SDK 包时）
 
 ```
@@ -128,9 +141,9 @@ git add plugins/cloud-deploy/backend/composer.{json,lock}   # 仅提交 composer
 
 ---
 
-## 三、Provider 实现状态总览（已对齐 certimate 149 端点 / 55 provider）
+## 三、Provider 实现状态总览（对齐 Certimate v0.4.36）
 
-**已对齐 certimate 全部部署端点：149 个已实现（certimate 共 152，ssh/ftp/local 经产品决策不实现，见本节末）。** 下方按 provider 列「SDK/签名 + 关键 API + uploader 策略」作实现参考与新增端点模板；**权威清单以 `Deployers/registry/*.php` 为准**（每个 registry 文件 = 一个 provider 的全部 product 注册）。官方 PHP SDK：aliyun/tencent/aws（v3）/qiniu/baidu/s3(aws S3)；其余 40+ provider 经各自 `<Provider>RestClient` 手写签名（HMAC-SHA256 各家变体 / JWT / OAuth2 / OCI HTTP Signatures / EOP 三级派生 / QY / TC3 等）调 REST，GuzzleHttp 来自主 vendor，不为单个 provider 另增依赖；插件已锁定的 phpseclib 同时用于签名与私钥格式转换。下列条目即便文字描述为「新建」也均**已落地**。
+**当前目录基准为 Certimate v0.4.36（`85626f68`）：159 个已实现（上游共 162，ssh/ftp/local 经产品决策不实现，见本节末）。** 下方按 provider 列「SDK/签名 + 关键 API + uploader 策略」作实现参考与新增端点模板；**权威清单以 `Deployers/registry/*.php` 为准**（每个 registry 文件 = 一个 provider 的全部 product 注册）。官方 PHP SDK：aliyun/tencent/aws（v3）/qiniu/baidu/s3(aws S3)；其余 40+ provider 经各自 `<Provider>RestClient` 手写签名（HMAC-SHA256 各家变体 / JWT / OAuth2 / OCI HTTP Signatures / EOP 三级派生 / QY / TC3 等）调 REST，GuzzleHttp 来自主 vendor，不为单个 provider 另增依赖；插件已锁定的 phpseclib 同时用于签名与私钥格式转换。下列条目即便文字描述为「新建」也均**已落地**。
 
 ### AWS ✅（已实现，8 端点：acm/iam/alb/nlb/clb/cloudfront/amplify/apigateway）
 

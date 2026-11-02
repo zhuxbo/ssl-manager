@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "54622307535c6316a14b03be0a9abab1",
+    "content-hash": "593665ac6c327ccc03e29116530c2238",
     "packages": [
         {
             "name": "adbario/php-dot-notation",
@@ -787,6 +787,53 @@
                 "source": "https://github.com/alibabacloud-sdk-php/live-20161101/tree/3.0.0"
             },
             "time": "2026-05-26T02:00:01+00:00"
+        },
+        {
+            "name": "alibabacloud/mse-20190531",
+            "version": "6.24.0",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/alibabacloud-sdk-php/mse-20190531.git",
+                "reference": "655b9ad97c258d06507c27c82d70b48bf34d523e"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/alibabacloud-sdk-php/mse-20190531/zipball/655b9ad97c258d06507c27c82d70b48bf34d523e",
+                "reference": "655b9ad97c258d06507c27c82d70b48bf34d523e",
+                "shasum": "",
+                "mirrors": [
+                    {
+                        "url": "https://mirrors.aliyun.com/composer/dists/%package%/%reference%.%type%",
+                        "preferred": true
+                    }
+                ]
+            },
+            "require": {
+                "alibabacloud/darabonba": "^1.0.0",
+                "alibabacloud/openapi-core": "^1.0.0",
+                "php": ">5.5"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "AlibabaCloud\\SDK\\Mse\\V20190531\\": "src"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "Apache-2.0"
+            ],
+            "authors": [
+                {
+                    "name": "Alibaba Cloud SDK",
+                    "email": "sdk-team@alibabacloud.com"
+                }
+            ],
+            "description": "Alibaba Cloud Microservice Engine (20190531) SDK Library for PHP",
+            "support": {
+                "source": "https://github.com/alibabacloud-sdk-php/mse-20190531/tree/6.24.0"
+            },
+            "time": "2026-04-07T18:24:35+00:00"
         },
         {
             "name": "alibabacloud/nlb-20220430",
@@ -2588,6 +2635,55 @@
                 }
             ],
             "time": "2026-04-10T16:19:22+00:00"
+        },
+        {
+            "name": "tencentcloud/antiddos",
+            "version": "3.0.1291",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/tencentcloud-sdk-php/antiddos.git",
+                "reference": "bc5863eb62a0ca5d4cd8f7f282fbf23b0ea3384e"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/tencentcloud-sdk-php/antiddos/zipball/bc5863eb62a0ca5d4cd8f7f282fbf23b0ea3384e",
+                "reference": "bc5863eb62a0ca5d4cd8f7f282fbf23b0ea3384e",
+                "shasum": "",
+                "mirrors": [
+                    {
+                        "url": "https://mirrors.aliyun.com/composer/dists/%package%/%reference%.%type%",
+                        "preferred": true
+                    }
+                ]
+            },
+            "require": {
+                "tencentcloud/common": "3.0.1291"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "TencentCloud\\": "./src/TencentCloud"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "Apache-2.0"
+            ],
+            "authors": [
+                {
+                    "name": "tencentcloudapi",
+                    "email": "tencentcloudapi@tencent.com",
+                    "homepage": "https://github.com/tencentcloud-sdk-php/antiddos",
+                    "role": "Developer"
+                }
+            ],
+            "description": "TencentCloudApi php sdk antiddos",
+            "homepage": "https://github.com/tencentcloud-sdk-php/antiddos",
+            "support": {
+                "issues": "https://github.com/tencentcloud-sdk-php/antiddos/issues",
+                "source": "https://github.com/tencentcloud-sdk-php/antiddos/tree/3.0.1291"
+            },
+            "time": "2024-12-29T20:12:40+00:00"
         },
         {
             "name": "tencentcloud/cdn",

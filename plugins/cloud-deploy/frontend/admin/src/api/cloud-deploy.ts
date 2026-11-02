@@ -10,8 +10,8 @@ export interface ConfigField {
   type: "string" | "number" | "select" | "bool" | "boolean";
   required?: boolean;
   default?: unknown;
-  required_when?: { key: string; equals: unknown };
-  visible_when?: { key: string; equals: unknown };
+  required_when?: import("@cloud-deploy/shared/schemaConditions").SchemaCondition;
+  visible_when?: import("@cloud-deploy/shared/schemaConditions").SchemaCondition;
   options?: Array<{ label: string; value: string }>;
   description?: string;
   help?: string;
@@ -23,8 +23,8 @@ export interface CredentialField {
   type?: "string" | "number" | "select" | "bool" | "boolean";
   required?: boolean;
   default?: unknown;
-  required_when?: { key: string; equals: unknown };
-  visible_when?: { key: string; equals: unknown };
+  required_when?: import("@cloud-deploy/shared/schemaConditions").SchemaCondition;
+  visible_when?: import("@cloud-deploy/shared/schemaConditions").SchemaCondition;
   options?: Array<{ label: string; value: string }>;
   secret?: boolean;
   description?: string;

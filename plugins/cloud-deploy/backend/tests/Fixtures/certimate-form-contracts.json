@@ -1,0 +1,2733 @@
+{
+  "source": {
+    "repo": "certimate-go/certimate",
+    "sha": "85626f68aef89f11cd41cdcc3cef37cbf4f38e37"
+  },
+  "scope": "部署表单有限选项、选择器默认值、Show 可见条件；不含动态校验和云 API 行为",
+  "forms": {
+    "1panel": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProvider1Panel.tsx",
+      "fields": {
+        "nodeName": {},
+        "deployTarget": {
+          "options": [
+            "website",
+            "certificate"
+          ],
+          "default": "website"
+        },
+        "websiteMatchPattern": {
+          "visible_when": {
+            "key": "deployTarget",
+            "equals": "website"
+          },
+          "options": [
+            "specified",
+            "certsan"
+          ],
+          "default": "specified"
+        },
+        "websiteId": {
+          "visible_when": {
+            "all": [
+              {
+                "key": "deployTarget",
+                "equals": "website"
+              },
+              {
+                "key": "websiteMatchPattern",
+                "not_equals": "certsan"
+              }
+            ]
+          }
+        },
+        "certificateId": {
+          "visible_when": {
+            "key": "deployTarget",
+            "equals": "certificate"
+          }
+        }
+      }
+    },
+    "1panel-console": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProvider1PanelConsole.tsx",
+      "fields": {
+        "autoRestart": {}
+      }
+    },
+    "aliyun-alb": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderAliyunALB.tsx",
+      "fields": {
+        "region": {},
+        "deployTarget": {
+          "options": [
+            "loadbalancer",
+            "listener"
+          ],
+          "default": "listener"
+        },
+        "loadbalancerId": {
+          "visible_when": {
+            "key": "deployTarget",
+            "equals": "loadbalancer"
+          }
+        },
+        "listenerId": {
+          "visible_when": {
+            "key": "deployTarget",
+            "equals": "listener"
+          }
+        },
+        "domain": {
+          "visible_when": {
+            "any": [
+              {
+                "key": "deployTarget",
+                "equals": "loadbalancer"
+              },
+              {
+                "key": "deployTarget",
+                "equals": "listener"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "aliyun-apigw": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderAliyunAPIGW.tsx",
+      "fields": {
+        "region": {},
+        "serviceType": {
+          "options": [
+            "cloudnative",
+            "traditional"
+          ]
+        },
+        "gatewayId": {
+          "visible_when": {
+            "key": "serviceType",
+            "equals": "cloudnative"
+          }
+        },
+        "groupId": {
+          "visible_when": {
+            "key": "serviceType",
+            "equals": "traditional"
+          }
+        },
+        "domainMatchPattern": {
+          "options": [
+            "exact",
+            "wildcard",
+            "certsan"
+          ],
+          "default": "exact"
+        },
+        "domain": {
+          "visible_when": {
+            "key": "domainMatchPattern",
+            "not_equals": "certsan"
+          }
+        }
+      }
+    },
+    "aliyun-cas": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderAliyunCAS.tsx",
+      "fields": {
+        "region": {}
+      }
+    },
+    "aliyun-casdeploy": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderAliyunCASDeploy.tsx",
+      "fields": {
+        "region": {},
+        "resourceIds": {},
+        "contactIds": {}
+      }
+    },
+    "aliyun-cdn": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderAliyunCDN.tsx",
+      "fields": {
+        "region": {},
+        "domainMatchPattern": {
+          "options": [
+            "exact",
+            "wildcard",
+            "certsan"
+          ],
+          "default": "exact"
+        },
+        "domain": {
+          "visible_when": {
+            "key": "domainMatchPattern",
+            "not_equals": "certsan"
+          }
+        }
+      }
+    },
+    "aliyun-clb": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderAliyunCLB.tsx",
+      "fields": {
+        "region": {},
+        "deployTarget": {
+          "options": [
+            "loadbalancer",
+            "listener"
+          ],
+          "default": "listener"
+        },
+        "loadbalancerId": {},
+        "listenerPort": {
+          "visible_when": {
+            "key": "deployTarget",
+            "equals": "listener"
+          }
+        },
+        "domain": {
+          "visible_when": {
+            "any": [
+              {
+                "key": "deployTarget",
+                "equals": "loadbalancer"
+              },
+              {
+                "key": "deployTarget",
+                "equals": "listener"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "aliyun-dcdn": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderAliyunDCDN.tsx",
+      "fields": {
+        "region": {},
+        "domainMatchPattern": {
+          "options": [
+            "exact",
+            "wildcard",
+            "certsan"
+          ],
+          "default": "exact"
+        },
+        "domain": {
+          "visible_when": {
+            "key": "domainMatchPattern",
+            "not_equals": "certsan"
+          }
+        }
+      }
+    },
+    "aliyun-ddospro": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderAliyunDDoSPro.tsx",
+      "fields": {
+        "region": {},
+        "domainMatchPattern": {
+          "options": [
+            "exact",
+            "wildcard",
+            "certsan"
+          ],
+          "default": "exact"
+        },
+        "domain": {
+          "visible_when": {
+            "key": "domainMatchPattern",
+            "not_equals": "certsan"
+          }
+        }
+      }
+    },
+    "aliyun-esa": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderAliyunESA.tsx",
+      "fields": {
+        "region": {},
+        "siteId": {}
+      }
+    },
+    "aliyun-esasaas": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderAliyunESASaaS.tsx",
+      "fields": {
+        "region": {},
+        "siteId": {},
+        "domainMatchPattern": {
+          "options": [
+            "exact",
+            "wildcard",
+            "certsan"
+          ],
+          "default": "exact"
+        },
+        "domain": {
+          "visible_when": {
+            "key": "domainMatchPattern",
+            "not_equals": "certsan"
+          }
+        }
+      }
+    },
+    "aliyun-fc": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderAliyunFC.tsx",
+      "fields": {
+        "region": {},
+        "serviceVersion": {
+          "options": [
+            "2.0",
+            "3.0"
+          ],
+          "default": "3.0"
+        },
+        "domainMatchPattern": {
+          "options": [
+            "exact",
+            "wildcard",
+            "certsan"
+          ],
+          "default": "exact"
+        },
+        "domain": {
+          "visible_when": {
+            "key": "domainMatchPattern",
+            "not_equals": "certsan"
+          }
+        }
+      }
+    },
+    "aliyun-ga": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderAliyunGA.tsx",
+      "fields": {
+        "deployTarget": {
+          "options": [
+            "accelerator",
+            "listener"
+          ],
+          "default": "listener"
+        },
+        "acceleratorId": {},
+        "listenerId": {
+          "visible_when": {
+            "key": "deployTarget",
+            "equals": "listener"
+          }
+        },
+        "domain": {
+          "visible_when": {
+            "any": [
+              {
+                "key": "deployTarget",
+                "equals": "accelerator"
+              },
+              {
+                "key": "deployTarget",
+                "equals": "listener"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "aliyun-live": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderAliyunLive.tsx",
+      "fields": {
+        "region": {},
+        "domainMatchPattern": {
+          "options": [
+            "exact",
+            "wildcard",
+            "certsan"
+          ],
+          "default": "exact"
+        },
+        "domain": {
+          "visible_when": {
+            "key": "domainMatchPattern",
+            "not_equals": "certsan"
+          }
+        }
+      }
+    },
+    "aliyun-mse": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderAliyunMSE.tsx",
+      "fields": {
+        "serviceType": {
+          "options": [
+            "cloudnative"
+          ],
+          "default": "cloudnative"
+        },
+        "gatewayId": {
+          "visible_when": {
+            "key": "serviceType",
+            "equals": "cloudnative"
+          }
+        },
+        "domainMatchPattern": {
+          "visible_when": {
+            "key": "serviceType",
+            "equals": "cloudnative"
+          },
+          "options": [
+            "exact",
+            "wildcard",
+            "certsan"
+          ],
+          "default": "exact"
+        },
+        "domain": {
+          "visible_when": {
+            "all": [
+              {
+                "key": "serviceType",
+                "equals": "cloudnative"
+              },
+              {
+                "key": "domainMatchPattern",
+                "not_equals": "certsan"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "aliyun-nlb": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderAliyunNLB.tsx",
+      "fields": {
+        "region": {},
+        "deployTarget": {
+          "options": [
+            "loadbalancer",
+            "listener"
+          ],
+          "default": "listener"
+        },
+        "loadbalancerId": {
+          "visible_when": {
+            "key": "deployTarget",
+            "equals": "loadbalancer"
+          }
+        },
+        "listenerId": {
+          "visible_when": {
+            "key": "deployTarget",
+            "equals": "listener"
+          }
+        }
+      }
+    },
+    "aliyun-oss": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderAliyunOSS.tsx",
+      "fields": {
+        "region": {},
+        "bucket": {},
+        "domain": {}
+      }
+    },
+    "aliyun-vod": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderAliyunVOD.tsx",
+      "fields": {
+        "region": {},
+        "domainMatchPattern": {
+          "options": [
+            "exact",
+            "wildcard",
+            "certsan"
+          ],
+          "default": "exact"
+        },
+        "domain": {
+          "visible_when": {
+            "key": "domainMatchPattern",
+            "not_equals": "certsan"
+          }
+        }
+      }
+    },
+    "aliyun-waf": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderAliyunWAF.tsx",
+      "fields": {
+        "region": {},
+        "serviceVersion": {
+          "options": [
+            "3.0"
+          ],
+          "default": "3.0"
+        },
+        "serviceType": {
+          "options": [
+            "cloudresource",
+            "cname"
+          ]
+        },
+        "instanceId": {},
+        "resourceProduct": {
+          "visible_when": {
+            "key": "serviceType",
+            "equals": "cloudresource"
+          }
+        },
+        "resourceId": {
+          "visible_when": {
+            "key": "serviceType",
+            "equals": "cloudresource"
+          }
+        },
+        "resourcePort": {
+          "visible_when": {
+            "key": "serviceType",
+            "equals": "cloudresource"
+          }
+        },
+        "domain": {}
+      }
+    },
+    "apisix": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderAPISIX.tsx",
+      "fields": {
+        "deployTarget": {
+          "options": [
+            "certificate"
+          ],
+          "default": "certificate"
+        },
+        "certificateId": {
+          "visible_when": {
+            "key": "deployTarget",
+            "equals": "certificate"
+          }
+        }
+      }
+    },
+    "asiaispcdn": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderAsiaISPCDN.tsx",
+      "fields": {
+        "domainMatchPattern": {
+          "options": [
+            "exact",
+            "wildcard",
+            "certsan"
+          ],
+          "default": "exact"
+        },
+        "domain": {
+          "visible_when": {
+            "key": "domainMatchPattern",
+            "not_equals": "certsan"
+          }
+        }
+      }
+    },
+    "aws-acm": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderAWSACM.tsx",
+      "fields": {
+        "region": {},
+        "certificateArn": {}
+      }
+    },
+    "aws-alb": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderAWSALB.tsx",
+      "fields": {
+        "region": {},
+        "loadbalancerArn": {},
+        "listenerArn": {},
+        "certificateSource": {
+          "options": [
+            "ACM",
+            "IAM"
+          ],
+          "default": "ACM"
+        },
+        "isDefault": {}
+      }
+    },
+    "aws-amplify": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderAWSAmplify.tsx",
+      "fields": {
+        "region": {},
+        "appId": {},
+        "domain": {},
+        "certificateSource": {
+          "options": [
+            "ACM"
+          ],
+          "default": "ACM"
+        }
+      }
+    },
+    "aws-apigateway": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderAWSAPIGateway.tsx",
+      "fields": {
+        "region": {},
+        "domain": {},
+        "certificateSource": {
+          "options": [
+            "ACM"
+          ],
+          "default": "ACM"
+        }
+      }
+    },
+    "aws-clb": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderAWSCLB.tsx",
+      "fields": {
+        "region": {},
+        "loadbalancerName": {},
+        "loadbalancerPort": {},
+        "certificateSource": {
+          "options": [
+            "ACM",
+            "IAM"
+          ],
+          "default": "ACM"
+        }
+      }
+    },
+    "aws-cloudfront": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderAWSCloudFront.tsx",
+      "fields": {
+        "region": {},
+        "distributionId": {},
+        "certificateSource": {
+          "options": [
+            "ACM",
+            "IAM"
+          ],
+          "default": "ACM"
+        }
+      }
+    },
+    "aws-iam": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderAWSIAM.tsx",
+      "fields": {
+        "region": {},
+        "certificatePath": {}
+      }
+    },
+    "aws-nlb": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderAWSNLB.tsx",
+      "fields": {
+        "region": {},
+        "loadbalancerArn": {},
+        "listenerArn": {},
+        "certificateSource": {
+          "options": [
+            "ACM",
+            "IAM"
+          ],
+          "default": "ACM"
+        },
+        "isDefault": {}
+      }
+    },
+    "azure-keyvault": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderAzureKeyVault.tsx",
+      "fields": {
+        "keyvaultName": {},
+        "certificateName": {}
+      }
+    },
+    "baiducloud-appblb": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderBaiduCloudAppBLB.tsx",
+      "fields": {
+        "region": {},
+        "deployTarget": {
+          "options": [
+            "loadbalancer",
+            "listener"
+          ],
+          "default": "listener"
+        },
+        "loadbalancerId": {},
+        "listenerPort": {
+          "visible_when": {
+            "key": "deployTarget",
+            "equals": "listener"
+          }
+        },
+        "domain": {
+          "visible_when": {
+            "any": [
+              {
+                "key": "deployTarget",
+                "equals": "loadbalancer"
+              },
+              {
+                "key": "deployTarget",
+                "equals": "listener"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "baiducloud-blb": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderBaiduCloudBLB.tsx",
+      "fields": {
+        "region": {},
+        "deployTarget": {
+          "options": [
+            "loadbalancer",
+            "listener"
+          ],
+          "default": "listener"
+        },
+        "loadbalancerId": {},
+        "listenerPort": {
+          "visible_when": {
+            "key": "deployTarget",
+            "equals": "listener"
+          }
+        },
+        "domain": {
+          "visible_when": {
+            "any": [
+              {
+                "key": "deployTarget",
+                "equals": "loadbalancer"
+              },
+              {
+                "key": "deployTarget",
+                "equals": "listener"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "baiducloud-cdn": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderBaiduCloudCDN.tsx",
+      "fields": {
+        "domainMatchPattern": {
+          "options": [
+            "exact",
+            "wildcard",
+            "certsan"
+          ],
+          "default": "exact"
+        },
+        "domain": {
+          "visible_when": {
+            "key": "domainMatchPattern",
+            "not_equals": "certsan"
+          }
+        }
+      }
+    },
+    "baishan-cdn": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderBaishanCDN.tsx",
+      "fields": {
+        "deployTarget": {
+          "options": [
+            "domain",
+            "certificate"
+          ],
+          "default": "domain"
+        },
+        "domainMatchPattern": {
+          "visible_when": {
+            "key": "deployTarget",
+            "equals": "domain"
+          },
+          "options": [
+            "exact"
+          ],
+          "default": "exact"
+        },
+        "domain": {
+          "visible_when": {
+            "key": "deployTarget",
+            "equals": "domain"
+          }
+        },
+        "certificateId": {
+          "visible_when": {
+            "key": "deployTarget",
+            "equals": "certificate"
+          }
+        }
+      }
+    },
+    "baotapanel": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderBaotaPanel.tsx",
+      "fields": {
+        "siteType": {
+          "options": [
+            "php",
+            "java",
+            "nodejs",
+            "go",
+            "python",
+            "proxy",
+            "html",
+            "general",
+            "any"
+          ],
+          "default": "any"
+        },
+        "siteNames": {}
+      }
+    },
+    "baotapanel-console": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderBaotaPanelConsole.tsx",
+      "fields": {
+        "autoRestart": {}
+      }
+    },
+    "baotapanelgo": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderBaotaPanelGo.tsx",
+      "fields": {
+        "siteType": {
+          "options": [
+            "php",
+            "java",
+            "asp",
+            "go",
+            "python",
+            "nodejs",
+            "proxy",
+            "general"
+          ],
+          "default": "php"
+        },
+        "siteNames": {}
+      }
+    },
+    "baotapanelgo-console": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderBaotaPanelGoConsole.tsx",
+      "fields": {}
+    },
+    "baotawaf": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderBaotaWAF.tsx",
+      "fields": {
+        "siteNames": {},
+        "sitePort": {}
+      }
+    },
+    "baotawaf-console": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderBaotaWAFConsole.tsx",
+      "fields": {}
+    },
+    "bunny-cdn": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderBunnyCDN.tsx",
+      "fields": {
+        "pullZoneId": {},
+        "hostname": {}
+      }
+    },
+    "byteplus-alb": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderBytePlusALB.tsx",
+      "fields": {
+        "region": {},
+        "deployTarget": {
+          "options": [
+            "loadbalancer",
+            "listener"
+          ],
+          "default": "listener"
+        },
+        "loadbalancerId": {
+          "visible_when": {
+            "key": "deployTarget",
+            "equals": "loadbalancer"
+          }
+        },
+        "listenerId": {
+          "visible_when": {
+            "key": "deployTarget",
+            "equals": "listener"
+          }
+        },
+        "domain": {
+          "visible_when": {
+            "any": [
+              {
+                "key": "deployTarget",
+                "equals": "loadbalancer"
+              },
+              {
+                "key": "deployTarget",
+                "equals": "listener"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "byteplus-apig": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderBytePlusAPIG.tsx",
+      "fields": {
+        "region": {},
+        "domainMatchPattern": {
+          "options": [
+            "exact",
+            "wildcard",
+            "certsan"
+          ],
+          "default": "exact"
+        },
+        "domain": {
+          "visible_when": {
+            "key": "domainMatchPattern",
+            "not_equals": "certsan"
+          }
+        }
+      }
+    },
+    "byteplus-cdn": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderBytePlusCDN.tsx",
+      "fields": {
+        "domainMatchPattern": {
+          "options": [
+            "exact",
+            "wildcard",
+            "certsan"
+          ],
+          "default": "exact"
+        },
+        "domain": {
+          "visible_when": {
+            "key": "domainMatchPattern",
+            "not_equals": "certsan"
+          }
+        }
+      }
+    },
+    "byteplus-certcenter": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderBytePlusCertCenter.tsx",
+      "fields": {
+        "region": {}
+      }
+    },
+    "byteplus-clb": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderBytePlusCLB.tsx",
+      "fields": {
+        "region": {},
+        "deployTarget": {
+          "options": [
+            "loadbalancer",
+            "listener"
+          ],
+          "default": "listener"
+        },
+        "loadbalancerId": {
+          "visible_when": {
+            "key": "deployTarget",
+            "equals": "loadbalancer"
+          }
+        },
+        "listenerId": {
+          "visible_when": {
+            "key": "deployTarget",
+            "equals": "listener"
+          }
+        }
+      }
+    },
+    "byteplus-medialive": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderBytePlusMediaLive.tsx",
+      "fields": {
+        "domainMatchPattern": {
+          "options": [
+            "exact",
+            "wildcard",
+            "certsan"
+          ],
+          "default": "exact"
+        },
+        "domain": {
+          "visible_when": {
+            "key": "domainMatchPattern",
+            "not_equals": "certsan"
+          }
+        }
+      }
+    },
+    "byteplus-tos": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderBytePlusTOS.tsx",
+      "fields": {
+        "region": {},
+        "bucket": {},
+        "domain": {}
+      }
+    },
+    "cdnfly": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderCdnfly.tsx",
+      "fields": {
+        "deployTarget": {
+          "options": [
+            "website",
+            "certificate"
+          ],
+          "default": "website"
+        },
+        "siteId": {
+          "visible_when": {
+            "key": "deployTarget",
+            "equals": "website"
+          }
+        },
+        "certificateId": {
+          "visible_when": {
+            "key": "deployTarget",
+            "equals": "certificate"
+          }
+        }
+      }
+    },
+    "cloudflare-ssl": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderCloudflareSSL.tsx",
+      "fields": {
+        "environment": {},
+        "zoneId": {},
+        "certificateId": {}
+      }
+    },
+    "cmcccloud-cdn": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderCMCCCloudCDN.tsx",
+      "fields": {
+        "domainMatchPattern": {
+          "options": [
+            "exact",
+            "wildcard",
+            "certsan"
+          ],
+          "default": "exact"
+        },
+        "domain": {
+          "visible_when": {
+            "key": "domainMatchPattern",
+            "not_equals": "certsan"
+          }
+        }
+      }
+    },
+    "cmcccloud-vlb": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderCMCCCloudVLB.tsx",
+      "fields": {
+        "poolId": {},
+        "deployTarget": {
+          "options": [
+            "loadbalancer",
+            "listener"
+          ],
+          "default": "listener"
+        },
+        "loadbalancerId": {
+          "visible_when": {
+            "key": "deployTarget",
+            "equals": "loadbalancer"
+          }
+        },
+        "listenerId": {
+          "visible_when": {
+            "key": "deployTarget",
+            "equals": "listener"
+          }
+        },
+        "domain": {
+          "visible_when": {
+            "any": [
+              {
+                "key": "deployTarget",
+                "equals": "loadbalancer"
+              },
+              {
+                "key": "deployTarget",
+                "equals": "listener"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "cpanel": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderCPanel.tsx",
+      "fields": {
+        "deployTarget": {
+          "options": [
+            "website"
+          ],
+          "default": "website"
+        },
+        "domain": {
+          "visible_when": {
+            "key": "deployTarget",
+            "equals": "website"
+          }
+        }
+      }
+    },
+    "ctcccloud-ao": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderCTCCCloudAO.tsx",
+      "fields": {
+        "domainMatchPattern": {
+          "options": [
+            "exact",
+            "wildcard",
+            "certsan"
+          ],
+          "default": "exact"
+        },
+        "domain": {
+          "visible_when": {
+            "key": "domainMatchPattern",
+            "not_equals": "certsan"
+          }
+        }
+      }
+    },
+    "ctcccloud-cdn": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderCTCCCloudCDN.tsx",
+      "fields": {
+        "domainMatchPattern": {
+          "options": [
+            "exact",
+            "wildcard",
+            "certsan"
+          ],
+          "default": "exact"
+        },
+        "domain": {
+          "visible_when": {
+            "key": "domainMatchPattern",
+            "not_equals": "certsan"
+          }
+        }
+      }
+    },
+    "ctcccloud-elb": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderCTCCCloudELB.tsx",
+      "fields": {
+        "regionId": {},
+        "deployTarget": {
+          "options": [
+            "loadbalancer",
+            "listener"
+          ],
+          "default": "listener"
+        },
+        "loadbalancerId": {
+          "visible_when": {
+            "key": "deployTarget",
+            "equals": "loadbalancer"
+          }
+        },
+        "listenerId": {
+          "visible_when": {
+            "key": "deployTarget",
+            "equals": "listener"
+          }
+        }
+      }
+    },
+    "ctcccloud-faas": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderCTCCCloudFaaS.tsx",
+      "fields": {
+        "regionId": {},
+        "domain": {}
+      }
+    },
+    "ctcccloud-icdn": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderCTCCCloudICDN.tsx",
+      "fields": {
+        "domainMatchPattern": {
+          "options": [
+            "exact",
+            "wildcard",
+            "certsan"
+          ],
+          "default": "exact"
+        },
+        "domain": {
+          "visible_when": {
+            "key": "domainMatchPattern",
+            "not_equals": "certsan"
+          }
+        }
+      }
+    },
+    "ctcccloud-lvdn": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderCTCCCloudLVDN.tsx",
+      "fields": {
+        "domainMatchPattern": {
+          "options": [
+            "exact",
+            "certsan"
+          ],
+          "default": "exact"
+        },
+        "domain": {
+          "visible_when": {
+            "key": "domainMatchPattern",
+            "not_equals": "certsan"
+          }
+        }
+      }
+    },
+    "dogecloud-cdn": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderDogeCloudCDN.tsx",
+      "fields": {
+        "domainMatchPattern": {
+          "options": [
+            "exact",
+            "certsan"
+          ],
+          "default": "exact"
+        },
+        "domain": {
+          "visible_when": {
+            "key": "domainMatchPattern",
+            "not_equals": "certsan"
+          }
+        }
+      }
+    },
+    "flexcdn": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderFlexCDN.tsx",
+      "fields": {
+        "deployTarget": {
+          "options": [
+            "certificate"
+          ],
+          "default": "certificate"
+        },
+        "certificateId": {
+          "visible_when": {
+            "key": "deployTarget",
+            "equals": "certificate"
+          }
+        }
+      }
+    },
+    "flyio": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderFlyIO.tsx",
+      "fields": {
+        "appName": {},
+        "domain": {}
+      }
+    },
+    "gcore-cdn": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderGcoreCDN.tsx",
+      "fields": {
+        "resourceId": {},
+        "certificateId": {}
+      }
+    },
+    "goedge": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderGoEdge.tsx",
+      "fields": {
+        "deployTarget": {
+          "options": [
+            "certificate"
+          ],
+          "default": "certificate"
+        },
+        "certificateId": {
+          "visible_when": {
+            "key": "deployTarget",
+            "equals": "certificate"
+          }
+        }
+      }
+    },
+    "huaweicloud-aad": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderHuaweiCloudAAD.tsx",
+      "fields": {
+        "region": {},
+        "instanceId": {},
+        "domainMatchPattern": {
+          "options": [
+            "exact",
+            "wildcard",
+            "certsan"
+          ],
+          "default": "exact"
+        },
+        "domain": {
+          "visible_when": {
+            "key": "domainMatchPattern",
+            "not_equals": "certsan"
+          }
+        }
+      }
+    },
+    "huaweicloud-apig": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderHuaweiCloudAPIG.tsx",
+      "fields": {
+        "region": {},
+        "deployTarget": {
+          "options": [
+            "certificate"
+          ],
+          "default": "certificate"
+        },
+        "certificateId": {
+          "visible_when": {
+            "key": "deployTarget",
+            "equals": "certificate"
+          }
+        }
+      }
+    },
+    "huaweicloud-cdn": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderHuaweiCloudCDN.tsx",
+      "fields": {
+        "region": {},
+        "domainMatchPattern": {
+          "options": [
+            "exact",
+            "wildcard",
+            "certsan"
+          ],
+          "default": "exact"
+        },
+        "domain": {
+          "visible_when": {
+            "key": "domainMatchPattern",
+            "not_equals": "certsan"
+          }
+        }
+      }
+    },
+    "huaweicloud-elb": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderHuaweiCloudELB.tsx",
+      "fields": {
+        "region": {},
+        "deployTarget": {
+          "options": [
+            "loadbalancer",
+            "listener",
+            "certificate"
+          ],
+          "default": "listener"
+        },
+        "loadbalancerId": {
+          "visible_when": {
+            "key": "deployTarget",
+            "equals": "loadbalancer"
+          }
+        },
+        "listenerId": {
+          "visible_when": {
+            "key": "deployTarget",
+            "equals": "listener"
+          }
+        },
+        "certificateId": {
+          "visible_when": {
+            "key": "deployTarget",
+            "equals": "certificate"
+          }
+        }
+      }
+    },
+    "huaweicloud-live": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderHuaweiCloudLive.tsx",
+      "fields": {
+        "region": {},
+        "domainMatchPattern": {
+          "options": [
+            "exact",
+            "certsan"
+          ],
+          "default": "exact"
+        },
+        "domain": {
+          "visible_when": {
+            "key": "domainMatchPattern",
+            "not_equals": "certsan"
+          }
+        }
+      }
+    },
+    "huaweicloud-obs": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderHuaweiCloudOBS.tsx",
+      "fields": {
+        "region": {},
+        "bucket": {},
+        "domain": {}
+      }
+    },
+    "huaweicloud-vod": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderHuaweiCloudVOD.tsx",
+      "fields": {
+        "region": {},
+        "domainMatchPattern": {
+          "options": [
+            "exact"
+          ],
+          "default": "exact"
+        },
+        "domain": {}
+      }
+    },
+    "huaweicloud-waf": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderHuaweiCloudWAF.tsx",
+      "fields": {
+        "region": {},
+        "deployTarget": {
+          "options": [
+            "cloudserver",
+            "premiumhost",
+            "certificate"
+          ]
+        },
+        "domain": {
+          "visible_when": {
+            "any": [
+              {
+                "key": "deployTarget",
+                "equals": "cloudserver"
+              },
+              {
+                "key": "deployTarget",
+                "equals": "premiumhost"
+              }
+            ]
+          }
+        },
+        "certificateId": {
+          "visible_when": {
+            "key": "deployTarget",
+            "equals": "certificate"
+          }
+        }
+      }
+    },
+    "huaweiibmc": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderHuaweiIBMC.tsx",
+      "fields": {
+        "autoRestart": {}
+      }
+    },
+    "jdcloud-alb": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderJDCloudALB.tsx",
+      "fields": {
+        "regionId": {},
+        "deployTarget": {
+          "options": [
+            "loadbalancer",
+            "listener"
+          ],
+          "default": "listener"
+        },
+        "loadbalancerId": {
+          "visible_when": {
+            "key": "deployTarget",
+            "equals": "loadbalancer"
+          }
+        },
+        "listenerId": {
+          "visible_when": {
+            "key": "deployTarget",
+            "equals": "listener"
+          }
+        },
+        "domain": {
+          "visible_when": {
+            "any": [
+              {
+                "key": "deployTarget",
+                "equals": "loadbalancer"
+              },
+              {
+                "key": "deployTarget",
+                "equals": "listener"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "jdcloud-cdn": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderJDCloudCDN.tsx",
+      "fields": {
+        "domainMatchPattern": {
+          "options": [
+            "exact",
+            "wildcard",
+            "certsan"
+          ],
+          "default": "exact"
+        },
+        "domain": {
+          "visible_when": {
+            "key": "domainMatchPattern",
+            "not_equals": "certsan"
+          }
+        }
+      }
+    },
+    "jdcloud-live": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderJDCloudLive.tsx",
+      "fields": {
+        "domainMatchPattern": {
+          "options": [
+            "exact",
+            "certsan"
+          ],
+          "default": "exact"
+        },
+        "domain": {
+          "visible_when": {
+            "key": "domainMatchPattern",
+            "not_equals": "certsan"
+          }
+        }
+      }
+    },
+    "jdcloud-vod": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderJDCloudVOD.tsx",
+      "fields": {
+        "domainMatchPattern": {
+          "options": [
+            "exact",
+            "certsan"
+          ],
+          "default": "exact"
+        },
+        "domain": {
+          "visible_when": {
+            "key": "domainMatchPattern",
+            "not_equals": "certsan"
+          }
+        }
+      }
+    },
+    "jdcloud-waf": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderJDCloudWAF.tsx",
+      "fields": {
+        "regionId": {},
+        "instanceId": {},
+        "domain": {}
+      }
+    },
+    "k8s-secret": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderKubernetesSecret.tsx",
+      "fields": {
+        "namespace": {},
+        "secretName": {},
+        "secretType": {},
+        "secretDataKeyForKey": {},
+        "secretDataKeyForCrt": {},
+        "secretDataKeyForCrtOnlyServer": {},
+        "secretDataKeyForCrtOnlyIntermedia": {},
+        "secretAnnotations": {},
+        "secretLabels": {}
+      }
+    },
+    "kong": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderKong.tsx",
+      "fields": {
+        "deployTarget": {
+          "options": [
+            "certificate"
+          ],
+          "default": "certificate"
+        },
+        "workspace": {},
+        "certificateId": {
+          "visible_when": {
+            "key": "deployTarget",
+            "equals": "certificate"
+          }
+        }
+      }
+    },
+    "ksyun-cdn": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderKsyunCDN.tsx",
+      "fields": {
+        "deployTarget": {
+          "options": [
+            "domain",
+            "certificate"
+          ],
+          "default": "domain"
+        },
+        "domainMatchPattern": {
+          "visible_when": {
+            "key": "deployTarget",
+            "equals": "domain"
+          },
+          "options": [
+            "exact",
+            "wildcard",
+            "certsan"
+          ],
+          "default": "exact"
+        },
+        "domain": {
+          "visible_when": {
+            "key": "deployTarget",
+            "equals": "domain"
+          }
+        },
+        "certificateId": {
+          "visible_when": {
+            "key": "deployTarget",
+            "equals": "certificate"
+          }
+        }
+      }
+    },
+    "ksyun-slb": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderKsyunSLB.tsx",
+      "fields": {
+        "region": {},
+        "deployTarget": {
+          "options": [
+            "certificate"
+          ],
+          "default": "certificate"
+        },
+        "certificateId": {
+          "visible_when": {
+            "key": "deployTarget",
+            "equals": "certificate"
+          }
+        }
+      }
+    },
+    "lecdn": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderLeCDN.tsx",
+      "fields": {
+        "deployTarget": {
+          "options": [
+            "certificate"
+          ],
+          "default": "certificate"
+        },
+        "certificateId": {
+          "visible_when": {
+            "key": "deployTarget",
+            "equals": "certificate"
+          }
+        },
+        "clientId": {
+          "visible_when": {
+            "key": "deployTarget",
+            "equals": "certificate"
+          }
+        }
+      }
+    },
+    "linode-los": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderLinodeLOS.tsx",
+      "fields": {
+        "regionId": {},
+        "bucket": {}
+      }
+    },
+    "mohua-mvh": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderMohuaMVH.tsx",
+      "fields": {
+        "hostId": {},
+        "domainId": {}
+      }
+    },
+    "netlify": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderNetlify.tsx",
+      "fields": {
+        "deployTarget": {
+          "options": [
+            "website"
+          ],
+          "default": "website"
+        },
+        "siteId": {
+          "visible_when": {
+            "key": "deployTarget",
+            "equals": "website"
+          }
+        }
+      }
+    },
+    "nginxproxymanager": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderNginxProxyManager.tsx",
+      "fields": {
+        "deployTarget": {
+          "options": [
+            "host",
+            "certificate"
+          ],
+          "default": "host"
+        },
+        "hostMatchPattern": {
+          "visible_when": {
+            "key": "deployTarget",
+            "equals": "host"
+          },
+          "options": [
+            "specified",
+            "certsan"
+          ],
+          "default": "specified"
+        },
+        "hostType": {
+          "visible_when": {
+            "key": "deployTarget",
+            "equals": "host"
+          },
+          "options": [
+            "proxy",
+            "redirection",
+            "stream",
+            "dead"
+          ],
+          "default": "proxy"
+        },
+        "hostId": {
+          "visible_when": {
+            "all": [
+              {
+                "key": "deployTarget",
+                "equals": "host"
+              },
+              {
+                "key": "hostMatchPattern",
+                "not_equals": "certsan"
+              }
+            ]
+          }
+        },
+        "certificateId": {
+          "visible_when": {
+            "key": "deployTarget",
+            "equals": "certificate"
+          }
+        }
+      }
+    },
+    "oraclecloud-certificatesmgmt": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderOracleCloudCertificatesMgmt.tsx",
+      "fields": {
+        "compartmentOcid": {}
+      }
+    },
+    "proxmoxbs": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderProxmoxBS.tsx",
+      "fields": {
+        "nodeName": {},
+        "autoRestart": {}
+      }
+    },
+    "proxmoxve": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderProxmoxVE.tsx",
+      "fields": {
+        "nodeName": {},
+        "autoRestart": {}
+      }
+    },
+    "qingcloud-lb": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderQingCloudLB.tsx",
+      "fields": {
+        "zoneId": {},
+        "deployTarget": {
+          "options": [
+            "loadbalancer",
+            "listener"
+          ],
+          "default": "listener"
+        },
+        "loadbalancerId": {
+          "visible_when": {
+            "key": "deployTarget",
+            "equals": "loadbalancer"
+          }
+        },
+        "listenerId": {
+          "visible_when": {
+            "key": "deployTarget",
+            "equals": "listener"
+          }
+        }
+      }
+    },
+    "qiniu-cdn": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderQiniuCDN.tsx",
+      "fields": {
+        "domainMatchPattern": {
+          "options": [
+            "exact",
+            "wildcard",
+            "certsan"
+          ],
+          "default": "exact"
+        },
+        "domain": {
+          "visible_when": {
+            "key": "domainMatchPattern",
+            "not_equals": "certsan"
+          }
+        }
+      }
+    },
+    "qiniu-kodo": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderQiniuKodo.tsx",
+      "fields": {
+        "bucket": {},
+        "domain": {}
+      }
+    },
+    "qiniu-pili": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderQiniuPili.tsx",
+      "fields": {
+        "hub": {},
+        "domainMatchPattern": {
+          "options": [
+            "exact",
+            "certsan"
+          ],
+          "default": "exact"
+        },
+        "domain": {
+          "visible_when": {
+            "key": "domainMatchPattern",
+            "not_equals": "certsan"
+          }
+        }
+      }
+    },
+    "rainyun-rcdn": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderRainYunRCDN.tsx",
+      "fields": {
+        "instanceId": {},
+        "domainMatchPattern": {
+          "options": [
+            "exact"
+          ],
+          "default": "exact"
+        },
+        "domain": {}
+      }
+    },
+    "rainyun-sslcenter": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderRainYunSSLCenter.tsx",
+      "fields": {
+        "certificateId": {}
+      }
+    },
+    "ratpanel": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderRatPanel.tsx",
+      "fields": {
+        "deployTarget": {
+          "options": [
+            "website",
+            "certificate"
+          ],
+          "default": "website"
+        },
+        "siteNames": {
+          "visible_when": {
+            "key": "deployTarget",
+            "equals": "website"
+          }
+        },
+        "certificateId": {
+          "visible_when": {
+            "key": "deployTarget",
+            "equals": "certificate"
+          }
+        }
+      }
+    },
+    "s3": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderS3.tsx",
+      "fields": {
+        "region": {},
+        "bucket": {},
+        "fileFormat": {
+          "options": [
+            "PEM",
+            "PFX",
+            "JKS"
+          ],
+          "default": "PEM"
+        },
+        "objectKeyForKey": {
+          "visible_when": {
+            "key": "fileFormat",
+            "equals": "PEM"
+          }
+        },
+        "objectKeyForCrt": {},
+        "objectKeyForCrtOnlyServer": {
+          "visible_when": {
+            "key": "fileFormat",
+            "equals": "PEM"
+          }
+        },
+        "objectKeyForCrtOnlyIntermedia": {
+          "visible_when": {
+            "key": "fileFormat",
+            "equals": "PEM"
+          }
+        },
+        "pfxPassword": {
+          "visible_when": {
+            "key": "fileFormat",
+            "equals": "PFX"
+          }
+        },
+        "pfxEncoder": {
+          "visible_when": {
+            "key": "fileFormat",
+            "equals": "PFX"
+          },
+          "options": [
+            "LegacyRC2",
+            "LegacyDES",
+            "Modern2023",
+            "Modern2026"
+          ]
+        },
+        "jksAlias": {
+          "visible_when": {
+            "key": "fileFormat",
+            "equals": "JKS"
+          }
+        },
+        "jksKeypass": {
+          "visible_when": {
+            "key": "fileFormat",
+            "equals": "JKS"
+          }
+        },
+        "jksStorepass": {
+          "visible_when": {
+            "key": "fileFormat",
+            "equals": "JKS"
+          }
+        }
+      }
+    },
+    "safeline": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderSafeLine.tsx",
+      "fields": {
+        "deployTarget": {
+          "options": [
+            "certificate"
+          ],
+          "default": "certificate"
+        },
+        "certificateId": {
+          "visible_when": {
+            "key": "deployTarget",
+            "equals": "certificate"
+          }
+        }
+      }
+    },
+    "samwaf": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderSamWAF.tsx",
+      "fields": {
+        "deployTarget": {
+          "options": [
+            "certificate"
+          ],
+          "default": "certificate"
+        },
+        "certificateId": {
+          "visible_when": {
+            "key": "deployTarget",
+            "equals": "certificate"
+          }
+        }
+      }
+    },
+    "samwaf-console": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderSamWAFConsole.tsx",
+      "fields": {
+        "autoRestart": {}
+      }
+    },
+    "synologydsm": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderSynologyDSM.tsx",
+      "fields": {
+        "certificateIdOrDesc": {},
+        "isDefault": {}
+      }
+    },
+    "tencentcloud-cdn": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderTencentCloudCDN.tsx",
+      "fields": {
+        "endpoint": {},
+        "domainMatchPattern": {
+          "options": [
+            "exact",
+            "wildcard",
+            "certsan"
+          ],
+          "default": "exact"
+        },
+        "domain": {
+          "visible_when": {
+            "key": "domainMatchPattern",
+            "not_equals": "certsan"
+          }
+        }
+      }
+    },
+    "tencentcloud-clb": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderTencentCloudCLB.tsx",
+      "fields": {
+        "endpoint": {},
+        "region": {},
+        "deployTarget": {
+          "options": [
+            "loadbalancer",
+            "listener",
+            "ruledomain"
+          ],
+          "default": "listener"
+        },
+        "loadbalancerId": {},
+        "listenerId": {
+          "visible_when": {
+            "any": [
+              {
+                "key": "deployTarget",
+                "equals": "listener"
+              },
+              {
+                "key": "deployTarget",
+                "equals": "ruledomain"
+              }
+            ]
+          }
+        },
+        "domain": {
+          "visible_when": {
+            "key": "deployTarget",
+            "equals": "ruledomain"
+          }
+        }
+      }
+    },
+    "tencentcloud-cos": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderTencentCloudCOS.tsx",
+      "fields": {
+        "region": {},
+        "bucket": {},
+        "domain": {}
+      }
+    },
+    "tencentcloud-css": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderTencentCloudCSS.tsx",
+      "fields": {
+        "endpoint": {},
+        "domainMatchPattern": {
+          "options": [
+            "exact",
+            "certsan"
+          ],
+          "default": "exact"
+        },
+        "domain": {
+          "visible_when": {
+            "key": "domainMatchPattern",
+            "not_equals": "certsan"
+          }
+        }
+      }
+    },
+    "tencentcloud-ddospro": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderTencentCloudDDoSPro.tsx",
+      "fields": {
+        "endpoint": {},
+        "instanceId": {},
+        "domainMatchPattern": {
+          "options": [
+            "exact",
+            "wildcard",
+            "certsan"
+          ],
+          "default": "exact"
+        },
+        "domain": {
+          "visible_when": {
+            "key": "domainMatchPattern",
+            "not_equals": "certsan"
+          }
+        }
+      }
+    },
+    "tencentcloud-ecdn": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderTencentCloudECDN.tsx",
+      "fields": {
+        "endpoint": {},
+        "domainMatchPattern": {
+          "options": [
+            "exact",
+            "wildcard",
+            "certsan"
+          ],
+          "default": "exact"
+        },
+        "domain": {
+          "visible_when": {
+            "key": "domainMatchPattern",
+            "not_equals": "certsan"
+          }
+        }
+      }
+    },
+    "tencentcloud-eo": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderTencentCloudEO.tsx",
+      "fields": {
+        "endpoint": {},
+        "zoneId": {},
+        "domainMatchPattern": {
+          "options": [
+            "exact",
+            "wildcard",
+            "certsan"
+          ],
+          "default": "exact"
+        },
+        "domains": {
+          "visible_when": {
+            "key": "domainMatchPattern",
+            "not_equals": "certsan"
+          }
+        },
+        "enableMultipleSSL": {}
+      }
+    },
+    "tencentcloud-eomakers": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderTencentCloudEOMakers.tsx",
+      "fields": {
+        "endpoint": {},
+        "apiToken": {},
+        "projectId": {},
+        "domainMatchPattern": {
+          "options": [
+            "exact",
+            "wildcard",
+            "certsan"
+          ],
+          "default": "exact"
+        },
+        "domains": {
+          "visible_when": {
+            "key": "domainMatchPattern",
+            "not_equals": "certsan"
+          }
+        },
+        "enableMultipleSSL": {}
+      }
+    },
+    "tencentcloud-ga2": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderTencentCloudGA2.tsx",
+      "fields": {
+        "endpoint": {},
+        "deployTarget": {
+          "options": [
+            "listener"
+          ],
+          "default": "listener"
+        },
+        "acceleratorId": {},
+        "listenerId": {
+          "visible_when": {
+            "key": "deployTarget",
+            "equals": "listener"
+          }
+        }
+      }
+    },
+    "tencentcloud-gaap": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderTencentCloudGAAP.tsx",
+      "fields": {
+        "endpoint": {},
+        "deployTarget": {
+          "options": [
+            "listener"
+          ],
+          "default": "listener"
+        },
+        "proxyId": {},
+        "listenerId": {
+          "visible_when": {
+            "key": "deployTarget",
+            "equals": "listener"
+          }
+        }
+      }
+    },
+    "tencentcloud-scf": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderTencentCloudSCF.tsx",
+      "fields": {
+        "endpoint": {},
+        "region": {},
+        "domainMatchPattern": {
+          "options": [
+            "exact",
+            "certsan"
+          ],
+          "default": "exact"
+        },
+        "domain": {
+          "visible_when": {
+            "key": "domainMatchPattern",
+            "not_equals": "certsan"
+          }
+        }
+      }
+    },
+    "tencentcloud-ssl": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderTencentCloudSSL.tsx",
+      "fields": {
+        "endpoint": {}
+      }
+    },
+    "tencentcloud-ssldeploy": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderTencentCloudSSLDeploy.tsx",
+      "fields": {
+        "endpoint": {},
+        "resourceRegion": {},
+        "resourceProduct": {},
+        "resourceIds": {}
+      }
+    },
+    "tencentcloud-sslupdate": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderTencentCloudSSLUpdate.tsx",
+      "fields": {
+        "endpoint": {},
+        "certificateId": {},
+        "resourceRegions": {},
+        "resourceProducts": {},
+        "isReplaced": {}
+      }
+    },
+    "tencentcloud-tse": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderTencentCloudTSE.tsx",
+      "fields": {
+        "endpoint": {},
+        "serviceType": {
+          "options": [
+            "cloudnative"
+          ],
+          "default": "cloudnative"
+        },
+        "gatewayId": {
+          "visible_when": {
+            "key": "serviceType",
+            "equals": "cloudnative"
+          }
+        },
+        "domains": {
+          "visible_when": {
+            "key": "serviceType",
+            "equals": "cloudnative"
+          }
+        },
+        "certificateId": {
+          "visible_when": {
+            "key": "serviceType",
+            "equals": "cloudnative"
+          }
+        }
+      }
+    },
+    "tencentcloud-vod": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderTencentCloudVOD.tsx",
+      "fields": {
+        "endpoint": {},
+        "subAppId": {},
+        "domainMatchPattern": {
+          "options": [
+            "exact",
+            "certsan"
+          ],
+          "default": "exact"
+        },
+        "domain": {
+          "visible_when": {
+            "key": "domainMatchPattern",
+            "not_equals": "certsan"
+          }
+        }
+      }
+    },
+    "tencentcloud-waf": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderTencentCloudWAF.tsx",
+      "fields": {
+        "endpoint": {},
+        "region": {},
+        "instanceId": {},
+        "domain": {},
+        "domainId": {}
+      }
+    },
+    "ucloud-ualb": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderUCloudUALB.tsx",
+      "fields": {
+        "endpoint": {},
+        "region": {},
+        "deployTarget": {
+          "options": [
+            "loadbalancer",
+            "listener"
+          ],
+          "default": "listener"
+        },
+        "loadbalancerId": {},
+        "listenerId": {
+          "visible_when": {
+            "key": "deployTarget",
+            "equals": "listener"
+          }
+        },
+        "domain": {
+          "visible_when": {
+            "any": [
+              {
+                "key": "deployTarget",
+                "equals": "loadbalancer"
+              },
+              {
+                "key": "deployTarget",
+                "equals": "listener"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "ucloud-ucdn": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderUCloudUCDN.tsx",
+      "fields": {
+        "endpoint": {},
+        "domainId": {}
+      }
+    },
+    "ucloud-uclb": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderUCloudUCLB.tsx",
+      "fields": {
+        "endpoint": {},
+        "region": {},
+        "deployTarget": {
+          "options": [
+            "loadbalancer",
+            "vserver"
+          ],
+          "default": "vserver"
+        },
+        "loadbalancerId": {},
+        "vserverId": {
+          "visible_when": {
+            "key": "deployTarget",
+            "equals": "vserver"
+          }
+        }
+      }
+    },
+    "ucloud-uewaf": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderUCloudUEWAF.tsx",
+      "fields": {
+        "endpoint": {},
+        "domain": {}
+      }
+    },
+    "ucloud-upathx": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderUCloudUPathX.tsx",
+      "fields": {
+        "endpoint": {},
+        "acceleratorId": {},
+        "listenerPort": {}
+      }
+    },
+    "ucloud-us3": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderUCloudUS3.tsx",
+      "fields": {
+        "endpoint": {},
+        "region": {},
+        "bucket": {},
+        "domain": {}
+      }
+    },
+    "unicloud-webhost": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderUniCloudWebHost.tsx",
+      "fields": {
+        "spaceProvider": {
+          "options": [
+            "aliyun",
+            "alipay",
+            "tencent"
+          ],
+          "default": "tencent"
+        },
+        "spaceId": {},
+        "domain": {}
+      }
+    },
+    "upyun-cdn": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderUpyunCDN.tsx",
+      "fields": {
+        "domainMatchPattern": {
+          "options": [
+            "exact",
+            "wildcard",
+            "certsan"
+          ],
+          "default": "exact"
+        },
+        "domain": {
+          "visible_when": {
+            "key": "domainMatchPattern",
+            "not_equals": "certsan"
+          }
+        }
+      }
+    },
+    "upyun-file": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderUpyunFile.tsx",
+      "fields": {
+        "bucket": {},
+        "domain": {}
+      }
+    },
+    "volcengine-alb": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderVolcEngineALB.tsx",
+      "fields": {
+        "region": {},
+        "deployTarget": {
+          "options": [
+            "loadbalancer",
+            "listener"
+          ],
+          "default": "listener"
+        },
+        "loadbalancerId": {
+          "visible_when": {
+            "key": "deployTarget",
+            "equals": "loadbalancer"
+          }
+        },
+        "listenerId": {
+          "visible_when": {
+            "key": "deployTarget",
+            "equals": "listener"
+          }
+        },
+        "domain": {
+          "visible_when": {
+            "any": [
+              {
+                "key": "deployTarget",
+                "equals": "loadbalancer"
+              },
+              {
+                "key": "deployTarget",
+                "equals": "listener"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "volcengine-apig": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderVolcEngineAPIG.tsx",
+      "fields": {
+        "region": {},
+        "domainMatchPattern": {
+          "options": [
+            "exact",
+            "wildcard",
+            "certsan"
+          ],
+          "default": "exact"
+        },
+        "domain": {
+          "visible_when": {
+            "key": "domainMatchPattern",
+            "not_equals": "certsan"
+          }
+        }
+      }
+    },
+    "volcengine-cdn": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderVolcEngineCDN.tsx",
+      "fields": {
+        "domainMatchPattern": {
+          "options": [
+            "exact",
+            "wildcard",
+            "certsan"
+          ],
+          "default": "exact"
+        },
+        "domain": {
+          "visible_when": {
+            "key": "domainMatchPattern",
+            "not_equals": "certsan"
+          }
+        }
+      }
+    },
+    "volcengine-certcenter": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderVolcEngineCertCenter.tsx",
+      "fields": {
+        "region": {}
+      }
+    },
+    "volcengine-clb": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderVolcEngineCLB.tsx",
+      "fields": {
+        "region": {},
+        "deployTarget": {
+          "options": [
+            "loadbalancer",
+            "listener"
+          ],
+          "default": "listener"
+        },
+        "loadbalancerId": {
+          "visible_when": {
+            "key": "deployTarget",
+            "equals": "loadbalancer"
+          }
+        },
+        "listenerId": {
+          "visible_when": {
+            "key": "deployTarget",
+            "equals": "listener"
+          }
+        },
+        "domain": {
+          "visible_when": {
+            "any": [
+              {
+                "key": "deployTarget",
+                "equals": "loadbalancer"
+              },
+              {
+                "key": "deployTarget",
+                "equals": "listener"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "volcengine-dcdn": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderVolcEngineDCDN.tsx",
+      "fields": {
+        "domainMatchPattern": {
+          "options": [
+            "exact",
+            "wildcard",
+            "certsan"
+          ],
+          "default": "exact"
+        },
+        "domain": {}
+      }
+    },
+    "volcengine-imagex": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderVolcEngineImageX.tsx",
+      "fields": {
+        "region": {},
+        "serviceId": {},
+        "domain": {}
+      }
+    },
+    "volcengine-live": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderVolcEngineLive.tsx",
+      "fields": {
+        "domainMatchPattern": {
+          "options": [
+            "exact",
+            "wildcard",
+            "certsan"
+          ],
+          "default": "exact"
+        },
+        "domain": {
+          "visible_when": {
+            "key": "domainMatchPattern",
+            "not_equals": "certsan"
+          }
+        }
+      }
+    },
+    "volcengine-tos": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderVolcEngineTOS.tsx",
+      "fields": {
+        "region": {},
+        "bucket": {},
+        "domain": {}
+      }
+    },
+    "volcengine-vod": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderVolcEngineVOD.tsx",
+      "fields": {
+        "region": {},
+        "spaceName": {},
+        "domainType": {
+          "options": [
+            "play",
+            "image",
+            "third"
+          ],
+          "default": "play"
+        },
+        "domainMatchPattern": {
+          "options": [
+            "exact",
+            "wildcard",
+            "certsan"
+          ],
+          "default": "exact"
+        },
+        "domain": {
+          "visible_when": {
+            "key": "domainMatchPattern",
+            "not_equals": "certsan"
+          }
+        }
+      }
+    },
+    "volcengine-waf": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderVolcEngineWAF.tsx",
+      "fields": {
+        "region": {},
+        "accessMode": {
+          "options": [
+            "cname"
+          ],
+          "default": "cname"
+        },
+        "domain": {}
+      }
+    },
+    "wangsu-cdn": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderWangsuCDN.tsx",
+      "fields": {
+        "domainMatchPattern": {
+          "options": [
+            "exact"
+          ],
+          "default": "exact"
+        },
+        "domains": {}
+      }
+    },
+    "wangsu-cdnpro": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderWangsuCDNPro.tsx",
+      "fields": {
+        "environment": {
+          "options": [
+            "production",
+            "staging"
+          ],
+          "default": "production"
+        },
+        "domainMatchPattern": {
+          "options": [
+            "exact"
+          ],
+          "default": "exact"
+        },
+        "domain": {},
+        "certificateId": {},
+        "webhookId": {}
+      }
+    },
+    "wangsu-certificate": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderWangsuCertificate.tsx",
+      "fields": {
+        "certificateId": {}
+      }
+    },
+    "webhook": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderWebhook.tsx",
+      "fields": {
+        "webhookData": {},
+        "timeout": {}
+      }
+    },
+    "yandexcloud-certificatemanager": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderYandexCloudCertificateManager.tsx",
+      "fields": {
+        "certificateId": {}
+      }
+    },
+    "zenlayer-cdn": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderZenlayerCDN.tsx",
+      "fields": {
+        "deployTarget": {
+          "options": [
+            "domain",
+            "certificate"
+          ],
+          "default": "domain"
+        },
+        "domainMatchPattern": {
+          "visible_when": {
+            "key": "deployTarget",
+            "equals": "domain"
+          },
+          "options": [
+            "exact",
+            "wildcard",
+            "certsan"
+          ],
+          "default": "exact"
+        },
+        "domain": {
+          "visible_when": {
+            "key": "deployTarget",
+            "equals": "domain"
+          }
+        },
+        "certificateId": {
+          "visible_when": {
+            "key": "deployTarget",
+            "equals": "certificate"
+          }
+        }
+      }
+    },
+    "zenlayer-ga": {
+      "file": "ui/src/components/workflow/designer/forms/BizDeployNodeConfigFieldsProviderZenlayerGA.tsx",
+      "fields": {
+        "deployTarget": {
+          "options": [
+            "accelerator",
+            "certificate"
+          ],
+          "default": "accelerator"
+        },
+        "acceleratorId": {
+          "visible_when": {
+            "key": "deployTarget",
+            "equals": "accelerator"
+          }
+        },
+        "certificateId": {
+          "visible_when": {
+            "key": "deployTarget",
+            "equals": "certificate"
+          }
+        }
+      }
+    }
+  },
+  "without_form": [
+    "axisnow",
+    "baiducloud-cert",
+    "cachefly",
+    "ctcccloud-cms",
+    "digitalocean-certificate",
+    "dokploy",
+    "googlecloud-certificatemanager",
+    "huaweicloud-scm",
+    "jdcloud-ssl",
+    "ksyun-kcm",
+    "ratpanel-console",
+    "vercel"
+  ]
+}

@@ -47,9 +47,12 @@ class UcloudUclbDeployer extends AbstractDeployer
         return [
             ['key' => 'endpoint', 'label' => '接口端点（选填）', 'type' => 'string', 'required' => false, 'destination' => true],
             ['key' => 'region', 'label' => '地域', 'type' => 'string', 'required' => true],
-            ['key' => 'deploy_target', 'label' => '部署目标', 'type' => 'string', 'required' => true],
+            ['key' => 'deploy_target', 'label' => '证书部署方式', 'type' => 'select', 'required' => true, 'default' => 'vserver', 'options' => [
+                ['label' => '负载均衡实例', 'value' => 'loadbalancer'],
+                ['label' => '指定 VServer', 'value' => 'vserver'],
+            ]],
             ['key' => 'loadbalancer_id', 'label' => '负载均衡实例 ID', 'type' => 'string', 'required' => true],
-            ['key' => 'vserver_id', 'label' => 'VServer ID（部署目标为 VServer 时必填）', 'type' => 'string', 'required' => false],
+            ['key' => 'vserver_id', 'label' => 'VServer ID（部署目标为 VServer 时必填）', 'type' => 'string', 'required' => false, 'visible_when' => ['key' => 'deploy_target', 'equals' => 'vserver'], 'required_when' => ['key' => 'deploy_target', 'equals' => 'vserver']],
         ];
     }
 

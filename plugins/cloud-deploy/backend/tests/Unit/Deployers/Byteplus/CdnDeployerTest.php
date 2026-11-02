@@ -192,3 +192,9 @@ test('upload SDK 抛网络类异常时脱敏只暴露类名（无 AK/SK、不挂
         expect($e->getPrevious())->toBeNull();
     }
 });
+
+test('BytePlus 证书仅有已配置项时无可部署域名必须报错', function () {
+    $client = Mockery::mock(BytePlusRestClient::class);
+    $client->shouldReceive('openApi')->once()->with('POST', 'DescribeCertConfig', '2021-03-01', [], ['CertId' => 'cert-1'])->andReturn((object) ['Result' => (object) ['SpecifiedCertConfig' => [(object) ['Domain' => 'example.com']]]]);
+    expect(fn () => byteplusCdnDeployerWith(fn () => $client)->bind('cert-1', byteplusCdnCreds(), ['domain_match_pattern' => 'certsan']))->toThrow(RuntimeException::class, '未找到');
+});

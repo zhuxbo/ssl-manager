@@ -13,6 +13,7 @@ use Plugins\CloudDeploy\Deployers\Aliyun\AliyunEsaSaasDeployer;
 use Plugins\CloudDeploy\Deployers\Aliyun\AliyunFcDeployer;
 use Plugins\CloudDeploy\Deployers\Aliyun\AliyunGaDeployer;
 use Plugins\CloudDeploy\Deployers\Aliyun\AliyunLiveDeployer;
+use Plugins\CloudDeploy\Deployers\Aliyun\AliyunMseDeployer;
 use Plugins\CloudDeploy\Deployers\Aliyun\AliyunNlbDeployer;
 use Plugins\CloudDeploy\Deployers\Aliyun\AliyunOssDeployer;
 use Plugins\CloudDeploy\Deployers\Aliyun\AliyunProvider;
@@ -44,4 +45,5 @@ return function (Registry $registry): void {
     $registry->registerDeployer('aliyun', 'ddospro', fn () => new AliyunDdosproDeployer);
     $registry->registerDeployer('aliyun', 'esa', fn () => new AliyunEsaDeployer);
     $registry->registerDeployer('aliyun', 'esasaas', fn () => new AliyunEsaSaasDeployer);
+    $registry->registerDeployer('aliyun', 'mse', fn () => new AliyunMseDeployer);
 };

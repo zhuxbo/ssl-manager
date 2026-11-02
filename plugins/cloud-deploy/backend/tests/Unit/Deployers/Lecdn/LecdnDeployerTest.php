@@ -155,8 +155,8 @@ test('client 角色：登录 body 含 email+username+password，更新 body 无 
     expect($update['path'])->toBe('certificate/7');
     expect($update['json'])->not->toHaveKey('client_id');
     expect($update['json']['type'])->toBe('upload');
-    expect($update['json']['ssl_pem'])->toBe('CERT'); // 原样，非 base64
-    expect($update['json']['ssl_key'])->toBe('KEY');
+    expect($update['json']['ssl_pem'])->toBe(base64_encode('CERT')); // 对齐新版接口编码
+    expect($update['json']['ssl_key'])->toBe(base64_encode('KEY'));
     expect($update['json']['auto_renewal'])->toBeFalse();
     expect($update['headers']['Authorization'])->toBe('Bearer TKN');
 });
@@ -170,7 +170,7 @@ test('master 角色：登录 body 仅 username+password，更新 body 含 client
 
     $update = $reqs[1];
     expect($update['json']['client_id'])->toBe(42);
-    expect($update['json']['ssl_pem'])->toBe('CERT');
+    expect($update['json']['ssl_pem'])->toBe(base64_encode('CERT'));
 });
 
 test('token 缓存：多次调用仅登录一次（无过期重登）', function () {
@@ -207,3 +207,23 @@ test('RestClient code≠200 归一为 LecdnApiException（读 msg/message）', f
     expect(fn () => $client->updateCertificate(1, 'C', 'K'))
         ->toThrow(LecdnApiException::class, 'boom');
 });
+
+test('LeCDN v4 API Key 直接鉴权，不登录且不发送 v3 专用字段', function (string $role) {
+    $http = Mockery::mock(ClientInterface::class);
+    $http->shouldReceive('request')->once()->with('PUT', 'certificate/7', Mockery::on(function ($opts) {
+        expect($opts['headers']['Authorization'])->toBe('APIKEY');
+        expect($opts['json'])->not->toHaveKeys(['type', 'client_id']);
+        expect(base64_decode($opts['json']['ssl_pem']))->toBe('CERT');
+        expect(base64_decode($opts['json']['ssl_key']))->toBe('KEY');
+
+        return true;
+    }))->andReturn(new Response(200, [], '{"code":200}'));
+    (new LecdnRestClient($http, $role, '', '', 'v4', 'APIKEY'))->updateCertificate(7, 'CERT', 'KEY', 9);
+})->with(['client', 'master']);
+
+test('LeCDN v4 用户端登录路径为 login，主控端仍为 auth/login', function (string $role, string $path) {
+    $http = Mockery::mock(ClientInterface::class);
+    $http->shouldReceive('request')->with('POST', $path, Mockery::type('array'))->once()->andReturn(new Response(200, [], '{"code":200,"data":{"token":"TOKEN"}}'));
+    $http->shouldReceive('request')->with('PUT', 'certificate/7', Mockery::on(fn ($o) => $o['headers']['Authorization'] === 'Bearer TOKEN'))->once()->andReturn(new Response(200, [], '{"code":200}'));
+    (new LecdnRestClient($http, $role, 'u', 'p', 'v4'))->updateCertificate(7, 'CERT', 'KEY');
+})->with([['client', 'login'], ['master', 'auth/login']]);

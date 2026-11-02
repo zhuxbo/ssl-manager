@@ -5,6 +5,8 @@ use GuzzleHttp\Handler\MockHandler;
 use GuzzleHttp\HandlerStack;
 use GuzzleHttp\Middleware;
 use GuzzleHttp\Psr7\Response;
+use phpseclib3\Crypt\RSA;
+use phpseclib3\Crypt\RSA\PrivateKey;
 use Plugins\CloudDeploy\Deployers\Unicloud\UnicloudApiException;
 use Plugins\CloudDeploy\Deployers\Unicloud\UnicloudClient;
 use Plugins\CloudDeploy\Deployers\Unicloud\WebhostDeployer;
@@ -125,9 +127,35 @@ test('bind 遇 UnicloudApiException 时脱敏重抛（含错误码、无凭证�
 
 // ============ 客户端线协议（MockHandler 捕获实际外发请求）============
 
-test('client：三步鉴权 + 业务请求（login → getUserToken → create-domain-with-cert，含签名/头）', function () {
+function unicloudChallengeKey(): PrivateKey
+{
+    static $key;
+
+    return $key ??= RSA::createKey(2048)->withPadding(RSA::ENCRYPTION_OAEP)->withHash('sha256')->withMGFHash('sha256');
+}
+
+function unicloudChallengeResponse(): Response
+{
+    return new Response(200, [], json_encode(['success' => true, 'data' => [
+        'version' => 1, 'algorithm' => 'RSA-OAEP-256+A256GCM', 'keyId' => 'key-1', 'challengeId' => 'challenge-1',
+        'publicKey' => unicloudChallengeKey()->getPublicKey()->toString('PKCS8'),
+    ]]));
+}
+
+function unicloudDecryptEnvelope(array $envelope): array
+{
+    $key = unicloudChallengeKey()->decrypt(base64_decode($envelope['encryptedKey']));
+    $aad = ['version' => $envelope['version'], 'algorithm' => $envelope['algorithm'], 'keyId' => $envelope['keyId'], 'challengeId' => $envelope['challengeId']];
+    $plain = openssl_decrypt(base64_decode($envelope['ciphertext']), 'aes-256-gcm', $key, OPENSSL_RAW_DATA, base64_decode($envelope['iv']), base64_decode($envelope['tag']), json_encode($aad, JSON_UNESCAPED_SLASHES));
+    expect($plain)->not->toBeFalse();
+
+    return json_decode($plain, true);
+}
+
+test('client：密码挑战 + 三步鉴权（login → getUserToken → create-domain-with-cert，含签名/头）', function () {
     $history = new ArrayObject;
     $client = unicloudClientWithMock([
+        unicloudChallengeResponse(),
         // 1) serverless login → newToken
         new Response(200, [], json_encode(['success' => true, 'data' => ['newToken' => ['token' => 'SLT-123', 'tokenExpired' => (int) (microtime(true) * 1000) + 3600000]]])),
         // 2) serverless getUserToken → 嵌套 token
@@ -138,14 +166,16 @@ test('client：三步鉴权 + 业务请求（login → getUserToken → create-d
 
     $client->createDomainWithCert(['provider' => 'aliyun', 'spaceId' => 's-1', 'domain' => 'd.example.com', 'cert' => 'C', 'key' => 'K']);
 
-    expect($history)->toHaveCount(3);
+    expect($history)->toHaveCount(4);
 
     // 第 1 步：登录到 identity endpoint，HMAC-MD5 签名（参考实现重算一致）
     /** @var RequestInterface $loginReq */
-    $loginReq = $history[0]['request'];
+    $challengeInner = json_decode(json_decode((string) $history[0]['request']->getBody(), true)['params'], true);
+    expect($challengeInner['functionArgs']['method'])->toBe('createPasswordChallenge');
+    $loginReq = $history[1]['request'];
     expect($loginReq->getMethod())->toBe('POST');
     expect((string) $loginReq->getUri())->toBe('https://account.dcloud.net.cn/client');
-    expect($loginReq->getHeaderLine('Origin'))->toBe('https://unicloud.dcloud.net.cn');
+    expect($loginReq->getHeaderLine('Origin'))->toBe('https://account.dcloud.net.cn');
     expect($loginReq->getHeaderLine('X-Client-Info'))->not->toBe('');
     $loginPayload = json_decode((string) $loginReq->getBody(), true);
     expect($loginPayload['method'])->toBe('serverless.function.runtime.invoke');
@@ -158,12 +188,15 @@ test('client：三步鉴权 + 业务请求（login → getUserToken → create-d
     $loginInner = json_decode($loginPayload['params'], true);
     expect($loginInner['functionTarget'])->toBe('uni-id-co');
     expect($loginInner['functionArgs']['method'])->toBe('login');
-    expect($loginInner['functionArgs']['params'][0]['password'])->toBe('secret-pass');
-    expect($loginInner['functionArgs']['params'][0]['email'])->toBe('user@example.com');
+    expect((string) $loginReq->getBody())->not->toContain('secret-pass');
+    $plain = unicloudDecryptEnvelope($loginInner['functionArgs']['params'][0]['passwordEnvelope']);
+    expect($plain['password'])->toBe('secret-pass');
+    expect($plain['email'])->toBe('user@example.com');
+    expect($plain['challengeId'])->toBe('challenge-1');
 
     // 第 2 步：getUserToken 到 console endpoint，带上一步拿到的 serverless token
     /** @var RequestInterface $tokenReq */
-    $tokenReq = $history[1]['request'];
+    $tokenReq = $history[2]['request'];
     expect((string) $tokenReq->getUri())->toBe('https://unicloud.dcloud.net.cn/client');
     expect($tokenReq->getHeaderLine('X-Client-Token'))->toBe('SLT-123');
     $tokenPayload = json_decode((string) $tokenReq->getBody(), true);
@@ -177,7 +210,7 @@ test('client：三步鉴权 + 业务请求（login → getUserToken → create-d
 
     // 第 3 步：业务请求带 apiUser Token 头
     /** @var RequestInterface $bizReq */
-    $bizReq = $history[2]['request'];
+    $bizReq = $history[3]['request'];
     expect((string) $bizReq->getUri())->toBe('https://unicloud-api.dcloud.net.cn/unicloud/api/host/create-domain-with-cert');
     expect($bizReq->getHeaderLine('Token'))->toBe('AUT-456');
     $bizBody = json_decode((string) $bizReq->getBody(), true);
@@ -188,6 +221,7 @@ test('client：三步鉴权 + 业务请求（login → getUserToken → create-d
 test('client：账号是手机号时登录 params 用 mobile', function () {
     $history = new ArrayObject;
     $client = unicloudClientWithMock([
+        unicloudChallengeResponse(),
         new Response(200, [], json_encode(['success' => true, 'data' => ['newToken' => ['token' => 'T', 'tokenExpired' => (int) (microtime(true) * 1000) + 3600000]]])),
         new Response(200, [], json_encode(['success' => true, 'data' => ['data' => ['data' => ['token' => 'AUT']]]])),
         new Response(200, [], json_encode(['ret' => 0])),
@@ -195,9 +229,10 @@ test('client：账号是手机号时登录 params 用 mobile', function () {
 
     $client->createDomainWithCert(['provider' => 'aliyun', 'spaceId' => 's', 'domain' => 'd.example.com']);
 
-    $loginInner = json_decode(json_decode((string) $history[0]['request']->getBody(), true)['params'], true);
-    expect($loginInner['functionArgs']['params'][0]['mobile'])->toBe('13800138000');
-    expect($loginInner['functionArgs']['params'][0])->not->toHaveKey('email');
+    $loginInner = json_decode(json_decode((string) $history[1]['request']->getBody(), true)['params'], true);
+    $plain = unicloudDecryptEnvelope($loginInner['functionArgs']['params'][0]['passwordEnvelope']);
+    expect($plain['mobile'])->toBe('13800138000');
+    expect($plain)->not->toHaveKey('email');
 });
 
 test('client：登录 success=false → UnicloudApiException（error.code + message）', function () {
@@ -216,6 +251,7 @@ test('client：登录 success=false → UnicloudApiException（error.code + mess
 
 test('client：业务请求 ret!=0 → UnicloudApiException（ret + desc）', function () {
     $client = unicloudClientWithMock([
+        unicloudChallengeResponse(),
         new Response(200, [], json_encode(['success' => true, 'data' => ['newToken' => ['token' => 'T', 'tokenExpired' => (int) (microtime(true) * 1000) + 3600000]]])),
         new Response(200, [], json_encode(['success' => true, 'data' => ['data' => ['data' => ['token' => 'AUT']]]])),
         new Response(200, [], json_encode(['ret' => 500, 'desc' => '域名不存在'])),
@@ -228,4 +264,12 @@ test('client：业务请求 ret!=0 → UnicloudApiException（ret + desc）', fu
         expect($e->getErrorCode())->toBe('500');
         expect($e->getErrorMessage())->toBe('域名不存在');
     }
+});
+
+test('uniCloud 拒绝未知挑战算法且不发送登录请求', function () {
+    $history = new ArrayObject;
+    $client = unicloudClientWithMock([new Response(200, [], '{"success":true,"data":{"challengeId":"c","algorithm":"unknown"}}')], $history);
+    expect(fn () => $client->createDomainWithCert([]))->toThrow(UnicloudApiException::class);
+    expect($history)->toHaveCount(1);
+    expect((string) $history[0]['request']->getBody())->not->toContain('secret-pass');
 });

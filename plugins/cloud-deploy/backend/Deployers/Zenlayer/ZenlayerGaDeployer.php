@@ -50,9 +50,12 @@ class ZenlayerGaDeployer extends AbstractDeployer implements HasPollBudget
     public function configSchema(): array
     {
         return [
-            ['key' => 'deploy_target', 'label' => '部署目标（accelerator/certificate）', 'type' => 'string', 'required' => false],
-            ['key' => 'accelerator_id', 'label' => '加速器 ID', 'type' => 'string', 'required' => false],
-            ['key' => 'certificate_id', 'label' => '证书 ID（certificate 目标）', 'type' => 'string', 'required' => false],
+            ['key' => 'deploy_target', 'label' => '证书部署方式', 'type' => 'select', 'required' => false, 'default' => 'accelerator', 'options' => [
+                ['label' => '加速实例', 'value' => 'accelerator'],
+                ['label' => '替换指定证书', 'value' => 'certificate'],
+            ]],
+            ['key' => 'accelerator_id', 'label' => '加速器 ID', 'type' => 'string', 'required' => false, 'visible_when' => ['key' => 'deploy_target', 'equals' => 'accelerator'], 'required_when' => ['key' => 'deploy_target', 'equals' => 'accelerator']],
+            ['key' => 'certificate_id', 'label' => '证书 ID（certificate 目标）', 'type' => 'string', 'required' => false, 'visible_when' => ['key' => 'deploy_target', 'equals' => 'certificate'], 'required_when' => ['key' => 'deploy_target', 'equals' => 'certificate']],
         ];
     }
 

@@ -5,18 +5,18 @@ namespace Plugins\CloudDeploy\Deployers\Lecdn;
 use GuzzleHttp\ClientInterface;
 
 /**
- * LeCDN v3 REST 薄客户端（账号密码登录态 + 更新证书；按角色 client/master 分支）。
+ * LeCDN v3/v4 REST 薄客户端（账号密码登录态 + 更新证书；按角色 client/master 分支）。
  *
- * 无官方 PHP SDK，照 certimate pkg/sdk3rd/lecdn/v3/{client,master} 用 GuzzleHttp（来自主系统 vendor）直调。
+ * 无官方 PHP SDK，照 certimate pkg/sdk3rd/lecdn/{client,master}/{v3,v4} 用 GuzzleHttp（来自主系统 vendor）直调。
  * base：{serverUrl}/prod-api。鉴权：账号密码登录换 token，token 进 `Authorization: Bearer` 头；token
  * **不带过期缓存**（与 GoEdge 族不同——仅当 token 为空时重登）。
  *
  * 角色差异（CRITICAL）：
- *   - 登录 POST /auth/login：client 端 body {email, username, password}（email 与 username 同值）；
+ *   - 登录 POST /auth/login（v4 client 为 /login）：client 端 body {email, username, password}（email 与 username 同值）；
  *     master 端 body {username, password}。响应 data.token 取 token。
- *   - 更新 PUT /certificate/{id}：master 端 body 多一个 client_id 字段；client 端无。
+ *   - 更新 PUT /certificate/{id}：v3 master 端 body 多一个 client_id 字段；client 端无。
  *   - 响应描述键：client 端 msg、master 端 message（两者都读）。
- * PEM **原样**（非 base64）填 ssl_pem / ssl_key。
+ * PEM 经 base64 编码填 ssl_pem / ssl_key。
  *
  * 响应体 `{code, message|msg, data}` —— code==200 成功。HTTP 非 2xx 或 code≠200 归一为 LecdnApiException。
  *
@@ -38,10 +38,12 @@ class LecdnRestClient
         private readonly string $role,
         private readonly string $username,
         private readonly string $password,
+        private readonly string $version = 'v3',
+        private readonly string $apiKey = '',
     ) {}
 
     /**
-     * 更新指定证书（PUT /certificate/{id}，PEM 原样）。
+     * 更新指定证书（PUT /certificate/{id}，PEM 经 base64 编码）。
      * REF: certimate lecdn v3 UpdateCertificate
      *
      * @param  int  $certificateId  LeCDN 证书 ID
@@ -53,13 +55,17 @@ class LecdnRestClient
             'name' => 'certimate-'.(int) (microtime(true) * 1000),
             'description' => 'upload from Certimate',
             'type' => 'upload',
-            'ssl_pem' => $certPem,
-            'ssl_key' => $keyPem,
+            'ssl_pem' => base64_encode($certPem),
+            'ssl_key' => base64_encode($keyPem),
             'auto_renewal' => false,
         ];
         // master 角色：body 头部带 client_id（对齐 certimate，无 omitempty，即便 0 也外发）
-        if ($this->role === self::ROLE_MASTER) {
+        if ($this->role === self::ROLE_MASTER && $this->version === 'v3') {
             $body = ['client_id' => $clientId] + $body;
+        }
+
+        if ($this->version === 'v4') {
+            unset($body['type']);
         }
 
         $this->call('PUT', "certificate/$certificateId", $body);
@@ -79,7 +85,8 @@ class LecdnRestClient
             ? ['username' => $this->username, 'password' => $this->password]
             : ['email' => $this->username, 'username' => $this->username, 'password' => $this->password];
 
-        $json = $this->call('POST', 'auth/login', $body, true);
+        $path = $this->version === 'v4' && $this->role === self::ROLE_CLIENT ? 'login' : 'auth/login';
+        $json = $this->call('POST', $path, $body, true);
 
         $data = is_array($json['data'] ?? null) ? $json['data'] : [];
         $token = is_string($data['token'] ?? null) ? $data['token'] : '';
@@ -98,8 +105,12 @@ class LecdnRestClient
     {
         $headers = ['Content-Type' => 'application/json', 'Accept' => 'application/json'];
         if (! $isLogin) {
-            $this->ensureToken();
-            $headers['Authorization'] = 'Bearer '.$this->token;
+            if ($this->apiKey !== '') {
+                $headers['Authorization'] = $this->apiKey;
+            } else {
+                $this->ensureToken();
+                $headers['Authorization'] = 'Bearer '.$this->token;
+            }
         }
 
         $resp = $this->http->request($method, $path, [

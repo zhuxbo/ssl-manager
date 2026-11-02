@@ -40,10 +40,14 @@ class ElbDeployer extends AbstractDeployer
     {
         return [
             ['key' => 'region', 'label' => '地域', 'type' => 'string', 'required' => true],
-            ['key' => 'deploy_target', 'label' => '部署目标', 'type' => 'string', 'required' => false, 'default' => 'listener'],
-            ['key' => 'load_balancer_id', 'label' => '负载均衡器 ID', 'type' => 'string', 'required' => false],
-            ['key' => 'listener_id', 'label' => '监听器 ID', 'type' => 'string', 'required' => false],
-            ['key' => 'certificate_id', 'label' => '证书 ID', 'type' => 'string', 'required' => false],
+            ['key' => 'deploy_target', 'label' => '证书部署方式', 'type' => 'select', 'required' => false, 'default' => 'listener', 'options' => [
+                ['label' => '负载均衡实例', 'value' => 'loadbalancer'],
+                ['label' => '指定监听器', 'value' => 'listener'],
+                ['label' => '替换指定证书', 'value' => 'certificate'],
+            ]],
+            ['key' => 'load_balancer_id', 'label' => '负载均衡器 ID', 'type' => 'string', 'required' => false, 'visible_when' => ['key' => 'deploy_target', 'equals' => 'loadbalancer'], 'required_when' => ['key' => 'deploy_target', 'equals' => 'loadbalancer']],
+            ['key' => 'listener_id', 'label' => '监听器 ID', 'type' => 'string', 'required' => false, 'visible_when' => ['key' => 'deploy_target', 'equals' => 'listener'], 'required_when' => ['key' => 'deploy_target', 'equals' => 'listener']],
+            ['key' => 'certificate_id', 'label' => '证书 ID', 'type' => 'string', 'required' => false, 'visible_when' => ['key' => 'deploy_target', 'equals' => 'certificate'], 'required_when' => ['key' => 'deploy_target', 'equals' => 'certificate']],
         ];
     }
 

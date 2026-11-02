@@ -1,9 +1,10 @@
 import { configForSchema, type ConfigSchemaField } from "./schemaConfig";
 
-export interface SchemaCondition {
-  key: string;
-  equals: unknown;
-}
+export type SchemaCondition =
+  | { key: string; equals: unknown }
+  | { key: string; not_equals: unknown }
+  | { all: SchemaCondition[] }
+  | { any: SchemaCondition[] };
 
 export interface ConditionalSchemaField extends ConfigSchemaField {
   required?: boolean;
@@ -64,6 +65,17 @@ function matchesSchemaCondition(
   values: Record<string, unknown>,
   fields: ConditionalSchemaField[]
 ): boolean {
+  if ("all" in condition) {
+    return (
+      condition.all.length > 0 &&
+      condition.all.every(item => matchesSchemaCondition(item, values, fields))
+    );
+  }
+  if ("any" in condition) {
+    return condition.any.some(item =>
+      matchesSchemaCondition(item, values, fields)
+    );
+  }
   const controlling = fields.find(field => field.key === condition.key);
   const value = values[condition.key];
   const effectiveValue =
@@ -71,5 +83,7 @@ function matchesSchemaCondition(
       ? controlling?.default
       : value;
 
-  return effectiveValue === condition.equals;
+  return "equals" in condition
+    ? effectiveValue === condition.equals
+    : effectiveValue !== condition.not_equals;
 }

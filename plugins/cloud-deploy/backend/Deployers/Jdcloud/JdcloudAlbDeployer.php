@@ -48,13 +48,13 @@ class JdcloudAlbDeployer extends AbstractDeployer
     {
         return [
             ['key' => 'region_id', 'label' => '地域 ID', 'type' => 'string', 'required' => true],
-            ['key' => 'deploy_target', 'label' => '部署目标', 'type' => 'string', 'required' => true, 'options' => [
-                ['label' => '负载均衡实例（全部 HTTPS/TLS 监听）', 'value' => self::TARGET_LOADBALANCER],
-                ['label' => '指定监听器', 'value' => self::TARGET_LISTENER],
+            ['key' => 'deploy_target', 'label' => '证书部署方式', 'type' => 'select', 'required' => true, 'default' => 'listener', 'options' => [
+                ['label' => '负载均衡实例（全部 HTTPS/TLS 监听）', 'value' => 'loadbalancer'],
+                ['label' => '指定监听器', 'value' => 'listener'],
             ]],
-            ['key' => 'loadbalancer_id', 'label' => '负载均衡实例 ID（部署目标为负载均衡实例时必填）', 'type' => 'string', 'required' => false],
-            ['key' => 'listener_id', 'label' => '监听器 ID（部署目标为指定监听器时必填）', 'type' => 'string', 'required' => false],
-            ['key' => 'domain', 'label' => 'SNI 扩展域名（选填）', 'type' => 'string', 'required' => false],
+            ['key' => 'loadbalancer_id', 'label' => '负载均衡实例 ID（部署目标为负载均衡实例时必填）', 'type' => 'string', 'required' => false, 'visible_when' => ['key' => 'deploy_target', 'equals' => 'loadbalancer'], 'required_when' => ['key' => 'deploy_target', 'equals' => 'loadbalancer']],
+            ['key' => 'listener_id', 'label' => '监听器 ID（部署目标为指定监听器时必填）', 'type' => 'string', 'required' => false, 'visible_when' => ['key' => 'deploy_target', 'equals' => 'listener'], 'required_when' => ['key' => 'deploy_target', 'equals' => 'listener']],
+            ['key' => 'domain', 'label' => 'SNI 扩展域名（选填）', 'type' => 'string', 'required' => false, 'visible_when' => ['any' => [['key' => 'deploy_target', 'equals' => 'loadbalancer'], ['key' => 'deploy_target', 'equals' => 'listener']]]],
         ];
     }
 

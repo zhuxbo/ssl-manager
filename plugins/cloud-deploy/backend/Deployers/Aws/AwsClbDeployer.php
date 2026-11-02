@@ -46,7 +46,10 @@ class AwsClbDeployer extends AbstractDeployer
             ['key' => 'region', 'label' => '地域', 'type' => 'string', 'required' => true],
             ['key' => 'load_balancer_name', 'label' => '负载均衡器名称', 'type' => 'string', 'required' => true],
             ['key' => 'listener_port', 'label' => '监听端口', 'type' => 'number', 'required' => true],
-            ['key' => 'certificate_source', 'label' => '证书来源（ACM/IAM）', 'type' => 'string', 'required' => false],
+            ['key' => 'certificate_source', 'label' => '证书来源（ACM/IAM）', 'type' => 'select', 'required' => false, 'default' => 'ACM', 'options' => [
+                ['label' => 'ACM', 'value' => 'ACM'],
+                ['label' => 'IAM', 'value' => 'IAM'],
+            ]],
         ];
     }
 

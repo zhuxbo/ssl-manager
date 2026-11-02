@@ -38,12 +38,12 @@ class BaishanCdnDeployer extends AbstractDeployer
     public function configSchema(): array
     {
         return [
-            ['key' => 'deploy_target', 'label' => '部署目标', 'type' => 'select', 'required' => false, 'default' => 'domain', 'options' => [
+            ['key' => 'deploy_target', 'label' => '证书部署方式', 'type' => 'select', 'required' => false, 'default' => 'domain', 'options' => [
                 ['label' => '加速域名', 'value' => 'domain'],
                 ['label' => '已有证书', 'value' => 'certificate'],
             ]],
-            ['key' => 'domain', 'label' => '加速域名', 'type' => 'string', 'required' => false],
-            ['key' => 'certificate_id', 'label' => '已有证书 ID', 'type' => 'string', 'required' => false],
+            ['key' => 'domain', 'label' => '加速域名', 'type' => 'string', 'required' => false, 'visible_when' => ['key' => 'deploy_target', 'equals' => 'domain'], 'required_when' => ['key' => 'deploy_target', 'equals' => 'domain']],
+            ['key' => 'certificate_id', 'label' => '已有证书 ID', 'type' => 'string', 'required' => false, 'visible_when' => ['key' => 'deploy_target', 'equals' => 'certificate']],
         ];
     }
 

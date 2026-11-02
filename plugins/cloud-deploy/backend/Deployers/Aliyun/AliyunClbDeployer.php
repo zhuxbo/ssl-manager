@@ -48,10 +48,13 @@ class AliyunClbDeployer extends AbstractDeployer
     public function configSchema(): array
     {
         return [
-            ['key' => 'deploy_target', 'label' => '部署目标', 'type' => 'string', 'required' => false, 'default' => 'listener'],
+            ['key' => 'deploy_target', 'label' => '证书部署方式', 'type' => 'select', 'required' => false, 'default' => 'listener', 'options' => [
+                ['label' => '负载均衡实例', 'value' => 'loadbalancer'],
+                ['label' => '指定监听器', 'value' => 'listener'],
+            ]],
             ['key' => 'load_balancer_id', 'label' => '负载均衡实例 ID', 'type' => 'string', 'required' => true],
-            ['key' => 'listener_port', 'label' => '监听端口', 'type' => 'number', 'required' => false],
-            ['key' => 'domain', 'label' => 'SNI 域名', 'type' => 'string', 'required' => false],
+            ['key' => 'listener_port', 'label' => '监听端口', 'type' => 'number', 'required' => false, 'visible_when' => ['key' => 'deploy_target', 'equals' => 'listener'], 'required_when' => ['key' => 'deploy_target', 'equals' => 'listener']],
+            ['key' => 'domain', 'label' => 'SNI 域名', 'type' => 'string', 'required' => false, 'visible_when' => ['any' => [['key' => 'deploy_target', 'equals' => 'loadbalancer'], ['key' => 'deploy_target', 'equals' => 'listener']]]],
             ['key' => 'region', 'label' => '地域', 'type' => 'string', 'required' => true],
         ];
     }

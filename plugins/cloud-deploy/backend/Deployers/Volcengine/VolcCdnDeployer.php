@@ -37,8 +37,12 @@ class VolcCdnDeployer extends AbstractDeployer implements ReceivesRemoteCertific
     public function configSchema(): array
     {
         return [
-            ['key' => 'domain_match_pattern', 'label' => '域名匹配模式', 'type' => 'string', 'required' => false, 'default' => 'exact'],
-            ['key' => 'domain', 'label' => '加速域名', 'type' => 'string', 'required' => false],
+            ['key' => 'domain_match_pattern', 'label' => '域名匹配模式', 'type' => 'select', 'required' => false, 'default' => 'exact', 'options' => [
+                ['label' => '精确匹配', 'value' => 'exact'],
+                ['label' => '泛域名匹配', 'value' => 'wildcard'],
+                ['label' => '根据证书自动匹配', 'value' => 'certsan'],
+            ]],
+            ['key' => 'domain', 'label' => '加速域名', 'type' => 'string', 'required' => false, 'visible_when' => ['key' => 'domain_match_pattern', 'not_equals' => 'certsan']],
         ];
     }
 
@@ -67,22 +71,24 @@ class VolcCdnDeployer extends AbstractDeployer implements ReceivesRemoteCertific
             $this->fail('缺少配置 domain');
         }
 
-        $this->guardSdk(function () use ($credentials, $domain, $certId, $pattern) {
-            /** @var VolcRestClient $client */
-            $client = $this->makeClient('cdn', $credentials);
-            $domains = match ($pattern) {
-                '', 'exact' => [$domain],
-                'wildcard' => $this->cdnWildcardDomains($client, $credentials, $domain),
-                'certsan' => $this->cdnCertificateDomains($client, $certId),
-                default => $this->fail("不支持的域名匹配模式 $pattern"),
-            };
-            foreach ($domains as $matchedDomain) {
-                $client->callJson('BatchDeployCert', '2021-03-01', [
-                    'Domain' => $matchedDomain,
-                    'CertId' => $certId,
-                ]);
-            }
+        if (! in_array($pattern, ['', 'exact', 'wildcard', 'certsan'], true)) {
+            $this->fail("不支持的域名匹配模式 $pattern");
+        }
+        /** @var VolcRestClient $client */
+        $client = $this->makeClient('cdn', $credentials);
+        $domains = $this->guardSdk(fn () => match ($pattern) {
+            '', 'exact' => [$domain],
+            'wildcard' => $this->cdnWildcardDomains($client, $credentials, $domain),
+            'certsan' => $this->cdnCertificateDomains($client, $certId),
         });
+        if ($domains === []) {
+            $this->fail('未找到匹配的 CDN 域名');
+        }
+        foreach ($domains as $matchedDomain) {
+            $this->guardSdk(fn () => $client->callJson('BatchDeployCert', '2021-03-01', [
+                'Domain' => $matchedDomain, 'CertId' => $certId,
+            ]));
+        }
     }
 
     /** @return list<string> */
@@ -113,9 +119,6 @@ class VolcCdnDeployer extends AbstractDeployer implements ReceivesRemoteCertific
             }
             $page++;
         } while (count($items) >= 100);
-        if ($domains === []) {
-            $this->fail('未找到匹配泛域名的 CDN 域名');
-        }
 
         return $domains;
     }
@@ -132,9 +135,6 @@ class VolcCdnDeployer extends AbstractDeployer implements ReceivesRemoteCertific
                     $domains[] = $domain;
                 }
             }
-        }
-        if ($domains === [] && ! is_array($result['SpecifiedCertConfig'] ?? null)) {
-            $this->fail('未找到证书可关联的 CDN 域名');
         }
 
         return $domains;
