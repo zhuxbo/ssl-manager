@@ -1,0 +1,28 @@
+{
+    "test": "P\\Tests\\Feature\\Http\\Controllers\\Admin\\UserUnlockTest::__pest_evaluable_管理员解锁全部登录标识并恢复正常登录",
+    "version": "1.0.0",
+    "calls": [
+        {
+            "method": "POST",
+            "uri_pattern": "/api/admin/user/unlock/{id}",
+            "request_keys": null,
+            "response_status": "2xx",
+            "response_schema": {
+                "code": "integer"
+            }
+        },
+        {
+            "method": "POST",
+            "uri_pattern": "/api/login",
+            "request_keys": [
+                "account",
+                "password"
+            ],
+            "response_status": "2xx",
+            "response_schema": {
+                "code": "integer",
+                "msg": "string"
+            }
+        }
+    ]
+}

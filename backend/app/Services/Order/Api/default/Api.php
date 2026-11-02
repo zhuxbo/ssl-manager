@@ -45,7 +45,7 @@ class Api implements OrderSourceApiInterface
             default => $this->getNewSslParams($data),
         };
 
-        $result = $this->sdk->new($params);
+        $result = $this->sdk->submitByReferId('new', $params);
 
         // SMIME、CodeSign、DocSign 不需要 DCV 验证
         if (in_array($productType, ['smime', 'codesign', 'docsign'])) {
@@ -69,7 +69,7 @@ class Api implements OrderSourceApiInterface
         };
         $params['order_id'] = $data['last_api_id'];
 
-        $result = $this->sdk->renew($params);
+        $result = $this->sdk->submitByReferId('renew', $params);
 
         // SMIME、CodeSign、DocSign 不需要 DCV 验证
         if (in_array($productType, ['smime', 'codesign', 'docsign'])) {
@@ -105,7 +105,7 @@ class Api implements OrderSourceApiInterface
             $params['email'] = $data['email'] ?? '';
         }
 
-        $result = $this->sdk->reissue($params);
+        $result = $this->sdk->submitByReferId('reissue', $params);
 
         // SMIME 和 CodeSign 不需要 DCV 验证
         if ($productType !== 'ssl') {
@@ -192,10 +192,11 @@ class Api implements OrderSourceApiInterface
                 'data' => [
                     'api_id' => $apiId,
                     'cert_apply_status' => $result['data']['cert_apply_status'] ?? 0,
-                    'dcv' => $result['data']['dcv'],
-                    'validation' => $result['data']['validation'],
+                    'dcv' => $result['data']['dcv'] ?? null,
+                    'validation' => $result['data']['validation'] ?? null,
                 ],
                 'code' => 1,
+                'recovered' => $result['recovered'] ?? false,
             ];
         }
 
@@ -217,6 +218,7 @@ class Api implements OrderSourceApiInterface
                     'cert_apply_status' => $result['data']['cert_apply_status'] ?? 0,
                 ],
                 'code' => 1,
+                'recovered' => $result['recovered'] ?? false,
             ];
         }
 

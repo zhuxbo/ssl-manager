@@ -968,3 +968,25 @@ test('同步取消自动退款提前返回分支也在提交后精准清理', fu
     Queue::assertPushed(CleanupDelegationTxtJob::class, fn ($job) => $job->certId === $cert->id
         && $job->validation === $validation && $job->queue === config('queue.names.tasks') && $job->afterCommit);
 });
+
+test('同步退款更新或清空当前申请的审核备注', function (?string $note) {
+    Queue::fake();
+    Setting::setValue('site', 'autoRefundOnSync', true);
+    $user = $this->createTestUser(['balance' => '100.00']);
+    $product = $this->createTestProduct();
+    $order = $this->createTestOrder($user, $product, [
+        'amount' => '100.00', 'review_note' => '旧审核备注',
+        'purchased_standard_count' => 1, 'purchased_wildcard_count' => 0,
+    ]);
+    $cert = $this->createTestCert($order, ['status' => 'approving', 'action' => 'new']);
+    createOrderTransaction($user->id, $order->id);
+    $api = Mockery::mock(Api::class);
+    $api->shouldReceive('get')->once()->with($order->id)->andReturn([
+        'code' => 1, 'data' => ['status' => 'cancelled', 'review_note' => $note],
+    ]);
+    app()->instance(Api::class, $api);
+    syncOrder(app(Action::class), $order->id, true);
+    expect($order->fresh()->review_note)->toBe($note)
+        ->and($cert->fresh()->status)->toBe('cancelled')
+        ->and($user->fresh()->balance)->toBe('100.00');
+})->with(['上游取消审核结论', null]);

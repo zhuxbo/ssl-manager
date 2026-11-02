@@ -36,7 +36,7 @@ class Sdk
      */
     public function new(array $params): array
     {
-        // 45s：commit() 在 orders 行锁内同步调上游，锁内仅此一个调用，45 < innodb_lock_wait_timeout(50s)，详见 call() 取值说明
+        // 单次直接提交 45s；常规提交走 submitByReferId 的组合预算。
         return $this->call('new', $params, 'post', 45);
     }
 
@@ -54,6 +54,51 @@ class Sdk
     public function reissue(array $params): array
     {
         return $this->call('reissue', $params, 'post', 45);
+    }
+
+    /**
+     * 先按原申请反查，再认领或提交；锁内总 HTTP 预算不超过 45 秒。
+     */
+    public function submitByReferId(string $action, array $params): array
+    {
+        if (! in_array($action, ['new', 'renew', 'reissue'], true) || empty($params['refer_id'])) {
+            return ['code' => 0, 'msg' => '提交类型或 Refer id 无效'];
+        }
+
+        $lookup = $this->call('get-order-id-by-refer-id', ['refer_id' => $params['refer_id']], 'get', 5);
+        if (($lookup['code'] ?? 0) !== 1) {
+            // Gateway 的占位由原 new/renew/reissue 入口按 refer_id 复用并推进，
+            // 包括结果未知时仅核查 CA 的保护；不能把普通查询失败当成不存在。
+            if (in_array($lookup['msg'] ?? '', ['Refer id not found', '订单处理中，请稍后重试'], true)) {
+                return $this->call($action, $params, 'post', 40);
+            }
+
+            return $lookup;
+        }
+
+        $apiId = $lookup['data']['order_id'] ?? null;
+        if ((! is_string($apiId) && ! is_int($apiId)) || ! $apiId) {
+            return ['code' => 0, 'msg' => '上游反查未返回订单号'];
+        }
+
+        $result = $this->get($apiId, 40);
+        if (($result['code'] ?? 0) !== 1) {
+            return $result;
+        }
+        if (! in_array($result['data']['status'] ?? null, ['processing', 'approving', 'active'], true)) {
+            return ['code' => 0, 'msg' => '上游订单状态不可认领，请联系管理员'];
+        }
+
+        // 反查不能绕过原提交入口对同 refer_id 的 CSR 一致性约束。
+        $normalizeCsr = fn (string $csr) => trim(str_replace("\r\n", "\n", $csr));
+        if (! empty($params['csr']) && $normalizeCsr($params['csr']) !== $normalizeCsr($result['data']['csr'] ?? '')) {
+            return ['code' => 0, 'msg' => '上游申请 CSR 不一致，请联系管理员'];
+        }
+
+        $result['data']['order_id'] = $apiId;
+        $result['recovered'] = true;
+
+        return $result;
     }
 
     /**
@@ -120,7 +165,7 @@ class Sdk
 
         // 锁内调用（commit 下单 new/renew/reissue / cancel）传入 $timeout，限制持锁时长 < innodb_lock_wait_timeout(默认 50s)，
         // 否则上游慢/挂时持锁无限，并发访问同一订单行的 for update 会报 1205 锁等待超时。
-        // 取值：commit 锁内**只有一个**上游调用（下单或 cancel），设 45s < 50（留 5s 裕度 + 锁内 save 开销）。
+        // 取值：submitByReferId 反查 5s + 提交/读取 40s，总计 ≤45s；单独下单/cancel 45s，留 5s 写库裕度。
         // 锁外调用也设超时上限防 FPM worker 被上游挂死永久占用（max_execution_time 不计 socket 阻塞）：
         // 文档上传 55s（对齐 worker --timeout 60，让 Guzzle 先干净断）、其他查询/操作（sync get / getProducts /
         // getOrders / revalidate / updateDCV）30s。$timeout=null 才不限时（当前已无此调用，留作扩展通道）。

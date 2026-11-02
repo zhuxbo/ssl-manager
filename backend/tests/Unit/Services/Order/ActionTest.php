@@ -2586,6 +2586,8 @@ test('retryCancel 重启失败或停止任务，无任务时新建并只派发�
     $this->freezeTime();
     [$order, $cert] = createOrderWithCertForRevoke('cancelling');
     $cert->forceFill(['updated_at' => now()->subMinutes(2)])->save();
+    // 先有其他任务，验证新任务权重使用自己的 ID，而非固定常量。
+    Task::factory()->create();
     $oldTask = $taskStatus ? Task::factory()->create([
         'order_id' => $order->id, 'action' => 'cancel', 'status' => $taskStatus,
         'started_at' => now()->addHour(), 'attempts' => 3,
@@ -2599,6 +2601,8 @@ test('retryCancel 重启失败或停止任务，无任务时新建并只派发�
         ->and($cert->fresh()->updated_at->timestamp)->toBe(now()->timestamp);
     if ($oldTask) {
         expect($task->id)->toBe($oldTask->id)->and($task->attempts)->toBe(3);
+    } else {
+        expect($task->source)->toBe('Console');
     }
     Queue::assertPushed(TaskJob::class, 1);
     Queue::assertPushed(TaskJob::class, fn ($job) => $job->afterCommit === true && $job->delay === null);
@@ -2651,9 +2655,85 @@ test('retryCancel 重启后的任务实际再次调用上游取消', function ()
     $api->shouldReceive('cancel')->once()->with($order->id)->andThrow(new ApiResponseException('上游仍拒绝取消'));
     $this->app->instance(Api::class, $api);
     expectOrderApiSuccess(fn () => $this->service->retryCancel($order->id));
-    (new TaskJob(['id' => $task->id]))->handle();
+    Queue::pushed(TaskJob::class)->sole()->handle();
     expect($task->fresh()->status)->toBe('failed')
         ->and($task->fresh()->attempts)->toBe(4)
         ->and($task->fresh()->result['msg'])->toBe('上游仍拒绝取消');
     expect($cert->fresh()->status)->toBe('cancelling');
+});
+
+// ==================== 导入与恢复路径的数据契约 ====================
+
+test('导入保留指定申请字段并强制同步新购或续费订单', function (string $action) {
+    $service = Mockery::mock(Action::class)->makePartial();
+    $service->shouldReceive('sync')->once()->withArgs(function (int $id, bool $force) use ($action) {
+        $order = Order::findOrFail($id);
+        expect($force)->toBeTrue()
+            ->and($order->user_id)->toBe($this->user->id)
+            ->and($order->product_id)->toBe($this->product->id)
+            ->and($order->period)->toBe(12)
+            ->and($order->latestCert->action)->toBe($action);
+
+        return true;
+    });
+    expectOrderApiSuccess(fn () => $service->input([
+        'user_id' => $this->user->id, 'product_id' => $this->product->id,
+        'period' => 12, 'api_id' => 'import-fields', 'action' => $action,
+        'channel' => 'api', 'common_name' => 'import.example.com',
+        'csr' => 'import-csr', 'private_key' => 'import-private-key',
+    ]));
+    $cert = Cert::where('api_id', 'import-fields')->sole();
+    expect($cert->action)->toBe($action)
+        ->and($cert->channel)->toBe('api')
+        ->and($cert->common_name)->toBe('import.example.com')
+        ->and($cert->csr)->toBe('import-csr')
+        ->and($cert->private_key)->toBe('import-private-key')
+        ->and($cert->status)->toBe('approving')
+        ->and(Order::count())->toBe(1);
+})->with(['new', 'renew']);
+
+test('导入拒绝禁用用户且不写入订单或证书', function () {
+    $this->user->update(['status' => 0]);
+    $service = Mockery::mock(Action::class)->makePartial();
+    $service->shouldNotReceive('sync');
+    expectOrderApiError(fn () => $service->input([
+        'user_id' => $this->user->id, 'product_id' => $this->product->id,
+        'period' => 12, 'api_id' => 'disabled-user-import',
+    ]), '用户已禁用');
+    expect(Order::count())->toBe(0)->and(Cert::count())->toBe(0);
+});
+
+test('导入重签关联原订单及前驱并支持按上游订单号再次更新', function () {
+    [$order, $oldCert] = createOrderWithCertForAction('active');
+    $service = Mockery::mock(Action::class)->makePartial();
+    $service->shouldReceive('sync')->twice()->with($order->id, true);
+    $params = [
+        'user_id' => $this->user->id, 'product_id' => $this->product->id,
+        'period' => 12, 'api_id' => 'import-reissue', 'action' => 'reissue',
+        'order_id' => $order->id,
+    ];
+    expectOrderApiSuccess(fn () => $service->input($params));
+    $cert = Cert::where('api_id', 'import-reissue')->sole();
+    expect($cert->order_id)->toBe($order->id)
+        ->and($cert->last_cert_id)->toBe($oldCert->id)
+        ->and($cert->common_name)->toBe('')
+        ->and($order->fresh()->latest_cert_id)->toBe($cert->id);
+    expectOrderApiSuccess(fn () => $service->input($params + ['common_name' => 'updated.example.com']));
+    expect(Cert::where('api_id', 'import-reissue')->sole()->id)->toBe($cert->id)
+        ->and($cert->fresh()->common_name)->toBe('updated.example.com')
+        ->and(Order::count())->toBe(1)
+        ->and(Cert::count())->toBe(2);
+});
+
+test('同步遇到非响应异常后保留原异常并允许立即重试', function () {
+    [$order, $cert] = createOrderWithCertForAction('processing');
+    $api = Mockery::mock(Api::class);
+    $api->shouldReceive('get')->once()->with($order->id)->andThrow(new RuntimeException('upstream temporarily unavailable'));
+    $api->shouldReceive('get')->once()->with($order->id)->andReturn(['code' => 1, 'data' => [
+        'dcv' => ['method' => 'txt', 'value' => 'rotated-token'],
+    ]]);
+    (new ReflectionProperty($this->service, 'api'))->setValue($this->service, $api);
+    expect(fn () => $this->service->sync($order->id, true))->toThrow(RuntimeException::class, 'upstream temporarily unavailable');
+    $this->service->sync($order->id, true);
+    expect($cert->fresh()->dcv)->toMatchArray(['method' => 'txt', 'value' => 'rotated-token']);
 });

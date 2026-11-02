@@ -4,6 +4,12 @@ description: Source API 接入 - 新增上游来源的开发指南。修改 Orde
 
 # Source API 接入指南
 
+## 提交结果恢复
+
+- default 来源的新购、续费、重签均先按稳定 `refer_id` 反查，不因查询失败更换标识或重新生成申请。上游需支持现有 V2 反查接口；接口不可用时停止本轮提交，不降级盲提。
+- 认领已有申请后保存 api_id 和验证信息，事务提交后立即创建 sync 任务，复用完整证书同步、通知、回调及终态保护。外层事务回滚不派任务。原提交成功路径保持不变。
+- `订单处理中，请稍后重试` 是 Gateway 的未受理占位响应，并不证明 CA 未收到请求；重新调用原入口必须由上游按原 refer_id 复用申请，并保留其结果未知时仅核查的保护。
+
 ## 普通订单有效期同步
 
 - `Order\Action::sync` 首次取得完整签发时间且订单尚无 `period_from` 时初始化有效期，上游 `period_till` 优先；已初始化订单不回算。
@@ -179,7 +185,7 @@ app()->instance(\App\Services\Acme\Api\Api::class, $mockFactory);
 
 **Order default Sdk**：`call()` 带可选第四参 `?int $timeout`，经 `makeClient()` 注入缝传给 Guzzle client config（`connect_timeout = min(10, $timeout)` + `timeout`；Guzzle `timeout` 含 connect，单次墙钟上限 = `timeout`）。connect_timeout 取 10s（早期 3s）：manager 是多级代理，上游可能是任意深度的另一个 manager，网络路径/DNS/地域全不可控，按"不可控上游"处理，对齐 callback 的 `connectTimeout(10)`；10 < 50 不破坏 1205 防护（总 timeout 45s 封顶不变，connect 不叠加），黑洞上游失败慢一点换多级链路的连接宽容，是有意取舍。
 
-- 锁内：`new` / `renew` / `reissue` / `cancel` → **45s**。commit 锁内**只有一个**上游调用（下单或 cancel），`45 < 50`（留 5s 裕度 + 锁内 `save()` 开销）。**default 源只对接同构 V2 的上游，上游 new/renew/reissue 对已存在 refer_id 仅在活动状态且提交的 CSR 一致时幂等返回 order_id（code=1），终态或 CSR 不同返回 Refer id already exists；本地不做 refer_id 反查、锁内不会串第二个调用**（对接其它 CA 走独立 source 另行处理，不共用本预算约定）
+- 锁内：普通订单经 `submitByReferId` 先用原 `refer_id` 调 `get-order-id-by-refer-id`（5s）；明确 `Refer id not found` 或 Gateway 约定的 `订单处理中，请稍后重试` 才调用原 new/renew/reissue 入口（40s），由上游复用占位并执行提交或结果核查。其他错误直接保留 pending。反查命中则读取 get（40s），只认领 processing/approving/active；空订单号、缺状态及终态拒绝认领；有 CSR 的请求必须与上游返回 CSR 一致（归一化换行和首尾空白），保留原幂等入口的一致性约束。两次调用预算合计 ≤45s，低于 session 锁等待 50s。单独 SDK new/renew/reissue/cancel 仍为 45s。
 - 锁外也设超时上限**防 FPM worker 被上游挂死永久占用**（`max_execution_time` 不计 socket 阻塞、只有 FPM `request_terminate_timeout` 能兜且部署默认未设，不可靠）：
   - `uploadDocument`（唯一调用方 `SubmitDocumentJob`(queue)，被 worker `--timeout 60` 的 SIGALRM 硬杀；单文件 ≤5MB，base64 ~6.7MB 正常网络 <10s）→ **55s**（< worker 60，让 Guzzle 自己先干净断，交给 Job 的 backoff 重试，而非被 SIGALRM 硬杀进程）
   - 其他 `sync` 的 `get`（默认 30s）/`getProducts`/`getOrders`/`revalidate`/`updateDCV` → **30s**（非耗时，仅防 hang）

@@ -24,6 +24,7 @@
                     "purchased_wildcard_count": "integer",
                     "organization": "null",
                     "contact": "null",
+                    "review_note": "null",
                     "cancelled_at": "null",
                     "admin_remark": "string",
                     "remark": "string",

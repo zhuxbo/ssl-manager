@@ -41,6 +41,7 @@
                                     }
                                 },
                                 "validation": "array<unknown>",
+                                "updated_at": "string",
                                 "status": "string",
                                 "amount": "string",
                                 "issued_at": "null",

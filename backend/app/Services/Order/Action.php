@@ -522,6 +522,12 @@ class Action
                 : $order->latestCert->validation;
             $order->latestCert->status = 'processing';
             $order->latestCert->save();
+
+            if ($result['recovered'] ?? false) {
+                // 释放提交事务的 order 锁后再创建任务，维持 task → order 锁序；
+                // 完整证书、通知及回调继续走既有同步路径。
+                DB::afterCommit(fn () => $this->createTask($orderId, 'sync'));
+            }
         }, 1);
 
         $this->success([
