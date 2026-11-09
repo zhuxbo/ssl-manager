@@ -1221,6 +1221,23 @@ class Action
         $this->success();
     }
 
+    /** 撤销归档后由同步任务确认上游状态，不恢复自动续费或自动重签。 */
+    public function revokeArchive(int $id): void
+    {
+        $this->runTaskMutationTransaction(function () use ($id) {
+            Task::lockForMutation($id, ['sync'])->get();
+            $order = Order::with('latestCert')->whereHas('latestCert')->lock()->find($id);
+            $order || $this->error('订单不存在或无权操作');
+            $order->latestCert->status === 'archived' || $this->error('仅已归档订单可以撤销归档');
+
+            $order->latestCert->update(['status' => 'approving']);
+            $order->update(['auto_renew' => false, 'auto_reissue' => false]);
+            $this->createTask($id, 'sync');
+        });
+
+        $this->success();
+    }
+
     /** 归档只终止本地管理，不调用上游或变更资金。 */
     public function archive(int $id): void
     {

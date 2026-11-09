@@ -28,6 +28,15 @@
       >归档</el-button
     >
     <el-button
+      v-if="status === 'archived'"
+      type="warning"
+      plain
+      size="small"
+      :loading="revokingArchive"
+      @click="revokeArchive"
+      >撤销归档</el-button
+    >
+    <el-button
       v-if="allowCancel"
       type="danger"
       plain
@@ -245,6 +254,21 @@ const archive = async () => {
   ) {
     message("归档成功", { type: "success" });
     get(true);
+  }
+};
+
+const revokingArchive = ref(false);
+const revokeArchive = async () => {
+  if (revokingArchive.value) return;
+  revokingArchive.value = true;
+  try {
+    await OrderApi.revokeArchive(order.id);
+    message("已撤销归档，正在同步订单状态；自动续费和自动重签仍保持关闭", {
+      type: "success"
+    });
+    await get(true);
+  } finally {
+    revokingArchive.value = false;
   }
 };
 

@@ -31,6 +31,11 @@ class OrderController extends BaseController
 
     use \App\Http\Traits\OrderController;
 
+    public function revokeArchive(int $id): void
+    {
+        $this->action->revokeArchive($id);
+    }
+
     /**
      * 获取订单列表
      *

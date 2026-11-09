@@ -110,6 +110,11 @@ export function archive(id: number): Promise<BaseResponse> {
   return http.post<BaseResponse<null>, any>(`/order/archive/${id}`);
 }
 
+/** 撤销归档并同步上游状态 */
+export function revokeArchive(id: number): Promise<BaseResponse> {
+  return http.post<BaseResponse<null>, any>(`/order/revoke-archive/${id}`);
+}
+
 /** 备注订单 */
 export function remark(id: number, remark: string): Promise<BaseResponse> {
   return http.post<BaseResponse<null>, any>(`/order/remark/${id}`, {

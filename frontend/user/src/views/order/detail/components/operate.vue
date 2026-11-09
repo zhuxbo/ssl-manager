@@ -20,14 +20,6 @@
       >续费</el-button
     >
     <el-button
-      v-if="['processing', 'active'].includes(status)"
-      type="warning"
-      plain
-      size="small"
-      @click="archive"
-      >归档</el-button
-    >
-    <el-button
       v-if="allowCancel"
       type="danger"
       plain
@@ -103,9 +95,7 @@ import { useDetail } from "@/views/order/detail";
 import dayjs from "dayjs";
 import {
   cancellationMessage,
-  confirmOrderAction,
-  confirmOrderCancellation,
-  archiveMessage
+  confirmOrderCancellation
 } from "@shared/utils/orderConfirmation";
 
 const now = useNow({ interval: 1000 });
@@ -205,16 +195,6 @@ const commitCancel = async () => {
   }
 };
 
-const archive = async () => {
-  if (
-    await confirmOrderAction("archive", archiveMessage, () =>
-      OrderApi.archive(order.id)
-    )
-  ) {
-    message("归档成功", { type: "success" });
-    get(true);
-  }
-};
 const revokeCancel = async () => {
   await OrderApi.revokeCancel(order.id);
   message("撤回取消成功，正在同步订单状态", { type: "success" });

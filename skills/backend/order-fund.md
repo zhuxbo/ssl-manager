@@ -23,6 +23,11 @@
 - V1/V2 与 Deploy 连续申请流程只对 `unpaid` 调支付；V1/V2 零元路径仍执行显式请求的 `issue_verify`，提交上游仍在外层事务之后。
 - 取消零元待提交重签沿用 `cancelPending`，不要求零元付款流水，不生成退款流水，恢复前驱证书。
 
+## 订单归档与撤销
+
+- 用户端不显示归档按钮；管理员可归档处理中或已签发订单，并通过 `POST /api/admin/order/revoke-archive/{id}` 撤销已归档订单。
+- 撤销归档使用 task→order 锁序及本地事务重试，将状态置为 `approving` 并创建提交后派发的同步任务，由上游确认实际状态；不直接假定证书仍有效，不恢复自动续费或自动重签，不改资金。
+
 ## order 级互斥锁（方案 C：根治 3+ 并发 1205）
 
 > **背景**：点 1（Sdk 锁内超时 28/10/10）把单次持锁压到 ≤48s 后，同一订单 **3+ 并发** commit/cancel 仍会在 DB 行锁上**排队累计** >`innodb_lock_wait_timeout`(已固化 session=50，见 `config/database.php` PDO `MYSQL_ATTR_INIT_COMMAND`) → 偶发 `1205 Lock wait timeout`。方案 C 在**进 DB 锁之前**加一把按订单 id 的 Cache 互斥锁，把"DB 锁等待 1205"转成"Cache 抢锁立即失败"。

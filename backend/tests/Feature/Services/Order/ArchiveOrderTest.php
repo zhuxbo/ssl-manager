@@ -159,3 +159,51 @@ test('待审核订单提交取消也立即创建任务', function () {
     expect($cert->fresh()->status)->toBe('cancelling')
         ->and($task->started_at->lte(now()))->toBeTrue();
 });
+
+test('管理员撤销归档只恢复同步且不动资金或自动续费设置', function (string $upstreamStatus) {
+    Queue::fake();
+    [$user, $order, $cert] = $this->archiveFixture;
+    $this->actingAsAdmin()->postJson("/api/admin/order/archive/$order->id")
+        ->assertOk()->assertJsonPath('code', 1);
+    $balance = $user->fresh()->balance;
+    $transactions = Transaction::count();
+    $this->postJson("/api/admin/order/revoke-archive/$order->id")
+        ->assertOk()->assertJsonPath('code', 1);
+    expect($cert->fresh()->status)->toBe('approving')
+        ->and($order->fresh()->auto_renew)->toBeFalse()
+        ->and($order->fresh()->auto_reissue)->toBeFalse();
+    $task = Task::where('order_id', $order->id)->sole();
+    expect($task->action)->toBe('sync');
+    $this->postJson("/api/admin/order/revoke-archive/$order->id")
+        ->assertOk()->assertJsonPath('code', 0);
+    expect(Task::where('order_id', $order->id)->count())->toBe(1);
+
+    $api = Mockery::mock(Api::class);
+    $api->shouldReceive('get')->once()->andReturn([
+        'code' => 1, 'data' => ['status' => $upstreamStatus],
+    ]);
+    $this->app->instance(Api::class, $api);
+    app(Action::class)->sync($order->id, true);
+    expect($cert->fresh()->status)->toBe($upstreamStatus)
+        ->and($user->fresh()->balance)->toBe($balance)
+        ->and(Transaction::count())->toBe($transactions);
+})->with(['processing', 'active', 'expired', 'revoked']);
+
+test('撤销归档拒绝其他状态且不创建任务', function (string $status) {
+    [, $order, $cert] = $this->archiveFixture;
+    $cert->update(['status' => $status]);
+    $this->actingAsAdmin()->postJson("/api/admin/order/revoke-archive/$order->id")
+        ->assertOk()->assertJsonPath('code', 0);
+    expect($cert->fresh()->status)->toBe($status)
+        ->and(Task::where('order_id', $order->id)->count())->toBe(0);
+})->with(['unpaid', 'pending', 'processing', 'approving', 'active', 'cancelling', 'cancelled', 'expired', 'renewed', 'reissued', 'revoked']);
+
+test('用户不能撤销归档', function () {
+    [$user, $order, $cert] = $this->archiveFixture;
+    $cert->update(['status' => 'archived']);
+    $this->actingAsUser($user);
+    $this->postJson("/api/order/revoke-archive/$order->id")->assertNotFound();
+    $this->postJson("/api/admin/order/revoke-archive/$order->id")->assertUnauthorized();
+    expect($cert->fresh()->status)->toBe('archived')
+        ->and(Task::where('order_id', $order->id)->count())->toBe(0);
+});
